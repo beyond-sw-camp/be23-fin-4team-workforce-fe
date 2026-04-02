@@ -1,0 +1,30 @@
+@import './tailwind.css';
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+
+:root {
+  --wf-color-text: #0f172a;
+  --wf-color-primary: #2563eb;
+  --wf-color-bg: #f8fafc;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: 'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR',
+    sans-serif;
+  color: var(--wf-color-text);
+  background-color: var(--wf-color-bg);
+}
+
+* {
+  font-family: inherit;
+}
+
+a {
+  color: var(--wf-color-primary);
+}
