@@ -1,19 +1,17 @@
-import { BankOutlined } from '@ant-design/icons';
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router';
 import { useCallback, useEffect, useState } from 'react';
 import { twMerge } from 'tailwind-merge';
+import brandLogo from '@/shared/assets/brand/logo.png';
 import { AppButton } from '@/shared/ui/AppButton';
 
 function BrandMark({ className }: { className?: string }) {
   return (
-    <Link to="/" className={twMerge('tw-flex tw-items-center tw-gap-2 tw-no-underline', className)}>
-      <div className="tw-flex tw-h-9 tw-w-9 tw-items-center tw-justify-center tw-rounded-xl tw-bg-[#2563EB] tw-text-white">
-        <BankOutlined />
-      </div>
-      <span className="tw-text-xl tw-font-black tw-tracking-[-0.02em]">
-        <span className="tw-text-[#0F172A]">WORK</span>
-        <span className="tw-text-[#2563EB]">FORCE</span>
-      </span>
+    <Link to="/" className={twMerge('tw-flex tw-items-center tw-no-underline', className)}>
+      <img
+        src={brandLogo}
+        alt="WORKFORCE 로고"
+        className="tw-h-9 tw-w-auto tw-block tw-shrink-0"
+      />
     </Link>
   );
 }
