@@ -5,7 +5,11 @@ import { useState } from 'react';
 import { useAuth } from '@/features/auth/useAuth';
 import { AppButton } from '@/shared/ui/AppButton';
 
-function LoginPage() {
+export type LoginPageProps = {
+  embedded?: boolean;
+};
+
+function LoginPage({ embedded = false }: LoginPageProps) {
   const auth = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -24,17 +28,28 @@ function LoginPage() {
     }
   };
 
-  return (
-    <div className="tw-relative tw-flex tw-min-h-screen tw-items-center tw-justify-center tw-overflow-hidden tw-bg-slate-50 tw-p-6">
-      <div className="tw-absolute tw-left-[-10%] tw-top-[-10%] tw-h-[45%] tw-w-[45%] tw-rounded-full tw-bg-blue-100 tw-blur-[120px]" />
-      <div className="tw-absolute tw-bottom-[-10%] tw-right-[-10%] tw-h-[40%] tw-w-[40%] tw-rounded-full tw-bg-indigo-100 tw-blur-[110px]" />
+  const shellClass = embedded
+    ? 'tw-relative tw-flex tw-w-full tw-min-h-screen tw-items-center tw-justify-center tw-bg-slate-50 tw-pb-12'
+    : 'tw-relative tw-flex tw-min-h-screen tw-items-center tw-justify-center tw-overflow-hidden tw-bg-slate-50 tw-p-6';
 
-      <Card className="tw-z-10 tw-w-full tw-max-w-[460px] tw-rounded-[36px] tw-border tw-border-slate-100 tw-shadow-2xl tw-shadow-blue-900/5">
+  return (
+    <div className={shellClass}>
+      {embedded ? null : (
+        <>
+          <div className="tw-absolute tw-left-[-10%] tw-top-[-10%] tw-h-[45%] tw-w-[45%] tw-rounded-full tw-bg-blue-100 tw-blur-[120px]" />
+          <div className="tw-absolute tw-bottom-[-10%] tw-right-[-10%] tw-h-[40%] tw-w-[40%] tw-rounded-full tw-bg-indigo-100 tw-blur-[110px]" />
+        </>
+      )}
+
+      <Card
+        className={
+          embedded
+            ? 'tw-z-10 tw-w-full tw-max-w-[460px] tw-mx-auto tw-rounded-[28px] tw-border tw-border-slate-100 tw-shadow-lg tw-shadow-slate-900/5'
+            : 'tw-z-10 tw-w-full tw-max-w-[460px] tw-rounded-[36px] tw-border tw-border-slate-100 tw-shadow-2xl tw-shadow-blue-900/5'
+        }
+      >
         <div className="tw-p-8 md:tw-p-10">
           <div className="tw-mb-8 tw-flex tw-flex-col tw-items-center tw-gap-2">
-            <div className="tw-flex tw-h-12 tw-w-12 tw-items-center tw-justify-center tw-rounded-2xl tw-bg-blue-600 tw-text-white">
-              <BankOutlined />
-            </div>
             <Typography.Title level={3} className="!tw-m-0 !tw-leading-none">
               <span className="tw-text-[40px] tw-font-black tw-tracking-[-0.02em]">
                 <span className="tw-text-[#0F172A]">WORK</span>

@@ -21,6 +21,33 @@ function toBooleanFlag(value?: 'Y' | 'N') {
   return value === 'Y';
 }
 
+function toBooleanMaybe(value: unknown): boolean | undefined {
+  if (value === 'Y') return true;
+  if (value === 'N') return false;
+  if (typeof value === 'boolean') return value;
+  return undefined;
+}
+
+function decodeBase64Url(value: string): string {
+  // JWT payload is base64url encoded; normalize to standard base64.
+  const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=');
+  return atob(padded);
+}
+
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  const parts = token.split('.');
+  if (parts.length < 2) return null;
+  const payloadPart = parts[1];
+  if (typeof payloadPart !== 'string') return null;
+  try {
+    const decoded = decodeBase64Url(payloadPart);
+    return JSON.parse(decoded) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
 function mapMe(payload: Partial<LoginResponse> & Partial<Me>): Me {
   const emailVerificationRequired =
     payload.isEmailVerifiedYn === undefined ? undefined : !toBooleanFlag(payload.isEmailVerifiedYn);
@@ -44,9 +71,77 @@ function hasFallbackUserPayload(payload: Partial<LoginResponse> & Partial<Me>) {
 }
 
 async function getMeOrThrow() {
-  const response = await httpClient.get('/member/me');
-  const payload = unwrapApiResponse<Partial<Me> & Partial<LoginResponse>>(response.data);
-  return mapMe(payload);
+  // Backend doesn't currently expose a "current user" GET endpoint like `/member/me`.
+  // Reconstruct `Me` from the access token claims so auth/permission routing can work.
+  const token = getAccessToken();
+  if (!token) {
+    throw new Error('Missing access token');
+  }
+
+  const jwtPayload = decodeJwtPayload(token);
+  if (!jwtPayload) {
+    throw new Error('Access token is not a JWT or cannot be decoded');
+  }
+
+  const permissionsRaw =
+    jwtPayload.permissions ??
+    jwtPayload.perms ??
+    jwtPayload.permissionCodes ??
+    jwtPayload.grantedPermissions ??
+    jwtPayload.authorities ??
+    jwtPayload.roles;
+
+  const permissions = Array.isArray(permissionsRaw)
+    ? permissionsRaw
+        .map((x) => {
+          if (typeof x === 'string') return x;
+          if (x && typeof x === 'object') {
+            const obj = x as Record<string, unknown>;
+            const code = obj.code ?? obj.permission ?? obj.name ?? obj.value;
+            return typeof code === 'string' ? code : undefined;
+          }
+          return undefined;
+        })
+        .filter((x): x is string => typeof x === 'string')
+    : [];
+
+  const flagsFromToken = (jwtPayload.flags && typeof jwtPayload.flags === 'object' ? jwtPayload.flags : {}) as
+    | Record<string, unknown>
+    | undefined;
+
+  const mustChangePassword = toBooleanMaybe(flagsFromToken?.mustChangePassword ?? jwtPayload.mustChangePassword);
+  const emailVerificationRequired = toBooleanMaybe(
+    flagsFromToken?.emailVerificationRequired ?? jwtPayload.emailVerificationRequired,
+  );
+
+  const id =
+    (typeof jwtPayload.id === 'string' && jwtPayload.id) ||
+    (typeof jwtPayload.memberId === 'string' && jwtPayload.memberId) ||
+    (typeof jwtPayload.sub === 'string' && jwtPayload.sub);
+
+  const name = (typeof jwtPayload.name === 'string' && jwtPayload.name) || undefined;
+  const email = (typeof jwtPayload.email === 'string' && jwtPayload.email) || undefined;
+
+  if (!id) {
+    throw new Error('JWT payload missing identity');
+  }
+
+  return mapMe({
+    id,
+    name,
+    email,
+    permissions,
+    flags: {
+      mustChangePassword,
+      emailVerificationRequired,
+      accountStatus: (() => {
+        const raw = flagsFromToken?.accountStatus;
+        if (typeof raw !== 'string') return undefined;
+        if (raw === 'ACTIVE' || raw === 'BLOCKED' || raw === 'DELETED') return raw;
+        return undefined;
+      })(),
+    },
+  });
 }
 
 export const authClient: AuthClient = {

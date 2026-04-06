@@ -1,11 +1,16 @@
-import { Alert, Card, Descriptions, Form, Input, Space, Steps, Tag, Typography } from 'antd';
+import { Alert, Card, Checkbox, Descriptions, Form, Input, Modal, Space, Tag, Typography } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { companyApi } from '@/features/organization/api/companyApi';
 import { AddressSearchField } from '@/shared/ui/AddressSearchField';
 import { AppButton } from '@/shared/ui/AppButton';
 
-type OnboardingForm = {
+export type CompanyOnboardingPageProps = {
+  /** 홈 레이아웃 메인 영역에 넣을 때 전체 화면용 바깥 패딩을 줄입니다. */
+  embedded?: boolean;
+};
+
+type CompanyOnboardingFormValues = {
   businessNumber: string;
   companyName: string;
   representativeName: string;
@@ -13,13 +18,27 @@ type OnboardingForm = {
   email: string;
   code: string;
   password: string;
+  agreeTerms: boolean;
+  agreePrivacy: boolean;
 };
 
-export function CompanyOnboardingPage() {
+const agreeValidator = (message: string) => (_: unknown, value: boolean) =>
+  value === true ? Promise.resolve() : Promise.reject(new Error(message));
+
+const LEGAL_DUMMY_TERMS = `제1조 (목적)\n본 약관은 WORKFORCE 서비스 이용과 관련하여 회사와 이용자 간 권리·의무를 정하는 것을 목적으로 합니다. (더미 텍스트)\n\n제2조 (정의)\n이용자란 본 약관에 동의하고 서비스를 이용하는 자를 말합니다. (더미 텍스트)\n\n제3조 (약관의 효력)\n회사는 필요 시 약관을 변경할 수 있으며, 변경 내용은 서비스 내 공지로 안내합니다. (더미 텍스트)`;
+
+const LEGAL_DUMMY_PRIVACY = `1. 수집하는 개인정보 항목\n회사명, 사업자번호, 담당자 이메일, 주소 등 가입 시 입력하신 정보가 포함될 수 있습니다. (더미 텍스트)\n\n2. 개인정보의 이용 목적\n회원 식별, 서비스 제공, 고객 지원 및 법령상 의무 이행 등에 활용됩니다. (더미 텍스트)\n\n3. 보유 및 파기\n목적 달성 후 관련 법령에서 정한 기간 동안 보관 후 안전하게 파기합니다. (더미 텍스트)`;
+
+export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPageProps) {
   const navigate = useNavigate();
-  const [form] = Form.useForm<OnboardingForm>();
+  const [form] = Form.useForm<CompanyOnboardingFormValues>();
   const passwordValue = Form.useWatch('password', form);
-  const [step, setStep] = useState(0);
+  const agreeTermsW = Form.useWatch('agreeTerms', form);
+  const agreePrivacyW = Form.useWatch('agreePrivacy', form);
+  const agreeTermsOn = agreeTermsW === true;
+  const agreePrivacyOn = agreePrivacyW === true;
+  const allAgreementsChecked = agreeTermsOn && agreePrivacyOn;
+  const someAgreementChecked = agreeTermsOn || agreePrivacyOn;
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -27,6 +46,7 @@ export function CompanyOnboardingPage() {
   const [emailVerified, setEmailVerified] = useState(false);
   const [onboardingCompleted, setOnboardingCompleted] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [legalModal, setLegalModal] = useState<null | 'terms' | 'privacy'>(null);
 
   useEffect(() => {
     if (resendCooldown <= 0) return;
@@ -73,7 +93,6 @@ export function CompanyOnboardingPage() {
         form.setFieldValue('companyName', response.companyName);
       }
       setSuccess('사업자번호가 확인되었습니다.');
-      setStep(1);
     } catch (e) {
       setError((e as { message?: string }).message ?? '사업자번호 검증에 실패했습니다.');
     } finally {
@@ -108,7 +127,6 @@ export function CompanyOnboardingPage() {
       await companyApi.verifyCode({ email: values.email, code: values.code });
       setEmailVerified(true);
       setSuccess('이메일 인증이 완료되었습니다.');
-      setStep(2);
     } catch (e) {
       setError((e as { message?: string }).message ?? '인증 코드 확인에 실패했습니다.');
     } finally {
@@ -116,7 +134,7 @@ export function CompanyOnboardingPage() {
     }
   };
 
-  const submitOnboarding = async (values: OnboardingForm) => {
+  const submitOnboarding = async (values: CompanyOnboardingFormValues) => {
     setError(null);
     setSuccess(null);
     if (!businessChecked) {
@@ -127,16 +145,14 @@ export function CompanyOnboardingPage() {
       setError('이메일 인증을 먼저 완료해 주세요.');
       return;
     }
+    if (!values.agreeTerms || !values.agreePrivacy) {
+      setError('필수 약관에 모두 동의해 주세요.');
+      return;
+    }
     setLoading(true);
     try {
-      await companyApi.onboarding({
-        businessNumber: values.businessNumber,
-        companyName: values.companyName,
-        representativeName: values.representativeName,
-        address: values.address,
-        email: values.email,
-        password: values.password,
-      });
+      const { agreeTerms: _t, agreePrivacy: _p, ...payload } = values;
+      await companyApi.onboarding(payload);
       setSuccess('회사 온보딩이 완료되었습니다. 로그인 페이지에서 로그인해 주세요.');
       setOnboardingCompleted(true);
     } catch (e) {
@@ -146,8 +162,12 @@ export function CompanyOnboardingPage() {
     }
   };
 
+  const outerClass = embedded
+    ? 'tw-min-h-screen tw-w-full tw-bg-[#F8FAFC] tw-pt-24 tw-pb-10'
+    : 'tw-min-h-screen tw-bg-[#F8FAFC] tw-px-6 tw-py-10';
+
   return (
-    <div className="tw-min-h-screen tw-bg-[#F8FAFC] tw-px-6 tw-py-10">
+    <div className={outerClass}>
       <div className="tw-mx-auto tw-w-full tw-max-w-[760px]">
         <Card className="tw-rounded-[28px] tw-border-0 tw-bg-white tw-shadow-[0_16px_60px_rgba(15,23,42,0.08)]">
           <div className="tw-mb-8 tw-flex tw-items-start tw-justify-between">
@@ -159,7 +179,7 @@ export function CompanyOnboardingPage() {
                 회사 계정 가입을 시작해요
               </Typography.Title>
               <Typography.Text className="tw-text-slate-500">
-                3단계만 완료하면 관리자 계정을 바로 사용할 수 있어요.
+                사업자번호·이메일 인증 후 대표 정보까지 한 페이지에서 입력할 수 있어요.
               </Typography.Text>
             </div>
             <AppButton variant="text" onClick={() => navigate({ to: '/' })}>
@@ -167,76 +187,57 @@ export function CompanyOnboardingPage() {
             </AppButton>
           </div>
 
-          <div className="tw-mb-6 tw-rounded-2xl tw-bg-[#F8FAFC] tw-p-4">
-            <Steps
-              size="small"
-              current={step}
-              items={[
-                { title: '사업자번호', status: businessChecked ? 'finish' : undefined },
-                { title: '이메일 인증', status: emailVerified ? 'finish' : undefined },
-                { title: '계정 생성' },
-              ]}
-            />
-          </div>
-
           {error ? <Alert type="error" showIcon message={error} className="tw-mb-4" /> : null}
           {success ? <Alert type="success" showIcon message={success} className="tw-mb-4" /> : null}
 
-          <Form form={form} layout="vertical" onFinish={(values) => void submitOnboarding(values)} requiredMark={false}>
-            {step === 0 ? (
-              <Space direction="vertical" className="tw-w-full" size={14}>
-                <div className="tw-flex tw-items-center tw-justify-between tw-rounded-2xl tw-bg-[#EFF6FF] tw-px-4 tw-py-3">
-                  <Typography.Text className="tw-font-semibold tw-text-[#2563EB]">사업자번호를 먼저 확인해 주세요</Typography.Text>
-                  {businessChecked ? <Tag color="green">검증 완료</Tag> : <Tag>진행 중</Tag>}
+          <Form
+            form={form}
+            layout="vertical"
+            initialValues={{ agreeTerms: false, agreePrivacy: false }}
+            onFinish={(values) => void submitOnboarding(values)}
+            requiredMark={false}
+          >
+            <Space direction="vertical" className="tw-w-full" size={20}>
+              <div>
+                <div className="tw-mb-3 tw-flex tw-items-center tw-justify-between tw-rounded-2xl tw-bg-[#EFF6FF] tw-px-4 tw-py-3">
+                  <Typography.Text className="tw-font-semibold tw-text-[#2563EB]">사업자번호</Typography.Text>
+                  {businessChecked ? <Tag color="green">검증 완료</Tag> : <Tag>미검증</Tag>}
                 </div>
                 <Form.Item
                   name="businessNumber"
                   label="사업자번호"
                   rules={[{ required: true, message: '사업자번호를 입력해 주세요.' }]}
+                  className="!tw-mb-3"
                 >
                   <Input
                     size="large"
                     placeholder="123-45-67890"
                     maxLength={12}
                     onChange={(event) => {
+                      setBusinessChecked(false);
                       form.setFieldValue('businessNumber', formatBusinessNumber(event.target.value));
                     }}
                   />
                 </Form.Item>
-                <Space className="tw-w-full tw-justify-end">
-                  <AppButton
-                    size="large"
-                    className="tw-min-w-[160px]"
-                    loading={loading}
-                    onClick={() => void checkBusinessNumber()}
-                  >
+                <div className="tw-flex tw-justify-end">
+                  <AppButton size="large" className="tw-min-w-[160px]" loading={loading} onClick={() => void checkBusinessNumber()}>
                     사업자번호 검증
                   </AppButton>
-                  <AppButton
-                    size="large"
-                    className="tw-min-w-[120px]"
-                    variant="secondary"
-                    disabled={!businessChecked}
-                    onClick={() => {
-                      setError(null);
-                      setSuccess(null);
-                      setStep(1);
-                    }}
-                  >
-                    다음
-                  </AppButton>
-                </Space>
-              </Space>
-            ) : null}
+                </div>
+              </div>
 
-            {step === 1 ? (
-              <Space direction="vertical" className="tw-w-full" size={14}>
-                <div className="tw-flex tw-items-center tw-justify-between tw-rounded-2xl tw-bg-[#EFF6FF] tw-px-4 tw-py-3">
-                  <Typography.Text className="tw-font-semibold tw-text-[#2563EB]">담당자 이메일 인증을 완료해 주세요</Typography.Text>
-                  {emailVerified ? <Tag color="green">인증 완료</Tag> : <Tag>진행 중</Tag>}
+              <div>
+                <div className="tw-mb-3 tw-flex tw-items-center tw-justify-between tw-rounded-2xl tw-bg-[#EFF6FF] tw-px-4 tw-py-3">
+                  <Typography.Text className="tw-font-semibold tw-text-[#2563EB]">회사·이메일 인증</Typography.Text>
+                  {emailVerified ? <Tag color="green">인증 완료</Tag> : <Tag>미인증</Tag>}
                 </div>
                 <Form.Item name="companyName" label="회사명" rules={[{ required: true, message: '회사명을 입력해 주세요.' }]}>
-                  <Input size="large" />
+                  <Input
+                    size="large"
+                    onChange={() => {
+                      setEmailVerified(false);
+                    }}
+                  />
                 </Form.Item>
                 <Form.Item
                   name="email"
@@ -246,48 +247,43 @@ export function CompanyOnboardingPage() {
                     { type: 'email', message: '올바른 이메일 형식이 아닙니다.' },
                   ]}
                 >
-                  <Input size="large" placeholder="admin@company.com" />
+                  <Input
+                    size="large"
+                    placeholder="admin@company.com"
+                    onChange={() => {
+                      setEmailVerified(false);
+                    }}
+                  />
                 </Form.Item>
-                <Form.Item name="code" label="인증 코드" rules={[{ required: true, message: '인증 코드를 입력해 주세요.' }]}>
-                  <Input size="large" maxLength={6} />
-                </Form.Item>
-                <Space className="tw-w-full tw-justify-between">
-                  <AppButton variant="text" onClick={() => setStep(0)}>
-                    이전
+                <div className="tw-flex tw-justify-end">
+                  <AppButton
+                    size="large"
+                    variant="secondary"
+                    disabled={resendCooldown > 0}
+                    loading={loading}
+                    onClick={() => void sendCode()}
+                  >
+                    {resendCooldown > 0 ? `재발송 (${resendCooldown}s)` : '인증 코드 발송'}
                   </AppButton>
-                  <Space>
-                    <AppButton
-                      size="large"
-                      variant="secondary"
-                      disabled={resendCooldown > 0}
-                      loading={loading}
-                      onClick={() => void sendCode()}
-                    >
-                      {resendCooldown > 0 ? `재발송 (${resendCooldown}s)` : '인증 코드 발송'}
-                    </AppButton>
-                    <AppButton size="large" loading={loading} onClick={() => void verifyCode()}>
-                      인증 코드 확인
-                    </AppButton>
-                    <AppButton
-                      size="large"
-                      className="tw-min-w-[100px]"
-                      variant="secondary"
-                      disabled={!emailVerified}
-                      onClick={() => {
-                        setError(null);
-                        setSuccess(null);
-                        setStep(2);
-                      }}
-                    >
-                      다음
-                    </AppButton>
-                  </Space>
-                </Space>
-              </Space>
-            ) : null}
+                </div>
+                <Form.Item name="code" label="인증 코드" rules={[{ required: true, message: '인증 코드를 입력해 주세요.' }]}>
+                  <Input
+                    size="large"
+                    maxLength={6}
+                    placeholder="발송된 6자리 코드"
+                    onChange={() => {
+                      setEmailVerified(false);
+                    }}
+                  />
+                </Form.Item>
+                <div className="tw-flex tw-justify-end">
+                  <AppButton size="large" loading={loading} onClick={() => void verifyCode()}>
+                    인증 코드 확인
+                  </AppButton>
+                </div>
+              </div>
 
-            {step === 2 ? (
-              <Space direction="vertical" className="tw-w-full" size={14}>
+              {businessChecked && emailVerified ? (
                 <Card size="small" className="tw-rounded-2xl tw-border tw-border-slate-100 tw-bg-slate-50">
                   <Descriptions column={1} size="small" title="입력 정보 확인">
                     <Descriptions.Item label="사업자번호">{form.getFieldValue('businessNumber')}</Descriptions.Item>
@@ -295,6 +291,17 @@ export function CompanyOnboardingPage() {
                     <Descriptions.Item label="담당자 이메일">{form.getFieldValue('email')}</Descriptions.Item>
                   </Descriptions>
                 </Card>
+              ) : null}
+
+              <div>
+                <Typography.Text className="tw-mb-3 tw-block tw-text-xs tw-font-bold tw-uppercase tw-tracking-[0.12em] tw-text-slate-400">
+                  대표 계정 정보
+                </Typography.Text>
+                {!businessChecked || !emailVerified ? (
+                  <Typography.Text type="secondary" className="tw-mb-4 tw-block tw-text-sm tw-leading-relaxed">
+                    사업자번호 검증과 이메일 인증이 끝나면 아래 내용을 입력하고 가입을 완료할 수 있어요. (미리 입력해 두어도 됩니다.)
+                  </Typography.Text>
+                ) : null}
                 <Form.Item
                   name="representativeName"
                   label="대표자명"
@@ -313,30 +320,123 @@ export function CompanyOnboardingPage() {
                   <Input.Password size="large" />
                 </Form.Item>
                 {passwordStrengthText ? (
-                  <Typography.Text type={passwordStrengthText === '강함' ? 'success' : passwordStrengthText === '보통' ? 'warning' : 'danger'}>
+                  <Typography.Text
+                    type={passwordStrengthText === '강함' ? 'success' : passwordStrengthText === '보통' ? 'warning' : 'danger'}
+                    className="tw-mb-2 tw-block"
+                  >
                     비밀번호 강도: {passwordStrengthText}
                   </Typography.Text>
                 ) : null}
-                <Space className="tw-w-full tw-justify-between">
-                  <AppButton variant="text" onClick={() => setStep(1)}>
-                    이전
-                  </AppButton>
-                  <Space>
-                    {onboardingCompleted ? (
-                      <AppButton size="large" variant="secondary" onClick={() => navigate({ to: '/login' })}>
-                        로그인 페이지로 이동
-                      </AppButton>
-                    ) : null}
-                    <AppButton size="large" htmlType="submit" loading={loading} disabled={onboardingCompleted}>
-                      회사 온보딩 완료
+
+                <div className="tw-mt-6 tw-rounded-2xl tw-border tw-border-slate-100 tw-bg-slate-50/80 tw-p-4">
+                  <Typography.Text className="tw-mb-3 tw-block tw-text-xs tw-font-bold tw-uppercase tw-tracking-[0.12em] tw-text-slate-400">
+                    약관 동의
+                  </Typography.Text>
+                  <div className="tw-mb-4 tw-border-b tw-border-slate-200/90 tw-pb-4">
+                    <Checkbox
+                      indeterminate={someAgreementChecked && !allAgreementsChecked}
+                      checked={allAgreementsChecked}
+                      className="tw-items-start tw-leading-snug [&_.ant-checkbox]:tw-mt-0.5"
+                      onChange={(e) => {
+                        const v = e.target.checked;
+                        form.setFieldsValue({ agreeTerms: v, agreePrivacy: v });
+                      }}
+                    >
+                      <span className="tw-text-sm tw-font-semibold tw-text-slate-900">약관 전체 동의</span>
+                    </Checkbox>
+                    <Typography.Text type="secondary" className="tw-ml-7 tw-mt-1 tw-block tw-text-xs">
+                      이용약관·개인정보처리방침에 함께 동의합니다.
+                    </Typography.Text>
+                  </div>
+                  <div className="!tw-mb-3 tw-flex tw-w-full tw-items-start tw-justify-between tw-gap-3">
+                    <Form.Item
+                      name="agreeTerms"
+                      valuePropName="checked"
+                      noStyle
+                      rules={[{ validator: agreeValidator('이용약관에 동의해 주세요.') }]}
+                    >
+                      <Checkbox className="tw-min-w-0 tw-flex-1 tw-items-start tw-leading-snug [&_.ant-checkbox]:tw-mt-0.5">
+                        <span className="tw-text-sm tw-text-slate-700">
+                          <span className="tw-font-bold tw-text-rose-600">[필수]</span>{' '}
+                          <span className="tw-font-semibold tw-text-[#0F172A]">이용약관</span>에 동의합니다.
+                        </span>
+                      </Checkbox>
+                    </Form.Item>
+                    <button
+                      type="button"
+                      className="tw-shrink-0 tw-border-0 tw-bg-transparent tw-pt-0.5 tw-text-sm tw-font-medium tw-text-slate-600 tw-underline tw-underline-offset-4 tw-decoration-slate-400 tw-transition-colors hover:tw-text-[#2563EB] hover:tw-decoration-[#2563EB]"
+                      onClick={() => setLegalModal('terms')}
+                    >
+                      내용 보기
+                    </button>
+                  </div>
+                  <div className="tw-flex tw-w-full tw-items-start tw-justify-between tw-gap-3">
+                    <Form.Item
+                      name="agreePrivacy"
+                      valuePropName="checked"
+                      noStyle
+                      rules={[{ validator: agreeValidator('개인정보처리방침에 동의해 주세요.') }]}
+                    >
+                      <Checkbox className="tw-min-w-0 tw-flex-1 tw-items-start tw-leading-snug [&_.ant-checkbox]:tw-mt-0.5">
+                        <span className="tw-text-sm tw-text-slate-700">
+                          <span className="tw-font-bold tw-text-rose-600">[필수]</span>{' '}
+                          <span className="tw-font-semibold tw-text-[#0F172A]">개인정보처리방침</span>에 동의합니다.
+                        </span>
+                      </Checkbox>
+                    </Form.Item>
+                    <button
+                      type="button"
+                      className="tw-shrink-0 tw-border-0 tw-bg-transparent tw-pt-0.5 tw-text-sm tw-font-medium tw-text-slate-600 tw-underline tw-underline-offset-4 tw-decoration-slate-400 tw-transition-colors hover:tw-text-[#2563EB] hover:tw-decoration-[#2563EB]"
+                      onClick={() => setLegalModal('privacy')}
+                    >
+                      내용 보기
+                    </button>
+                  </div>
+                </div>
+
+                <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-end tw-gap-2 tw-pt-2">
+                  {onboardingCompleted ? (
+                    <AppButton size="large" variant="secondary" onClick={() => navigate({ to: '/login' })}>
+                      로그인 페이지로 이동
                     </AppButton>
-                  </Space>
-                </Space>
-              </Space>
-            ) : null}
+                  ) : null}
+                  <AppButton
+                    size="large"
+                    htmlType="submit"
+                    loading={loading}
+                    disabled={onboardingCompleted || !businessChecked || !emailVerified}
+                  >
+                    회사 온보딩 완료
+                  </AppButton>
+                </div>
+              </div>
+            </Space>
           </Form>
         </Card>
       </div>
+
+      <Modal
+        title={
+          <span className="tw-text-lg tw-font-bold tw-text-[#0F172A]">
+            {legalModal === 'terms' ? '이용약관' : legalModal === 'privacy' ? '개인정보처리방침' : ''}
+          </span>
+        }
+        open={legalModal !== null}
+        onCancel={() => setLegalModal(null)}
+        footer={
+          <AppButton variant="secondary" className="tw-min-w-[96px]" onClick={() => setLegalModal(null)}>
+            닫기
+          </AppButton>
+        }
+        width={520}
+        centered
+        destroyOnClose
+        classNames={{ body: '!tw-pt-2' }}
+      >
+        <Typography.Paragraph className="!tw-mb-0 tw-max-h-[min(60vh,420px)] tw-overflow-y-auto tw-whitespace-pre-wrap tw-text-sm tw-leading-relaxed tw-text-slate-600">
+          {legalModal === 'terms' ? LEGAL_DUMMY_TERMS : legalModal === 'privacy' ? LEGAL_DUMMY_PRIVACY : null}
+        </Typography.Paragraph>
+      </Modal>
     </div>
   );
 }

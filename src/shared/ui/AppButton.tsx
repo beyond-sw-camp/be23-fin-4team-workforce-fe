@@ -12,7 +12,7 @@ type AppButtonProps = Omit<ButtonProps, 'variant'> & {
 export function AppButton({ variant = 'primary', className, ...props }: AppButtonProps) {
   const variantClassName =
     variant === 'primary'
-      ? 'tw-border-0 !tw-bg-[#2563EB] hover:!tw-bg-[#1D4ED8]'
+      ? 'tw-border-0 !tw-bg-[#2563EB] hover:!tw-bg-[#1D4ED8] disabled:!tw-cursor-not-allowed disabled:!tw-border disabled:!tw-border-slate-200 disabled:!tw-bg-white disabled:!tw-text-slate-400 disabled:!tw-opacity-100 disabled:!tw-shadow-none disabled:hover:!tw-bg-white disabled:hover:!tw-text-slate-400'
       : variant === 'secondary'
         ? 'tw-border tw-border-slate-200 tw-bg-white tw-text-[#0F172A] hover:tw-border-[#2563EB]/30 hover:tw-bg-[#EFF6FF] hover:tw-text-[#2563EB]'
         : variant === 'danger'

@@ -8,6 +8,8 @@ import {
 import { z } from 'zod';
 import type { AppRouterContext } from '@/app/router/types';
 import { requireAuth, requirePermissions } from '@/app/router/guards';
+import { HomePublicLayout } from '@/pages/public/HomePublicLayout';
+import { LandingHomePage } from '@/pages/public/LandingHomePage';
 import LoginPage from '@/pages/public/LoginPage';
 import { FindPasswordPage } from '@/pages/public/FindPasswordPage';
 import { ResetPasswordPage } from '@/pages/public/ResetPasswordPage';
@@ -37,7 +39,27 @@ const appLayoutRoute = createRoute({
   },
 });
 
-const loginRoute = createRoute({ getParentRoute: () => publicLayoutRoute, path: '/login', component: LoginPage });
+/** pathless layout: `path: '/'`를 부모·자식에 동시에 두면 id `/public/`가 중복되어 런타임 오류가 납니다. */
+const homeRoute = createRoute({
+  getParentRoute: () => publicLayoutRoute,
+  id: 'home',
+  component: HomePublicLayout,
+  beforeLoad: ({ context }) => {
+    if (context.auth.isAuthenticated) {
+      throw redirect({ to: '/app/dashboard' });
+    }
+  },
+});
+const homeIndexRoute = createRoute({
+  getParentRoute: () => homeRoute,
+  path: '/',
+  component: LandingHomePage,
+});
+const loginRoute = createRoute({
+  getParentRoute: () => homeRoute,
+  path: 'login',
+  component: () => <LoginPage embedded />,
+});
 const findPasswordRoute = createRoute({ getParentRoute: () => publicLayoutRoute, path: '/find-password', component: FindPasswordPage });
 const resetPasswordRoute = createRoute({
   getParentRoute: () => publicLayoutRoute,
@@ -47,9 +69,9 @@ const resetPasswordRoute = createRoute({
 });
 const verifyEmailRoute = createRoute({ getParentRoute: () => publicLayoutRoute, path: '/verify-email', component: VerifyEmailPage });
 const companyOnboardingRoute = createRoute({
-  getParentRoute: () => publicLayoutRoute,
-  path: '/company/onboarding',
-  component: CompanyOnboardingPage,
+  getParentRoute: () => homeRoute,
+  path: 'company/onboarding',
+  component: () => <CompanyOnboardingPage embedded />,
 });
 
 const appBaseRoute = createRoute({ getParentRoute: () => appLayoutRoute, path: '/app', component: Outlet });
@@ -111,23 +133,16 @@ const genericRoutes = genericPaths.map((path) =>
 const forbiddenRoute = createRoute({ getParentRoute: () => rootRoute, path: '/403', component: ForbiddenPage });
 const notFoundRoute = createRoute({ getParentRoute: () => rootRoute, path: '/404', component: NotFoundPage });
 
-const indexRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/',
-  beforeLoad: ({ context }) => {
-    if (context.auth.isAuthenticated) {
-      throw redirect({ to: '/app/dashboard' });
-    }
-    throw redirect({ to: '/login' });
-  },
-});
-
 const routeTree = rootRoute.addChildren([
-  publicLayoutRoute.addChildren([loginRoute, findPasswordRoute, resetPasswordRoute, verifyEmailRoute, companyOnboardingRoute]),
+  publicLayoutRoute.addChildren([
+    homeRoute.addChildren([homeIndexRoute, loginRoute, companyOnboardingRoute]),
+    findPasswordRoute,
+    resetPasswordRoute,
+    verifyEmailRoute,
+  ]),
   appLayoutRoute.addChildren([appBaseRoute.addChildren([dashboardRoute, membersRoute, memberDetailRoute, notificationsRoute, ...genericRoutes])]),
   forbiddenRoute,
   notFoundRoute,
-  indexRoute,
 ]);
 
 export function createAppRouter(context: AppRouterContext) {
