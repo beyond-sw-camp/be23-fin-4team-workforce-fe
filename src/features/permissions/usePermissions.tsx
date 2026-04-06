@@ -1,8 +1,8 @@
-﻿import { useMemo } from 'react';
+import { useMemo } from 'react';
 import type { PropsWithChildren } from 'react';
 import { useAuth } from '@/features/auth/useAuth';
 import type { PermissionSpec, PermissionsContextValue } from '@/features/permissions/model';
-import { toPermissionCode } from '@/features/permissions/model';
+import { grantedStartsWithRequired, toPermissionCode } from '@/features/permissions/model';
 import { PermissionsContext } from '@/features/permissions/permissions-context';
 
 export function PermissionsProvider({ children }: PropsWithChildren) {
@@ -10,13 +10,21 @@ export function PermissionsProvider({ children }: PropsWithChildren) {
 
   const value = useMemo<PermissionsContextValue>(() => {
     const granted = user?.permissions ?? [];
-    const set = new Set(granted.map((item) => toPermissionCode(item)));
+    const isSystemAdmin = user?.isSystemAdmin === true;
 
     return {
       granted,
-      hasPermission: (spec: PermissionSpec) => set.has(toPermissionCode(spec)),
+      hasPermission: (spec: PermissionSpec) => {
+        if (isSystemAdmin) return true;
+        const required = toPermissionCode(spec);
+        if (!required) return false;
+        return granted.some((item) => {
+          const code = typeof item === 'string' ? item.trim() : toPermissionCode(item as PermissionSpec);
+          return grantedStartsWithRequired(code, required);
+        });
+      },
     };
-  }, [user?.permissions]);
+  }, [user?.permissions, user?.isSystemAdmin]);
 
   return <PermissionsContext.Provider value={value}>{children}</PermissionsContext.Provider>;
 }

@@ -7,6 +7,7 @@ import {
 } from '@tanstack/react-router';
 import { z } from 'zod';
 import type { AppRouterContext } from '@/app/router/types';
+import { PERM } from '@/features/permissions/backend-permissions';
 import { requireAuth, requirePermissions } from '@/app/router/guards';
 import { HomePublicLayout } from '@/pages/public/HomePublicLayout';
 import { LandingHomePage } from '@/pages/public/LandingHomePage';
@@ -22,6 +23,7 @@ import { NotificationsPage } from '@/pages/app/NotificationsPage';
 import { GenericPage } from '@/pages/app/GenericPage';
 import { ForbiddenPage } from '@/pages/ForbiddenPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
+import { APP_GENERIC_PAGE_COPY } from '@/app/locale/app-ko';
 import { AppShellLayout } from '@/widgets/app-shell/AppShellLayout';
 
 const rootRoute = createRootRouteWithContext<AppRouterContext>()({
@@ -79,7 +81,7 @@ const appBaseRoute = createRoute({ getParentRoute: () => appLayoutRoute, path: '
 const dashboardRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/dashboard',
-  beforeLoad: ({ context }) => requirePermissions(context, ['dashboard.read']),
+  beforeLoad: ({ context }) => requirePermissions(context, [PERM.MEMBER_READ]),
   component: DashboardPage,
 });
 
@@ -93,14 +95,14 @@ const membersRoute = createRoute({
     sortBy: z.string().optional(),
     sortOrder: z.enum(['asc', 'desc']).optional(),
   }),
-  beforeLoad: ({ context }) => requirePermissions(context, ['members.read']),
+  beforeLoad: ({ context }) => requirePermissions(context, [PERM.MEMBER_READ]),
   component: MembersPage,
 });
 
 const memberDetailRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/members/$memberId',
-  beforeLoad: ({ context }) => requirePermissions(context, ['members.read']),
+  beforeLoad: ({ context }) => requirePermissions(context, [PERM.MEMBER_READ]),
   component: MemberDetailPage,
 });
 const notificationsRoute = createRoute({
@@ -122,13 +124,14 @@ const genericPaths = [
   '/settings',
 ] as const;
 
-const genericRoutes = genericPaths.map((path) =>
-  createRoute({
+const genericRoutes = genericPaths.map((path) => {
+  const copy = APP_GENERIC_PAGE_COPY[path] ?? { title: '페이지', description: '준비 중입니다.' };
+  return createRoute({
     getParentRoute: () => appBaseRoute,
     path,
-    component: () => <GenericPage title={path.replace('/', '').replace('-', ' ')} />,
-  }),
-);
+    component: () => <GenericPage title={copy.title} description={copy.description} />,
+  });
+});
 
 const forbiddenRoute = createRoute({ getParentRoute: () => rootRoute, path: '/403', component: ForbiddenPage });
 const notFoundRoute = createRoute({ getParentRoute: () => rootRoute, path: '/404', component: NotFoundPage });

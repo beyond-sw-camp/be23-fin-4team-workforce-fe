@@ -38,33 +38,42 @@ export function NotificationsPage() {
 
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
-      <Card>
-        <Space className="tw-w-full tw-justify-between">
-          <Typography.Title level={4} className="!tw-m-0">
-            Notifications
-          </Typography.Title>
-          <Space>
-            <Badge count={unreadCount} overflowCount={99} />
-            <AppButton
-              variant="secondary"
-              loading={markAllAsRead.isPending}
-              onClick={() => {
-                void markAllAsRead.mutateAsync();
-              }}
-            >
-              Mark all as read
-            </AppButton>
+      <div>
+        <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
+          알림
+        </Typography.Title>
+        <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-sm">
+          읽지 않은 알림을 확인하고 처리할 수 있습니다.
+        </Typography.Paragraph>
+      </div>
+      <Card className="tw-border-slate-200/80 tw-shadow-sm">
+        <Space className="tw-w-full tw-flex-wrap tw-justify-between" align="center">
+          <Space align="center">
+            <Typography.Text strong className="tw-text-slate-700">
+              미읽음
+            </Typography.Text>
+            <Badge count={unreadCount} overflowCount={99} showZero />
           </Space>
+          <AppButton
+            variant="secondary"
+            loading={markAllAsRead.isPending}
+            onClick={() => {
+              void markAllAsRead.mutateAsync();
+            }}
+          >
+            모두 읽음 처리
+          </AppButton>
         </Space>
       </Card>
 
-      <Card>
+      <Card className="tw-border-slate-200/80 tw-shadow-sm">
         <List
           loading={isLoading}
           dataSource={notifications}
           locale={{ emptyText: '알림이 없습니다.' }}
           renderItem={(item) => (
             <List.Item
+              className="!tw-items-start"
               actions={[
                 !item.read ? (
                   <AppButton
@@ -81,12 +90,14 @@ export function NotificationsPage() {
             >
               <List.Item.Meta
                 title={
-                  <Space>
-                    <span>{item.title}</span>
-                    {!item.read ? <Badge status="processing" text="NEW" /> : null}
+                  <Space wrap>
+                    <span className="tw-font-medium tw-text-slate-900">{item.title}</span>
+                    {!item.read ? (
+                      <Badge status="processing" text="새 알림" className="!tw-text-xs" />
+                    ) : null}
                   </Space>
                 }
-                description={item.content}
+                description={<span className="tw-text-slate-600">{item.content}</span>}
               />
             </List.Item>
           )}

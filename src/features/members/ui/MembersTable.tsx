@@ -1,7 +1,9 @@
-import { Dropdown, Space, Tag } from 'antd';
+import { Button, Dropdown, Space, Tag } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { Link } from '@tanstack/react-router';
+import { MEMBER_STATUS_KO } from '@/app/locale/app-ko';
 import { AppDataTable } from '@/shared/ui/AppDataTable';
+import { PERM } from '@/features/permissions/backend-permissions';
 import { PermissionGuard } from '@/features/permissions/permission-guard';
 import type { Member } from '@/features/members/model/types';
 
@@ -16,37 +18,48 @@ type Props = {
 
 export function MembersTable({ rows, loading, total, page, pageSize, onPageChange }: Props) {
   const columns: ColumnsType<Member> = [
-    { title: 'Name', dataIndex: 'name' },
-    { title: 'Email', dataIndex: 'email' },
-    { title: 'Department', dataIndex: 'department' },
+    { title: '이름', dataIndex: 'name' },
+    { title: '이메일', dataIndex: 'email' },
+    { title: '부서', dataIndex: 'department' },
     {
-      title: 'Status',
+      title: '상태',
       dataIndex: 'status',
       render: (status: Member['status']) => (
-        <Tag color={status === 'ACTIVE' ? 'green' : status === 'DORMANT' ? 'gold' : 'volcano'}>{status}</Tag>
+        <Tag color={status === 'ACTIVE' ? 'green' : status === 'DORMANT' ? 'gold' : 'volcano'}>
+          {MEMBER_STATUS_KO[status]}
+        </Tag>
       ),
     },
     {
-      title: 'Actions',
+      title: '작업',
       key: 'actions',
       render: (_, row) => (
         <Space>
           <Dropdown
             menu={{
               items: [
-                { key: 'view', label: <Link to="/app/members/$memberId" params={{ memberId: row.id }}>{`View ${row.name}`}</Link> },
+                {
+                  key: 'view',
+                  label: (
+                    <Link to="/app/members/$memberId" params={{ memberId: row.id }}>
+                      상세 보기
+                    </Link>
+                  ),
+                },
                 {
                   key: 'edit',
                   label: (
-                    <PermissionGuard required="members.edit" fallback={<span style={{ opacity: 0.5 }}>Edit (No permission)</span>}>
-                      <span>Edit</span>
+                    <PermissionGuard required={PERM.MEMBER_UPDATE} fallback={<span className="tw-text-slate-400">수정 (권한 없음)</span>}>
+                      <span>수정</span>
                     </PermissionGuard>
                   ),
                 },
               ],
             }}
           >
-            <a>More</a>
+            <Button type="link" className="!tw-px-1">
+              더보기
+            </Button>
           </Dropdown>
         </Space>
       ),
@@ -59,7 +72,14 @@ export function MembersTable({ rows, loading, total, page, pageSize, onPageChang
       columns={columns}
       dataSource={rows}
       loading={loading}
-      pagination={{ current: page, pageSize, total, onChange: onPageChange, showSizeChanger: true }}
+      pagination={{
+        current: page,
+        pageSize,
+        total,
+        onChange: onPageChange,
+        showSizeChanger: true,
+        showTotal: (t) => `총 ${t}건`,
+      }}
     />
   );
 }
