@@ -20,6 +20,26 @@ export const antdTheme = {
     fontFamily: BRAND_FONT_FAMILY,
   },
   components: {
+    Menu: {
+      itemBorderRadius: 10,
+      itemMarginInline: 10,
+      itemMarginBlock: 2,
+      itemHeight: 40,
+      itemPaddingInline: 14,
+      colorItemText: '#64748b',
+      colorItemTextHover: '#0f172a',
+      colorItemTextSelected: BRAND_PRIMARY,
+      colorItemBg: 'transparent',
+      colorItemBgHover: '#f1f5f9',
+      colorItemBgSelected: 'rgba(37, 99, 235, 0.12)',
+      colorSubItemBg: 'transparent',
+    },
+    Layout: {
+      headerBg: '#ffffff',
+      headerPadding: '0 24px',
+      bodyBg: BRAND_BG,
+      siderBg: '#ffffff',
+    },
     Button: {
       fontWeight: 700,
       borderRadius: 16,

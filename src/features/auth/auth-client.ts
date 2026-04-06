@@ -11,8 +11,31 @@ type LoginResponse = {
   name?: string;
   email?: string;
   permissions?: string[];
+  isSystemAdminYn?: 'Y' | 'N';
   isFirstLoginYn?: 'Y' | 'N';
   isEmailVerifiedYn?: 'Y' | 'N';
+  jobTitle?: string;
+  positionName?: string;
+  rank?: string;
+  departmentName?: string;
+  deptName?: string;
+  organizationName?: string;
+  companyName?: string;
+  corpName?: string;
+  tenantName?: string;
+  businessName?: string;
+  clientCompanyName?: string;
+  companyLogoUrl?: string;
+  logoUrl?: string;
+  brandLogoUrl?: string;
+  companyLogo?: string;
+  companyImageUrl?: string;
+  profileUrl?: string;
+  profileImageUrl?: string;
+  avatarUrl?: string;
+  photoUrl?: string;
+  headImgUrl?: string;
+  headImageUrl?: string;
 };
 
 let currentSession: AuthSession | null = null;
@@ -28,11 +51,16 @@ function toBooleanMaybe(value: unknown): boolean | undefined {
   return undefined;
 }
 
-function decodeBase64Url(value: string): string {
-  // JWT payload is base64url encoded; normalize to standard base64.
-  const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+/** Base64url → UTF-8 문자열 (JWT JSON 본문에 한글 등이 있을 때 `atob`만 쓰면 깨짐) */
+function decodeBase64UrlPayloadToUtf8(payloadPart: string): string {
+  const normalized = payloadPart.replace(/-/g, '+').replace(/_/g, '/');
   const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=');
-  return atob(padded);
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new TextDecoder('utf-8').decode(bytes);
 }
 
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
@@ -41,22 +69,90 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
   const payloadPart = parts[1];
   if (typeof payloadPart !== 'string') return null;
   try {
-    const decoded = decodeBase64Url(payloadPart);
-    return JSON.parse(decoded) as Record<string, unknown>;
+    const jsonText = decodeBase64UrlPayloadToUtf8(payloadPart);
+    return JSON.parse(jsonText) as Record<string, unknown>;
   } catch {
     return null;
   }
+}
+
+function parseIsSystemAdmin(value: unknown): boolean | undefined {
+  if (value === true) return true;
+  if (value === false) return false;
+  if (typeof value === 'string') {
+    const v = value.trim().toUpperCase();
+    if (v === 'YES' || v === 'Y') return true;
+    if (v === 'NO' || v === 'N') return false;
+  }
+  return undefined;
+}
+
+function pickJobTitle(payload: Partial<LoginResponse> & Partial<Me>): string | undefined {
+  const raw = payload.jobTitle ?? payload.positionName ?? payload.rank;
+  return typeof raw === 'string' && raw.trim() ? raw.trim() : undefined;
+}
+
+function pickDepartmentName(payload: Partial<LoginResponse> & Partial<Me>): string | undefined {
+  const raw = payload.departmentName ?? payload.deptName ?? payload.organizationName;
+  return typeof raw === 'string' && raw.trim() ? raw.trim() : undefined;
+}
+
+function pickCompanyName(payload: Partial<LoginResponse> & Partial<Me>): string | undefined {
+  const raw =
+    payload.companyName ??
+    payload.corpName ??
+    payload.tenantName ??
+    payload.businessName ??
+    payload.clientCompanyName;
+  return typeof raw === 'string' && raw.trim() ? raw.trim() : undefined;
+}
+
+function pickCompanyLogoUrl(payload: Partial<LoginResponse> & Partial<Me>): string | undefined {
+  const raw =
+    payload.companyLogoUrl ??
+    payload.logoUrl ??
+    payload.brandLogoUrl ??
+    payload.companyLogo ??
+    payload.companyImageUrl;
+  if (typeof raw !== 'string' || !raw.trim()) return undefined;
+  const u = raw.trim();
+  if (u.startsWith('http') || u.startsWith('/') || u.startsWith('data:')) return u;
+  return u;
+}
+
+function pickProfileImageUrl(payload: Partial<LoginResponse> & Partial<Me>): string | undefined {
+  const raw =
+    payload.profileImageUrl ??
+    payload.profileUrl ??
+    payload.avatarUrl ??
+    payload.photoUrl ??
+    payload.headImgUrl ??
+    payload.headImageUrl;
+  if (typeof raw !== 'string' || !raw.trim()) return undefined;
+  const u = raw.trim();
+  if (u.startsWith('http') || u.startsWith('/') || u.startsWith('data:')) return u;
+  return u;
 }
 
 function mapMe(payload: Partial<LoginResponse> & Partial<Me>): Me {
   const emailVerificationRequired =
     payload.isEmailVerifiedYn === undefined ? undefined : !toBooleanFlag(payload.isEmailVerifiedYn);
 
+  const fromPayload =
+    payload.isSystemAdmin ??
+    (payload.isSystemAdminYn !== undefined ? parseIsSystemAdmin(payload.isSystemAdminYn) : undefined);
+
   return {
     id: payload.id ?? payload.memberId ?? '',
     name: payload.name ?? '',
     email: payload.email ?? '',
     permissions: payload.permissions ?? [],
+    isSystemAdmin: fromPayload,
+    jobTitle: pickJobTitle(payload),
+    departmentName: pickDepartmentName(payload),
+    companyName: pickCompanyName(payload),
+    companyLogoUrl: pickCompanyLogoUrl(payload),
+    profileImageUrl: pickProfileImageUrl(payload),
     flags: {
       mustChangePassword:
         payload.isFirstLoginYn === undefined ? payload.flags?.mustChangePassword : toBooleanFlag(payload.isFirstLoginYn),
@@ -91,19 +187,27 @@ async function getMeOrThrow() {
     jwtPayload.authorities ??
     jwtPayload.roles;
 
-  const permissions = Array.isArray(permissionsRaw)
-    ? permissionsRaw
-        .map((x) => {
-          if (typeof x === 'string') return x;
-          if (x && typeof x === 'object') {
-            const obj = x as Record<string, unknown>;
-            const code = obj.code ?? obj.permission ?? obj.name ?? obj.value;
-            return typeof code === 'string' ? code : undefined;
-          }
-          return undefined;
-        })
-        .filter((x): x is string => typeof x === 'string')
-    : [];
+  let permissions: string[] = [];
+  if (typeof permissionsRaw === 'string' && permissionsRaw.trim()) {
+    permissions = permissionsRaw
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+  } else if (Array.isArray(permissionsRaw)) {
+    permissions = permissionsRaw
+      .map((x) => {
+        if (typeof x === 'string') return x;
+        if (x && typeof x === 'object') {
+          const obj = x as Record<string, unknown>;
+          const code = obj.code ?? obj.permission ?? obj.name ?? obj.value;
+          return typeof code === 'string' ? code : undefined;
+        }
+        return undefined;
+      })
+      .filter((x): x is string => typeof x === 'string');
+  }
+
+  const isSystemAdminFromJwt = parseIsSystemAdmin(jwtPayload.isSystemAdmin);
 
   const flagsFromToken = (jwtPayload.flags && typeof jwtPayload.flags === 'object' ? jwtPayload.flags : {}) as
     | Record<string, unknown>
@@ -122,6 +226,37 @@ async function getMeOrThrow() {
   const name = (typeof jwtPayload.name === 'string' && jwtPayload.name) || undefined;
   const email = (typeof jwtPayload.email === 'string' && jwtPayload.email) || undefined;
 
+  const jobTitleRaw =
+    jwtPayload.jobTitle ?? jwtPayload.positionName ?? jwtPayload.rank ?? jwtPayload.jobGrade ?? jwtPayload.job_grade;
+  const departmentRaw =
+    jwtPayload.departmentName ??
+    jwtPayload.deptName ??
+    jwtPayload.organizationName ??
+    jwtPayload.orgName ??
+    jwtPayload.department;
+
+  const companyNameRaw =
+    jwtPayload.companyName ??
+    jwtPayload.corpName ??
+    jwtPayload.tenantName ??
+    jwtPayload.businessName ??
+    jwtPayload.clientCompanyName;
+
+  const companyLogoRaw =
+    jwtPayload.companyLogoUrl ??
+    jwtPayload.logoUrl ??
+    jwtPayload.brandLogoUrl ??
+    jwtPayload.companyLogo ??
+    jwtPayload.companyImageUrl;
+
+  const profileImageRaw =
+    jwtPayload.profileUrl ??
+    jwtPayload.profileImageUrl ??
+    jwtPayload.avatarUrl ??
+    jwtPayload.photoUrl ??
+    jwtPayload.headImgUrl ??
+    jwtPayload.headImageUrl;
+
   if (!id) {
     throw new Error('JWT payload missing identity');
   }
@@ -131,6 +266,16 @@ async function getMeOrThrow() {
     name,
     email,
     permissions,
+    isSystemAdmin: isSystemAdminFromJwt,
+    jobTitle: typeof jobTitleRaw === 'string' ? jobTitleRaw : undefined,
+    departmentName: typeof departmentRaw === 'string' ? departmentRaw : undefined,
+    companyName: typeof companyNameRaw === 'string' ? companyNameRaw.trim() || undefined : undefined,
+    companyLogoUrl: pickCompanyLogoUrl({
+      companyLogoUrl: typeof companyLogoRaw === 'string' ? companyLogoRaw : undefined,
+    }),
+    profileImageUrl: pickProfileImageUrl({
+      profileImageUrl: typeof profileImageRaw === 'string' ? profileImageRaw : undefined,
+    }),
     flags: {
       mustChangePassword,
       emailVerificationRequired,
