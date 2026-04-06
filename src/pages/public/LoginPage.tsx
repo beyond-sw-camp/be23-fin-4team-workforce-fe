@@ -1,5 +1,5 @@
 import { Alert, Card, Checkbox, Form, Input, Typography } from 'antd';
-import { ArrowRightOutlined, BankOutlined, LockOutlined, MailOutlined } from '@ant-design/icons';
+import { ArrowRightOutlined, LockOutlined, MailOutlined } from '@ant-design/icons';
 import { useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { useAuth } from '@/features/auth/useAuth';
