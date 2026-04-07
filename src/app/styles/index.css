@@ -28,3 +28,69 @@ body {
 a {
   color: var(--wf-color-primary);
 }
+
+/**
+ * 얇은 스크롤바 — 칸반·긴 가로 목록 등 (Firefox + WebKit)
+ */
+.wf-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.7) rgba(241, 245, 249, 0.6);
+}
+
+.wf-scrollbar::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+
+.wf-scrollbar::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.wf-scrollbar::-webkit-scrollbar-track {
+  margin: 4px;
+  background: rgba(241, 245, 249, 0.85);
+  border-radius: 9999px;
+}
+
+.wf-scrollbar::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  background-color: rgba(148, 163, 184, 0.55);
+}
+
+.wf-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(100, 116, 139, 0.75);
+}
+
+/**
+ * 모달 본문 — 트랙은 투명, 썸만 얇게(기본은 약하게, 호버 시만 또렷)
+ */
+.wf-scrollbar-modal {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
+}
+
+.wf-scrollbar-modal::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.wf-scrollbar-modal::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.wf-scrollbar-modal::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.wf-scrollbar-modal::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  background-color: rgba(148, 163, 184, 0.28);
+}
+
+.wf-scrollbar-modal::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(100, 116, 139, 0.5);
+}

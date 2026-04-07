@@ -1,4 +1,4 @@
-﻿import { Modal } from 'antd';
+import { AppModal } from '@/shared/ui/AppModal';
 
 type Props = {
   open: boolean;
@@ -10,8 +10,8 @@ type Props = {
 
 export function AppConfirmModal({ open, title, onOk, onCancel, children }: Props) {
   return (
-    <Modal open={open} title={title} onOk={onOk} onCancel={onCancel}>
+    <AppModal open={open} title={title} onOk={onOk} onCancel={onCancel}>
       {children}
-    </Modal>
+    </AppModal>
   );
 }

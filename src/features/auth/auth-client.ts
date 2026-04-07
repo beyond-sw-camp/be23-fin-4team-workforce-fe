@@ -1,6 +1,7 @@
 import type { AuthClient, AuthSession, LoginInput, Me } from '@/features/auth/types';
 import { httpClient } from '@/shared/api/httpClient';
 import { unwrapApiResponse } from '@/shared/api/response';
+import { decodeJwtPayload, getTenantHeadersFromJwtPayload } from '@/shared/auth/jwtTenantClaims';
 import { clearAccessToken, getAccessToken, setAccessToken } from '@/shared/stores/authTokenStore';
 
 type LoginResponse = {
@@ -8,6 +9,10 @@ type LoginResponse = {
   access_token?: string;
   memberId?: string;
   id?: string;
+  companyId?: string;
+  company_id?: string;
+  corpId?: string;
+  tenantId?: string;
   name?: string;
   email?: string;
   permissions?: string[];
@@ -51,29 +56,11 @@ function toBooleanMaybe(value: unknown): boolean | undefined {
   return undefined;
 }
 
-/** Base64url → UTF-8 문자열 (JWT JSON 본문에 한글 등이 있을 때 `atob`만 쓰면 깨짐) */
-function decodeBase64UrlPayloadToUtf8(payloadPart: string): string {
-  const normalized = payloadPart.replace(/-/g, '+').replace(/_/g, '/');
-  const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=');
-  const binary = atob(padded);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return new TextDecoder('utf-8').decode(bytes);
-}
-
-function decodeJwtPayload(token: string): Record<string, unknown> | null {
-  const parts = token.split('.');
-  if (parts.length < 2) return null;
-  const payloadPart = parts[1];
-  if (typeof payloadPart !== 'string') return null;
-  try {
-    const jsonText = decodeBase64UrlPayloadToUtf8(payloadPart);
-    return JSON.parse(jsonText) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
+function pickCompanyId(payload: Partial<LoginResponse> & Partial<Me>): string | undefined {
+  const extended = payload as Partial<LoginResponse> & { company_id?: string };
+  const raw = extended.companyId ?? extended.company_id ?? extended.corpId ?? extended.tenantId;
+  if (typeof raw !== 'string' || !raw.trim()) return undefined;
+  return raw.trim();
 }
 
 function parseIsSystemAdmin(value: unknown): boolean | undefined {
@@ -144,6 +131,7 @@ function mapMe(payload: Partial<LoginResponse> & Partial<Me>): Me {
 
   return {
     id: payload.id ?? payload.memberId ?? '',
+    companyId: pickCompanyId(payload),
     name: payload.name ?? '',
     email: payload.email ?? '',
     permissions: payload.permissions ?? [],
@@ -242,6 +230,9 @@ async function getMeOrThrow() {
     jwtPayload.businessName ??
     jwtPayload.clientCompanyName;
 
+  const tenantIds = getTenantHeadersFromJwtPayload(jwtPayload);
+  const companyId = tenantIds['X-Company-Id'];
+
   const companyLogoRaw =
     jwtPayload.companyLogoUrl ??
     jwtPayload.logoUrl ??
@@ -263,6 +254,7 @@ async function getMeOrThrow() {
 
   return mapMe({
     id,
+    companyId,
     name,
     email,
     permissions,
