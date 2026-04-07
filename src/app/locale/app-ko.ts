@@ -4,8 +4,10 @@ export const APP_BRAND_NAME = '워크포스';
 
 export const APP_MENU_LABEL: Record<string, string> = {
   '/app/dashboard': '대시보드',
+  '/app/calendar': '일정',
   '/app/members': '구성원',
   '/app/organization': '조직',
+  '/app/roles': '역할·권한',
   '/app/attendance': '근태',
   '/app/leave': '휴가',
   '/app/approvals': '결재',
@@ -21,33 +23,49 @@ export const APP_MENU_LABEL: Record<string, string> = {
 /** 사이드 메뉴 표시 순서 */
 export const APP_MENU_PATH_ORDER = [
   '/app/dashboard',
+  '/app/calendar',
   '/app/members',
   '/app/organization',
+  '/app/roles',
   '/app/attendance',
   '/app/leave',
   '/app/approvals',
   '/app/payroll',
   '/app/mail',
-  '/app/notifications',
   '/app/performance',
   '/app/evaluations',
   '/app/ai-assistant',
   '/app/settings',
 ] as const;
 
+/** ESG 메뉴(설정 ON 시 사이드바에 삽입) — 경로·라벨 */
+export const ESG_MENU_PATH_ORDER = [
+  '/app/esg',
+  '/app/esg/activities',
+  '/app/esg/campaigns',
+  '/app/esg/shop',
+  '/app/esg/admin',
+] as const;
+
+export const ESG_MENU_LABEL: Record<string, string> = {
+  '/app/esg': 'ESG',
+  '/app/esg/activities': 'ESG 활동',
+  '/app/esg/campaigns': 'ESG 캠페인',
+  '/app/esg/shop': 'ESG 샵',
+  '/app/esg/admin': 'ESG 관리',
+};
+
 /** 상단 헤더 등에 표시하는 현재 화면 제목 */
 export function appHeaderTitleFromPath(pathname: string): string {
-  const exact = APP_MENU_LABEL[pathname];
+  const exact = APP_MENU_LABEL[pathname] ?? ESG_MENU_LABEL[pathname];
   if (exact) return exact;
+  if (pathname === '/app/me') return '마이페이지';
+  if (pathname === '/app/me/edit') return '내 정보 수정';
   if (/^\/app\/members\/[^/]+$/.test(pathname)) return '구성원 상세';
   return APP_BRAND_NAME;
 }
 
 export const APP_GENERIC_PAGE_COPY: Record<string, { title: string; description: string }> = {
-  '/organization': {
-    title: '조직',
-    description: '조직도·부서 관리 기능을 준비 중입니다. 곧 이용하실 수 있어요.',
-  },
   '/attendance': {
     title: '근태',
     description: '출퇴근·근무 현황·근태 통계 기능을 준비 중입니다.',
@@ -80,8 +98,8 @@ export const APP_GENERIC_PAGE_COPY: Record<string, { title: string; description:
 
 export const MEMBER_STATUS_KO: Record<'ACTIVE' | 'DORMANT' | 'LEAVE', string> = {
   ACTIVE: '재직',
-  DORMANT: '휴면',
-  LEAVE: '휴직',
+  DORMANT: '휴직',
+  LEAVE: '퇴직',
 };
 
 export const ACCOUNT_STATUS_KO: Record<'ACTIVE' | 'BLOCKED' | 'DELETED', string> = {
@@ -90,10 +108,13 @@ export const ACCOUNT_STATUS_KO: Record<'ACTIVE' | 'BLOCKED' | 'DELETED', string>
   DELETED: '삭제됨',
 };
 
-export const EMPLOYMENT_TYPE_KO: Record<'FULL_TIME' | 'CONTRACTOR' | 'INTERN', string> = {
+export const EMPLOYMENT_TYPE_KO: Record<string, string> = {
   FULL_TIME: '정규직',
-  CONTRACTOR: '계약직',
+  PART_TIME: '파트타임',
+  CONTRACT: '계약직',
   INTERN: '인턴',
+  /** 구 API 호환 */
+  CONTRACTOR: '계약직',
 };
 
 /** 성과(/app/performance) 화면 카피 */

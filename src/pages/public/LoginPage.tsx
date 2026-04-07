@@ -2,6 +2,7 @@ import { Alert, Card, Checkbox, Form, Input, Typography } from 'antd';
 import { ArrowRightOutlined, LockOutlined, MailOutlined } from '@ant-design/icons';
 import { useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
+import { APP_POST_LOGIN_PATH } from '@/app/config/paths';
 import { useAuth } from '@/features/auth/useAuth';
 import brandLogo from '@/shared/assets/brand/logo.png';
 import { AppButton } from '@/shared/ui/AppButton';
@@ -20,8 +21,12 @@ function LoginPage({ embedded = false }: LoginPageProps) {
     setLoading(true);
     setError(null);
     try {
-      await auth.login(values);
-      navigate({ to: '/app/dashboard' });
+      const session = await auth.login(values);
+      if (session.user.flags?.mustChangePassword) {
+        void navigate({ to: '/change-password', search: { forced: true } });
+        return;
+      }
+      void navigate({ to: APP_POST_LOGIN_PATH, replace: true });
     } catch (e) {
       setError((e as { message?: string })?.message ?? '로그인에 실패했습니다.');
     } finally {

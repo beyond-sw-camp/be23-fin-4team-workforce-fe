@@ -15,7 +15,7 @@ export function FindPasswordPage() {
     setLoading(true);
     setError(null);
     try {
-      await memberApi.sendResetPasswordCode(values);
+      await memberApi.sendResetPasswordCode(values.email);
       setSent(true);
     } catch (e) {
       setError((e as { message?: string })?.message ?? '요청 처리에 실패했습니다.');

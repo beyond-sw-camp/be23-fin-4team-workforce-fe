@@ -49,6 +49,10 @@ export type AuthContextValue = {
   status: 'loading' | 'authenticated' | 'unauthenticated';
   user: Me | null;
   isAuthenticated: boolean;
-  login: (input: LoginInput) => Promise<void>;
+  login: (input: LoginInput) => Promise<AuthSession>;
   logout: () => Promise<void>;
+  /** AT 재발급 후 사용자 정보(JWT 클레임) 갱신 — 성공 여부 */
+  refreshAuth: () => Promise<boolean>;
+  /** AT 만료 시각(ms). JWT `exp` 또는 발급 기준 +30분 */
+  accessExpiresAtMs: number | null;
 };

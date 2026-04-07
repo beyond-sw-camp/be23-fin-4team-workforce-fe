@@ -60,7 +60,9 @@ export function MemberDetailPage() {
           <Descriptions.Item label="이메일">{member.email}</Descriptions.Item>
           <Descriptions.Item label="사번">{member.sabun}</Descriptions.Item>
           <Descriptions.Item label="입사일">{member.joinDate}</Descriptions.Item>
-          <Descriptions.Item label="고용 형태">{EMPLOYMENT_TYPE_KO[member.employmentType]}</Descriptions.Item>
+          <Descriptions.Item label="고용 형태">
+            {EMPLOYMENT_TYPE_KO[member.employmentType] ?? member.employmentType}
+          </Descriptions.Item>
           <Descriptions.Item label="재직 상태">
             <Tag color={member.memberStatus === 'ACTIVE' ? 'green' : member.memberStatus === 'DORMANT' ? 'gold' : 'volcano'}>
               {MEMBER_STATUS_KO[member.memberStatus]}

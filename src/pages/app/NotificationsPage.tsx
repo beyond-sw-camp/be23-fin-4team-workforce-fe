@@ -1,5 +1,4 @@
 import { Badge, Card, List, Space, Typography } from 'antd';
-import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { notificationApi } from '@/features/notification/api/notificationApi';
 import { AppButton } from '@/shared/ui/AppButton';
@@ -28,13 +27,6 @@ export function NotificationsPage() {
       void queryClient.invalidateQueries({ queryKey: ['notifications'] });
     },
   });
-
-  useEffect(() => {
-    const unsubscribe = notificationApi.subscribe(() => {
-      void queryClient.invalidateQueries({ queryKey: ['notifications'] });
-    });
-    return unsubscribe;
-  }, [queryClient]);
 
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
@@ -75,12 +67,12 @@ export function NotificationsPage() {
             <List.Item
               className="!tw-items-start"
               actions={[
-                !item.read ? (
+                item.isRead !== 'YES' ? (
                   <AppButton
-                    key={`${item.id}-read`}
+                    key={`${item.notificationId}-read`}
                     type="link"
                     onClick={() => {
-                      void markAsRead.mutateAsync(item.id);
+                      void markAsRead.mutateAsync(item.notificationId);
                     }}
                   >
                     읽음 처리
@@ -92,7 +84,7 @@ export function NotificationsPage() {
                 title={
                   <Space wrap>
                     <span className="tw-font-medium tw-text-slate-900">{item.title}</span>
-                    {!item.read ? (
+                    {item.isRead !== 'YES' ? (
                       <Badge status="processing" text="새 알림" className="!tw-text-xs" />
                     ) : null}
                   </Space>

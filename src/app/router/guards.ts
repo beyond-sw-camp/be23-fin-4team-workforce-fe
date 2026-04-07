@@ -1,4 +1,4 @@
-﻿import { redirect } from '@tanstack/react-router';
+import { redirect } from '@tanstack/react-router';
 import type { PermissionSpec } from '@/features/permissions/model';
 import type { AppRouterContext } from '@/app/router/types';
 
@@ -12,7 +12,7 @@ export function requireAuth(context: AppRouterContext) {
     throw redirect({ to: '/403' });
   }
   if (flags?.mustChangePassword) {
-    throw redirect({ to: '/reset-password', search: { forced: true } as never });
+    throw redirect({ to: '/change-password', search: { forced: true } });
   }
   if (flags?.emailVerificationRequired) {
     throw redirect({ to: '/verify-email' });

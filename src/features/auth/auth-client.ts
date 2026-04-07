@@ -2,6 +2,7 @@ import type { AuthClient, AuthSession, LoginInput, Me } from '@/features/auth/ty
 import { httpClient } from '@/shared/api/httpClient';
 import { unwrapApiResponse } from '@/shared/api/response';
 import { decodeJwtPayload, getTenantHeadersFromJwtPayload } from '@/shared/auth/jwtTenantClaims';
+import { clearRefreshIdentity, setRefreshIdentity } from '@/shared/stores/authRefreshIdentityStore';
 import { clearAccessToken, getAccessToken, setAccessToken } from '@/shared/stores/authTokenStore';
 
 type LoginResponse = {
@@ -17,8 +18,9 @@ type LoginResponse = {
   email?: string;
   permissions?: string[];
   isSystemAdminYn?: 'Y' | 'N';
-  isFirstLoginYn?: 'Y' | 'N';
-  isEmailVerifiedYn?: 'Y' | 'N';
+  isFirstLoginYn?: 'Y' | 'N' | 'YES' | 'NO';
+  isEmailVerifiedYn?: 'Y' | 'N' | 'YES' | 'NO';
+  memberPositionId?: string;
   jobTitle?: string;
   positionName?: string;
   rank?: string;
@@ -45,8 +47,11 @@ type LoginResponse = {
 
 let currentSession: AuthSession | null = null;
 
-function toBooleanFlag(value?: 'Y' | 'N') {
-  return value === 'Y';
+/** 백엔드 `Y`/`N` 또는 `YES`/`NO` */
+function isYnYes(value?: string) {
+  if (value == null || value === '') return false;
+  const v = String(value).trim().toUpperCase();
+  return v === 'Y' || v === 'YES';
 }
 
 function toBooleanMaybe(value: unknown): boolean | undefined {
@@ -123,7 +128,7 @@ function pickProfileImageUrl(payload: Partial<LoginResponse> & Partial<Me>): str
 
 function mapMe(payload: Partial<LoginResponse> & Partial<Me>): Me {
   const emailVerificationRequired =
-    payload.isEmailVerifiedYn === undefined ? undefined : !toBooleanFlag(payload.isEmailVerifiedYn);
+    payload.isEmailVerifiedYn === undefined ? undefined : !isYnYes(payload.isEmailVerifiedYn);
 
   const fromPayload =
     payload.isSystemAdmin ??
@@ -143,7 +148,7 @@ function mapMe(payload: Partial<LoginResponse> & Partial<Me>): Me {
     profileImageUrl: pickProfileImageUrl(payload),
     flags: {
       mustChangePassword:
-        payload.isFirstLoginYn === undefined ? payload.flags?.mustChangePassword : toBooleanFlag(payload.isFirstLoginYn),
+        payload.isFirstLoginYn === undefined ? payload.flags?.mustChangePassword : isYnYes(payload.isFirstLoginYn),
       emailVerificationRequired: payload.flags?.emailVerificationRequired ?? emailVerificationRequired,
       accountStatus: payload.flags?.accountStatus ?? 'ACTIVE',
     },
@@ -201,7 +206,13 @@ async function getMeOrThrow() {
     | Record<string, unknown>
     | undefined;
 
-  const mustChangePassword = toBooleanMaybe(flagsFromToken?.mustChangePassword ?? jwtPayload.mustChangePassword);
+  const mustChangePassword = (() => {
+    const fromFlags = toBooleanMaybe(flagsFromToken?.mustChangePassword ?? jwtPayload.mustChangePassword);
+    if (fromFlags !== undefined) return fromFlags;
+    const raw = jwtPayload.isFirstLoginYn;
+    if (raw === undefined || raw === null) return undefined;
+    return isYnYes(String(raw));
+  })();
   const emailVerificationRequired = toBooleanMaybe(
     flagsFromToken?.emailVerificationRequired ?? jwtPayload.emailVerificationRequired,
   );
@@ -284,9 +295,20 @@ async function getMeOrThrow() {
 export const authClient: AuthClient = {
   async login(input: LoginInput) {
     const response = await httpClient.post('/member/login', input);
+    const root = response.data;
+    if (root && typeof root === 'object' && 'success' in root && (root as { success?: boolean }).success === false) {
+      const msg = (root as { message?: string }).message;
+      throw new Error(typeof msg === 'string' && msg.trim() ? msg : '로그인에 실패했습니다.');
+    }
     const payload = unwrapApiResponse<LoginResponse>(response.data);
     const token = payload?.accessToken ?? payload?.access_token ?? null;
     setAccessToken(token);
+
+    const memberId = typeof payload.memberId === 'string' ? payload.memberId : typeof payload.id === 'string' ? payload.id : null;
+    const positionId = typeof payload.memberPositionId === 'string' ? payload.memberPositionId : null;
+    if (memberId) {
+      setRefreshIdentity(memberId, positionId);
+    }
 
     let me: Me;
     try {
@@ -295,7 +317,17 @@ export const authClient: AuthClient = {
       if (!hasFallbackUserPayload(payload)) {
         throw error;
       }
-      me = mapMe(payload);
+      me = mapMe({ ...payload, email: typeof payload.email === 'string' ? payload.email : input.email });
+    }
+    /** 로그인 응답의 isFirstLoginYn 은 JWT에 없을 수 있어, 최초 로그인 시 비밀번호 변경 플래그를 여기서 확정 */
+    if (payload.isFirstLoginYn !== undefined) {
+      me = {
+        ...me,
+        flags: {
+          ...me.flags,
+          mustChangePassword: isYnYes(payload.isFirstLoginYn),
+        },
+      };
     }
 
     currentSession = { user: me };
@@ -306,6 +338,7 @@ export const authClient: AuthClient = {
       await httpClient.post('/member/logout');
     } finally {
       clearAccessToken();
+      clearRefreshIdentity();
       currentSession = null;
     }
   },
@@ -336,6 +369,12 @@ export const authClient: AuthClient = {
       const payload = unwrapApiResponse<LoginResponse>(response.data);
       const token = payload?.accessToken ?? payload?.access_token ?? null;
       setAccessToken(token);
+
+      const mid = typeof payload.memberId === 'string' ? payload.memberId.trim() : '';
+      const pid = typeof payload.memberPositionId === 'string' ? payload.memberPositionId.trim() : '';
+      if (mid) {
+        setRefreshIdentity(mid, pid || null);
+      }
 
       const me = await getMeOrThrow();
       currentSession = { user: me };

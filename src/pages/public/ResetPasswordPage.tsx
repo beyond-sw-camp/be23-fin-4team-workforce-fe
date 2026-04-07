@@ -1,6 +1,6 @@
 import { ArrowLeftOutlined, LockOutlined, MailOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
 import { Alert, Card, Form, Input, Typography } from 'antd';
-import { useNavigate, useSearch } from '@tanstack/react-router';
+import { useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { memberApi } from '@/features/member/api/memberApi';
 import { AppButton } from '@/shared/ui/AppButton';
@@ -14,7 +14,6 @@ type ResetForm = {
 
 export function ResetPasswordPage() {
   const navigate = useNavigate();
-  const search = useSearch({ strict: false }) as { forced?: boolean };
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,10 +22,11 @@ export function ResetPasswordPage() {
     setLoading(true);
     setError(null);
     try {
+      await memberApi.verifyResetPasswordCode(values.email, values.code);
       await memberApi.resetPassword({
-        email: values.email,
-        code: values.code,
+        personalEmail: values.email,
         newPassword: values.newPassword,
+        newPasswordCheck: values.confirmPassword,
       });
       setDone(true);
     } catch (e) {
@@ -54,12 +54,11 @@ export function ResetPasswordPage() {
             <Typography.Title level={4} className="!tw-mb-1 !tw-text-white">
               비밀번호 재설정
             </Typography.Title>
-            <Typography.Text className="tw-text-blue-100">이메일 인증 코드와 새 비밀번호를 입력해 주세요.</Typography.Text>
+            <Typography.Text className="tw-text-blue-100">
+              인증 코드 확인 후 새 비밀번호로 재설정합니다. (찾기 화면에서 코드를 먼저 받아 주세요.)
+            </Typography.Text>
           </div>
 
-          {search.forced ? (
-            <Alert type="warning" showIcon message="최초 로그인으로 인해 비밀번호 변경이 필요합니다." className="tw-mb-4" />
-          ) : null}
           {done ? <Alert type="success" showIcon message="비밀번호가 변경되었습니다." className="tw-mb-4" /> : null}
           {error ? <Alert type="error" showIcon message={error} className="tw-mb-4" /> : null}
 

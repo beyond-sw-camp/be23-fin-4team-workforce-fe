@@ -1,6 +1,8 @@
-import { Alert, Card, Checkbox, Descriptions, Form, Input, Space, Tag, Typography } from 'antd';
+import { UploadOutlined } from '@ant-design/icons';
+import { Alert, App, Button, Card, Checkbox, Descriptions, Form, Input, Space, Tag, Typography, Upload } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
+import { authClient } from '@/features/auth/auth-client';
 import { companyApi } from '@/features/organization/api/companyApi';
 import { AddressSearchField } from '@/shared/ui/AddressSearchField';
 import { AppButton } from '@/shared/ui/AppButton';
@@ -14,14 +16,21 @@ export type CompanyOnboardingPageProps = {
 type CompanyOnboardingFormValues = {
   businessNumber: string;
   companyName: string;
-  representativeName: string;
+  companyDomain: string;
+  ceoName: string;
   address: string;
-  email: string;
+  detailAddress: string;
+  adminEmail: string;
+  adminName: string;
   code: string;
-  password: string;
+  adminPassword: string;
+  adminPasswordCheck: string;
   agreeTerms: boolean;
   agreePrivacy: boolean;
 };
+
+const PASSWORD_SPECIAL_RE = /[!@#$%^&*()_+\-=[\]{}]/;
+const PASSWORD_RULE_HINT = '영문·숫자·특수문자(!@#$%^&*()_+-=[]{} 등)를 모두 포함해 8자 이상 입력해 주세요.';
 
 const agreeValidator = (message: string) => (_: unknown, value: boolean) =>
   value === true ? Promise.resolve() : Promise.reject(new Error(message));
@@ -30,10 +39,13 @@ const LEGAL_DUMMY_TERMS = `제1조 (목적)\n본 약관은 WORKFORCE 서비스 �
 
 const LEGAL_DUMMY_PRIVACY = `1. 수집하는 개인정보 항목\n회사명, 사업자번호, 담당자 이메일, 주소 등 가입 시 입력하신 정보가 포함될 수 있습니다. (더미 텍스트)\n\n2. 개인정보의 이용 목적\n회원 식별, 서비스 제공, 고객 지원 및 법령상 의무 이행 등에 활용됩니다. (더미 텍스트)\n\n3. 보유 및 파기\n목적 달성 후 관련 법령에서 정한 기간 동안 보관 후 안전하게 파기합니다. (더미 텍스트)`;
 
+const LOGO_MAX_BYTES = 5 * 1024 * 1024;
+
 export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPageProps) {
+  const { message } = App.useApp();
   const navigate = useNavigate();
   const [form] = Form.useForm<CompanyOnboardingFormValues>();
-  const passwordValue = Form.useWatch('password', form);
+  const passwordValue = Form.useWatch('adminPassword', form);
   const agreeTermsW = Form.useWatch('agreeTerms', form);
   const agreePrivacyW = Form.useWatch('agreePrivacy', form);
   const agreeTermsOn = agreeTermsW === true;
@@ -48,6 +60,7 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
   const [onboardingCompleted, setOnboardingCompleted] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [legalModal, setLegalModal] = useState<null | 'terms' | 'privacy'>(null);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
 
   useEffect(() => {
     if (resendCooldown <= 0) return;
@@ -61,21 +74,16 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
     const value = passwordValue ?? '';
     if (!value) return null;
     const hasLength = value.length >= 8;
-    const hasUpper = /[A-Z]/.test(value);
-    const hasLower = /[a-z]/.test(value);
+    const hasLetter = /[A-Za-z]/.test(value);
     const hasNumber = /\d/.test(value);
-    const score = [hasLength, hasUpper, hasLower, hasNumber].filter(Boolean).length;
+    const hasSpecial = PASSWORD_SPECIAL_RE.test(value);
+    const score = [hasLength, hasLetter, hasNumber, hasSpecial].filter(Boolean).length;
     if (score <= 2) return '약함';
     if (score === 3) return '보통';
     return '강함';
   }, [passwordValue]);
 
-  const formatBusinessNumber = (value: string) => {
-    const digits = value.replace(/\D/g, '').slice(0, 10);
-    if (digits.length <= 3) return digits;
-    if (digits.length <= 5) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
-    return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`;
-  };
+  const sanitizeBusinessNumberDigits = (value: string) => value.replace(/\D/g, '').slice(0, 10);
 
   const checkBusinessNumber = async () => {
     setError(null);
@@ -85,15 +93,15 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
     setLoading(true);
     try {
       const response = await companyApi.checkBusinessNumber(values.businessNumber);
-      if (!response.valid) {
-        setError('유효하지 않은 사업자번호입니다.');
+      if (!response?.success) {
+        setError(response?.message ?? '유효하지 않은 사업자번호입니다.');
         return;
       }
       setBusinessChecked(true);
       if (response.companyName) {
         form.setFieldValue('companyName', response.companyName);
       }
-      setSuccess('사업자번호가 확인되었습니다.');
+      setSuccess(response.message ?? '사업자번호가 확인되었습니다.');
     } catch (e) {
       setError((e as { message?: string }).message ?? '사업자번호 검증에 실패했습니다.');
     } finally {
@@ -104,12 +112,16 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
   const sendCode = async () => {
     setError(null);
     setSuccess(null);
-    const values = await form.validateFields(['email', 'companyName']).catch(() => null);
-    if (!values?.email) return;
+    const values = await form.validateFields(['adminEmail', 'companyName']).catch(() => null);
+    if (!values?.adminEmail) return;
     setLoading(true);
     try {
-      await companyApi.sendVerificationCode({ email: values.email, companyName: values.companyName });
-      setSuccess('이메일 인증 코드가 발송되었습니다.');
+      const res = await companyApi.sendVerificationCode(values.adminEmail);
+      if (!res.success) {
+        setError(res.message ?? '인증 코드 발송에 실패했습니다.');
+        return;
+      }
+      setSuccess(res.message ?? '이메일 인증 코드가 발송되었습니다.');
       setResendCooldown(60);
     } catch (e) {
       setError((e as { message?: string }).message ?? '인증 코드 발송에 실패했습니다.');
@@ -121,13 +133,17 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
   const verifyCode = async () => {
     setError(null);
     setSuccess(null);
-    const values = await form.validateFields(['email', 'code']).catch(() => null);
-    if (!values?.email || !values?.code) return;
+    const values = await form.validateFields(['adminEmail', 'code']).catch(() => null);
+    if (!values?.adminEmail || !values?.code) return;
     setLoading(true);
     try {
-      await companyApi.verifyCode({ email: values.email, code: values.code });
+      const res = await companyApi.verifyCode(values.adminEmail, values.code);
+      if (!res.success) {
+        setError(res.message ?? '인증 코드 확인에 실패했습니다.');
+        return;
+      }
       setEmailVerified(true);
-      setSuccess('이메일 인증이 완료되었습니다.');
+      setSuccess(res.message ?? '이메일 인증이 완료되었습니다.');
     } catch (e) {
       setError((e as { message?: string }).message ?? '인증 코드 확인에 실패했습니다.');
     } finally {
@@ -152,12 +168,44 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
     }
     setLoading(true);
     try {
-      const { agreeTerms, agreePrivacy, ...payload } = values;
-      void agreeTerms;
-      void agreePrivacy;
-      await companyApi.onboarding(payload);
-      setSuccess('회사 온보딩이 완료되었습니다. 로그인 페이지에서 로그인해 주세요.');
+      const res = await companyApi.onboarding({
+        companyName: values.companyName,
+        companyDomain: values.companyDomain,
+        ceoName: values.ceoName,
+        businessNumber: values.businessNumber.replace(/\D/g, ''),
+        address: values.address,
+        detailAddress: values.detailAddress,
+        adminEmail: values.adminEmail,
+        adminPassword: values.adminPassword,
+        adminPasswordCheck: values.adminPasswordCheck,
+        adminName: values.adminName,
+      });
+      if (!res.success) {
+        setError(res.message ?? '온보딩 처리에 실패했습니다.');
+        return;
+      }
+      let logoOk = false;
+      if (logoFile) {
+        try {
+          await authClient.login({
+            email: values.adminEmail.trim(),
+            password: values.adminPassword,
+          });
+          await companyApi.updateLogo(logoFile);
+          await authClient.logout();
+          logoOk = true;
+        } catch (e) {
+          message.warning(
+            (e as Error)?.message ??
+              '로고는 등록되지 않았습니다. 로그인 후 회사 설정에서 다시 등록할 수 있습니다.',
+          );
+        }
+      }
+      const baseMsg =
+        res.message ?? '회사 온보딩이 완료되었습니다. 로그인 페이지에서 로그인해 주세요.';
+      setSuccess(logoOk ? `${baseMsg.trim()} 회사 로고가 등록되었습니다.` : baseMsg);
       setOnboardingCompleted(true);
+      setLogoFile(null);
     } catch (e) {
       setError((e as { message?: string }).message ?? '온보딩 처리에 실패했습니다.');
     } finally {
@@ -182,7 +230,7 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
                 회사 계정 가입을 시작해요
               </Typography.Title>
               <Typography.Text className="tw-text-slate-500">
-                사업자번호·이메일 인증 후 대표 정보까지 한 페이지에서 입력할 수 있어요.
+                사업자번호·이메일 인증 후 회사·관리자 정보를 입력해 가입을 완료해요.
               </Typography.Text>
             </div>
             <AppButton variant="text" onClick={() => navigate({ to: '/' })}>
@@ -214,11 +262,13 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
                 >
                   <Input
                     size="large"
-                    placeholder="123-45-67890"
-                    maxLength={12}
+                    inputMode="numeric"
+                    autoComplete="off"
+                    placeholder="1234567890"
+                    maxLength={10}
                     onChange={(event) => {
                       setBusinessChecked(false);
-                      form.setFieldValue('businessNumber', formatBusinessNumber(event.target.value));
+                      form.setFieldValue('businessNumber', sanitizeBusinessNumberDigits(event.target.value));
                     }}
                   />
                 </Form.Item>
@@ -243,8 +293,8 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
                   />
                 </Form.Item>
                 <Form.Item
-                  name="email"
-                  label="담당자 이메일"
+                  name="adminEmail"
+                  label="관리자 이메일"
                   rules={[
                     { required: true, message: '이메일을 입력해 주세요.' },
                     { type: 'email', message: '올바른 이메일 형식이 아닙니다.' },
@@ -291,14 +341,25 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
                   <Descriptions column={1} size="small" title="입력 정보 확인">
                     <Descriptions.Item label="사업자번호">{form.getFieldValue('businessNumber')}</Descriptions.Item>
                     <Descriptions.Item label="회사명">{form.getFieldValue('companyName')}</Descriptions.Item>
-                    <Descriptions.Item label="담당자 이메일">{form.getFieldValue('email')}</Descriptions.Item>
+                    <Descriptions.Item label="회사 도메인">{form.getFieldValue('companyDomain')}</Descriptions.Item>
+                    <Descriptions.Item label="관리자 이메일">{form.getFieldValue('adminEmail')}</Descriptions.Item>
+                    <Descriptions.Item label="관리자 이름">{form.getFieldValue('adminName')}</Descriptions.Item>
+                    <Descriptions.Item label="주소">
+                      {form.getFieldValue('address')}
+                      {form.getFieldValue('detailAddress') ? (
+                        <>
+                          <br />
+                          <span className="tw-text-slate-600">{form.getFieldValue('detailAddress')}</span>
+                        </>
+                      ) : null}
+                    </Descriptions.Item>
                   </Descriptions>
                 </Card>
               ) : null}
 
               <div>
                 <Typography.Text className="tw-mb-3 tw-block tw-text-xs tw-font-bold tw-uppercase tw-tracking-[0.12em] tw-text-slate-400">
-                  대표 계정 정보
+                  회사 · 관리자 정보
                 </Typography.Text>
                 {!businessChecked || !emailVerified ? (
                   <Typography.Text type="secondary" className="tw-mb-4 tw-block tw-text-sm tw-leading-relaxed">
@@ -306,19 +367,129 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
                   </Typography.Text>
                 ) : null}
                 <Form.Item
-                  name="representativeName"
-                  label="대표자명"
-                  rules={[{ required: true, message: '대표자명을 입력해 주세요.' }]}
+                  name="companyDomain"
+                  label="회사 도메인"
+                  extra={
+                    <Typography.Text type="secondary" className="tw-block tw-text-xs tw-leading-relaxed">
+                      영문·숫자만 입력 가능합니다. 직원 이메일 자동 생성에 사용됩니다. (예: workforce → emp0001.홍길동@workforce.company)
+                    </Typography.Text>
+                  }
+                  rules={[
+                    { required: true, message: '회사 도메인을 입력해 주세요.' },
+                    {
+                      pattern: /^[a-z0-9]+$/,
+                      message: '영문(소문자)과 숫자만 입력할 수 있습니다.',
+                    },
+                  ]}
                 >
+                  <Input
+                    size="large"
+                    placeholder="workforce"
+                    autoComplete="off"
+                    onChange={(event) => {
+                      const v = event.target.value.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                      form.setFieldValue('companyDomain', v);
+                    }}
+                  />
+                </Form.Item>
+                <Form.Item name="ceoName" label="대표자명" rules={[{ required: true, message: '대표자명을 입력해 주세요.' }]}>
                   <Input size="large" />
+                </Form.Item>
+                <Form.Item
+                  label="회사 로고 (선택)"
+                  extra={
+                    <Typography.Text type="secondary" className="tw-block tw-text-xs tw-leading-relaxed">
+                      PNG, JPG, GIF, WebP · 최대 5MB. 가입 완료 직후 관리자 계정으로 잠시 로그인해 등록합니다.
+                    </Typography.Text>
+                  }
+                >
+                  <Upload
+                    accept="image/png,image/jpeg,image/jpg,image/gif,image/webp"
+                    maxCount={1}
+                    fileList={
+                      logoFile
+                        ? [{ uid: '-logo', name: logoFile.name, status: 'done' }]
+                        : []
+                    }
+                    beforeUpload={(file) => {
+                      if (!file.type.startsWith('image/')) {
+                        message.error('이미지 파일만 선택할 수 있습니다.');
+                        return Upload.LIST_IGNORE;
+                      }
+                      if (file.size > LOGO_MAX_BYTES) {
+                        message.error('5MB 이하 이미지만 등록할 수 있습니다.');
+                        return Upload.LIST_IGNORE;
+                      }
+                      setLogoFile(file);
+                      return false;
+                    }}
+                    onRemove={() => {
+                      setLogoFile(null);
+                    }}
+                  >
+                    <Button size="large" icon={<UploadOutlined />}>
+                      로고 이미지 선택
+                    </Button>
+                  </Upload>
                 </Form.Item>
                 <Form.Item name="address" label="주소" rules={[{ required: true, message: '주소를 입력해 주세요.' }]}>
                   <AddressSearchField />
                 </Form.Item>
                 <Form.Item
-                  name="password"
-                  label="대표 계정 비밀번호"
-                  rules={[{ required: true, message: '비밀번호를 입력해 주세요.' }]}
+                  name="detailAddress"
+                  label="상세 주소"
+                  rules={[{ required: true, message: '상세 주소를 입력해 주세요.' }]}
+                  extra={
+                    <Typography.Text type="secondary" className="tw-text-xs">
+                      건물 동·층·호수 등 (예: 6층, 301호)
+                    </Typography.Text>
+                  }
+                >
+                  <Input size="large" placeholder="예: 6층, 301호" />
+                </Form.Item>
+                <Typography.Text type="secondary" className="tw-mb-2 tw-block tw-text-xs tw-leading-relaxed">
+                  {PASSWORD_RULE_HINT}
+                </Typography.Text>
+                <Form.Item
+                  name="adminPassword"
+                  label="관리자 비밀번호"
+                  rules={[
+                    { required: true, message: '비밀번호를 입력해 주세요.' },
+                    {
+                      validator: async (_, value: string) => {
+                        if (!value || value.length < 8) {
+                          throw new Error('비밀번호는 8자 이상이어야 합니다.');
+                        }
+                        if (!/[A-Za-z]/.test(value)) {
+                          throw new Error('영문을 포함해 주세요.');
+                        }
+                        if (!/\d/.test(value)) {
+                          throw new Error('숫자를 포함해 주세요.');
+                        }
+                        if (!PASSWORD_SPECIAL_RE.test(value)) {
+                          throw new Error('특수문자(!@#$%^&*()_+-=[]{} 등)를 포함해 주세요.');
+                        }
+                      },
+                    },
+                  ]}
+                >
+                  <Input.Password size="large" />
+                </Form.Item>
+                <Form.Item
+                  name="adminPasswordCheck"
+                  label="비밀번호 확인"
+                  dependencies={['adminPassword']}
+                  rules={[
+                    { required: true, message: '비밀번호 확인을 입력해 주세요.' },
+                    ({ getFieldValue }) => ({
+                      validator(_, value) {
+                        if (!value || getFieldValue('adminPassword') === value) {
+                          return Promise.resolve();
+                        }
+                        return Promise.reject(new Error('비밀번호가 일치하지 않습니다.'));
+                      },
+                    }),
+                  ]}
                 >
                   <Input.Password size="large" />
                 </Form.Item>
@@ -330,6 +501,9 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
                     비밀번호 강도: {passwordStrengthText}
                   </Typography.Text>
                 ) : null}
+                <Form.Item name="adminName" label="관리자 이름" rules={[{ required: true, message: '관리자 이름을 입력해 주세요.' }]}>
+                  <Input size="large" />
+                </Form.Item>
 
                 <div className="tw-mt-6 tw-rounded-2xl tw-border tw-border-slate-100 tw-bg-slate-50/80 tw-p-4">
                   <Typography.Text className="tw-mb-3 tw-block tw-text-xs tw-font-bold tw-uppercase tw-tracking-[0.12em] tw-text-slate-400">

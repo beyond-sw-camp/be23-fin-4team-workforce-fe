@@ -2,6 +2,17 @@ const ACCESS_TOKEN_STORAGE_KEY = 'workforce.accessToken';
 
 let accessToken: string | null = null;
 
+type AccessTokenListener = (token: string | null) => void;
+const accessTokenListeners = new Set<AccessTokenListener>();
+
+export function subscribeAccessToken(listener: AccessTokenListener) {
+  accessTokenListeners.add(listener);
+  listener(getAccessToken());
+  return () => {
+    accessTokenListeners.delete(listener);
+  };
+}
+
 function canUseStorage() {
   return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
 }
@@ -24,16 +35,17 @@ export function getAccessToken() {
 export function setAccessToken(token: string | null) {
   accessToken = token;
 
-  if (!canUseStorage()) {
-    return;
+  if (canUseStorage()) {
+    if (!token) {
+      window.localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
+    } else {
+      window.localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, token);
+    }
   }
 
-  if (!token) {
-    window.localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
-    return;
-  }
-
-  window.localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, token);
+  accessTokenListeners.forEach((fn) => {
+    fn(token);
+  });
 }
 
 export function clearAccessToken() {

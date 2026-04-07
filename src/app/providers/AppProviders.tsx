@@ -1,6 +1,6 @@
 import { RouterProvider } from '@tanstack/react-router';
 import { QueryClientProvider } from '@tanstack/react-query';
-import { ConfigProvider } from 'antd';
+import { App as AntdApp, ConfigProvider } from 'antd';
 import koKR from 'antd/locale/ko_KR';
 import { useMemo } from 'react';
 import { queryClient } from '@/app/config/queryClient';
@@ -36,7 +36,9 @@ export function AppProviders() {
         <AuthProvider>
           <PermissionsProvider>
             <ConfigProvider locale={koKR} theme={antdTheme}>
-              <InnerRouterProvider />
+              <AntdApp>
+                <InnerRouterProvider />
+              </AntdApp>
             </ConfigProvider>
           </PermissionsProvider>
         </AuthProvider>

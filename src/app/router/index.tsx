@@ -12,18 +12,30 @@ import { HomePublicLayout } from '@/pages/public/HomePublicLayout';
 import { LandingHomePage } from '@/pages/public/LandingHomePage';
 import LoginPage from '@/pages/public/LoginPage';
 import { FindPasswordPage } from '@/pages/public/FindPasswordPage';
+import { ChangePasswordPage } from '@/pages/public/ChangePasswordPage';
 import { ResetPasswordPage } from '@/pages/public/ResetPasswordPage';
 import { VerifyEmailPage } from '@/pages/public/VerifyEmailPage';
 import { CompanyOnboardingPage } from '@/pages/public/CompanyOnboardingPage';
+import { CalendarPage } from '@/pages/app/CalendarPage';
 import { DashboardPage } from '@/pages/app/DashboardPage';
+import { EsgActivitiesPage } from '@/pages/app/esg/EsgActivitiesPage';
+import { EsgAdminPage } from '@/pages/app/esg/EsgAdminPage';
+import { EsgCampaignsPage } from '@/pages/app/esg/EsgCampaignsPage';
+import { EsgHomePage } from '@/pages/app/esg/EsgHomePage';
+import { EsgShopPage } from '@/pages/app/esg/EsgShopPage';
 import { MembersPage } from '@/pages/app/MembersPage';
 import { MemberDetailPage } from '@/pages/app/MemberDetailPage';
 import { NotificationsPage } from '@/pages/app/NotificationsPage';
 import { EvaluationsPage } from '@/pages/app/EvaluationsPage';
 import { PerformancePage } from '@/pages/app/PerformancePage';
 import { GenericPage } from '@/pages/app/GenericPage';
+import { OrganizationPage } from '@/pages/app/OrganizationPage';
+import { RolesPage } from '@/pages/app/RolesPage';
+import { MyProfilePage } from '@/pages/app/MyProfilePage';
+import { MyProfileEditPage } from '@/pages/app/MyProfileEditPage';
 import { ForbiddenPage } from '@/pages/ForbiddenPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
+import { APP_POST_LOGIN_PATH } from '@/app/config/paths';
 import { APP_GENERIC_PAGE_COPY } from '@/app/locale/app-ko';
 import { AppShellLayout } from '@/widgets/app-shell/AppShellLayout';
 
@@ -49,7 +61,7 @@ const homeRoute = createRoute({
   component: HomePublicLayout,
   beforeLoad: ({ context }) => {
     if (context.auth.isAuthenticated) {
-      throw redirect({ to: '/app/dashboard' });
+      throw redirect({ to: APP_POST_LOGIN_PATH });
     }
   },
 });
@@ -64,6 +76,21 @@ const loginRoute = createRoute({
   component: () => <LoginPage embedded />,
 });
 const findPasswordRoute = createRoute({ getParentRoute: () => publicLayoutRoute, path: '/find-password', component: FindPasswordPage });
+const changePasswordRoute = createRoute({
+  getParentRoute: () => publicLayoutRoute,
+  path: '/change-password',
+  validateSearch: z.object({ forced: z.boolean().optional() }),
+  beforeLoad: ({ context, search }) => {
+    if (!context.auth.isAuthenticated) {
+      throw redirect({ to: '/login' });
+    }
+    const must = context.auth.user?.flags?.mustChangePassword;
+    if (!must && search.forced !== true) {
+      throw redirect({ to: APP_POST_LOGIN_PATH });
+    }
+  },
+  component: ChangePasswordPage,
+});
 const resetPasswordRoute = createRoute({
   getParentRoute: () => publicLayoutRoute,
   path: '/reset-password',
@@ -83,6 +110,55 @@ const dashboardRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/dashboard',
   component: DashboardPage,
+});
+
+const calendarRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/calendar',
+  component: CalendarPage,
+});
+
+const esgHomeRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/esg',
+  component: EsgHomePage,
+});
+const esgActivitiesRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/esg/activities',
+  component: EsgActivitiesPage,
+});
+const esgCampaignsRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/esg/campaigns',
+  component: EsgCampaignsPage,
+});
+const esgShopRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/esg/shop',
+  component: EsgShopPage,
+});
+const esgAdminRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/esg/admin',
+  component: EsgAdminPage,
+  beforeLoad: ({ context }) => {
+    if (!context.auth.user?.isSystemAdmin) {
+      throw redirect({ to: '/app/esg' });
+    }
+  },
+});
+
+const myProfileEditRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/me/edit',
+  component: MyProfileEditPage,
+});
+
+const myProfileRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/me',
+  component: MyProfilePage,
 });
 
 const membersRoute = createRoute({
@@ -121,8 +197,19 @@ const evaluationsRoute = createRoute({
   component: EvaluationsPage,
 });
 
+const organizationRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/organization',
+  component: OrganizationPage,
+});
+
+const rolesRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/roles',
+  component: RolesPage,
+});
+
 const genericPaths = [
-  '/organization',
   '/attendance',
   '/leave',
   '/approvals',
@@ -148,17 +235,28 @@ const routeTree = rootRoute.addChildren([
   publicLayoutRoute.addChildren([
     homeRoute.addChildren([homeIndexRoute, loginRoute, companyOnboardingRoute]),
     findPasswordRoute,
+    changePasswordRoute,
     resetPasswordRoute,
     verifyEmailRoute,
   ]),
   appLayoutRoute.addChildren([
     appBaseRoute.addChildren([
       dashboardRoute,
+      calendarRoute,
+      esgHomeRoute,
+      esgActivitiesRoute,
+      esgCampaignsRoute,
+      esgShopRoute,
+      esgAdminRoute,
+      myProfileEditRoute,
+      myProfileRoute,
       membersRoute,
       memberDetailRoute,
       notificationsRoute,
       performanceRoute,
       evaluationsRoute,
+      organizationRoute,
+      rolesRoute,
       ...genericRoutes,
     ]),
   ]),
