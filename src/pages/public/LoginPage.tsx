@@ -1,8 +1,9 @@
 import { Alert, Card, Checkbox, Form, Input, Typography } from 'antd';
-import { ArrowRightOutlined, BankOutlined, LockOutlined, MailOutlined } from '@ant-design/icons';
+import { ArrowRightOutlined, LockOutlined, MailOutlined } from '@ant-design/icons';
 import { useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { useAuth } from '@/features/auth/useAuth';
+import brandLogo from '@/shared/assets/brand/logo.png';
 import { AppButton } from '@/shared/ui/AppButton';
 
 export type LoginPageProps = {
@@ -50,12 +51,11 @@ function LoginPage({ embedded = false }: LoginPageProps) {
       >
         <div className="tw-p-8 md:tw-p-10">
           <div className="tw-mb-8 tw-flex tw-flex-col tw-items-center tw-gap-2">
-            <Typography.Title level={3} className="!tw-m-0 !tw-leading-none">
-              <span className="tw-text-[40px] tw-font-black tw-tracking-[-0.02em]">
-                <span className="tw-text-[#0F172A]">WORK</span>
-                <span className="tw-text-[#2563EB]">FORCE</span>
-              </span>
-            </Typography.Title>
+            <img
+              src={brandLogo}
+              alt="WORKFORCE 로고"
+              className="tw-h-12 tw-w-auto tw-block tw-shrink-0"
+            />
             <Typography.Text className="tw-text-[11px] tw-font-bold tw-uppercase tw-tracking-[0.2em] tw-text-slate-500">
               LOGIN
             </Typography.Text>

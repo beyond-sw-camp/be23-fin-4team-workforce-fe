@@ -10,17 +10,17 @@ import {
   MessageOutlined,
   RobotOutlined,
   ScheduleOutlined,
-  SearchOutlined,
   SettingOutlined,
   StarOutlined,
   TeamOutlined,
 } from '@ant-design/icons';
-import { Avatar, Badge, Input, Layout, Menu } from 'antd';
+import { Avatar, Badge, Layout, Menu } from 'antd';
 import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import { useAuth } from '@/features/auth/useAuth';
-import { APP_BRAND_NAME, APP_MENU_LABEL, APP_MENU_PATH_ORDER, appHeaderTitleFromPath } from '@/app/locale/app-ko';
+import { APP_BRAND_NAME, APP_MENU_LABEL, APP_MENU_PATH_ORDER } from '@/app/locale/app-ko';
+import { AppSearchField } from '@/shared/ui/AppSearchField';
 import { LogoutGlyphIcon } from '@/shared/ui/icons/LogoutGlyphIcon';
 
 const APP_MENU_ICONS: Record<string, ReactNode> = {
@@ -73,9 +73,14 @@ function SiderBrandHeader() {
       >
         {initial}
       </Avatar>
-      <span className="tw-truncate tw-text-base tw-font-semibold tw-tracking-tight tw-text-slate-900" title={companyName}>
-        {companyName}
-      </span>
+      <div className="tw-flex tw-min-w-0 tw-flex-col tw-leading-tight">
+        <span className="tw-truncate tw-text-base tw-font-semibold tw-tracking-tight tw-text-slate-900" title={companyName}>
+          {companyName}
+        </span>
+        <span className="tw-truncate tw-text-[11px] tw-font-semibold tw-uppercase tw-tracking-[0.08em] tw-text-slate-500">
+          WORKFORCE HRMS
+        </span>
+      </div>
     </div>
   );
 }
@@ -134,29 +139,18 @@ function SiderUserFooter() {
   );
 }
 
-function AppShellHeader({ pathname }: { pathname: string }) {
+function AppShellHeader() {
   const [search, setSearch] = useState('');
 
   return (
     <Layout.Header className="tw-m-0 tw-flex tw-h-16 tw-shrink-0 tw-items-center tw-gap-3 tw-overflow-visible tw-border-0 tw-border-b tw-border-solid tw-border-slate-200 tw-bg-white tw-px-4 tw-leading-none tw-shadow-none md:tw-gap-6 md:tw-px-7">
-      <span
-        className="tw-hidden tw-min-w-0 tw-shrink-0 tw-truncate tw-text-sm tw-font-medium tw-text-slate-500 sm:tw-block sm:tw-max-w-[7rem] md:tw-max-w-[9.5rem]"
-        title={appHeaderTitleFromPath(pathname)}
-      >
-        {appHeaderTitleFromPath(pathname)}
-      </span>
-
-      <div className="tw-flex tw-min-w-0 tw-flex-1 tw-justify-end">
-        <Input
-          allowClear
+      <div className="tw-flex tw-min-w-0 tw-flex-1 tw-justify-start">
+        <AppSearchField
+          className="tw-max-w-2xl"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="메뉴, 동료, 문서 검색..."
           aria-label="메뉴, 동료, 문서 검색"
-          variant="borderless"
-          size="large"
-          prefix={<SearchOutlined className="tw-text-[15px] tw-text-slate-400" />}
-          className="tw-h-11 tw-max-w-2xl tw-w-full tw-rounded-full !tw-border-0 !tw-bg-transparent tw-px-3 tw-shadow-none hover:!tw-bg-slate-50 focus-within:!tw-bg-slate-50 [&_.ant-input-affix-wrapper]:!tw-border-0 [&_.ant-input-affix-wrapper]:!tw-shadow-none [&_.ant-input-affix-wrapper-focused]:!tw-shadow-none [&_.ant-input]:!tw-bg-transparent [&_.ant-input]:tw-placeholder:text-slate-400"
         />
       </div>
 
@@ -193,11 +187,11 @@ export function AppShellLayout() {
         width={248}
         className="tw-h-full tw-min-h-0 tw-overflow-hidden tw-border-0 tw-bg-transparent tw-shadow-none [&_.ant-layout-sider-children]:tw-flex [&_.ant-layout-sider-children]:tw-h-full [&_.ant-layout-sider-children]:tw-w-full [&_.ant-layout-sider-children]:tw-min-h-0 [&_.ant-layout-sider-children]:tw-flex-col"
       >
-        <div className="tw-flex tw-h-full tw-w-full tw-min-h-0 tw-max-h-full tw-flex-col tw-bg-white">
+        <div className="tw-flex tw-h-full tw-w-full tw-min-h-0 tw-max-h-full tw-flex-col tw-bg-white tw-shadow-[inset_-1px_0_0_0_rgba(226,232,240,1)]">
           <div className="tw-flex tw-h-16 tw-w-full tw-shrink-0 tw-items-center tw-gap-2 tw-px-4">
             <SiderBrandHeader />
           </div>
-          <div className="tw-min-h-0 tw-w-full tw-flex-1 tw-overflow-y-auto tw-overflow-x-hidden">
+          <div className="wf-scrollbar tw-min-h-0 tw-w-full tw-flex-1 tw-overflow-y-auto tw-overflow-x-hidden">
             <Menu
               className="tw-mt-2 tw-w-full !tw-border-0 tw-bg-transparent tw-px-2 tw-pb-3 [&_.ant-menu-item::after]:tw-hidden"
               theme="light"
@@ -213,8 +207,8 @@ export function AppShellLayout() {
         </div>
       </Layout.Sider>
       <Layout className="tw-flex tw-min-h-0 tw-min-w-0 tw-flex-1 tw-flex-col tw-bg-slate-50">
-        <AppShellHeader pathname={pathname} />
-        <Layout.Content className="tw-min-h-0 tw-flex-1 tw-overflow-y-auto tw-bg-transparent tw-p-6">
+        <AppShellHeader />
+        <Layout.Content className="wf-scrollbar tw-min-h-0 tw-flex-1 tw-overflow-y-auto tw-bg-transparent tw-p-6">
           <Outlet />
         </Layout.Content>
       </Layout>

@@ -8,6 +8,8 @@ export type AuthFlags = {
 
 export type Me = {
   id: string;
+  /** JWT·로그인 응답의 회사 UUID — Goal 등 멀티테넌시 API 바디에 사용 */
+  companyId?: string;
   name: string;
   email: string;
   permissions: string[];

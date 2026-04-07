@@ -3,6 +3,7 @@ import type { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { env } from '@/app/config/env';
 import { parseApiError } from '@/shared/api/error-parser';
 import { unwrapApiResponse } from '@/shared/api/response';
+import { getTenantHeadersFromToken } from '@/shared/auth/jwtTenantClaims';
 import { getAccessToken, setAccessToken } from '@/shared/stores/authTokenStore';
 
 export const httpClient = axios.create({
@@ -13,9 +14,19 @@ export const httpClient = axios.create({
 
 httpClient.interceptors.request.use((config) => {
   const token = getAccessToken();
+  config.headers = config.headers ?? {};
   if (token) {
-    config.headers = config.headers ?? {};
     config.headers.Authorization = `Bearer ${token}`;
+  }
+  const tenant = getTenantHeadersFromToken(token);
+  if (tenant['X-Member-Id']) {
+    config.headers['X-Member-Id'] = tenant['X-Member-Id'];
+  }
+  if (tenant['X-Company-Id']) {
+    const cid = tenant['X-Company-Id'];
+    config.headers['X-Company-Id'] = cid;
+    /** goal-service 등에서 `@RequestHeader("X-User-CompanyId")` 사용 */
+    config.headers['X-User-CompanyId'] = cid;
   }
   return config;
 });

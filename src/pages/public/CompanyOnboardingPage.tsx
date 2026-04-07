@@ -1,9 +1,10 @@
-import { Alert, Card, Checkbox, Descriptions, Form, Input, Modal, Space, Tag, Typography } from 'antd';
+import { Alert, Card, Checkbox, Descriptions, Form, Input, Space, Tag, Typography } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { companyApi } from '@/features/organization/api/companyApi';
 import { AddressSearchField } from '@/shared/ui/AddressSearchField';
 import { AppButton } from '@/shared/ui/AppButton';
+import { AppModal } from '@/shared/ui/AppModal';
 
 export type CompanyOnboardingPageProps = {
   /** 홈 레이아웃 메인 영역에 넣을 때 전체 화면용 바깥 패딩을 줄입니다. */
@@ -151,7 +152,9 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
     }
     setLoading(true);
     try {
-      const { agreeTerms: _t, agreePrivacy: _p, ...payload } = values;
+      const { agreeTerms, agreePrivacy, ...payload } = values;
+      void agreeTerms;
+      void agreePrivacy;
       await companyApi.onboarding(payload);
       setSuccess('회사 온보딩이 완료되었습니다. 로그인 페이지에서 로그인해 주세요.');
       setOnboardingCompleted(true);
@@ -415,7 +418,7 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
         </Card>
       </div>
 
-      <Modal
+      <AppModal
         title={
           <span className="tw-text-lg tw-font-bold tw-text-[#0F172A]">
             {legalModal === 'terms' ? '이용약관' : legalModal === 'privacy' ? '개인정보처리방침' : ''}
@@ -429,14 +432,13 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
           </AppButton>
         }
         width={520}
-        centered
         destroyOnClose
         classNames={{ body: '!tw-pt-2' }}
       >
-        <Typography.Paragraph className="!tw-mb-0 tw-max-h-[min(60vh,420px)] tw-overflow-y-auto tw-whitespace-pre-wrap tw-text-sm tw-leading-relaxed tw-text-slate-600">
+        <Typography.Paragraph className="!tw-mb-0 tw-whitespace-pre-wrap tw-text-sm tw-leading-relaxed tw-text-slate-600">
           {legalModal === 'terms' ? LEGAL_DUMMY_TERMS : legalModal === 'privacy' ? LEGAL_DUMMY_PRIVACY : null}
         </Typography.Paragraph>
-      </Modal>
+      </AppModal>
     </div>
   );
 }

@@ -7,8 +7,7 @@ import {
 } from '@tanstack/react-router';
 import { z } from 'zod';
 import type { AppRouterContext } from '@/app/router/types';
-import { PERM } from '@/features/permissions/backend-permissions';
-import { requireAuth, requirePermissions } from '@/app/router/guards';
+import { requireAuth } from '@/app/router/guards';
 import { HomePublicLayout } from '@/pages/public/HomePublicLayout';
 import { LandingHomePage } from '@/pages/public/LandingHomePage';
 import LoginPage from '@/pages/public/LoginPage';
@@ -20,6 +19,8 @@ import { DashboardPage } from '@/pages/app/DashboardPage';
 import { MembersPage } from '@/pages/app/MembersPage';
 import { MemberDetailPage } from '@/pages/app/MemberDetailPage';
 import { NotificationsPage } from '@/pages/app/NotificationsPage';
+import { EvaluationsPage } from '@/pages/app/EvaluationsPage';
+import { PerformancePage } from '@/pages/app/PerformancePage';
 import { GenericPage } from '@/pages/app/GenericPage';
 import { ForbiddenPage } from '@/pages/ForbiddenPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
@@ -81,7 +82,6 @@ const appBaseRoute = createRoute({ getParentRoute: () => appLayoutRoute, path: '
 const dashboardRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/dashboard',
-  beforeLoad: ({ context }) => requirePermissions(context, [PERM.MEMBER_READ]),
   component: DashboardPage,
 });
 
@@ -95,20 +95,30 @@ const membersRoute = createRoute({
     sortBy: z.string().optional(),
     sortOrder: z.enum(['asc', 'desc']).optional(),
   }),
-  beforeLoad: ({ context }) => requirePermissions(context, [PERM.MEMBER_READ]),
   component: MembersPage,
 });
 
 const memberDetailRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/members/$memberId',
-  beforeLoad: ({ context }) => requirePermissions(context, [PERM.MEMBER_READ]),
   component: MemberDetailPage,
 });
 const notificationsRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/notifications',
   component: NotificationsPage,
+});
+
+const performanceRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/performance',
+  component: PerformancePage,
+});
+
+const evaluationsRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/evaluations',
+  component: EvaluationsPage,
 });
 
 const genericPaths = [
@@ -118,8 +128,6 @@ const genericPaths = [
   '/approvals',
   '/payroll',
   '/mail',
-  '/performance',
-  '/evaluations',
   '/ai-assistant',
   '/settings',
 ] as const;
@@ -143,7 +151,17 @@ const routeTree = rootRoute.addChildren([
     resetPasswordRoute,
     verifyEmailRoute,
   ]),
-  appLayoutRoute.addChildren([appBaseRoute.addChildren([dashboardRoute, membersRoute, memberDetailRoute, notificationsRoute, ...genericRoutes])]),
+  appLayoutRoute.addChildren([
+    appBaseRoute.addChildren([
+      dashboardRoute,
+      membersRoute,
+      memberDetailRoute,
+      notificationsRoute,
+      performanceRoute,
+      evaluationsRoute,
+      ...genericRoutes,
+    ]),
+  ]),
   forbiddenRoute,
   notFoundRoute,
 ]);
