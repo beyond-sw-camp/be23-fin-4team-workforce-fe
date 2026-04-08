@@ -21,6 +21,9 @@ export type CreateTeamCalendarPayload = {
 
 export type CalendarEventScope = 'personal' | 'team';
 
+/** 목록 조회 쿼리 `eventType` (생략 시 개인+팀 전체) */
+export type CalendarListEventTypeParam = 'PERSONAL' | 'TEAM';
+
 export type CalendarEvent = {
   eventId: string;
   title: string;
@@ -85,14 +88,44 @@ function normalizeListPayload(raw: unknown, depth = 0): unknown[] {
   return [];
 }
 
+function listQueryParams(eventType?: CalendarListEventTypeParam) {
+  return eventType ? { eventType } : {};
+}
+
+async function fetchCalendarList(
+  url: string,
+  params: Record<string, string | number | undefined>,
+) {
+  const response = await httpClient.get(url, { params });
+  const unwrapped = unwrapApiResponse<unknown>(response.data);
+  const arr = normalizeListPayload(unwrapped);
+  return arr.map(normalizeEvent).filter((e): e is CalendarEvent => e != null);
+}
+
 export const calendarApi = {
-  async listMonth(year: number, month: number) {
-    const response = await httpClient.get('/calendar', {
-      params: { year, month },
+  /** GET /calendar/daily?date=YYYY-MM-DD[&eventType=] */
+  async listDaily(date: string, eventType?: CalendarListEventTypeParam) {
+    return fetchCalendarList('/calendar/daily', {
+      date,
+      ...listQueryParams(eventType),
     });
-    const unwrapped = unwrapApiResponse<unknown>(response.data);
-    const arr = normalizeListPayload(unwrapped);
-    return arr.map(normalizeEvent).filter((e): e is CalendarEvent => e != null);
+  },
+
+  /** GET /calendar/weekly?date=YYYY-MM-DD[&eventType=] (해당 날짜가 속한 주 월~일) */
+  async listWeekly(date: string, eventType?: CalendarListEventTypeParam) {
+    return fetchCalendarList('/calendar/weekly', {
+      date,
+      ...listQueryParams(eventType),
+    });
+  },
+
+  /** GET /calendar?year=&month=[&eventType=] */
+  async listMonth(year: number, month: number, eventType?: CalendarListEventTypeParam) {
+    return fetchCalendarList('/calendar', {
+      year,
+      month,
+      ...listQueryParams(eventType),
+    });
   },
 
   async detail(eventId: string) {

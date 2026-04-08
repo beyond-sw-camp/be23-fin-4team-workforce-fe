@@ -56,7 +56,13 @@ export const ESG_MENU_LABEL: Record<string, string> = {
 };
 
 /** 상단 헤더 등에 표시하는 현재 화면 제목 */
-export function appHeaderTitleFromPath(pathname: string): string {
+export function appHeaderTitleFromPath(
+  pathname: string,
+  opts?: { isSystemAdmin?: boolean },
+): string {
+  if (pathname === '/app/dashboard' && opts?.isSystemAdmin) {
+    return '관리자 대시보드';
+  }
   const exact = APP_MENU_LABEL[pathname] ?? ESG_MENU_LABEL[pathname];
   if (exact) return exact;
   if (pathname === '/app/me') return '마이페이지';

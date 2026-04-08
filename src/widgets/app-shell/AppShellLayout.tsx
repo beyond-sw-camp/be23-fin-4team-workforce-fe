@@ -98,12 +98,17 @@ function useAppShellMenuItems() {
   });
 
   return useMemo(() => {
-    const base = APP_MENU_PATH_ORDER.map((path) => ({
-      key: path,
-      icon: APP_MENU_ICONS[path],
-      title: APP_MENU_LABEL[path],
-      label: APP_MENU_LABEL[path],
-    }));
+    const base = APP_MENU_PATH_ORDER.map((path) => {
+      const defaultLabel = APP_MENU_LABEL[path];
+      const label =
+        path === '/app/dashboard' && isAdmin ? '관리자 대시보드' : defaultLabel;
+      return {
+        key: path,
+        icon: APP_MENU_ICONS[path],
+        title: label,
+        label,
+      };
+    });
     const esgPaths = ESG_MENU_PATH_ORDER.filter((p) => shouldShowEsgMenuItem(p, esgConfig ?? null, isAdmin));
     if (esgPaths.length === 0) {
       return base;
