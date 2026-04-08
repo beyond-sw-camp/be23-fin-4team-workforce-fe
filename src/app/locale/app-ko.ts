@@ -16,8 +16,8 @@ export const APP_MENU_LABEL: Record<string, string> = {
   '/app/notifications': '알림',
   '/app/performance': '성과',
   '/app/evaluations': '평가',
-  '/app/ai-assistant': 'AI 비서',
   '/app/settings': '설정',
+  '/app/ai-documents': 'HR 정책 문서',
 };
 
 /** 사이드 메뉴 표시 순서 */
@@ -34,7 +34,6 @@ export const APP_MENU_PATH_ORDER = [
   '/app/mail',
   '/app/performance',
   '/app/evaluations',
-  '/app/ai-assistant',
   '/app/settings',
 ] as const;
 

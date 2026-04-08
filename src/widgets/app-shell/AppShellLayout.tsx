@@ -13,7 +13,6 @@ import {
   LineChartOutlined,
   MailOutlined,
   KeyOutlined,
-  MessageOutlined,
   RobotOutlined,
   ScheduleOutlined,
   SettingOutlined,
@@ -43,6 +42,7 @@ import {
 } from '@/app/locale/app-ko';
 import { AppSearchField } from '@/shared/ui/AppSearchField';
 import { LogoutGlyphIcon } from '@/shared/ui/icons/LogoutGlyphIcon';
+import { AiChatbotFab } from '@/widgets/app-shell/AiChatbotFab';
 
 const APP_MENU_ICONS: Record<string, ReactNode> = {
   '/app/dashboard': <DashboardOutlined className="tw-text-lg" />,
@@ -58,7 +58,6 @@ const APP_MENU_ICONS: Record<string, ReactNode> = {
   '/app/notifications': <BellOutlined className="tw-text-lg" />,
   '/app/performance': <LineChartOutlined className="tw-text-lg" />,
   '/app/evaluations': <StarOutlined className="tw-text-lg" />,
-  '/app/ai-assistant': <RobotOutlined className="tw-text-lg" />,
   '/app/settings': <SettingOutlined className="tw-text-lg" />,
 };
 
@@ -109,9 +108,25 @@ function useAppShellMenuItems() {
         label,
       };
     });
+    const settingsIdx = base.findIndex((x) => x.key === '/app/settings');
+    const adminDocItem = isAdmin
+      ? [
+          {
+            key: '/app/ai-documents',
+            icon: <RobotOutlined className="tw-text-lg" />,
+            title: 'HR 정책 문서',
+            label: 'HR 정책 문서',
+          },
+        ]
+      : [];
+    const menu =
+      settingsIdx === -1
+        ? [...base, ...adminDocItem]
+        : [...base.slice(0, settingsIdx), ...adminDocItem, ...base.slice(settingsIdx)];
+
     const esgPaths = ESG_MENU_PATH_ORDER.filter((p) => shouldShowEsgMenuItem(p, esgConfig ?? null, isAdmin));
     if (esgPaths.length === 0) {
-      return base;
+      return menu;
     }
     const esgItems = esgPaths.map((path) => ({
       key: path,
@@ -120,19 +135,16 @@ function useAppShellMenuItems() {
       label: ESG_MENU_LABEL[path],
     }));
     const insertAfter = '/app/calendar';
-    const idx = base.findIndex((x) => x.key === insertAfter);
+    const idx = menu.findIndex((x) => x.key === insertAfter);
     if (idx === -1) {
-      return [...base, ...esgItems];
+      return [...menu, ...esgItems];
     }
-    return [...base.slice(0, idx + 1), ...esgItems, ...base.slice(idx + 1)];
+    return [...menu.slice(0, idx + 1), ...esgItems, ...menu.slice(idx + 1)];
   }, [esgConfig, isAdmin]);
 }
 
 const headerGhostIconClass =
   'tw-flex tw-size-11 tw-items-center tw-justify-center tw-rounded-full tw-text-slate-500 tw-transition-colors hover:tw-bg-slate-100 hover:tw-text-slate-800 focus-visible:tw-outline focus-visible:tw-outline-2 focus-visible:tw-outline-offset-2 focus-visible:tw-outline-[#2563EB]';
-
-const aiAssistantCtaClass =
-  'tw-inline-flex tw-h-11 tw-shrink-0 tw-items-center tw-gap-2 tw-rounded-full tw-bg-[#2563EB] tw-px-5 tw-text-sm tw-font-bold tw-text-white tw-no-underline tw-shadow-none tw-transition-[filter,transform] hover:tw-brightness-110 hover:tw-no-underline focus-visible:tw-outline focus-visible:tw-outline-2 focus-visible:tw-outline-offset-2 focus-visible:tw-outline-[#2563EB] active:tw-scale-[0.98]';
 
 function formatSessionCountdown(totalSeconds: number): string {
   const s = Math.max(0, totalSeconds);
@@ -422,11 +434,6 @@ function AppShellHeader() {
             <BellOutlined className="tw-text-[20px]" />
           </Link>
         </Badge>
-
-        <Link to="/app/ai-assistant" className={`${aiAssistantCtaClass} tw-px-4 sm:tw-px-5`} aria-label="AI 비서">
-          <MessageOutlined className="tw-text-base" />
-          <span className="tw-hidden sm:tw-inline">AI 비서</span>
-        </Link>
       </div>
     </Layout.Header>
   );
@@ -434,7 +441,7 @@ function AppShellHeader() {
 
 function menuSelectedKeyFromPath(pathname: string): string[] {
   if (/^\/app\/members\/[^/]+$/.test(pathname)) return ['/app/members'];
-  const menuPaths = new Set<string>([...APP_MENU_PATH_ORDER, ...ESG_MENU_PATH_ORDER]);
+  const menuPaths = new Set<string>([...APP_MENU_PATH_ORDER, ...ESG_MENU_PATH_ORDER, '/app/ai-documents']);
   if (menuPaths.has(pathname)) return [pathname];
   return [];
 }
@@ -477,6 +484,7 @@ export function AppShellLayout() {
           <Outlet />
         </Layout.Content>
       </Layout>
+      <AiChatbotFab />
     </Layout>
   );
 }

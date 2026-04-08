@@ -29,6 +29,7 @@ import { NotificationsPage } from '@/pages/app/NotificationsPage';
 import { EvaluationsPage } from '@/pages/app/EvaluationsPage';
 import { PerformancePage } from '@/pages/app/PerformancePage';
 import { GenericPage } from '@/pages/app/GenericPage';
+import { AiDocumentsAdminPage } from '@/pages/app/AiDocumentsAdminPage';
 import { OrganizationPage } from '@/pages/app/OrganizationPage';
 import { RolesPage } from '@/pages/app/RolesPage';
 import { MyProfilePage } from '@/pages/app/MyProfilePage';
@@ -209,6 +210,17 @@ const rolesRoute = createRoute({
   component: RolesPage,
 });
 
+const aiDocumentsAdminRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/ai-documents',
+  component: AiDocumentsAdminPage,
+  beforeLoad: ({ context }) => {
+    if (!context.auth.user?.isSystemAdmin) {
+      throw redirect({ to: '/403' });
+    }
+  },
+});
+
 const genericPaths = [
   '/attendance',
   '/leave',
@@ -257,6 +269,7 @@ const routeTree = rootRoute.addChildren([
       evaluationsRoute,
       organizationRoute,
       rolesRoute,
+      aiDocumentsAdminRoute,
       ...genericRoutes,
     ]),
   ]),
