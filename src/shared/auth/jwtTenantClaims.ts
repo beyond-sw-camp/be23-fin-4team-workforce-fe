@@ -55,3 +55,24 @@ export function getTenantHeadersFromToken(token: string | null | undefined): Ten
   if (!token) return {};
   return getTenantHeadersFromJwtPayload(decodeJwtPayload(token));
 }
+
+function parseIsSystemAdminFlag(value: unknown): boolean | undefined {
+  if (value === true) return true;
+  if (value === false) return false;
+  if (typeof value === 'string') {
+    const v = value.trim().toUpperCase();
+    if (v === 'YES' || v === 'Y') return true;
+    if (v === 'NO' || v === 'N') return false;
+  }
+  return undefined;
+}
+
+/** 게이트웨이/서비스가 JWT 대신 헤더로 시스템 관리자 여부를 받는 경우에 사용합니다. */
+export function isSystemAdminFromJwtPayload(payload: Record<string, unknown> | null): boolean {
+  if (!payload) return false;
+  const direct = parseIsSystemAdminFlag(payload.isSystemAdmin);
+  if (direct !== undefined) return direct;
+  const yn = parseIsSystemAdminFlag(payload.isSystemAdminYn);
+  if (yn !== undefined) return yn;
+  return false;
+}
