@@ -5,8 +5,8 @@ import dayjs from 'dayjs';
 import { useEffect, useMemo } from 'react';
 import type { CreateMemberPayload, EmploymentType } from '@/features/member/api/memberApi';
 import { memberApi } from '@/features/member/api/memberApi';
-import type { OrganizationTreeNode } from '@/features/organization/api/organizationApi';
 import { organizationApi } from '@/features/organization/api/organizationApi';
+import { flattenOrganizationsWithMeta } from '@/features/organization/lib/flattenOrganizationTree';
 import { membersKeys } from '@/features/members/queries';
 import { EMPLOYMENT_TYPE_KO } from '@/app/locale/app-ko';
 
@@ -224,7 +224,7 @@ export function MemberCreateModal({ open, onClose }: Props) {
       okText="등록"
       cancelText="취소"
       width={560}
-      destroyOnClose
+      destroyOnHidden
       confirmLoading={createM.isPending}
     >
       <Typography.Paragraph type="secondary" className="!tw-mb-4 !tw-text-sm">

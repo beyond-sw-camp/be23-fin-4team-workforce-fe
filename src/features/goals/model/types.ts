@@ -4,15 +4,16 @@ export type MeasureType = 'HIGHER_BETTER' | 'LOWER_BETTER' | 'TARGET_MATCH';
 /** goal-service `UnitType` */
 export type UnitType = 'NUMBER' | 'AMOUNT' | 'PERCENTAGE' | 'RATIO' | 'CUSTOM';
 
-export type KpiCycle = 'MONTHLY' | 'QUARTERLY' | 'HALF_YEARLY' | 'YEARLY';
+/** KPI 템플릿 `KpiCycle` — goal-service: MONTHLY, QUARTERLY, ANYTIME (+ 레거시 값 호환) */
+export type KpiCycle = 'MONTHLY' | 'QUARTERLY' | 'ANYTIME' | 'HALF_YEARLY' | 'YEARLY';
 
 /** goal-service `GoalOwnerType` */
 export type OwnerType = 'MEMBER' | 'ORGANIZATION';
 
-export type Visibility = 'PUBLIC' | 'TEAM_ONLY' | 'PRIVATE';
+/** goal-service `RollupPolicy` — 목표 생성·수정 */
+export type RollupPolicy = 'CHILDREN_AVG' | 'CHILDREN_WEIGHTED';
 
-/** goal-service 실적 `InputType` */
-export type PerformanceInputType = 'NUMBER' | 'TEXT' | 'FILE';
+export type Visibility = 'PUBLIC' | 'TEAM_ONLY' | 'PRIVATE';
 
 export type KpiTemplate = {
   id: string;
@@ -20,29 +21,36 @@ export type KpiTemplate = {
   name: string;
   measureType: MeasureType;
   unitType: UnitType;
+  /** 화면 표시 단위 — 템플릿·목표에 복사되는 문자열 (API: 최대 20자) */
+  unitLabel: string;
   cycle: KpiCycle;
   capPct?: number;
-};
-
-export type PerformanceRecord = {
-  id: string;
-  goalId?: string;
-  actualValue: number;
-  description?: string;
-  selfScore?: number;
-  inputType: PerformanceInputType;
-  confirmed?: boolean | null;
-  convertedScore?: number | null;
-  rejectReason?: string | null;
-  createdAt?: string;
+  /** 비활성 템플릿은 새 목표에서 선택 불가 — 응답 없으면 활성으로 간주 */
+  isActive?: boolean;
+  specCycleType?: string;
+  targetTeamId?: string | null;
+  requireApproval?: boolean;
+  kpisJson?: string | null;
 };
 
 /** goal-service `GoalStatus` — DB enum과 동일 */
 export type GoalStatus = 'DRAFT' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
 
+export type GoalHealthStatus =
+  | 'NOT_STARTED'
+  | 'ON_TRACK'
+  | 'AT_RISK'
+  | 'BEHIND'
+  | 'COMPLETED'
+  | string;
+
+export type GoalKindType = 'objective' | 'kr' | 'task' | string;
+
 export type Goal = {
   id: string;
   kpiTemplateId?: string;
+  /** 상위 목표 `goalId` — 루트면 없음 */
+  parentGoalId?: string | null;
   companyId?: string;
   ownerType: OwnerType;
   ownerId: string;
@@ -52,17 +60,46 @@ export type Goal = {
   endDate: string;
   measureType: MeasureType;
   unitType: UnitType;
+  /** 화면 표시 단위(최대 20자) — 없으면 목표 생성 시 템플릿 값 사용 */
+  unitLabel?: string;
   baseline?: number;
   targetValue?: number;
   actualValue?: number;
   /** 목표 집계 API가 채우는 달성률(%) — 있으면 진행 UI에 우선 사용 */
   achievementPct?: number;
   capPct?: number;
+  /** 서버 공식 롤업 달성률(있으면 상위 목표 표시 기준으로 사용) */
+  rolledAchievementPct?: number | null;
+  /** 롤업 출처 */
+  rollupSource?: 'SELF' | 'CHILDREN_AVG' | 'CHILDREN_WEIGHTED' | string;
+  /** 롤업 정책 */
+  rollupPolicy?: 'CHILDREN_AVG' | 'CHILDREN_WEIGHTED' | string;
+  /** 직속 하위 개수 */
+  childCount?: number;
+  /** 트리 조회 시 포함될 수 있는 뎁스 */
+  depth?: number;
+  /** 루트부터 현재 목표까지 path */
+  path?: string[];
+  /** 트리 조회 시 자식 존재 여부 */
+  hasChildren?: boolean;
+  /**
+   * 목표 승인 워크플로 상태 — API `goalApprovalStatus`와 동일 의미(매핑 시 둘 다 수용).
+   */
+  approvalStatus?: 'NOT_REQUESTED' | 'PENDING' | 'APPROVED' | 'REJECTED' | string;
   visibility: Visibility;
   weightPct?: number;
   /** API가 추후 값을 추가해도 매핑 레이어에서 허용 */
   status?: GoalStatus | string;
-  performanceRecords?: PerformanceRecord[];
+  /** KPI 템플릿 주기 — `GoalResDto.cycle` */
+  cycle?: KpiCycle;
+  /** 명세 objective|kr|task — API `type` */
+  type?: GoalKindType;
+  /** UI 진행률 0~100 — API `progress` */
+  progress?: number;
+  autoUpdate?: boolean;
+  healthStatus?: GoalHealthStatus;
+  visibleTeamIds?: string[];
+  participantMemberIds?: string[];
 };
 
 export type CreateKpiTemplatePayload = {
@@ -70,45 +107,165 @@ export type CreateKpiTemplatePayload = {
   name: string;
   measureType: MeasureType;
   unitType: UnitType;
+  /** 필수, @NotBlank, 최대 20자 */
+  unitLabel: string;
   cycle: KpiCycle;
   capPct: number;
 };
 
 /** `GoalCreateReqDto` — UUID·날짜는 JSON 문자열로 전송 (Spring이 파싱) */
 export type CreateGoalPayload = {
-  kpiTemplateId: string;
+  kpiTemplateId?: string;
   companyId: string;
   /** 선택, 상위 목표 연결 시 */
   parentGoalId?: string;
+  /** 미입력 시 서버 기본 CHILDREN_AVG */
+  rollupPolicy?: RollupPolicy;
   ownerType: OwnerType;
   ownerId: string;
   title: string;
-  /** 백엔드 `@NotBlank`, 최대 300자 */
-  description: string;
+  description?: string;
+  cycle?: KpiCycle;
+  goalKind?: 'OBJECTIVE' | 'KR' | 'TASK';
+  autoUpdate?: boolean;
+  requireApproval?: boolean;
+  activateImmediately?: boolean;
+  approverId?: string;
+  visibleTeamIds?: string[];
+  memberIds?: string[];
   startDate: string;
   endDate: string;
-  measureType: MeasureType;
-  unitType: UnitType;
-  /** 선택, 사용자 정의 단위 표기 */
+  measureType?: MeasureType;
+  unitType?: UnitType;
+  /** 비우면 템플릿 `unitLabel` 적용. 값이 있으면 최대 20자 */
   unitLabel?: string;
-  baseline: number;
+  baseline?: number;
   targetValue: number;
-  /** 백엔드 `@NotNull` `@Min(1)` */
-  capPct: number;
+  capPct?: number;
   contributionPct?: number;
   weightPct?: number;
   visibility: Visibility;
 };
 
-export type SubmitPerformancePayload = {
-  actualValue: number;
-  description?: string;
-  selfScore: number;
-  inputType: PerformanceInputType;
+export type GoalApprovalDecision = 'PENDING' | 'APPROVED' | 'REJECTED' | string;
+
+export type GoalApprovalSummary = {
+  goalId: string;
+  requestId?: string;
+  approvalStatus: 'NOT_REQUESTED' | 'PENDING' | 'APPROVED' | 'REJECTED' | string;
+  approverId?: string;
+  decision?: GoalApprovalDecision;
+  decidedAt?: string | null;
+  comment?: string | null;
+  completionSummary?: string | null;
+  completionEvidenceFiles?: string | null;
+  watchers?: Array<{ memberId: string }>;
 };
 
-export type ReviewPerformancePayload = {
-  confirmed: boolean;
-  convertedScore: number;
-  rejectReason?: string;
+/** `GoalApprovalRequestCreateReqDto` */
+export type GoalApprovalRequestPayload = {
+  approverId: string;
+};
+
+export type GoalApprovalWatchersPayload = {
+  watcherIds: string[];
+};
+
+export type GoalApprovalDecisionPayload = {
+  comment?: string;
+  reason?: string;
+};
+
+export type GoalApprovalBundleSummary = {
+  requestId: string;
+  status: string;
+  goalCount: number;
+  requestedAt?: string;
+  completionSummary?: string | null;
+  completionEvidenceFiles?: string | null;
+};
+
+export type GoalApprovalBundleDetail = {
+  requestId: string;
+  status: string;
+  rejectionReason?: string | null;
+  goals: Goal[];
+  approverId?: string;
+  decision?: GoalApprovalDecision;
+  decidedAt?: string | null;
+  comment?: string | null;
+  completionSummary?: string | null;
+  completionEvidenceFiles?: string | null;
+  watchers?: Array<{ memberId: string }>;
+};
+
+export type GoalActivity = {
+  activityId: string;
+  type:
+    | 'GOAL_CREATED'
+    | 'APPROVAL_REQUESTED'
+    | 'APPROVED'
+    | 'REJECTED'
+    | 'COMMENT_ADDED'
+    | 'PROGRESS_UPDATED'
+    | 'GOAL_METADATA_UPDATED'
+    | string;
+  actorId?: string;
+  createdAt?: string;
+  summary?: string;
+  meta?: Record<string, unknown>;
+};
+
+/** `GoalUpdateReqDto` — PATCH `/goal/{goalId}` (모두 선택) */
+export type UpdateGoalPayload = {
+  title?: string;
+  description?: string;
+  visibility?: Visibility;
+  weightPct?: number;
+  contributionPct?: number;
+  parentGoalId?: string;
+  cycle?: KpiCycle;
+  rollupPolicy?: RollupPolicy;
+  goalKind?: 'OBJECTIVE' | 'KR' | 'TASK';
+  autoUpdate?: boolean;
+  healthStatus?: GoalHealthStatus;
+  visibleTeamIds?: string[];
+  memberIds?: string[];
+};
+
+export type GoalComment = {
+  commentId: string;
+  goalId: string;
+  authorId: string;
+  body: string;
+  reactionsJson?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type CreateGoalCommentPayload = {
+  body: string;
+};
+
+export type AddGoalProgressUpdatePayload = {
+  /** 0~100 */
+  value: number;
+  status: GoalHealthStatus;
+  note?: string;
+};
+
+export type GoalCompletionSubmitPayload = {
+  approverId: string;
+  summary?: string;
+  evidenceFiles?: string;
+};
+
+export type GoalProgressUpdate = {
+  updateId: string;
+  goalId: string;
+  value: number;
+  status: GoalHealthStatus;
+  note?: string | null;
+  createdBy?: string;
+  createdAt?: string;
 };

@@ -26,8 +26,11 @@ import { EsgShopPage } from '@/pages/app/esg/EsgShopPage';
 import { MembersPage } from '@/pages/app/MembersPage';
 import { MemberDetailPage } from '@/pages/app/MemberDetailPage';
 import { NotificationsPage } from '@/pages/app/NotificationsPage';
-import { EvaluationsPage } from '@/pages/app/EvaluationsPage';
+import EvaluationsPage from '@/pages/app/EvaluationsPage';
+import { EvaluationWritePage } from '@/pages/app/EvaluationWritePage';
 import { PerformancePage } from '@/pages/app/PerformancePage';
+import { GoalApprovalDetailPage } from '@/pages/app/GoalApprovalDetailPage';
+import { GoalApprovalsListPage } from '@/pages/app/GoalApprovalsListPage';
 import { GenericPage } from '@/pages/app/GenericPage';
 import { AiDocumentsAdminPage } from '@/pages/app/AiDocumentsAdminPage';
 import { OrganizationPage } from '@/pages/app/OrganizationPage';
@@ -38,7 +41,7 @@ import { ForbiddenPage } from '@/pages/ForbiddenPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { APP_POST_LOGIN_PATH } from '@/app/config/paths';
 import { APP_GENERIC_PAGE_COPY } from '@/app/locale/app-ko';
-import { AppShellLayout } from '@/widgets/app-shell/AppShellLayout';
+import AppShellLayout from '@/widgets/app-shell/AppShellLayout';
 
 const rootRoute = createRootRouteWithContext<AppRouterContext>()({
   component: Outlet,
@@ -192,10 +195,28 @@ const performanceRoute = createRoute({
   component: PerformancePage,
 });
 
+const goalApprovalsListRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/performance/approvals',
+  component: GoalApprovalsListPage,
+});
+
+const goalApprovalDetailRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/performance/approvals/$requestId',
+  component: GoalApprovalDetailPage,
+});
+
 const evaluationsRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/evaluations',
   component: EvaluationsPage,
+});
+
+const evaluationWriteRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/evaluations/$responseId/write',
+  component: EvaluationWritePage,
 });
 
 const organizationRoute = createRoute({
@@ -227,6 +248,7 @@ const genericPaths = [
   '/approvals',
   '/payroll',
   '/mail',
+  '/meetings',
   '/ai-assistant',
   '/settings',
 ] as const;
@@ -266,7 +288,10 @@ const routeTree = rootRoute.addChildren([
       memberDetailRoute,
       notificationsRoute,
       performanceRoute,
+      goalApprovalsListRoute,
+      goalApprovalDetailRoute,
       evaluationsRoute,
+      evaluationWriteRoute,
       organizationRoute,
       rolesRoute,
       aiDocumentsAdminRoute,

@@ -604,7 +604,7 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
           </AppButton>
         }
         width={520}
-        destroyOnClose
+        destroyOnHidden
         classNames={{ body: '!tw-pt-2' }}
       >
         <Typography.Paragraph className="!tw-mb-0 tw-whitespace-pre-wrap tw-text-sm tw-leading-relaxed tw-text-slate-600">

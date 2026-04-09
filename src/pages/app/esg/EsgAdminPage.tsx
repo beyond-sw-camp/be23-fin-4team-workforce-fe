@@ -831,7 +831,7 @@ export function EsgAdminPage() {
         }}
         onOk={() => void saveSubject.mutateAsync()}
         confirmLoading={saveSubject.isPending}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={subForm} layout="vertical">
           <Form.Item name="title" label="제목" rules={[{ required: true }]}>
@@ -864,7 +864,7 @@ export function EsgAdminPage() {
           })
         }
         confirmLoading={rejectM.isPending}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={rejectForm} layout="vertical" className="tw-pt-1">
           <Form.Item
