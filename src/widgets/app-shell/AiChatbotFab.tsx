@@ -83,7 +83,7 @@ export function AiChatbotFab() {
         footer={null}
         width={520}
         centered
-        destroyOnClose={false}
+        destroyOnHidden={false}
         maskClosable
         classNames={{ body: '!tw-p-0' }}
         className="[&_.ant-modal-content]:tw-overflow-hidden [&_.ant-modal-content]:tw-p-0"

@@ -1,0 +1,343 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  Button, Card, Form, Input, Progress, Radio, Space, Tag, Typography, message, Spin, Divider,
+} from 'antd';
+import {
+  ArrowLeftOutlined, SaveOutlined, SendOutlined, InfoCircleOutlined,
+} from '@ant-design/icons';
+import { useNavigate, useParams } from '@tanstack/react-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { EVALUATION_PAGE_KO as L } from '@/app/locale/app-ko';
+import { evaluationApi } from '@/features/evaluation/api/evaluationApi';
+import type {
+  Answer, DesignSection, DesignQuestion, EvaluationDesign, EvaluationResponse,
+} from '@/features/evaluation/model/types';
+import { useAuth } from '@/features/auth/useAuth';
+import { AppButton } from '@/shared/ui/AppButton';
+
+const { Text, Title, Paragraph } = Typography;
+
+export function EvaluationWritePage() {
+  const { responseId } = useParams({ strict: false }) as { responseId: string };
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const autoSaveRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ── Data ──
+  const { data: response, isLoading: responseLoading } = useQuery({
+    queryKey: ['eval-response', responseId],
+    queryFn: () => evaluationApi.getResponse(responseId),
+  });
+
+  // Load the design for this response's group
+  const { data: designs = [] } = useQuery({
+    queryKey: ['eval-designs'],
+    queryFn: () => evaluationApi.listDesigns(),
+  });
+
+  // ── Local answer state ──
+  const [answers, setAnswers] = useState<Record<string, Answer>>({});
+  const [initialized, setInitialized] = useState(false);
+
+  // Initialize answers from response
+  useEffect(() => {
+    if (response && !initialized) {
+      const map: Record<string, Answer> = {};
+      for (const a of response.answers) {
+        map[a.questionId] = a;
+      }
+      setAnswers(map);
+      setInitialized(true);
+    }
+  }, [response, initialized]);
+
+  // ── Find design (simplified - in production would fetch from group→design relationship) ──
+  const design: EvaluationDesign | undefined = designs[0]; // Placeholder - would be fetched via group
+  const sections: DesignSection[] = design?.sections ?? [];
+  const allQuestions = useMemo(() => sections.flatMap(s => s.questions), [sections]);
+  const requiredQuestions = useMemo(() => allQuestions.filter(q => q.required), [allQuestions]);
+
+  // ── Progress ──
+  const answeredRequired = useMemo(() => {
+    return requiredQuestions.filter(q => {
+      const a = answers[q.id];
+      if (!a) return false;
+      if (q.type === 'text') return !!a.textValue?.trim();
+      if (q.type === 'scale') return a.scaleValue != null;
+      if (q.type === 'grade') return !!a.gradeValue;
+      if (q.type === 'gap') return a.scaleValue != null;
+      return false;
+    }).length;
+  }, [requiredQuestions, answers]);
+  const progressPct = requiredQuestions.length > 0 ? Math.round((answeredRequired / requiredQuestions.length) * 100) : 0;
+
+  // ── Update answer ──
+  const updateAnswer = useCallback((questionId: string, patch: Partial<Answer>) => {
+    setAnswers(prev => ({
+      ...prev,
+      [questionId]: { ...prev[questionId], questionId, ...patch },
+    }));
+  }, []);
+
+  // ── Save mutation ──
+  const saveMut = useMutation({
+    mutationFn: () => {
+      const answerList = Object.values(answers);
+      return evaluationApi.saveResponse(responseId, { answersJson: JSON.stringify(answerList) });
+    },
+    onSuccess: () => message.success(L.writeAutoSaved),
+  });
+
+  // ── Submit mutation ──
+  const submitMut = useMutation({
+    mutationFn: async () => {
+      // Save first
+      const answerList = Object.values(answers);
+      await evaluationApi.saveResponse(responseId, { answersJson: JSON.stringify(answerList) });
+      return evaluationApi.submitResponse(responseId);
+    },
+    onSuccess: () => {
+      message.success('평가가 제출되었습니다.');
+      queryClient.invalidateQueries({ queryKey: ['eval-my-responses'] });
+      navigate({ to: '/app/evaluations' });
+    },
+  });
+
+  // ── Auto-save ──
+  useEffect(() => {
+    if (response?.status === 'SUBMITTED') return;
+    autoSaveRef.current = setInterval(() => {
+      if (Object.keys(answers).length > 0) {
+        saveMut.mutate();
+      }
+    }, 30000);
+    return () => {
+      if (autoSaveRef.current) clearInterval(autoSaveRef.current);
+    };
+  }, [answers, response?.status]);
+
+  // ── Handle submit ──
+  const handleSubmit = () => {
+    // Check all required questions are answered
+    const unanswered = requiredQuestions.filter(q => {
+      const a = answers[q.id];
+      if (!a) return true;
+      if (q.type === 'text') return !a.textValue?.trim();
+      if (q.type === 'scale') return a.scaleValue == null;
+      if (q.type === 'grade') return !a.gradeValue;
+      return false;
+    });
+    if (unanswered.length > 0) {
+      message.warning(`필수 문항 ${unanswered.length}개가 미작성입니다.`);
+      // Scroll to first unanswered
+      const el = document.getElementById(`q-${unanswered[0].id}`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    submitMut.mutate();
+  };
+
+  if (responseLoading) return <div className="tw-flex tw-justify-center tw-py-20"><Spin size="large" /></div>;
+  if (!response) return <div className="tw-p-6"><Text type="danger">평가 응답을 찾을 수 없습니다.</Text></div>;
+
+  const isReadOnly = response.status === 'SUBMITTED';
+
+  // ── Question Renderer ──
+  const renderQuestion = (q: DesignQuestion) => {
+    const a = answers[q.id] ?? {};
+    return (
+      <div id={`q-${q.id}`} key={q.id} className="tw-py-4 tw-border-b tw-border-gray-100 last:tw-border-0">
+        <div className="tw-flex tw-items-start tw-gap-2 tw-mb-2">
+          <Text strong>{q.title}</Text>
+          {q.required && <Tag color="red" className="tw-text-xs">{L.writeRequired}</Tag>}
+        </div>
+        {q.description && <Paragraph type="secondary" className="tw-text-sm tw-mb-3">{q.description}</Paragraph>}
+
+        {q.type === 'text' && (
+          <Input.TextArea
+            rows={3}
+            value={a.textValue ?? ''}
+            onChange={e => updateAnswer(q.id, { textValue: e.target.value })}
+            disabled={isReadOnly}
+            placeholder="답변을 입력해주세요..."
+          />
+        )}
+
+        {q.type === 'scale' && (
+          <Radio.Group
+            value={a.scaleValue}
+            onChange={e => updateAnswer(q.id, { scaleValue: e.target.value })}
+            disabled={isReadOnly}
+          >
+            <Space>
+              {Array.from({ length: (q.options?.scaleMax ?? 5) - (q.options?.scaleMin ?? 1) + 1 }, (_, i) => {
+                const val = (q.options?.scaleMin ?? 1) + i;
+                return (
+                  <Radio.Button key={val} value={val} className="tw-min-w-[48px] tw-text-center">
+                    {val}
+                  </Radio.Button>
+                );
+              })}
+            </Space>
+          </Radio.Group>
+        )}
+
+        {q.type === 'grade' && (
+          <Radio.Group
+            value={a.gradeValue}
+            onChange={e => updateAnswer(q.id, { gradeValue: e.target.value })}
+            disabled={isReadOnly}
+          >
+            <Space>
+              {(q.options?.gradeLabels ?? ['S', 'A', 'B', 'C', 'D']).map(label => (
+                <Radio.Button key={label} value={label} className="tw-min-w-[48px] tw-text-center tw-font-semibold">
+                  {label}
+                </Radio.Button>
+              ))}
+            </Space>
+          </Radio.Group>
+        )}
+
+        {q.type === 'gap' && (
+          <Radio.Group
+            value={a.scaleValue}
+            onChange={e => updateAnswer(q.id, { scaleValue: e.target.value })}
+            disabled={isReadOnly}
+          >
+            <Space>
+              {Array.from({ length: 5 }, (_, i) => i + 1).map(val => (
+                <Radio.Button key={val} value={val} className="tw-min-w-[48px] tw-text-center">
+                  {val}
+                </Radio.Button>
+              ))}
+            </Space>
+          </Radio.Group>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="tw-p-6 tw-max-w-screen-xl tw-mx-auto">
+      {/* Header */}
+      <div className="tw-flex tw-items-center tw-gap-4 tw-mb-6">
+        <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate({ to: '/app/evaluations' })} />
+        <div className="tw-flex-1">
+          <Title level={4} className="tw-mb-0">{L.writeTitle}</Title>
+          <Text type="secondary">대상: {response.targetMemberId} · {({
+            SELF: L.evalTypeSelf, DOWNWARD: L.evalTypeDownward, UPWARD: L.evalTypeUpward, PEER: L.evalTypePeer,
+          }[response.evaluationType] ?? response.evaluationType)} 평가</Text>
+        </div>
+        <div className="tw-flex tw-items-center tw-gap-2 tw-min-w-[200px]">
+          <Text type="secondary" className="tw-text-sm">{L.writeProgress}</Text>
+          <Progress
+            percent={progressPct}
+            size="small"
+            strokeColor={progressPct >= 80 ? '#22c55e' : progressPct >= 50 ? '#f59e0b' : '#ef4444'}
+            className="tw-flex-1"
+          />
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="tw-flex tw-gap-6">
+        {/* Left: Questions */}
+        <div className="tw-flex-1 tw-space-y-4">
+          {sections.length > 0 ? sections.map((section, si) => (
+            <Card key={si} title={
+              <div className="tw-flex tw-justify-between tw-items-center">
+                <Text strong>{`${si + 1}. ${section.title}`}</Text>
+                <Tag color="blue">{L.designWeight} {section.weight}%</Tag>
+              </div>
+            }>
+              {section.questions.map(renderQuestion)}
+            </Card>
+          )) : (
+            <Card>
+              <div className="tw-text-center tw-py-12 tw-text-gray-400">
+                <InfoCircleOutlined className="tw-text-3xl tw-mb-2" />
+                <div>평가 설계가 아직 연결되지 않았습니다.</div>
+              </div>
+            </Card>
+          )}
+
+          {/* Action Bar */}
+          {!isReadOnly && (
+            <div className="tw-flex tw-justify-end tw-gap-3 tw-pt-4 tw-border-t tw-border-gray-200">
+              <AppButton variant="secondary" onClick={() => saveMut.mutate()} loading={saveMut.isPending}>
+                <SaveOutlined /> {L.writeSave}
+              </AppButton>
+              <AppButton variant="primary" onClick={handleSubmit} loading={submitMut.isPending}>
+                <SendOutlined /> {L.writeSubmit}
+              </AppButton>
+            </div>
+          )}
+        </div>
+
+        {/* Right: Reference Panel */}
+        <div className="tw-w-80 tw-flex-shrink-0">
+          <Card title={L.writeReferencePanel} size="small" className="tw-sticky tw-top-4">
+            <div className="tw-space-y-4">
+              {/* Member Info */}
+              <div>
+                <Text type="secondary" className="tw-text-xs tw-block tw-mb-1">평가 대상</Text>
+                <Text>{response.targetMemberId}</Text>
+              </div>
+              <Divider className="tw-my-2" />
+              {/* Evaluation Type */}
+              <div>
+                <Text type="secondary" className="tw-text-xs tw-block tw-mb-1">평가 유형</Text>
+                <Tag color="blue">{({
+                  SELF: L.evalTypeSelf, DOWNWARD: L.evalTypeDownward, UPWARD: L.evalTypeUpward, PEER: L.evalTypePeer,
+                }[response.evaluationType])}</Tag>
+              </div>
+              <Divider className="tw-my-2" />
+              {/* Status */}
+              <div>
+                <Text type="secondary" className="tw-text-xs tw-block tw-mb-1">상태</Text>
+                {response.status === 'SUBMITTED' ? (
+                  <Tag color="green">{L.statusSubmitted}</Tag>
+                ) : response.status === 'IN_PROGRESS' ? (
+                  <Tag color="gold">{L.statusInProgress}</Tag>
+                ) : (
+                  <Tag>{L.statusNotStarted}</Tag>
+                )}
+              </div>
+              {response.submittedAt && (
+                <>
+                  <Divider className="tw-my-2" />
+                  <div>
+                    <Text type="secondary" className="tw-text-xs tw-block tw-mb-1">제출 시각</Text>
+                    <Text className="tw-text-sm">{response.submittedAt}</Text>
+                  </div>
+                </>
+              )}
+            </div>
+          </Card>
+
+          {/* Criteria Panel */}
+          {design && (
+            <Card title={L.writeCriteriaPanel} size="small" className="tw-mt-4">
+              <div className="tw-space-y-2">
+                {sections.map((s, i) => (
+                  <div key={i} className="tw-flex tw-justify-between tw-text-sm">
+                    <Text>{s.title}</Text>
+                    <Text type="secondary">{s.weight}%</Text>
+                  </div>
+                ))}
+                <Divider className="tw-my-2" />
+                <div className="tw-flex tw-justify-between tw-text-sm tw-font-semibold">
+                  <Text>합계</Text>
+                  <Text type={sections.reduce((s, sec) => s + sec.weight, 0) === 100 ? 'success' : 'danger'}>
+                    {sections.reduce((s, sec) => s + sec.weight, 0)}%
+                  </Text>
+                </div>
+              </div>
+            </Card>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

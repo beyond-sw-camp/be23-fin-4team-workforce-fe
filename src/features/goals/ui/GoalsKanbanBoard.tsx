@@ -1,4 +1,4 @@
-import { CalendarOutlined, EyeInvisibleOutlined, HolderOutlined, UserOutlined } from '@ant-design/icons';
+import { CalendarOutlined, EyeInvisibleOutlined, HolderOutlined, InfoCircleOutlined, UserOutlined } from '@ant-design/icons';
 import {
   DndContext,
   type DragEndEvent,
@@ -16,6 +16,8 @@ import { CSS } from '@dnd-kit/utilities';
 import { Button, Progress, Tag, Tooltip, Typography, message } from 'antd';
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Goal, Visibility } from '@/features/goals/model/types';
+import { goalDepthInList } from '@/features/goals/lib/goalHierarchy';
+import { goalValueUnitSuffix } from '@/features/goals/lib/goalUnitDisplay';
 import {
   type KanbanColumnKey,
   loadKanbanOrder,
@@ -23,7 +25,7 @@ import {
   saveKanbanOrder,
 } from '@/features/goals/lib/goalKanbanStorage';
 import type { GoalListSortKey } from '@/features/goals/lib/sortGoals';
-import { computeGoalProgressPercent } from '@/features/goals/ui/goalProgressDisplay';
+import { buildGoalDisplayProgressMap } from '@/features/goals/ui/goalProgressRollup';
 import { GoalsEmptyPanel } from '@/features/goals/ui/GoalsEmptyPanel';
 
 const { Text } = Typography;
@@ -79,6 +81,7 @@ export type GoalsKanbanBoardProps = {
   loading?: boolean;
   companyId?: string;
   memberId: string;
+  formatOwnerLabel?: (goal: Goal) => string;
   canActivate: boolean;
   onOpenDetail: (g: Goal) => void;
   onOpenPerf: (g: Goal) => void;
@@ -131,16 +134,24 @@ function GoalKanbanCard({
   canActivate,
   canSubmitPerf,
   activating,
+  displayPctRaw,
+  rolledFromChildren,
   onOpenDetail,
   onOpenPerf,
   onActivate,
+  depth,
+  formatOwnerLabel,
 }: {
   goal: Goal;
   column: KanbanColumnKey;
+  depth: number;
   memberId: string;
+  formatOwnerLabel?: (goal: Goal) => string;
   canActivate: boolean;
   canSubmitPerf: boolean;
   activating: boolean;
+  displayPctRaw: number | null;
+  rolledFromChildren: boolean;
   onOpenDetail: () => void;
   onOpenPerf: () => void;
   onActivate: () => void;
@@ -149,12 +160,16 @@ function GoalKanbanCard({
   const style = { transform: CSS.Transform.toString(transform), transition };
 
   const st = (goal.status ?? 'DRAFT').toUpperCase();
-  const pctComputed = computeGoalProgressPercent(goal);
-  const rawPct = pctComputed != null ? Math.round(pctComputed) : null;
+  const rawPct = displayPctRaw != null ? Math.round(displayPctRaw) : null;
   const barPct = rawPct != null ? Math.min(100, rawPct) : 0;
   const barColor =
     rawPct != null && rawPct > 100 ? '#22c55e' : rawPct != null && rawPct > 0 ? '#3b82f6' : '#e2e8f0';
-  const ownerShort = goal.ownerId === memberId ? '나' : `${goal.ownerId.slice(0, 2)}**`;
+  const ownerShort = formatOwnerLabel
+    ? formatOwnerLabel(goal)
+    : (() => {
+        const oid = goal.ownerId?.trim() ?? '';
+        return !oid ? '—' : oid === memberId ? '나' : `${oid.slice(0, 2)}**`;
+      })();
   const actual = goal.actualValue ?? 0;
   const target = goal.targetValue ?? 0;
   const tagRowClass = '[&_.ant-tag]:!tw-m-0 [&_.ant-tag]:!tw-text-[11px] [&_.ant-tag]:!tw-leading-5';
@@ -208,8 +223,13 @@ function GoalKanbanCard({
           </div>
 
           <div className="tw-mt-4 tw-border-t tw-border-slate-200/80 tw-pt-3">
-            <div className="tw-text-2xl tw-font-bold tw-tabular-nums tw-leading-none tw-text-[#1e3a5f]">
-              {rawPct != null ? `${rawPct}%` : '—'}
+            <div className="tw-flex tw-items-center tw-gap-1.5 tw-text-2xl tw-font-bold tw-tabular-nums tw-leading-none tw-text-[#1e3a5f]">
+              <span>{rawPct != null ? `${rawPct}%` : '—'}</span>
+              {rolledFromChildren ? (
+                <Tooltip title="하위 목표 평균 달성률로 자동 집계됩니다.">
+                  <InfoCircleOutlined className="tw-text-sm tw-text-slate-400" />
+                </Tooltip>
+              ) : null}
             </div>
             <Progress
               percent={barPct}
@@ -221,7 +241,7 @@ function GoalKanbanCard({
             />
             <Text type="secondary" className="!tw-mt-2 tw-block tw-text-xs tw-leading-normal tw-text-slate-500">
               실적 {actual} / 목표 {target}
-              {goal.unitType ? ` · ${goal.unitType}` : ''}
+              {goalValueUnitSuffix(goal)}
             </Text>
           </div>
 
@@ -256,6 +276,7 @@ export function GoalsKanbanBoard({
   loading,
   companyId,
   memberId,
+  formatOwnerLabel,
   canActivate,
   onOpenDetail,
   onOpenPerf,
@@ -275,6 +296,7 @@ export function GoalsKanbanBoard({
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
 
   const goalsById = useMemo(() => new Map(goals.map((g) => [g.id, g])), [goals]);
+  const progressMap = useMemo(() => buildGoalDisplayProgressMap(goals), [goals]);
   const sig = useMemo(() => goalsSignature(goals), [goals]);
 
   useLayoutEffect(() => {
@@ -349,7 +371,23 @@ export function GoalsKanbanBoard({
       return;
     }
 
-    message.warning('칸반에서 서버에 반영되는 이동은 진행 전 → 진행 중(진행 시작)만 가능해요.');
+    if (activeCol === 'DRAFT' && overCol === 'ACTIVE' && !canActivate) {
+      message.warning('목표 진행 시작 권한이 없습니다. 관리자에게 문의해 주세요.');
+      return;
+    }
+    if (activeCol === 'ACTIVE' && overCol === 'COMPLETED') {
+      message.info('목표 완료 처리는 목표 상세에서 진행해 주세요.');
+      return;
+    }
+    if (overCol === 'CANCELLED') {
+      message.info('목표 취소는 목표 상세에서 진행해 주세요.');
+      return;
+    }
+    if (activeCol !== 'DRAFT' && overCol === 'DRAFT') {
+      message.warning('진행 중이거나 완료된 목표는 진행 전 상태로 되돌릴 수 없습니다.');
+      return;
+    }
+    message.warning('해당 상태 변경은 칸반에서 지원하지 않습니다. 목표 상세에서 처리해 주세요.');
   };
 
   const activeGoal = activeDragId ? goalsById.get(activeDragId) : undefined;
@@ -384,17 +422,22 @@ export function GoalsKanbanBoard({
                   </div>
                 ) : (
                   goalsInCol.map((g) => {
-                    const isOwner = g.ownerId === memberId;
+                    const isOwner = Boolean(g.ownerId && g.ownerId === memberId);
                     const st = (g.status ?? 'DRAFT').toUpperCase();
+                    const depth = goalDepthInList(g, goals);
                     return (
                       <GoalKanbanCard
                         key={g.id}
                         goal={g}
                         column={col}
+                        depth={depth}
                         memberId={memberId}
+                        formatOwnerLabel={formatOwnerLabel}
                         canActivate={canActivate}
-                        canSubmitPerf={st === 'ACTIVE' && isOwner && canActivate}
+                        canSubmitPerf={st === 'ACTIVE' && isOwner}
                         activating={activatingGoalId === g.id}
+                        displayPctRaw={progressMap.get(g.id)?.pct ?? null}
+                        rolledFromChildren={Boolean(progressMap.get(g.id)?.rolledFromChildren)}
                         onOpenDetail={() => onOpenDetail(g)}
                         onOpenPerf={() => onOpenPerf(g)}
                         onActivate={() => void activateGoal(g.id)}

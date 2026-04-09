@@ -1,5 +1,6 @@
-import { Spin, Tag, Typography } from 'antd';
+import { Button, Popconfirm, Spin, Tag, Typography } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
+import { PERFORMANCE_PAGE_KO } from '@/app/locale/app-ko';
 import type { KpiCycle, KpiTemplate, MeasureType, UnitType } from '@/features/goals/model/types';
 import { AppEmptyIllustrated } from '@/shared/ui/AppEmptyIllustrated';
 import { AppPagination, appPaginationShowTotalLabel } from '@/shared/ui/AppPagination';
@@ -23,9 +24,14 @@ const UNIT_LABEL: Record<UnitType, string> = {
 const CYCLE_LABEL: Record<KpiCycle, string> = {
   MONTHLY: '월간',
   QUARTERLY: '분기',
+  ANYTIME: '상시',
   HALF_YEARLY: '반기',
   YEARLY: '연간',
 };
+
+function templateIsActive(tpl: KpiTemplate): boolean {
+  return tpl.isActive !== false;
+}
 
 export type KpiTemplateCardsProps = {
   templates: KpiTemplate[];
@@ -33,6 +39,10 @@ export type KpiTemplateCardsProps = {
   emptyMessage: string;
   pageSizeOptions?: number[];
   defaultPageSize?: number;
+  /** GOAL:UPDATE — 비활성화 버튼 표시 */
+  canDeactivate?: boolean;
+  onDeactivate?: (kpiTemplateId: string) => void;
+  deactivatingId?: string | null;
 };
 
 export function KpiTemplateCards({
@@ -41,6 +51,9 @@ export function KpiTemplateCards({
   emptyMessage,
   pageSizeOptions = [12, 24, 48],
   defaultPageSize = 12,
+  canDeactivate = false,
+  onDeactivate,
+  deactivatingId = null,
 }: KpiTemplateCardsProps) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(defaultPageSize);
@@ -81,39 +94,72 @@ export function KpiTemplateCards({
   return (
     <div className="tw-flex tw-flex-col">
       <div className="tw-flex tw-flex-col">
-        {slice.map((tpl) => (
-          <div
-            key={tpl.id}
-            className="tw-border-0 tw-border-b tw-border-solid tw-border-slate-200 tw-py-5 last:tw-border-b-0"
-          >
-            <Tag className="!tw-m-0 tw-border-slate-200 tw-bg-slate-50 tw-text-slate-600">
-              {CYCLE_LABEL[tpl.cycle] ?? tpl.cycle}
-            </Tag>
-            <div className="tw-mt-3 tw-text-lg tw-font-bold tw-leading-snug tw-text-[#1e3a5f]">{tpl.name}</div>
-            <div className="tw-mt-3 tw-flex tw-flex-wrap tw-gap-x-6 tw-gap-y-2 tw-text-sm">
-              <div>
-                <Text type="secondary" className="tw-mr-2 tw-text-xs">
-                  측정
-                </Text>
-                <Tag className="!tw-m-0">{MEASURE_LABEL[tpl.measureType] ?? tpl.measureType}</Tag>
+        {slice.map((tpl) => {
+          const active = templateIsActive(tpl);
+          return (
+            <div
+              key={tpl.id}
+              className="tw-border-0 tw-border-b tw-border-solid tw-border-slate-200 tw-py-5 last:tw-border-b-0"
+            >
+              <div className="tw-flex tw-flex-wrap tw-items-start tw-justify-between tw-gap-3">
+                <div className="tw-flex tw-min-w-0 tw-flex-wrap tw-items-center tw-gap-2">
+                  <Tag className="!tw-m-0 tw-border-slate-200 tw-bg-slate-50 tw-text-slate-600">
+                    {CYCLE_LABEL[tpl.cycle] ?? tpl.cycle}
+                  </Tag>
+                  {!active ? (
+                    <Tag className="!tw-m-0 tw-border-slate-200 tw-bg-slate-100 tw-text-slate-500">
+                      {PERFORMANCE_PAGE_KO.templateInactive}
+                    </Tag>
+                  ) : null}
+                </div>
+                {canDeactivate && onDeactivate && active ? (
+                  <Popconfirm
+                    title={PERFORMANCE_PAGE_KO.templateDeactivateConfirm}
+                    onConfirm={() => onDeactivate(tpl.id)}
+                    okButtonProps={{ loading: deactivatingId === tpl.id }}
+                  >
+                    <Button type="link" size="small" className="!tw-shrink-0 !tw-px-0 tw-text-slate-600">
+                      {PERFORMANCE_PAGE_KO.templateDeactivate}
+                    </Button>
+                  </Popconfirm>
+                ) : null}
               </div>
-              <div>
-                <Text type="secondary" className="tw-mr-2 tw-text-xs">
-                  단위
-                </Text>
-                <Text className="tw-text-slate-700">{UNIT_LABEL[tpl.unitType] ?? tpl.unitType}</Text>
+              <div
+                className={`tw-mt-3 tw-text-lg tw-font-bold tw-leading-snug tw-text-[#1e3a5f] ${!active ? 'tw-text-slate-500' : ''}`}
+              >
+                {tpl.name}
               </div>
-              <div>
-                <Text type="secondary" className="tw-mr-2 tw-text-xs">
-                  상한
-                </Text>
-                <Text className="tw-font-medium tw-tabular-nums tw-text-[#1e3a5f]">
-                  {tpl.capPct != null ? `${tpl.capPct}%` : '—'}
-                </Text>
+              <div className="tw-mt-3 tw-flex tw-flex-wrap tw-gap-x-6 tw-gap-y-2 tw-text-sm">
+                <div>
+                  <Text type="secondary" className="tw-mr-2 tw-text-xs">
+                    측정
+                  </Text>
+                  <Tag className="!tw-m-0">{MEASURE_LABEL[tpl.measureType] ?? tpl.measureType}</Tag>
+                </div>
+                <div>
+                  <Text type="secondary" className="tw-mr-2 tw-text-xs">
+                    단위 유형
+                  </Text>
+                  <Text className="tw-text-slate-700">{UNIT_LABEL[tpl.unitType] ?? tpl.unitType}</Text>
+                </div>
+                <div>
+                  <Text type="secondary" className="tw-mr-2 tw-text-xs">
+                    표시
+                  </Text>
+                  <Text className="tw-font-medium tw-text-[#1e3a5f]">{tpl.unitLabel?.trim() || '—'}</Text>
+                </div>
+                <div>
+                  <Text type="secondary" className="tw-mr-2 tw-text-xs">
+                    상한
+                  </Text>
+                  <Text className="tw-font-medium tw-tabular-nums tw-text-[#1e3a5f]">
+                    {tpl.capPct != null ? `${tpl.capPct}%` : '—'}
+                  </Text>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <AppPagination

@@ -2,30 +2,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, DatePicker, Form, Input, Modal, Select, Typography } from 'antd';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import type { CreateMemberPayload, EmploymentType } from '@/features/member/api/memberApi';
 import { memberApi } from '@/features/member/api/memberApi';
-import type { OrganizationTreeNode } from '@/features/organization/api/organizationApi';
 import { organizationApi } from '@/features/organization/api/organizationApi';
+import { flattenOrganizationsWithMeta } from '@/features/organization/lib/flattenOrganizationTree';
 import { membersKeys } from '@/features/members/queries';
 import { EMPLOYMENT_TYPE_KO } from '@/app/locale/app-ko';
-
-function pickOrgId(node: OrganizationTreeNode): string {
-  const raw =
-    node.id ??
-    node.organizationId ??
-    node.organization_id ??
-    node.uuid ??
-    node.organizationUuid ??
-    node.organization_uuid;
-  if (typeof raw === 'string' && raw) return raw;
-  if (typeof raw === 'number') return String(raw);
-  return '';
-}
-
-function pickOrgName(node: OrganizationTreeNode): string {
-  return typeof node.name === 'string' ? node.name : '';
-}
 
 function pickRowId(row: Record<string, unknown>): string {
   const v = row.id ?? row.jobGradeId ?? row.job_grade_id ?? row.jobTitleId ?? row.job_title_id;
@@ -131,13 +114,14 @@ export function MemberCreateModal({ open, onClose }: Props) {
     }
   };
 
-  const orgOptions = orgList
-    .map((n) => {
-      const id = pickOrgId(n);
-      const label = pickOrgName(n) || '(이름 없음)';
-      return id ? { value: id, label } : null;
-    })
-    .filter((x): x is { value: string; label: string } => x !== null);
+  const orgOptions = useMemo(
+    () =>
+      flattenOrganizationsWithMeta(orgList).map((r) => ({
+        value: r.id,
+        label: `${r.depth > 0 ? '\u2003'.repeat(r.depth) : ''}${r.name || '(이름 없음)'}`,
+      })),
+    [orgList],
+  );
 
   const gradeOptions = grades.map((row) => {
     const r = row as Record<string, unknown>;
@@ -164,7 +148,7 @@ export function MemberCreateModal({ open, onClose }: Props) {
       okText="등록"
       cancelText="취소"
       width={560}
-      destroyOnClose
+      destroyOnHidden
       confirmLoading={createM.isPending}
     >
       <Typography.Paragraph type="secondary" className="!tw-mb-4 !tw-text-sm">

@@ -676,7 +676,7 @@ export function CalendarPage() {
           </Button>,
         ]}
         width={520}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={form} layout="vertical" className="tw-pt-2">
           <Form.Item name="kind" label="유형" rules={[{ required: true }]}>

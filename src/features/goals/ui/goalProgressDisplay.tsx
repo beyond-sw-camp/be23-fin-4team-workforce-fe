@@ -9,6 +9,11 @@ function normalizeApiPercent(raw: number): number {
   return raw;
 }
 
+function normalizeRolledOrAchievement(raw: number | null | undefined): number | null {
+  if (raw === undefined || raw === null || !Number.isFinite(Number(raw))) return null;
+  return normalizeApiPercent(Number(raw));
+}
+
 function estimateAchievementPct(goal: Goal): number | null {
   const current = goal.actualValue ?? 0;
   const target = goal.targetValue ?? 0;
@@ -36,13 +41,18 @@ function estimateAchievementPct(goal: Goal): number | null {
   }
 }
 
-/** 막대·툴팁용 달성률(0~cap), 없으면 null */
+/** 막대·툴팁용 달성률(0~cap), 없으면 null — `rolledAchievementPct` 우선(GoalResDto) */
 export function computeGoalProgressPercent(goal: Goal): number | null {
   const target = goal.targetValue ?? 0;
   const current = goal.actualValue ?? 0;
-  const serverRaw = goal.achievementPct;
   const cap = goal.capPct != null && Number.isFinite(goal.capPct) ? Number(goal.capPct) : 200;
 
+  const rolledNorm = normalizeRolledOrAchievement(goal.rolledAchievementPct ?? undefined);
+  if (rolledNorm !== null) {
+    return Math.min(cap, Math.max(0, rolledNorm));
+  }
+
+  const serverRaw = goal.achievementPct;
   const fromServer =
     serverRaw !== undefined && serverRaw !== null && Number.isFinite(Number(serverRaw)) ? Number(serverRaw) : null;
   const normalizedServer = fromServer !== null ? normalizeApiPercent(fromServer) : null;

@@ -1,4 +1,4 @@
-﻿import { Drawer } from 'antd';
+import { Drawer } from 'antd';
 import type { PropsWithChildren } from 'react';
 
 type Props = PropsWithChildren<{
@@ -9,7 +9,7 @@ type Props = PropsWithChildren<{
 
 export function AppDrawerForm({ open, title, onClose, children }: Props) {
   return (
-    <Drawer open={open} title={title} onClose={onClose} destroyOnClose>
+    <Drawer open={open} title={title} onClose={onClose} destroyOnHidden>
       {children}
     </Drawer>
   );

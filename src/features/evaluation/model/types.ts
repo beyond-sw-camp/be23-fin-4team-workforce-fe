@@ -1,127 +1,165 @@
-/** goal-service EvalCycle (백엔드 enum과 동일) */
-export type EvalCycle = 'MONTHLY' | 'QUARTERLY' | 'SEMI_ANNUAL' | 'ANNUAL';
-
-/** 등급 산정 방식 */
+// ── Enums ──
+export type SeasonType = 'ANNUAL' | 'HALF_YEAR' | 'QUARTER';
+export type SeasonStatus = 'DRAFT' | 'ACTIVE' | 'CLOSED';
+export type EvalType = 'SELF' | 'DOWNWARD' | 'UPWARD' | 'PEER';
+export type EvaluationStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'SUBMITTED';
 export type GradeType = 'ABSOLUTE' | 'RELATIVE';
+export type QuestionType = 'text' | 'scale' | 'grade' | 'gap';
+export type AnomalyType = 'all_same' | 'too_short' | 'insincere' | 'contradiction';
+export type AnomalySeverity = 'info' | 'warning' | 'critical';
 
-/** 평가 유형 */
-export type EvalType = 'SELF' | 'SUPERVISOR' | 'PEER';
-
-/** 평가 진행 상태(백엔드 enum에 맞춤) */
-export type EvaluationStatus = 'DRAFT' | 'SUBMITTED' | 'CONFIRMED' | string;
-
-export type EvaluationPolicy = {
-  id: string;
-  companyId: string;
-  policyName: string;
-  evalCycle: EvalCycle;
-  periodStart: string;
-  periodEnd: string;
-  resultOpenDate: string;
-  editAllowedDays?: number;
-  quantWeightPct?: number;
-  qualWeightPct?: number;
-  selfWeightPct?: number;
-  supervisorWeightPct?: number;
-  peerWeightPct?: number;
-  gradeType?: GradeType;
-  gradeConfigJson?: string;
-  approvalRequired?: boolean;
-  biasCheckEnabled?: boolean;
-  peerCountMin?: number;
-  peerCountMax?: number;
-  active?: boolean;
+// ── Schedule ──
+export type EvalSchedule = {
+  self?: { startDate: string; endDate: string };
+  peer?: { startDate: string; endDate: string };
+  upward?: { startDate: string; endDate: string };
+  downward?: { startDate: string; endDate: string };
 };
 
-export type CreateEvaluationPolicyPayload = {
+// ── Season ──
+export type EvaluationSeason = {
+  seasonId: string;
   companyId: string;
-  policyName: string;
-  evalCycle: EvalCycle;
-  periodStart: string;
-  periodEnd: string;
-  resultOpenDate: string;
-  editAllowedDays: number;
-  quantWeightPct: number;
-  qualWeightPct: number;
-  selfWeightPct: number;
-  supervisorWeightPct: number;
-  peerWeightPct: number;
-  gradeType: GradeType;
-  gradeConfigJson: string;
-  approvalRequired: boolean;
-  biasCheckEnabled: boolean;
-  peerCountMin: number;
-  peerCountMax: number;
+  name: string;
+  type: SeasonType;
+  startDate: string;
+  endDate: string;
+  status: SeasonStatus;
+  resultPublishDate?: string;
+  schedule?: EvalSchedule;
 };
 
-export type Evaluation = {
-  id: string;
-  evaluationPolicyId: string;
-  evaluateeId: string;
+export type CreateSeasonPayload = {
+  name: string;
+  type: SeasonType;
+  startDate: string;
+  endDate: string;
+  resultPublishDate?: string;
+  scheduleJson?: string;
+};
+
+export type UpdateSeasonPayload = Partial<CreateSeasonPayload>;
+
+// ── Group ──
+export type EvaluatorMap = {
+  targetMemberId: string;
   evaluatorId: string;
-  evalType: EvalType;
-  status?: EvaluationStatus;
-  quantScore?: number;
-  qualScore?: number;
-  goalScoresJson?: string;
-  rubricScoresJson?: string;
-  comment?: string;
-  strengthComment?: string;
-  improveComment?: string;
-  finalScore?: number;
-  grade?: string;
+  evaluationType: EvalType;
 };
 
-export type CreateEvaluationPayload = {
-  evaluationPolicyId: string;
-  evaluateeId: string;
-  evalType: EvalType;
+export type EvaluationGroup = {
+  groupId: string;
+  companyId: string;
+  seasonId: string;
+  name: string;
+  evaluationTypes: EvalType[];
+  targetMemberIds: string[];
+  designId?: string;
+  evaluatorMaps: EvaluatorMap[];
 };
 
-export type PatchEvaluationScoresPayload = {
-  quantScore?: number;
-  qualScore?: number;
-  goalScoresJson?: string;
-  rubricScoresJson?: string;
-  comment?: string;
-  strengthComment?: string;
-  improveComment?: string;
+export type CreateGroupPayload = {
+  name: string;
+  evaluationTypes: string[];
+  targetMemberIds: string[];
+  designId?: string;
 };
 
-export type ConfirmEvaluationPayload = {
-  finalScore: number;
-  grade: string;
+export type UpdateGroupPayload = Partial<CreateGroupPayload>;
+
+// ── Design ──
+export type QuestionOption = {
+  scaleMin?: number;
+  scaleMax?: number;
+  gradeLabels?: string[];
 };
 
-export type PeerAssignment = {
+export type DesignQuestion = {
   id: string;
-  evaluationId: string;
-  evaluateeId: string;
-  peerMemberId: string;
-  status?: string;
+  type: QuestionType;
+  title: string;
+  description?: string;
+  required: boolean;
+  weight: number;
+  options?: QuestionOption;
 };
 
-export type CreatePeerAssignmentPayload = {
-  evaluationId: string;
-  evaluateeId: string;
-  peerMemberId: string;
+export type DesignSection = {
+  title: string;
+  weight: number;
+  questions: DesignQuestion[];
 };
 
-export type CreateCalibrationPayload = {
-  evaluationId: string;
-  beforeGrade?: string;
-  afterGrade?: string;
-  beforeScore?: number;
-  afterScore?: number;
-  reason: string;
+export type GradeConfig = {
+  type: GradeType;
+  grades: { label: string; minScore: number; maxScore: number; color: string }[];
+  targetDistribution?: Record<string, number>;
 };
 
-export type CalibrationLog = {
-  id?: string;
-  evaluationId: string;
-  beforeGrade?: string;
-  afterGrade?: string;
-  beforeScore?: number;
-  afterScore?: number;
-  reason?: string;
+export type EvaluationDesign = {
+  designId: string;
+  companyId: string;
+  name: string;
+  sections: DesignSection[];
+  gradeConfig?: GradeConfig;
+};
+
+export type CreateDesignPayload = {
+  name: string;
+  sectionsJson: string;
+  gradeConfigJson?: string;
+};
+
+export type UpdateDesignPayload = Partial<CreateDesignPayload>;
+
+// ── Response (Answer) ──
+export type Answer = {
+  questionId: string;
+  textValue?: string;
+  scaleValue?: number;
+  gradeValue?: string;
+  flagged?: boolean;
+  anomalyType?: AnomalyType;
+  anomalySeverity?: AnomalySeverity;
+};
+
+export type Calibration = {
+  originalGrade?: string;
+  adjustedGrade?: string;
+  adjustmentReason?: string;
+  confirmedAt?: string;
+};
+
+export type EvaluationResponse = {
+  responseId: string;
+  companyId: string;
+  groupId: string;
+  targetMemberId: string;
+  evaluatorId: string;
+  evaluationType: EvalType;
+  status: EvaluationStatus;
+  submittedAt?: string;
+  lastRemindedAt?: string;
+  answers: Answer[];
+  calibration?: Calibration;
+};
+
+export type SaveResponsePayload = {
+  answersJson: string;
+};
+
+// ── Calibration ──
+export type CalibrationAdjustment = {
+  responseId: string;
+  adjustedGrade: string;
+  adjustmentReason: string;
+};
+
+export type CalibrationAdjustPayload = {
+  adjustments: CalibrationAdjustment[];
+};
+
+export type CalibrationBaselinePayload = {
+  range: string;
+  baselineValue: number;
 };

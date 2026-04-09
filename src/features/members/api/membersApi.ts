@@ -3,7 +3,56 @@ import type { Member, MembersSearch } from '@/features/members/model/types';
 import { httpClient } from '@/shared/api/httpClient';
 import { unwrapApiResponse } from '@/shared/api/response';
 
-type MembersListPayload = ListResponse<Member> | Member[];
+type MembersListPayload = ListResponse<unknown> | unknown[];
+
+function strField(r: Record<string, unknown>, ...keys: string[]): string {
+  for (const k of keys) {
+    const v = r[k];
+    if (typeof v === 'string' && v.trim()) return v.trim();
+  }
+  return '';
+}
+
+/** 목록/상세 응답이 `id` 또는 `memberId`(및 스네이크 케이스)로 올 수 있음 → Select 값으로 쓰일 `id` 통일 */
+function mapRawToMember(raw: unknown): Member | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const id = strField(r, 'id', 'memberId', 'member_id');
+  if (!id) return null;
+  const name = strField(r, 'name') || '—';
+  const email = strField(r, 'email');
+  const department =
+    strField(r, 'department', 'organizationName', 'organization_name', 'dept') || '';
+  const statusRaw = strField(r, 'status', 'memberStatus', 'member_status') || 'ACTIVE';
+  const u = statusRaw.toUpperCase();
+  const status: Member['status'] =
+    u === 'DORMANT' ? 'DORMANT' : u === 'LEAVE' ? 'LEAVE' : 'ACTIVE';
+  return { id, name, email, department, status };
+}
+
+function normalizeListPayload(
+  payload: MembersListPayload,
+  params: MembersSearch,
+): ListResponse<Member> {
+  if (Array.isArray(payload)) {
+    const items = payload.map(mapRawToMember).filter((m): m is Member => m !== null);
+    return {
+      items,
+      total: items.length,
+      page: params.page,
+      pageSize: params.pageSize,
+    };
+  }
+
+  const rawItems = Array.isArray(payload.items) ? payload.items : [];
+  const items = rawItems.map(mapRawToMember).filter((m): m is Member => m !== null);
+  return {
+    items,
+    total: typeof payload.total === 'number' ? payload.total : items.length,
+    page: typeof payload.page === 'number' ? payload.page : params.page,
+    pageSize: typeof payload.pageSize === 'number' ? payload.pageSize : params.pageSize,
+  };
+}
 
 function mapRowToMember(row: unknown): Member {
   const r = row && typeof row === 'object' ? (row as Record<string, unknown>) : {};

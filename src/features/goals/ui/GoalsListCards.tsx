@@ -1,41 +1,85 @@
-import { CalendarOutlined, EyeInvisibleOutlined, UserOutlined } from '@ant-design/icons';
+import {
+  CaretDownOutlined,
+  CaretRightOutlined,
+  EyeInvisibleOutlined,
+  InfoCircleOutlined,
+  ThunderboltOutlined,
+} from '@ant-design/icons';
 import { Button, Progress, Spin, Tag, Tooltip, Typography } from 'antd';
+import dayjs from 'dayjs';
 import { useEffect, useMemo, useState } from 'react';
 import type { Goal, Visibility } from '@/features/goals/model/types';
-import { computeGoalProgressPercent } from '@/features/goals/ui/goalProgressDisplay';
+import {
+  filterRowsByCollapsedParents,
+  goalTreeOrderedWithDepth,
+  parentIdsWithChildrenInList,
+} from '@/features/goals/lib/goalHierarchy';
+import { goalValueUnitSuffix } from '@/features/goals/lib/goalUnitDisplay';
+import { buildGoalDisplayProgressMap } from '@/features/goals/ui/goalProgressRollup';
 import { GoalsEmptyPanel } from '@/features/goals/ui/GoalsEmptyPanel';
+import { PERFORMANCE_PAGE_KO } from '@/app/locale/app-ko';
 import { AppPagination, appPaginationShowTotalLabel } from '@/shared/ui/AppPagination';
 
 const { Text } = Typography;
 
-function visibilityTag(v: Visibility) {
-  if (v === 'PUBLIC') return <Tag color="blue">전사</Tag>;
-  if (v === 'TEAM_ONLY') return <Tag color="geekblue">팀</Tag>;
-  return <Tag>비공개</Tag>;
+/** 시작·종료일로부터 사이클 뱃지 텍스트와 색상을 결정 */
+function goalCycleBadge(startDate: string, endDate: string): { label: string; color: string } {
+  const s = dayjs(startDate);
+  const e = dayjs(endDate);
+  if (!s.isValid() || !e.isValid()) return { label: '기간형', color: 'default' };
+  const sameYear = s.year() === e.year();
+  const year = s.year();
+  const diffDays = e.diff(s, 'day');
+
+  if (sameYear && s.month() === 0 && s.date() === 1 && e.month() === 11 && e.date() === 31) {
+    return { label: `${year} 연간`, color: 'purple' };
+  }
+  if (diffDays >= 170 && diffDays <= 190) {
+    const half = s.month() < 6 ? '상반기' : '하반기';
+    return { label: `${year} ${half}`, color: 'cyan' };
+  }
+  if (diffDays >= 80 && diffDays <= 100) {
+    const q = Math.floor(s.month() / 3) + 1;
+    return { label: `${year} ${q}분기`, color: 'blue' };
+  }
+  if (diffDays >= 25 && diffDays <= 35) {
+    return { label: `${year}.${String(s.month() + 1).padStart(2, '0')} 월간`, color: 'geekblue' };
+  }
+  return { label: sameYear ? `${year} 기간형` : '기간형', color: 'default' };
 }
 
-function statusTagUi(status?: string) {
+/** 상태 태그 — PerformancePage 기준 색상 통일 */
+function statusTagUi(status: string | undefined, approvalStatus?: string) {
   const s = (status ?? 'DRAFT').toUpperCase();
-  if (s === 'DRAFT') return <Tag color="default">진행 전</Tag>;
-  if (s === 'ACTIVE') return <Tag color="blue">진행 중</Tag>;
-  if (s === 'COMPLETED') return <Tag color="success">완료</Tag>;
-  if (s === 'CANCELLED') return <Tag>취소</Tag>;
-  return <Tag>{status ?? '—'}</Tag>;
+  const a = String(approvalStatus ?? '').toUpperCase();
+  if (s === 'ACTIVE' && a === 'PENDING') {
+    return <Tag color="processing" className="!tw-m-0 !tw-text-[11px]">완료 제출</Tag>;
+  }
+  if (s === 'ACTIVE' && a === 'REJECTED') {
+    return <Tag color="warning" className="!tw-m-0 !tw-text-[11px]">보완 필요</Tag>;
+  }
+  const map: Record<string, { text: string; color: string }> = {
+    DRAFT: { text: '초안', color: 'gold' },
+    ACTIVE: { text: '진행 중', color: 'green' },
+    COMPLETED: { text: '완료', color: 'blue' },
+    CANCELLED: { text: '취소됨', color: 'default' },
+  };
+  const v = map[s] ?? { text: s, color: 'default' };
+  return <Tag color={v.color} className="!tw-m-0 !tw-text-[11px]">{v.text}</Tag>;
 }
 
-function progressVisual(goal: Goal): {
+function progressVisual(displayRaw: number | null): {
   displayPct: number | null;
   barPct: number;
   stroke: string;
   success: boolean;
 } {
-  const raw = computeGoalProgressPercent(goal);
-  if (raw == null) {
+  if (displayRaw == null) {
     return { displayPct: null, barPct: 0, stroke: '#e2e8f0', success: false };
   }
-  const rounded = Math.round(raw);
+  const rounded = Math.round(displayRaw);
   const over = rounded > 100;
-  const stroke = over ? '#22c55e' : rounded > 0 ? '#3b82f6' : '#e2e8f0';
+  const stroke = over ? '#22c55e' : rounded >= 70 ? '#22c55e' : rounded >= 40 ? '#f59e0b' : rounded > 0 ? '#ef4444' : '#e2e8f0';
   return {
     displayPct: rounded,
     barPct: Math.min(100, rounded),
@@ -48,11 +92,12 @@ export type GoalsListCardsProps = {
   goals: Goal[];
   loading?: boolean;
   memberId: string;
+  /** 담당 주체 표시 — 조직명·사원명. 미전달 시 레거시 마스킹 */
+  formatOwnerLabel?: (goal: Goal) => string;
   canCreate: boolean;
   emptyTitle: string;
   emptyHint: string;
   onOpenDetail: (g: Goal) => void;
-  onOpenPerf: (g: Goal) => void;
   onActivate: (goalId: string) => void;
   activatingGoalId: string | null;
   pageSize?: number;
@@ -63,11 +108,11 @@ export function GoalsListCards({
   goals,
   loading,
   memberId,
+  formatOwnerLabel,
   canCreate,
   emptyTitle,
   emptyHint,
   onOpenDetail,
-  onOpenPerf,
   onActivate,
   activatingGoalId,
   pageSize: defaultPageSize = 12,
@@ -75,7 +120,17 @@ export function GoalsListCards({
 }: GoalsListCardsProps) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(defaultPageSize);
-  const totalPages = Math.max(1, Math.ceil(goals.length / pageSize));
+  const [collapsedParentIds, setCollapsedParentIds] = useState(() => new Set<string>());
+
+  const parentsWithChildren = useMemo(() => parentIdsWithChildrenInList(goals), [goals]);
+  const progressMap = useMemo(() => buildGoalDisplayProgressMap(goals), [goals]);
+  const orderedRows = useMemo(() => goalTreeOrderedWithDepth(goals), [goals]);
+  const visibleRows = useMemo(
+    () => filterRowsByCollapsedParents(orderedRows, collapsedParentIds),
+    [orderedRows, collapsedParentIds],
+  );
+
+  const totalPages = Math.max(1, Math.ceil(visibleRows.length / pageSize));
   const safePage = Math.min(Math.max(1, page), totalPages);
 
   useEffect(() => {
@@ -84,8 +139,8 @@ export function GoalsListCards({
 
   const slice = useMemo(() => {
     const start = (safePage - 1) * pageSize;
-    return goals.slice(start, start + pageSize);
-  }, [goals, safePage, pageSize]);
+    return visibleRows.slice(start, start + pageSize);
+  }, [visibleRows, safePage, pageSize]);
 
   if (loading) {
     return (
@@ -103,92 +158,140 @@ export function GoalsListCards({
 
   return (
     <div className="tw-flex tw-flex-col">
-      <div className="tw-flex tw-flex-col">
-        {slice.map((goal) => {
-          const isOwner = goal.ownerId === memberId;
+      <div className="tw-grid tw-grid-cols-[minmax(0,1.4fr)_minmax(0,0.7fr)_minmax(0,0.7fr)_minmax(0,0.7fr)_minmax(0,0.8fr)] tw-gap-3 tw-rounded-lg tw-bg-slate-50 tw-px-6 tw-py-2.5 tw-text-[11px] tw-font-semibold tw-uppercase tw-tracking-wide tw-text-slate-500">
+        <div>제목</div>
+        <div>담당 주체</div>
+        <div>사이클</div>
+        <div>종료일</div>
+        <div className="tw-text-right">진행 상태</div>
+      </div>
+      <div className="tw-flex tw-flex-col tw-divide-y tw-divide-slate-200">
+        {slice.map(({ goal, depth }) => {
+          const hasChildren = parentsWithChildren.has(goal.id);
+          const isCollapsed = collapsedParentIds.has(goal.id);
           const st = (goal.status ?? 'DRAFT').toUpperCase();
           const canActivate = canCreate && st === 'DRAFT';
-          const canSubmitPerf = st === 'ACTIVE' && isOwner && canCreate;
           const activating = activatingGoalId === goal.id;
-          const { displayPct, barPct, stroke } = progressVisual(goal);
+          const progressInfo = progressMap.get(goal.id);
+          const { displayPct, barPct, stroke } = progressVisual(progressInfo?.pct ?? null);
           const actual = goal.actualValue ?? 0;
           const target = goal.targetValue ?? 0;
-          const ownerLabel =
-            goal.ownerId === memberId ? '나' : `${goal.ownerId.slice(0, 2)}**`;
+          const ownerLabel = formatOwnerLabel
+            ? formatOwnerLabel(goal)
+            : (() => {
+                const oid = goal.ownerId?.trim() ?? '';
+                return !oid ? '—' : oid === memberId ? '나' : `${oid.slice(0, 2)}**`;
+              })();
+          const cycleBadge = goalCycleBadge(goal.startDate, goal.endDate);
+          const indentPx = depth > 0 ? Math.min(depth - 1, 5) * 18 : 0;
 
           return (
             <div
               key={goal.id}
-              className="tw-border-0 tw-border-b tw-border-solid tw-border-slate-200 tw-py-5 last:tw-border-b-0"
+              className="tw-grid tw-grid-cols-[minmax(0,1.4fr)_minmax(0,0.7fr)_minmax(0,0.7fr)_minmax(0,0.7fr)_minmax(0,0.8fr)] tw-gap-3 tw-items-center tw-px-6 tw-py-3.5 hover:tw-bg-slate-50/60 tw-transition-colors"
             >
-              <div className="tw-flex tw-flex-col tw-gap-5 lg:tw-flex-row lg:tw-items-stretch lg:tw-justify-between lg:tw-gap-8">
-              <div className="tw-min-w-0 tw-flex-1">
-                <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-1.5">
-                  {statusTagUi(goal.status)}
-                  {visibilityTag(goal.visibility)}
+              {/* 제목 */}
+              <div className="tw-min-w-0" style={indentPx > 0 ? { paddingLeft: indentPx } : undefined}>
+                <div className="tw-flex tw-items-center tw-gap-1.5">
+                  {hasChildren ? (
+                    <button
+                      type="button"
+                      className="tw-m-0 tw-flex tw-h-5 tw-w-5 tw-shrink-0 tw-items-center tw-justify-center tw-rounded tw-border-0 tw-bg-transparent tw-text-slate-500 tw-outline-none hover:tw-bg-slate-100 hover:tw-text-slate-800 focus-visible:tw-ring-2 focus-visible:tw-ring-[#3b82f6]/40"
+                      aria-expanded={!isCollapsed}
+                      aria-label={isCollapsed ? '하위 목표 펼치기' : '하위 목표 접기'}
+                      onClick={() => {
+                        setCollapsedParentIds((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(goal.id)) next.delete(goal.id);
+                          else next.add(goal.id);
+                          return next;
+                        });
+                      }}
+                    >
+                      {isCollapsed ? <CaretRightOutlined className="tw-text-[10px]" /> : <CaretDownOutlined className="tw-text-[10px]" />}
+                    </button>
+                  ) : (
+                    <span className="tw-inline-block tw-w-5 tw-shrink-0" />
+                  )}
+                  {depth > 0 ? (
+                    <Tooltip title={`상위 목표의 ${depth}단계 하위`}>
+                      <span className="tw-mr-0.5 tw-inline-flex tw-h-5 tw-min-w-[1.1rem] tw-items-center tw-justify-center tw-rounded tw-bg-slate-200/90 tw-px-1 tw-text-[10px] tw-font-bold tw-tabular-nums tw-text-slate-600">
+                        {depth}
+                      </span>
+                    </Tooltip>
+                  ) : null}
+                  {statusTagUi(goal.status, goal.approvalStatus)}
                   {goal.visibility === 'PRIVATE' ? (
                     <Tooltip title="비공개 목표">
-                      <EyeInvisibleOutlined className="tw-text-slate-400" />
+                      <EyeInvisibleOutlined className="tw-text-slate-400 tw-text-xs" />
+                    </Tooltip>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="tw-m-0 tw-truncate tw-border-0 tw-bg-transparent tw-p-0 tw-text-left tw-text-sm tw-font-semibold tw-text-[#1e3a5f] tw-outline-none hover:tw-underline tw-cursor-pointer"
+                    onClick={() => onOpenDetail(goal)}
+                    title={goal.title}
+                  >
+                    {goal.title}
+                  </button>
+                </div>
+                {/* 액션 버튼 — 필요한 경우에만 표시 */}
+                {canActivate ? (
+                  <div className="tw-mt-1.5 tw-flex tw-gap-1.5" style={indentPx > 0 ? { paddingLeft: indentPx + 20 + 6 } : { paddingLeft: 26 }}>
+                    {canActivate ? (
+                      <Button type="primary" size="small" loading={activating} onClick={() => onActivate(goal.id)} className="!tw-rounded !tw-text-[11px] !tw-h-6 !tw-px-2 !tw-bg-[#1e3a5f] hover:!tw-bg-[#152a45]">
+                        진행 시작
+                      </Button>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+
+              {/* 담당 주체 */}
+              <div className="tw-text-sm tw-text-slate-600 tw-truncate" title={ownerLabel}>
+                {ownerLabel}
+              </div>
+
+              {/* 사이클 */}
+              <div>
+                <Tag color={cycleBadge.color} className="!tw-m-0 !tw-text-[11px]">
+                  {cycleBadge.label}
+                </Tag>
+              </div>
+
+              {/* 종료일 */}
+              <div className="tw-text-sm tw-text-slate-500 tw-tabular-nums">
+                {goal.endDate}
+              </div>
+
+              {/* 진행 상태 */}
+              <div className="tw-flex tw-flex-col tw-items-end tw-gap-1">
+                <div className="tw-flex tw-items-center tw-gap-1.5">
+                  <span className="tw-text-base tw-font-bold tw-tabular-nums tw-text-[#1e3a5f]">
+                    {displayPct != null ? `${displayPct}%` : '—'}
+                  </span>
+                  {goal.autoUpdate !== false && st === 'ACTIVE' ? (
+                    <Tooltip title={PERFORMANCE_PAGE_KO.autoUpdateTooltip}>
+                      <ThunderboltOutlined className="tw-text-xs tw-text-amber-500" />
+                    </Tooltip>
+                  ) : null}
+                  {progressInfo?.rolledFromChildren ? (
+                    <Tooltip title="하위 목표 평균 달성률로 자동 집계됩니다.">
+                      <InfoCircleOutlined className="tw-text-xs tw-text-slate-400" />
                     </Tooltip>
                   ) : null}
                 </div>
-                <div className="tw-mt-2.5 tw-text-lg tw-font-bold tw-leading-snug tw-text-[#1e3a5f]">{goal.title}</div>
-                {goal.description ? (
-                  <Text type="secondary" className="tw-mt-1.5 tw-block tw-text-sm tw-leading-relaxed">
-                    {goal.description}
-                  </Text>
-                ) : null}
-                <div className="tw-mt-4 tw-flex tw-flex-wrap tw-items-center tw-gap-x-5 tw-gap-y-2 tw-text-xs tw-text-slate-500">
-                  <span className="tw-inline-flex tw-items-center tw-gap-1.5">
-                    <CalendarOutlined />
-                    {goal.startDate} ~ {goal.endDate}
-                  </span>
-                  <span className="tw-inline-flex tw-items-center tw-gap-1.5">
-                    <UserOutlined />
-                    {ownerLabel}
-                  </span>
-                </div>
-              </div>
-
-              <div className="tw-flex tw-w-full tw-shrink-0 tw-flex-col tw-justify-center lg:tw-w-[220px]">
-                <div className="tw-text-right tw-text-3xl tw-font-bold tw-tabular-nums tw-leading-none tw-text-[#1e3a5f]">
-                  {displayPct != null ? `${displayPct}%` : '—'}
-                </div>
-                <div className="tw-mt-3">
-                  <Progress
-                    percent={barPct}
-                    showInfo={false}
-                    strokeColor={stroke}
-                    trailColor="rgba(15,23,42,0.06)"
-                    className="!tw-m-0"
-                  />
-                </div>
-                <Text type="secondary" className="tw-mt-2 tw-block tw-text-center tw-text-xs lg:tw-text-right">
-                  실적 {actual} / 목표 {target}
-                  {goal.unitType ? ` · ${goal.unitType}` : ''}
+                <Progress
+                  percent={barPct}
+                  showInfo={false}
+                  strokeColor={stroke}
+                  trailColor="rgba(15,23,42,0.06)"
+                  size="small"
+                  className="!tw-m-0 tw-w-full tw-max-w-[120px]"
+                />
+                <Text type="secondary" className="tw-text-[10px]">
+                  {actual} / {target}{goalValueUnitSuffix(goal)}
                 </Text>
-                <div className="tw-mt-4 tw-flex tw-flex-wrap tw-justify-end tw-gap-2">
-                  <Button type="text" size="small" onClick={() => onOpenDetail(goal)} className="!tw-text-slate-600">
-                    상세
-                  </Button>
-                  {canActivate ? (
-                    <Button
-                      type="primary"
-                      size="small"
-                      loading={activating}
-                      onClick={() => onActivate(goal.id)}
-                      className="!tw-rounded-lg !tw-bg-[#1e3a5f] hover:!tw-bg-[#152a45]"
-                    >
-                      진행 시작
-                    </Button>
-                  ) : null}
-                  {canSubmitPerf ? (
-                    <Button size="small" onClick={() => onOpenPerf(goal)} className="!tw-rounded-lg">
-                      실적 입력
-                    </Button>
-                  ) : null}
-                </div>
-              </div>
               </div>
             </div>
           );
@@ -199,7 +302,7 @@ export function GoalsListCards({
         wrapClassName="tw-mt-1"
         current={safePage}
         pageSize={pageSize}
-        total={goals.length}
+        total={visibleRows.length}
         showSizeChanger
         pageSizeOptions={pageSizeOptions.map(String)}
         onChange={(p, ps) => {
