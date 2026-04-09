@@ -36,7 +36,6 @@ export const APP_MENU_PATH_ORDER = [
   '/app/performance',
   '/app/evaluations',
   '/app/meetings',
-  '/app/settings',
 ] as const;
 
 /** ESG 메뉴(설정 ON 시 사이드바에 삽입) — 경로·라벨 */
@@ -56,8 +55,19 @@ export const ESG_MENU_LABEL: Record<string, string> = {
   '/app/esg/admin': 'ESG 관리',
 };
 
-/** 성과·평가·미팅 — 사이드바 접이식 그룹 제목 */
-export const APP_MENU_TALENT_HUB_LABEL = '성과·평가·미팅';
+/** 사이드바 접이식 그룹 — 통일 키워드: 「영역·영역」 */
+
+/** 성과·평가·미팅 묶음 */
+export const APP_MENU_TALENT_HUB_LABEL = '인재·성과';
+
+/** 구성원·조직·권한 묶음 */
+export const APP_MENU_ORG_HR_GROUP_LABEL = '인사·조직';
+
+/** ESG 하위 화면 묶음 */
+export const APP_MENU_ESG_GROUP_LABEL = '지속·경영';
+
+/** 근태·휴가 묶음 */
+export const APP_MENU_WORK_LEAVE_GROUP_LABEL = '근무·휴가';
 
 /** 상단 헤더 등에 표시하는 현재 화면 제목 */
 export function appHeaderTitleFromPath(
@@ -271,61 +281,171 @@ export const PERFORMANCE_PAGE_KO = {
 
 /** 평가(/app/evaluations) 화면 */
 export const EVALUATION_PAGE_KO = {
-  pageIntro:
-    '정책 수립 → 평가 생성 → 동료 배정(선택) → 작성·제출 → 조정·확정 순으로 진행됩니다. 권한에 따라 보이는 메뉴가 달라질 수 있습니다.',
-  flowTitle: '평가 진행 순서',
-  flowSteps: [
-    '인사/관리자가 평가 정책을 등록합니다.',
-    '평가 건이 생성되면 작성자는 초안(DRAFT)에서 점수·의견을 입력합니다.',
-    '필요 시 동료 평가가 배정·수락됩니다.',
-    '제출하면 수정할 수 없습니다(SUBMITTED).',
-    '조정 기록 후 최종 확정(CONFIRMED)과 등급이 부여됩니다.',
-  ],
-  tabMine: '내가 할 평가',
-  tabPolicies: '평가 정책',
-  activeOnlyPolicies: '활성 정책만',
-  policyTableName: '정책명',
-  policyTableCycle: '주기',
-  policyTablePeriod: '평가 기간',
-  policyTableResultOpen: '결과 공개일',
-  policyTableActive: '상태',
-  policyDeactivate: '비활성화',
-  policyDeactivateConfirm: '이 정책을 비활성화할까요?',
-  ctaNewPolicy: '새 정책',
-  ctaNewEvaluation: '평가 생성',
-  policyPickForList: '정책을 선택하면 소속 평가 목록을 볼 수 있습니다.',
-  evalTableEvaluatee: '피평가자',
-  evalTableEvaluator: '평가자',
-  evalTableType: '유형',
-  evalTableStatus: '상태',
-  evalOpen: '열기',
-  emptyMyEval: '나에게 배정된 평가가 없습니다.',
-  emptyPolicies: '등록된 평가 정책이 없습니다.',
-  drawerTitle: '평가 상세',
-  saveDraft: '저장',
-  submitEval: '제출',
-  submitWarning: '제출 후에는 점수·의견을 수정할 수 없습니다. 계속할까요?',
-  confirmEval: '확정',
-  confirmTitle: '평가 확정',
-  finalScore: '최종 점수',
-  finalGrade: '등급',
-  roleHintNoH: '정책 관리·확정은 EVALUATION 권한이 있는 역할에서 수행할 수 있습니다.',
-  modalNewPolicyTitle: '평가 정책 등록',
-  modalNewEvalTitle: '평가 생성',
-  evaluateeSearchPlaceholder: '이름·이메일로 검색 후 피평가자 선택',
-  evaluateeIdRequired: '피평가자를 선택하세요.',
-  uuidInvalidFormat:
-    '36자 표준 UUID 형식이어야 합니다. (예: 550e8400-e29b-41d4-a716-446655440000)',
-  uuidInvalidCompany:
-    '회사 ID가 올바르지 않습니다. 로그인 상태를 확인하거나 다시 로그인해 주세요.',
-  peerMemberIdPlaceholder: '동료 평가자 회원 UUID',
-  tabPeers: '동료 배정',
-  peerAssign: '배정',
-  peerListTitle: '동료 배정 현황',
-  tabCalibration: '조정 이력',
-  calibrationReason: '조정 사유',
-  calibrationRecord: '조정 기록',
-  statusDraft: '작성 중',
-  statusSubmitted: '제출됨',
-  statusConfirmed: '확정',
+  // Page
+  pageTitle: '평가 관리',
+
+  // Tabs
+  tabSeasons: '시즌 관리',
+  tabMyEvaluations: '내 평가',
+  tabDesigns: '평가 설계',
+  tabProgress: '진행도 관리',
+  tabCalibration: '등급 캘리브레이션',
+  tabAnalytics: '분포 분석',
+  tabAnomalies: '오류 감지',
+
+  // Season
+  seasonAdd: '시즌 추가',
+  seasonName: '시즌명',
+  seasonType: '유형',
+  seasonPeriod: '기간',
+  seasonStatus: '상태',
+  seasonActions: '액션',
+  seasonEdit: '편집',
+  seasonStart: '시작',
+  seasonClose: '종료',
+  seasonView: '조회',
+  seasonSelect: '시즌 선택',
+  seasonStartConfirm: '시즌을 시작하시겠습니까?',
+  seasonCloseConfirm: '시즌을 종료하시겠습니까?',
+  seasonCreated: '시즌이 생성되었습니다.',
+  seasonStarted: '시즌이 시작되었습니다.',
+  seasonClosed: '시즌이 종료되었습니다.',
+  seasonResultPublishDate: '결과 공개일',
+  seasonTypeAnnual: '연간',
+  seasonTypeHalfYear: '반기',
+  seasonTypeQuarter: '분기',
+
+  // Status
+  statusDraft: '초안',
+  statusActive: '진행 중',
+  statusClosed: '완료',
+  statusNotStarted: '미시작',
+  statusInProgress: '진행 중',
+  statusSubmitted: '완료',
+
+  // Group
+  groupAdd: '그룹 추가',
+  groupsTitle: '그룹 관리',
+  groupName: '그룹명',
+  groupTargetCount: '대상 인원',
+  groupPersonCount: '명',
+  groupEvalTypes: '평가 유형',
+  groupDesign: '적용 설계',
+  groupCreated: '그룹이 생성되었습니다.',
+
+  // Eval types
+  evalTypeSelf: '셀프',
+  evalTypeDownward: '하향',
+  evalTypeUpward: '상향',
+  evalTypePeer: '동료',
+
+  // Design
+  designAdd: '설계 추가',
+  designName: '설계명',
+  designSections: '섹션',
+  designSectionCount: '개',
+  designPreview: '미리보기',
+  designSave: '저장',
+  designSelect: '설계 선택',
+  designCreated: '설계가 생성되었습니다.',
+  designSectionConfig: '섹션 구성(JSON)',
+  designGradeConfig: '등급 설정(JSON)',
+  designSectionAdd: '섹션 추가',
+  designQuestionAdd: '문항 추가',
+  designWeight: '가중치',
+  designWeightSum: '전체 가중치 합계',
+  designWeightWarning: '100% 필요',
+  designWeightOk: '100% 충족',
+
+  // Question types
+  questionTypeText: '서술형',
+  questionTypeScale: '척도형',
+  questionTypeGrade: '등급형',
+  questionTypeGap: '낙차형',
+
+  // Grade
+  gradeAbsolute: '절대 평가',
+  gradeRelative: '상대 평가',
+  gradeTargetDist: '목표 분포',
+
+  // Response / Write
+  writeTitle: '평가 작성',
+  writeProgress: '진행률',
+  writeSave: '임시 저장',
+  writeSubmit: '제출',
+  evaluationType: '평가 유형',
+  evaluationTarget: '평가 대상',
+  evaluationStatus: '상태',
+  evaluationAction: '액션',
+  evaluationWrite: '작성',
+  evaluationSubmitted: '제출 완료',
+  writeAutoSaved: '자동 저장됨',
+  writeRequired: '필수',
+  writeReferencePanel: '참고자료',
+  writeCriteriaPanel: '기준 명세',
+
+  // Progress
+  progressTitle: '진행도 관리',
+  progressOverall: '전체 진행률',
+  progressCompleted: '완료',
+  progressRemindAll: '리마인드 일괄 발송',
+  progressRemindOne: '발송',
+  progressAction: '액션',
+  progressReminderConfirm: '미완료 평가자에게 리마인드를 발송할까요?',
+  reminderSent: '리마인드가 발송되었습니다.',
+  progressLastAccess: '마지막 접속',
+  progressLastRemind: '마지막 리마인드',
+
+  // Anomaly
+  anomalyTitle: '스마트 오류 감지',
+  anomalyCount: '감지 건수',
+  anomalyEvaluator: '평가자',
+  anomalyType: '이상 유형',
+  anomalyAction: '액션',
+  anomalyRequestReview: '검토 요청',
+  reviewRequested: '검토 요청이 접수되었습니다.',
+  anomalyDismiss: '무시',
+  anomalyAllSame: '모든 항목 동일 응답',
+  anomalyTooShort: '답변 너무 짧음',
+  anomalyInsincere: '의미 없는 반복 텍스트',
+  anomalyContradiction: '모순 응답 감지',
+
+  // Calibration
+  calibrationTitle: '등급 캘리브레이션',
+  calibrationConfirm: '확정하기',
+  calibrationConfirmed: '캘리브레이션이 확정되었습니다.',
+  calibrationBaseline: '기준점 설정',
+  calibrationRange: '범위',
+  calibrationBaselineValue: '기준값',
+  calibrationApply: '적용',
+  calibrationDistribution: '분포 비교',
+  calibrationTarget: '목표 분포',
+  calibrationCurrent: '현재 분포',
+  calibrationDiff: '차이',
+  calibrationAdjust: '등급 조율',
+  calibrationCurrentGrade: '현재 등급',
+  calibrationAdjustedGrade: '조정 등급',
+  calibrationReason: '사유',
+  calibrationConfirmStatus: '확정 상태',
+  calibrationUnconfirmed: '미확정',
+  calibrationConfirmModal: '확정 후 수정 불가합니다.',
+
+  // Analytics
+  analyticsTitle: '분포 분석',
+  analyticsItemDist: '조사항목 분포',
+  analyticsTeamSelf: '팀별 셀프 평가',
+  analyticsChartPlaceholder: '차트 준비 중',
+
+  // Common
+  save: '저장',
+  cancel: '취소',
+  delete: '삭제',
+  edit: '편집',
+  confirm: '확인',
+  search: '검색',
+  team: '팀',
+  member: '구성원',
+  score: '점수',
+  grade: '등급',
+  noData: '데이터가 없습니다.',
 } as const;

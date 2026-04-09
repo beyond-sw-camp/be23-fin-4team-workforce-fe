@@ -26,7 +26,8 @@ import { EsgShopPage } from '@/pages/app/esg/EsgShopPage';
 import { MembersPage } from '@/pages/app/MembersPage';
 import { MemberDetailPage } from '@/pages/app/MemberDetailPage';
 import { NotificationsPage } from '@/pages/app/NotificationsPage';
-import { EvaluationsPage } from '@/pages/app/EvaluationsPage';
+import EvaluationsPage from '@/pages/app/EvaluationsPage';
+import { EvaluationWritePage } from '@/pages/app/EvaluationWritePage';
 import { PerformancePage } from '@/pages/app/PerformancePage';
 import { GoalApprovalDetailPage } from '@/pages/app/GoalApprovalDetailPage';
 import { GoalApprovalsListPage } from '@/pages/app/GoalApprovalsListPage';
@@ -212,6 +213,12 @@ const evaluationsRoute = createRoute({
   component: EvaluationsPage,
 });
 
+const evaluationWriteRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/evaluations/$responseId/write',
+  component: EvaluationWritePage,
+});
+
 const organizationRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/organization',
@@ -284,6 +291,7 @@ const routeTree = rootRoute.addChildren([
       goalApprovalsListRoute,
       goalApprovalDetailRoute,
       evaluationsRoute,
+      evaluationWriteRoute,
       organizationRoute,
       rolesRoute,
       aiDocumentsAdminRoute,

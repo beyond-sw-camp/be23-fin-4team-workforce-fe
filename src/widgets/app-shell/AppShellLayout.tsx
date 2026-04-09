@@ -2,6 +2,7 @@ import {
   ApartmentOutlined,
   BellOutlined,
   CalendarOutlined,
+  CloseOutlined,
   ClockCircleOutlined,
   ControlOutlined,
   DashboardOutlined,
@@ -12,8 +13,10 @@ import {
   GlobalOutlined,
   LineChartOutlined,
   MailOutlined,
+  MoreOutlined,
   KeyOutlined,
   MessageOutlined,
+  PoweroffOutlined,
   ProjectOutlined,
   RobotOutlined,
   ScheduleOutlined,
@@ -24,10 +27,11 @@ import {
   UserOutlined,
   VideoCameraOutlined,
 } from '@ant-design/icons';
-import { Avatar, Badge, Button, Empty, Layout, Menu, Spin, message } from 'antd';
+import { Avatar, Badge, Button, Empty, Layout, Menu, Popover, Spin, Tooltip, message } from 'antd';
 import type { MenuProps } from 'antd';
+import MenuContext from 'antd/es/menu/MenuContext';
 import type { ReactNode } from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useContext, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import { useAuth } from '@/features/auth/useAuth';
@@ -39,15 +43,35 @@ import { searchApi } from '@/features/search/api/searchApi';
 import { memberApi } from '@/features/member/api/memberApi';
 import {
   APP_BRAND_NAME,
+  APP_MENU_ESG_GROUP_LABEL,
   APP_MENU_LABEL,
+  APP_MENU_ORG_HR_GROUP_LABEL,
   APP_MENU_PATH_ORDER,
   APP_MENU_TALENT_HUB_LABEL,
+  APP_MENU_WORK_LEAVE_GROUP_LABEL,
   ESG_MENU_LABEL,
   ESG_MENU_PATH_ORDER,
 } from '@/app/locale/app-ko';
 import { AppSearchField } from '@/shared/ui/AppSearchField';
-import { LogoutGlyphIcon } from '@/shared/ui/icons/LogoutGlyphIcon';
 import { AiChatbotFab } from '@/widgets/app-shell/AiChatbotFab';
+
+/** 왼쪽 날개 패널 + 본문 — 접기·펼치기 동일 아이콘(선형·둥근 테두리). */
+function SiderPanelToggleIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      width="1em"
+      height="1em"
+      aria-hidden
+    >
+      <rect x="3.25" y="4.75" width="17.5" height="14.5" rx="2.5" ry="2.5" stroke="currentColor" strokeWidth="1.65" />
+      <line x1="9.25" y1="6.5" x2="9.25" y2="17.5" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" />
+    </svg>
+  );
+}
 
 const APP_MENU_ICONS: Record<string, ReactNode> = {
   '/app/dashboard': <DashboardOutlined className="tw-text-lg" />,
@@ -63,6 +87,7 @@ const APP_MENU_ICONS: Record<string, ReactNode> = {
   '/app/notifications': <BellOutlined className="tw-text-lg" />,
   '/app/performance': <LineChartOutlined className="tw-text-lg" />,
   '/app/evaluations': <StarOutlined className="tw-text-lg" />,
+  '/app/meetings': <VideoCameraOutlined className="tw-text-lg" />,
   '/app/settings': <SettingOutlined className="tw-text-lg" />,
 };
 
@@ -94,9 +119,41 @@ const TALENT_HUB_GROUP_KEY = 'group-talent-hub';
 const TALENT_HUB_PATHS = ['/app/performance', '/app/evaluations', '/app/meetings'] as const;
 const TALENT_HUB_PATH_SET = new Set<string>(TALENT_HUB_PATHS);
 
-function buildAppShellMenuItems(esgPaths: readonly string[]): MenuProps['items'] {
+const ORG_HR_GROUP_KEY = 'group-org-hr';
+const ORG_HR_PATHS = ['/app/members', '/app/organization', '/app/roles'] as const;
+const ORG_HR_PATH_SET = new Set<string>(ORG_HR_PATHS);
+
+const ESG_GROUP_KEY = 'group-esg';
+
+const WORK_LEAVE_GROUP_KEY = 'group-work-leave';
+const WORK_LEAVE_PATHS = ['/app/attendance', '/app/leave'] as const;
+const WORK_LEAVE_PATH_SET = new Set<string>(WORK_LEAVE_PATHS);
+
+/**
+ * antd SubMenu는 접힘 상태에서 기본 툴팁이 없음 — 아이콘+텍스트를 한 덩어리로 감싸 호버 시 그룹명 표시.
+ * 펼침일 때는 Tooltip을 쓰지 않음(중복 툴팁 방지).
+ */
+function SiderGroupedMenuLabel({ icon, text }: { icon: ReactNode; text: string }) {
+  const { inlineCollapsed } = useContext(MenuContext);
+  const inner = (
+    <span className="tw-inline-flex tw-min-w-0 tw-w-full tw-items-center tw-gap-3 [&_.anticon]:tw-shrink-0">
+      {icon}
+      <span className="tw-truncate">{text}</span>
+    </span>
+  );
+  if (!inlineCollapsed) return inner;
+  return (
+    <Tooltip title={text} placement="right" mouseEnterDelay={0.12}>
+      {inner}
+    </Tooltip>
+  );
+}
+
+function buildAppShellMenuItems(esgPaths: readonly string[], isAdmin: boolean): NonNullable<MenuProps['items']> {
   const items: NonNullable<MenuProps['items']> = [];
   let hubInserted = false;
+  let orgInserted = false;
+  let workLeaveInserted = false;
 
   for (const path of APP_MENU_PATH_ORDER) {
     if (TALENT_HUB_PATH_SET.has(path)) {
@@ -104,36 +161,85 @@ function buildAppShellMenuItems(esgPaths: readonly string[]): MenuProps['items']
         hubInserted = true;
         items.push({
           key: TALENT_HUB_GROUP_KEY,
-          icon: <ProjectOutlined className="tw-text-lg" />,
-          label: APP_MENU_TALENT_HUB_LABEL,
+          label: (
+            <SiderGroupedMenuLabel icon={<ProjectOutlined className="tw-text-lg" />} text={APP_MENU_TALENT_HUB_LABEL} />
+          ),
           children: TALENT_HUB_PATHS.map((p) => ({
             key: p,
             icon: APP_MENU_ICONS[p],
             label: APP_MENU_LABEL[p],
+            title: APP_MENU_LABEL[p],
           })),
         });
       }
       continue;
     }
+    if (ORG_HR_PATH_SET.has(path)) {
+      if (!orgInserted) {
+        orgInserted = true;
+        items.push({
+          key: ORG_HR_GROUP_KEY,
+          label: (
+            <SiderGroupedMenuLabel icon={<TeamOutlined className="tw-text-lg" />} text={APP_MENU_ORG_HR_GROUP_LABEL} />
+          ),
+          children: ORG_HR_PATHS.map((p) => ({
+            key: p,
+            icon: APP_MENU_ICONS[p],
+            label: APP_MENU_LABEL[p],
+            title: APP_MENU_LABEL[p],
+          })),
+        });
+      }
+      continue;
+    }
+    if (WORK_LEAVE_PATH_SET.has(path)) {
+      if (!workLeaveInserted) {
+        workLeaveInserted = true;
+        items.push({
+          key: WORK_LEAVE_GROUP_KEY,
+          label: (
+            <SiderGroupedMenuLabel
+              icon={<ClockCircleOutlined className="tw-text-lg" />}
+              text={APP_MENU_WORK_LEAVE_GROUP_LABEL}
+            />
+          ),
+          children: WORK_LEAVE_PATHS.map((p) => ({
+            key: p,
+            icon: APP_MENU_ICONS[p],
+            label: APP_MENU_LABEL[p],
+            title: APP_MENU_LABEL[p],
+          })),
+        });
+      }
+      continue;
+    }
+    const leafLabel =
+      path === '/app/dashboard' && isAdmin ? '관리자 대시보드' : APP_MENU_LABEL[path];
     items.push({
       key: path,
       icon: APP_MENU_ICONS[path],
-      label: APP_MENU_LABEL[path],
+      label: leafLabel,
+      title: leafLabel,
     });
     if (path === '/app/calendar' && esgPaths.length > 0) {
-      for (const p of esgPaths) {
-        items.push({
+      items.push({
+        key: ESG_GROUP_KEY,
+        label: (
+          <SiderGroupedMenuLabel icon={<GlobalOutlined className="tw-text-lg" />} text={APP_MENU_ESG_GROUP_LABEL} />
+        ),
+        children: esgPaths.map((p) => ({
           key: p,
           icon: ESG_MENU_ICONS[p],
           label: ESG_MENU_LABEL[p],
-        });
-      }
+          title: ESG_MENU_LABEL[p],
+        })),
+      });
     }
   }
   return items;
 }
 
-function useAppShellSiderMenuItems(): MenuProps['items'] {
+function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
   const { status, user } = useAuth();
   const isAdmin = user?.isSystemAdmin === true;
   const { data: esgConfig } = useQuery({
@@ -145,50 +251,16 @@ function useAppShellSiderMenuItems(): MenuProps['items'] {
   });
 
   return useMemo(() => {
-    const base = APP_MENU_PATH_ORDER.map((path) => {
-      const defaultLabel = APP_MENU_LABEL[path];
-      const label =
-        path === '/app/dashboard' && isAdmin ? '관리자 대시보드' : defaultLabel;
-      return {
-        key: path,
-        icon: APP_MENU_ICONS[path],
-        title: label,
-        label,
-      };
-    });
-    const settingsIdx = base.findIndex((x) => x.key === '/app/settings');
-    const adminDocItem = isAdmin
-      ? [
-          {
-            key: '/app/ai-documents',
-            icon: <RobotOutlined className="tw-text-lg" />,
-            title: 'HR 정책 문서',
-            label: 'HR 정책 문서',
-          },
-        ]
-      : [];
-    const menu =
-      settingsIdx === -1
-        ? [...base, ...adminDocItem]
-        : [...base.slice(0, settingsIdx), ...adminDocItem, ...base.slice(settingsIdx)];
-
     const esgPaths = ESG_MENU_PATH_ORDER.filter((p) => shouldShowEsgMenuItem(p, esgConfig ?? null, isAdmin));
-    return buildAppShellMenuItems(esgPaths);
-    if (esgPaths.length === 0) {
-      return menu;
-    }
-    const esgItems = esgPaths.map((path) => ({
-      key: path,
-      icon: ESG_MENU_ICONS[path],
-      title: ESG_MENU_LABEL[path],
-      label: ESG_MENU_LABEL[path],
-    }));
-    const insertAfter = '/app/calendar';
-    const idx = menu.findIndex((x) => x.key === insertAfter);
-    if (idx === -1) {
-      return [...menu, ...esgItems];
-    }
-    return [...menu.slice(0, idx + 1), ...esgItems, ...menu.slice(idx + 1)];
+    const items = buildAppShellMenuItems(esgPaths, isAdmin);
+    if (!isAdmin) return items;
+    const doc = {
+      key: '/app/ai-documents',
+      icon: <RobotOutlined className="tw-text-lg" />,
+      label: 'HR 정책 문서',
+      title: 'HR 정책 문서',
+    };
+    return [...items, doc];
   }, [esgConfig, isAdmin]);
 }
 
@@ -257,7 +329,7 @@ function SessionAccessTimer() {
   );
 }
 
-function SiderBrandHeader() {
+function SiderBrandHeader({ collapsed }: { collapsed?: boolean }) {
   const { user, status } = useAuth();
   const { data: companyInfo } = useQuery({
     queryKey: ['company', 'info'],
@@ -283,21 +355,33 @@ function SiderBrandHeader() {
 
   const initial = (companyName[0] ?? 'W').toUpperCase();
 
+  const avatar = (
+    <Avatar
+      src={logoUrl || undefined}
+      alt=""
+      shape="square"
+      size={collapsed ? 40 : 36}
+      className={
+        logoUrl
+          ? 'tw-shrink-0 tw-rounded-xl tw-bg-white [&_img]:tw-h-full [&_img]:tw-w-full [&_img]:tw-object-contain'
+          : 'tw-shrink-0 tw-rounded-xl tw-bg-[#2563EB] tw-text-sm tw-font-bold tw-text-white'
+      }
+    >
+      {initial}
+    </Avatar>
+  );
+
+  if (collapsed) {
+    return (
+      <Tooltip title={companyName} placement="right">
+        <div className="tw-flex tw-w-full tw-justify-center tw-px-1">{avatar}</div>
+      </Tooltip>
+    );
+  }
+
   return (
     <div className="tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-2">
-      <Avatar
-        src={logoUrl || undefined}
-        alt=""
-        shape="square"
-        size={36}
-        className={
-          logoUrl
-            ? 'tw-shrink-0 tw-rounded-xl tw-bg-white [&_img]:tw-h-full [&_img]:tw-w-full [&_img]:tw-object-contain'
-            : 'tw-shrink-0 tw-rounded-xl tw-bg-[#2563EB] tw-text-sm tw-font-bold tw-text-white'
-        }
-      >
-        {initial}
-      </Avatar>
+      {avatar}
       <div className="tw-flex tw-min-w-0 tw-flex-col tw-leading-tight">
         <span className="tw-truncate tw-text-base tw-font-semibold tw-tracking-tight tw-text-slate-900" title={companyName}>
           {companyName}
@@ -313,9 +397,107 @@ function SiderBrandHeader() {
   );
 }
 
-function SiderUserFooter() {
+function SiderAccountPopoverContent({
+  onClose,
+  profileSrc,
+  nameLine,
+  departmentLine,
+  emailLine,
+  onMyPage,
+  onSettings,
+  onLogout,
+}: {
+  onClose: () => void;
+  profileSrc?: string;
+  nameLine: string;
+  departmentLine: string;
+  emailLine: string;
+  onMyPage: () => void;
+  onSettings: () => void;
+  onLogout: () => Promise<void>;
+}) {
+  return (
+    <div className="tw-relative tw-w-[min(100vw-24px,288px)] tw-max-w-[288px] tw-px-4 tw-pb-5 tw-pt-2">
+      <button
+        type="button"
+        className="tw-absolute tw-right-2 tw-top-2 tw-flex tw-size-8 tw-items-center tw-justify-center tw-rounded-lg tw-border-0 tw-bg-transparent tw-text-slate-400 tw-transition-colors hover:tw-bg-slate-100 hover:tw-text-slate-700"
+        aria-label="닫기"
+        onClick={onClose}
+      >
+        <CloseOutlined />
+      </button>
+      <div className="tw-flex tw-flex-col tw-items-center tw-px-2 tw-pt-8">
+        <Avatar
+          src={profileSrc || undefined}
+          alt=""
+          shape="square"
+          size={88}
+          icon={!profileSrc ? <UserOutlined className="tw-text-3xl tw-text-slate-500" /> : undefined}
+          className={
+            profileSrc
+              ? '[&_img]:tw-h-full [&_img]:tw-w-full [&_img]:tw-object-cover tw-rounded-2xl'
+              : 'tw-rounded-2xl tw-bg-slate-100'
+          }
+        />
+        <div className="tw-mt-4 tw-text-center tw-text-base tw-font-bold tw-text-slate-900" title={nameLine}>
+          {nameLine}
+        </div>
+        <div className="tw-mt-1 tw-text-center tw-text-sm tw-text-slate-700" title={departmentLine}>
+          {departmentLine}
+        </div>
+        <div className="tw-mt-1 tw-text-center tw-text-xs tw-text-slate-500" title={emailLine}>
+          {emailLine}
+        </div>
+      </div>
+      <div className="tw-mt-8 tw-flex tw-w-full tw-flex-wrap tw-justify-center tw-gap-x-6 tw-gap-y-3">
+        <button
+          type="button"
+          className="group tw-flex tw-flex-col tw-items-center tw-gap-2 tw-border-0 tw-bg-transparent tw-p-0 tw-text-slate-700 tw-transition-colors hover:tw-text-slate-900"
+          onClick={() => {
+            onClose();
+            onMyPage();
+          }}
+        >
+          <span className="tw-flex tw-size-14 tw-items-center tw-justify-center tw-rounded-full tw-bg-slate-100 tw-text-lg tw-text-slate-600 tw-transition-colors group-hover:tw-bg-slate-200">
+            <UserOutlined />
+          </span>
+          <span className="tw-text-xs tw-font-medium tw-text-slate-600">마이페이지</span>
+        </button>
+        <button
+          type="button"
+          className="group tw-flex tw-flex-col tw-items-center tw-gap-2 tw-border-0 tw-bg-transparent tw-p-0 tw-text-slate-700 tw-transition-colors hover:tw-text-slate-900"
+          onClick={() => {
+            onClose();
+            onSettings();
+          }}
+        >
+          <span className="tw-flex tw-size-14 tw-items-center tw-justify-center tw-rounded-full tw-bg-slate-100 tw-text-lg tw-text-slate-600 tw-transition-colors group-hover:tw-bg-slate-200">
+            <SettingOutlined />
+          </span>
+          <span className="tw-text-xs tw-font-medium tw-text-slate-600">설정</span>
+        </button>
+        <button
+          type="button"
+          className="group tw-flex tw-flex-col tw-items-center tw-gap-2 tw-border-0 tw-bg-transparent tw-p-0 tw-text-slate-700 tw-transition-colors hover:tw-text-slate-900"
+          onClick={() => {
+            onClose();
+            void onLogout();
+          }}
+        >
+          <span className="tw-flex tw-size-14 tw-items-center tw-justify-center tw-rounded-full tw-bg-slate-100 tw-text-lg tw-text-slate-600 tw-transition-colors group-hover:tw-bg-slate-200">
+            <PoweroffOutlined />
+          </span>
+          <span className="tw-text-xs tw-font-medium tw-text-slate-600">로그아웃</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SiderUserFooter({ collapsed }: { collapsed?: boolean }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [accountPopoverOpen, setAccountPopoverOpen] = useState(false);
   const memberId = user?.id?.trim();
 
   const { data: member } = useQuery({
@@ -330,11 +512,15 @@ function SiderUserFooter() {
   };
 
   const name = user?.name?.trim() || '사용자';
+  const jobTitle =
+    member?.jobTitleName?.trim() || member?.jobGradeName?.trim() || user?.jobTitle?.trim() || '';
+  const nameLine = jobTitle ? `${name} ${jobTitle}` : name;
   const orgLine =
     member?.organizationName?.trim() ||
     user?.departmentName?.trim() ||
     user?.companyName?.trim() ||
     '—';
+  const emailLine = member?.email?.trim() || user?.email?.trim() || '—';
   const profileSrc =
     member?.profileUrl?.trim() || user?.profileImageUrl?.trim() || undefined;
 
@@ -350,33 +536,91 @@ function SiderUserFooter() {
     />
   );
 
+  const popoverContent = (
+    <SiderAccountPopoverContent
+      onClose={() => setAccountPopoverOpen(false)}
+      profileSrc={profileSrc}
+      nameLine={nameLine}
+      departmentLine={orgLine}
+      emailLine={emailLine}
+      onMyPage={() => {
+        void navigate({ to: '/app/me' });
+      }}
+      onSettings={() => {
+        void navigate({ to: '/app/settings' });
+      }}
+      onLogout={handleLogout}
+    />
+  );
+
+  const popoverCommon = {
+    open: accountPopoverOpen,
+    onOpenChange: setAccountPopoverOpen,
+    trigger: 'click' as const,
+    arrow: false,
+    getPopupContainer: () => document.body,
+    styles: { body: { padding: 0 } } as const,
+    content: popoverContent,
+  };
+
+  if (collapsed) {
+    return (
+      <Popover {...popoverCommon} placement="rightTop">
+        <div
+          className="tw-flex tw-w-full tw-shrink-0 tw-cursor-pointer tw-flex-col tw-items-center tw-rounded-lg tw-border-t tw-border-slate-100 tw-px-2 tw-py-3 tw-outline-none hover:tw-bg-slate-50/80 focus-visible:tw-ring-2 focus-visible:tw-ring-blue-500/30"
+          role="button"
+          tabIndex={0}
+          aria-label="계정 정보"
+          aria-expanded={accountPopoverOpen}
+          aria-haspopup="dialog"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setAccountPopoverOpen((o) => !o);
+            }
+          }}
+        >
+          {avatar}
+        </div>
+      </Popover>
+    );
+  }
+
   return (
-    <div
-      className="tw-flex tw-shrink-0 tw-items-center tw-gap-2 tw-px-3 tw-py-3 tw-w-full"
+    <Popover
+      {...popoverCommon}
+      placement="top"
+      /** 트리거(사이드 ~248px)보다 패널(~288px)이 넓어 `topRight`면 왼쪽으로 크게 밀림 → 가운데 정렬 + 살짝 위로 */
+      align={{ offset: [0, -8] }}
     >
-      <Link
-        to="/app/me"
-        className="tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-3 tw-no-underline hover:tw-opacity-90"
+      <div
+        className="tw-flex tw-w-full tw-shrink-0 tw-cursor-pointer tw-items-center tw-gap-2 tw-px-3 tw-py-3 tw-outline-none hover:tw-bg-slate-50/80 focus-visible:tw-ring-2 focus-visible:tw-ring-blue-500/30"
+        role="button"
+        tabIndex={0}
+        aria-label="계정 정보"
+        aria-expanded={accountPopoverOpen}
+        aria-haspopup="dialog"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setAccountPopoverOpen((o) => !o);
+          }
+        }}
       >
-        {avatar}
-        <div className="tw-min-w-0 tw-flex-1">
-          <div className="tw-truncate tw-text-sm tw-font-semibold tw-text-slate-900" title={name}>
-            {name}
-          </div>
-          <div className="tw-truncate tw-text-xs tw-text-slate-500" title={orgLine}>
-            {orgLine}
+        <div className="tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-3">
+          {avatar}
+          <div className="tw-min-w-0 tw-flex-1">
+            <div className="tw-truncate tw-text-sm tw-font-semibold tw-text-slate-900" title={name}>
+              {name}
+            </div>
+            <div className="tw-truncate tw-text-xs tw-text-slate-500" title={orgLine}>
+              {orgLine}
+            </div>
           </div>
         </div>
-      </Link>
-      <button
-        type="button"
-        onClick={() => void handleLogout()}
-        className="group tw-flex tw-size-9 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-lg tw-border-0 tw-bg-transparent tw-transition-colors hover:tw-bg-slate-100"
-        aria-label="로그아웃"
-      >
-        <LogoutGlyphIcon className="tw-size-[18px] tw-text-slate-400 tw-transition-colors group-hover:tw-text-slate-600" />
-      </button>
-    </div>
+        <MoreOutlined className="tw-shrink-0 tw-text-base tw-text-slate-500" />
+      </div>
+    </Popover>
   );
 }
 
@@ -495,51 +739,138 @@ function menuSelectedKeyFromPath(pathname: string): string[] {
   return [];
 }
 
+function menuOpenKeysForPath(pathname: string): string[] {
+  const keys: string[] = [];
+  if (TALENT_HUB_PATH_SET.has(pathname)) keys.push(TALENT_HUB_GROUP_KEY);
+  if (ORG_HR_PATH_SET.has(pathname) || /^\/app\/members\/[^/]+$/.test(pathname)) {
+    keys.push(ORG_HR_GROUP_KEY);
+  }
+  if (pathname.startsWith('/app/esg')) keys.push(ESG_GROUP_KEY);
+  if (WORK_LEAVE_PATH_SET.has(pathname)) keys.push(WORK_LEAVE_GROUP_KEY);
+  return keys;
+}
+
+const SIDER_COLLAPSED_STORAGE_KEY = 'wf-app-shell-sider-collapsed';
+
 function AppShellLayout() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const navigate = useNavigate();
   const menuSelectedKey = useMemo(() => menuSelectedKeyFromPath(pathname), [pathname]);
   const appShellMenuItems = useAppShellSiderMenuItems();
 
-  const [menuOpenKeys, setMenuOpenKeys] = useState<string[]>(() =>
-    TALENT_HUB_PATH_SET.has(pathname) ? [TALENT_HUB_GROUP_KEY] : [],
-  );
+  const [siderCollapsed, setSiderCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return window.localStorage.getItem(SIDER_COLLAPSED_STORAGE_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
 
   useEffect(() => {
-    if (TALENT_HUB_PATH_SET.has(pathname)) {
-      setMenuOpenKeys((prev) => (prev.includes(TALENT_HUB_GROUP_KEY) ? prev : [...prev, TALENT_HUB_GROUP_KEY]));
+    try {
+      window.localStorage.setItem(SIDER_COLLAPSED_STORAGE_KEY, siderCollapsed ? '1' : '0');
+    } catch {
+      /* ignore */
     }
-  }, [pathname]);
+  }, [siderCollapsed]);
+
+  /** 펼침: 경로에 맞는 그룹을 펼침. 접힘: 팝업은 openKeys로만 제어 — 경로 병합 시 그룹 키가 남아 팝업이 안 닫히는 문제 방지 */
+  const [menuOpenKeys, setMenuOpenKeys] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      if (window.localStorage.getItem(SIDER_COLLAPSED_STORAGE_KEY) === '1') return [];
+    } catch {
+      /* ignore */
+    }
+    return menuOpenKeysForPath(pathname);
+  });
+
+  useEffect(() => {
+    if (siderCollapsed) {
+      setMenuOpenKeys([]);
+      return;
+    }
+    setMenuOpenKeys((prev) => {
+      const merged = new Set(prev);
+      for (const k of menuOpenKeysForPath(pathname)) merged.add(k);
+      return [...merged];
+    });
+  }, [pathname, siderCollapsed]);
 
   return (
     <Layout className="tw-flex tw-h-[100dvh] tw-min-h-0 tw-bg-slate-50">
       <Layout.Sider
         theme="light"
         width={248}
+        collapsedWidth={76}
+        collapsible
+        collapsed={siderCollapsed}
+        onCollapse={setSiderCollapsed}
+        trigger={null}
         className="tw-h-full tw-min-h-0 tw-overflow-hidden tw-border-0 tw-bg-transparent tw-shadow-none [&_.ant-layout-sider-children]:tw-flex [&_.ant-layout-sider-children]:tw-h-full [&_.ant-layout-sider-children]:tw-w-full [&_.ant-layout-sider-children]:tw-min-h-0 [&_.ant-layout-sider-children]:tw-flex-col"
       >
         <div className="tw-flex tw-h-full tw-w-full tw-min-h-0 tw-max-h-full tw-flex-col tw-bg-white tw-shadow-[inset_-1px_0_0_0_rgba(226,232,240,1)]">
-          <div className="tw-flex tw-h-16 tw-w-full tw-shrink-0 tw-items-center tw-gap-2 tw-px-4">
-            <SiderBrandHeader />
+          <div
+            className={`tw-flex tw-h-16 tw-w-full tw-shrink-0 tw-items-center tw-gap-2 ${
+              siderCollapsed ? 'tw-justify-center tw-px-2' : 'tw-px-4'
+            }`}
+          >
+            <SiderBrandHeader collapsed={siderCollapsed} />
           </div>
           <div className="wf-scrollbar tw-min-h-0 tw-w-full tw-flex-1 tw-overflow-y-auto tw-overflow-x-hidden">
             <Menu
               className="tw-mt-2 tw-w-full !tw-border-0 tw-bg-transparent tw-px-2 tw-pb-3 [&_.ant-menu-item::after]:tw-hidden [&_.ant-menu-submenu-title]:tw-px-3 [&_.ant-menu-submenu-title]:tw-rounded-lg [&_.ant-menu-item-only-child]:tw-rounded-lg"
               theme="light"
               mode="inline"
+              inlineCollapsed={siderCollapsed}
+              {...(siderCollapsed ? { triggerSubMenuAction: 'click' as const } : {})}
+              getPopupContainer={() => document.body}
               selectedKeys={menuSelectedKey}
+              // 접힘 시에도 openKeys를 비우면 팝업 서브메뉴가 절대 열리지 않음 — 항상 동일 상태로 팝업/인라인 전환
               openKeys={menuOpenKeys}
               onOpenChange={(keys) => {
                 setMenuOpenKeys(keys as string[]);
               }}
               items={appShellMenuItems}
               onClick={({ key }) => {
-                if (key === TALENT_HUB_GROUP_KEY) return;
+                if (
+                  key === TALENT_HUB_GROUP_KEY ||
+                  key === ORG_HR_GROUP_KEY ||
+                  key === ESG_GROUP_KEY ||
+                  key === WORK_LEAVE_GROUP_KEY
+                ) {
+                  return;
+                }
+                if (siderCollapsed) {
+                  setMenuOpenKeys([]);
+                }
                 void navigate({ to: key });
               }}
             />
           </div>
-          <SiderUserFooter />
+          <div className="tw-flex tw-shrink-0 tw-border-t tw-border-slate-100 tw-px-2 tw-py-1.5">
+            <Tooltip
+              title={siderCollapsed ? '사이드바 펼치기' : '사이드바 접기'}
+              placement={siderCollapsed ? 'right' : 'top'}
+            >
+              <Button
+                type="text"
+                block
+                className="!tw-flex !tw-h-auto !tw-min-h-9 !tw-w-full !items-center !justify-center !tw-rounded-lg !tw-bg-slate-50 !tw-py-2 !tw-text-slate-600 hover:!tw-bg-slate-100 hover:!tw-text-slate-800"
+                onClick={() => setSiderCollapsed((c) => !c)}
+                aria-label={siderCollapsed ? '사이드바 펼치기' : '사이드바 접기'}
+              >
+                <span className="tw-flex tw-w-full tw-items-center tw-justify-center tw-gap-2">
+                  <SiderPanelToggleIcon className="tw-shrink-0 tw-text-lg" />
+                  {siderCollapsed ? null : (
+                    <span className="tw-truncate tw-text-sm tw-font-medium tw-text-slate-600">사이드바 접기</span>
+                  )}
+                </span>
+              </Button>
+            </Tooltip>
+          </div>
+          <SiderUserFooter collapsed={siderCollapsed} />
         </div>
       </Layout.Sider>
       <Layout className="tw-flex tw-min-h-0 tw-min-w-0 tw-flex-1 tw-flex-col tw-bg-slate-50">
