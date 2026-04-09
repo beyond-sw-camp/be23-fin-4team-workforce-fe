@@ -19,6 +19,7 @@ import {
   Table,
   Tabs,
   Tag,
+  Tooltip,
   Typography,
   message,
 } from 'antd';
@@ -42,6 +43,7 @@ import { PERM } from '@/features/permissions/backend-permissions';
 import { PermissionGuard } from '@/features/permissions/permission-guard';
 import { usePermissions } from '@/features/permissions/usePermissionsHook';
 import { useAuth } from '@/features/auth/useAuth';
+import { useMemberDisplayNames } from '@/features/members/hooks/useMemberDisplayNames';
 import { MemberRemoteSelect } from '@/features/members/ui/MemberRemoteSelect';
 import { isStandardUuidString } from '@/shared/validation/uuid';
 import { AppButton } from '@/shared/ui/AppButton';
@@ -81,11 +83,6 @@ function statusTag(status?: string) {
   if (s === 'SUBMITTED') return <Tag color="blue">{EVALUATION_PAGE_KO.statusSubmitted}</Tag>;
   if (s === 'CONFIRMED') return <Tag color="success">{EVALUATION_PAGE_KO.statusConfirmed}</Tag>;
   return <Tag>{status ?? '—'}</Tag>;
-}
-
-function shortId(id: string): string {
-  if (id.length <= 10) return id;
-  return `${id.slice(0, 8)}…`;
 }
 
 export function EvaluationsPage() {
@@ -238,6 +235,33 @@ export function EvaluationsPage() {
   const isSubmitted = (displayEval?.status ?? '').toUpperCase() === 'SUBMITTED';
   const isMyEvaluation = displayEval && displayEval.evaluatorId === memberId;
 
+  const evaluationMemberIds = useMemo(() => {
+    const s = new Set<string>();
+    for (const e of myQuery.data ?? []) {
+      if (e.evaluateeId?.trim()) s.add(e.evaluateeId.trim());
+      if (e.evaluatorId?.trim()) s.add(e.evaluatorId.trim());
+    }
+    for (const e of policyEvalsQuery.data ?? []) {
+      if (e.evaluateeId?.trim()) s.add(e.evaluateeId.trim());
+      if (e.evaluatorId?.trim()) s.add(e.evaluatorId.trim());
+    }
+    if (displayEval?.evaluateeId?.trim()) s.add(displayEval.evaluateeId.trim());
+    if (displayEval?.evaluatorId?.trim()) s.add(displayEval.evaluatorId.trim());
+    return [...s];
+  }, [myQuery.data, policyEvalsQuery.data, displayEval]);
+
+  const { labelFor: evalMemberLabelLookup } = useMemberDisplayNames(evaluationMemberIds);
+
+  const evalMemberLabel = useCallback(
+    (id: string | null | undefined) => {
+      const t = id?.trim() ?? '';
+      if (!t) return '—';
+      if (t === memberId) return '나';
+      return evalMemberLabelLookup(t);
+    },
+    [evalMemberLabelLookup, memberId],
+  );
+
   const policyColumns: ColumnsType<EvaluationPolicy> = useMemo(
     () => [
       { title: EVALUATION_PAGE_KO.policyTableName, dataIndex: 'policyName', key: 'policyName', ellipsis: true },
@@ -291,7 +315,11 @@ export function EvaluationsPage() {
         title: EVALUATION_PAGE_KO.evalTableEvaluatee,
         dataIndex: 'evaluateeId',
         key: 'evaluateeId',
-        render: (id: string) => <Text code>{shortId(id)}</Text>,
+        render: (id: string) => (
+          <Tooltip title={id}>
+            <span>{evalMemberLabel(id)}</span>
+          </Tooltip>
+        ),
       },
       {
         title: EVALUATION_PAGE_KO.evalTableType,
@@ -318,7 +346,7 @@ export function EvaluationsPage() {
         ),
       },
     ],
-    [openDetail],
+    [evalMemberLabel, openDetail],
   );
 
   const policyEvalColumns: ColumnsType<Evaluation> = useMemo(
@@ -327,13 +355,21 @@ export function EvaluationsPage() {
         title: EVALUATION_PAGE_KO.evalTableEvaluator,
         dataIndex: 'evaluatorId',
         key: 'evaluatorId',
-        render: (id: string) => <Text code>{shortId(id)}</Text>,
+        render: (id: string) => (
+          <Tooltip title={id}>
+            <span>{evalMemberLabel(id)}</span>
+          </Tooltip>
+        ),
       },
       {
         title: EVALUATION_PAGE_KO.evalTableEvaluatee,
         dataIndex: 'evaluateeId',
         key: 'evaluateeId',
-        render: (id: string) => <Text code>{shortId(id)}</Text>,
+        render: (id: string) => (
+          <Tooltip title={id}>
+            <span>{evalMemberLabel(id)}</span>
+          </Tooltip>
+        ),
       },
       {
         title: EVALUATION_PAGE_KO.evalTableType,
@@ -360,11 +396,11 @@ export function EvaluationsPage() {
         ),
       },
     ],
-    [openDetail],
+    [evalMemberLabel, openDetail],
   );
 
   return (
-    <div className="tw-mx-auto tw-w-full tw-max-w-[1200px] tw-space-y-5">
+    <div className="tw-mx-auto tw-w-full tw-space-y-5">
       {!companyId ? (
         <Alert type="warning" showIcon message="회사 정보(companyId)를 확인할 수 없습니다." />
       ) : null}
@@ -531,7 +567,7 @@ export function EvaluationsPage() {
         width={560}
         open={detailEval !== null}
         onClose={closeDetail}
-        destroyOnClose
+        destroyOnHidden
         classNames={{ body: 'wf-scrollbar-modal' }}
         styles={{ body: { paddingBottom: 24 } }}
       >
@@ -549,10 +585,14 @@ export function EvaluationsPage() {
                 </Text>
               </Descriptions.Item>
               <Descriptions.Item label={EVALUATION_PAGE_KO.evalTableEvaluatee}>
-                <Text code>{displayEval.evaluateeId}</Text>
+                <Tooltip title={displayEval.evaluateeId}>
+                  <span>{evalMemberLabel(displayEval.evaluateeId)}</span>
+                </Tooltip>
               </Descriptions.Item>
               <Descriptions.Item label={EVALUATION_PAGE_KO.evalTableEvaluator}>
-                <Text code>{displayEval.evaluatorId}</Text>
+                <Tooltip title={displayEval.evaluatorId}>
+                  <span>{evalMemberLabel(displayEval.evaluatorId)}</span>
+                </Tooltip>
               </Descriptions.Item>
               <Descriptions.Item label={EVALUATION_PAGE_KO.evalTableType}>{evalTypeLabel(displayEval.evalType)}</Descriptions.Item>
               <Descriptions.Item label={EVALUATION_PAGE_KO.evalTableStatus}>{statusTag(displayEval.status)}</Descriptions.Item>
@@ -637,7 +677,7 @@ export function EvaluationsPage() {
         open={policyModalOpen}
         onCancel={() => setPolicyModalOpen(false)}
         footer={null}
-        destroyOnClose
+        destroyOnHidden
         width={520}
       >
         <Form
@@ -724,7 +764,7 @@ export function EvaluationsPage() {
         open={evalModalOpen}
         onCancel={() => setEvalModalOpen(false)}
         footer={null}
-        destroyOnClose
+        destroyOnHidden
         width={520}
       >
         <Form
@@ -765,7 +805,7 @@ export function EvaluationsPage() {
         open={confirmModalOpen}
         onCancel={() => setConfirmModalOpen(false)}
         footer={null}
-        destroyOnClose
+        destroyOnHidden
         width={400}
       >
         <Form

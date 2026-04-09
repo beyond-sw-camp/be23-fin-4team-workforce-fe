@@ -269,7 +269,7 @@ export function RolesPage() {
         okText={modal?.type === 'edit' ? '저장' : '등록'}
         cancelText="취소"
         width={720}
-        destroyOnClose
+        destroyOnHidden
         confirmLoading={createM.isPending || updateM.isPending}
       >
         <Form<FormValues> form={form} layout="vertical" className="tw-pt-2">

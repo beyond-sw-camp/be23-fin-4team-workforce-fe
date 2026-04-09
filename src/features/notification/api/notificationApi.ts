@@ -102,12 +102,18 @@ export const notificationApi = {
     return Array.isArray(unwrapped) ? unwrapped.map(toNotificationItem) : [];
   },
   async unreadCount() {
-    const response = await httpClient.get('/notification/unread-count');
-    const payload = unwrapApiResponse<{ count?: number } | number>(response.data);
-    if (typeof payload === 'number') {
-      return payload;
+    try {
+      const response = await httpClient.get('/notification/unread-count');
+      const payload = unwrapApiResponse<{ count?: number } | number>(response.data);
+      if (typeof payload === 'number') {
+        return payload;
+      }
+      return payload?.count ?? 0;
+    } catch (e: unknown) {
+      const status = (e as { status?: number })?.status;
+      if (status === 404) return 0;
+      throw e;
     }
-    return payload?.count ?? 0;
   },
   async markAsRead(notificationId: string) {
     const response = await httpClient.patch(`/notification/${notificationId}/read`);
@@ -125,14 +131,17 @@ export const notificationApi = {
       return () => undefined;
     }
     const lastEventId = readLastEventId();
-    const eventSource = new EventSourcePolyfill(`${env.VITE_API_BASE_URL}/notification/subscribe`, {
-      withCredentials: true,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'X-User-UUID': userUuid,
-        ...(lastEventId ? { 'Last-Event-ID': lastEventId } : {}),
-      },
-    });
+    const makeEventSource = (path: string) =>
+      new EventSourcePolyfill(`${env.VITE_API_BASE_URL}${path}`, {
+        withCredentials: true,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'X-User-UUID': userUuid,
+          ...(lastEventId ? { 'Last-Event-ID': lastEventId } : {}),
+        },
+      });
+    let eventSource = makeEventSource('/notification/subscribe');
+    let fallbackTried = false;
 
     eventSource.addEventListener('connect', (event) => {
       writeLastEventId((event as MessageEvent).lastEventId);
@@ -145,6 +154,24 @@ export const notificationApi = {
       onNotification();
     });
     eventSource.onerror = () => {
+      // 일부 환경에서는 /api prefix로만 노출됨.
+      if (!fallbackTried) {
+        fallbackTried = true;
+        eventSource.close();
+        eventSource = makeEventSource('/api/notification/subscribe');
+        eventSource.addEventListener('connect', (event) => {
+          writeLastEventId((event as MessageEvent).lastEventId);
+        });
+        eventSource.addEventListener('heartbeat', (event) => {
+          writeLastEventId((event as MessageEvent).lastEventId);
+        });
+        eventSource.addEventListener('notification', (event) => {
+          writeLastEventId((event as MessageEvent).lastEventId);
+          onNotification();
+        });
+        eventSource.onerror = () => eventSource.close();
+        return;
+      }
       eventSource.close();
     };
     return () => eventSource.close();

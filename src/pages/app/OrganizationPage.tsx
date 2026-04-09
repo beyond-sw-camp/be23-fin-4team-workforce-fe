@@ -777,7 +777,7 @@ export function OrganizationPage() {
         onOk={() => void submitOrgModal()}
         confirmLoading={createOrgM.isPending || updateOrgM.isPending}
         okText="저장"
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={orgForm} layout="vertical" className="tw-mt-2">
           <Form.Item name="name" label="조직명" rules={[{ required: true, message: '조직명을 입력해 주세요.' }]}>
@@ -801,7 +801,7 @@ export function OrganizationPage() {
         }}
         confirmLoading={createGradeM.isPending || updateGradeM.isPending}
         okText="저장"
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={gradeForm} layout="vertical" className="tw-mt-2">
           <Form.Item name="name" label="직급명" rules={[{ required: true, message: '직급명을 입력해 주세요.' }]}>
@@ -825,7 +825,7 @@ export function OrganizationPage() {
         }}
         confirmLoading={createTitleM.isPending || updateTitleM.isPending}
         okText="저장"
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={titleForm} layout="vertical" className="tw-mt-2">
           <Form.Item name="name" label="직책명" rules={[{ required: true, message: '직책명을 입력해 주세요.' }]}>

@@ -13,6 +13,8 @@ import {
   LineChartOutlined,
   MailOutlined,
   KeyOutlined,
+  MessageOutlined,
+  ProjectOutlined,
   RobotOutlined,
   ScheduleOutlined,
   SettingOutlined,
@@ -20,8 +22,10 @@ import {
   StarOutlined,
   TeamOutlined,
   UserOutlined,
+  VideoCameraOutlined,
 } from '@ant-design/icons';
 import { Avatar, Badge, Button, Empty, Layout, Menu, Spin, message } from 'antd';
+import type { MenuProps } from 'antd';
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -37,6 +41,7 @@ import {
   APP_BRAND_NAME,
   APP_MENU_LABEL,
   APP_MENU_PATH_ORDER,
+  APP_MENU_TALENT_HUB_LABEL,
   ESG_MENU_LABEL,
   ESG_MENU_PATH_ORDER,
 } from '@/app/locale/app-ko';
@@ -85,7 +90,50 @@ function shouldShowEsgMenuItem(path: string, cfg: EsgConfig | null | undefined, 
   return true;
 }
 
-function useAppShellMenuItems() {
+const TALENT_HUB_GROUP_KEY = 'group-talent-hub';
+const TALENT_HUB_PATHS = ['/app/performance', '/app/evaluations', '/app/meetings'] as const;
+const TALENT_HUB_PATH_SET = new Set<string>(TALENT_HUB_PATHS);
+
+function buildAppShellMenuItems(esgPaths: readonly string[]): MenuProps['items'] {
+  const items: NonNullable<MenuProps['items']> = [];
+  let hubInserted = false;
+
+  for (const path of APP_MENU_PATH_ORDER) {
+    if (TALENT_HUB_PATH_SET.has(path)) {
+      if (!hubInserted) {
+        hubInserted = true;
+        items.push({
+          key: TALENT_HUB_GROUP_KEY,
+          icon: <ProjectOutlined className="tw-text-lg" />,
+          label: APP_MENU_TALENT_HUB_LABEL,
+          children: TALENT_HUB_PATHS.map((p) => ({
+            key: p,
+            icon: APP_MENU_ICONS[p],
+            label: APP_MENU_LABEL[p],
+          })),
+        });
+      }
+      continue;
+    }
+    items.push({
+      key: path,
+      icon: APP_MENU_ICONS[path],
+      label: APP_MENU_LABEL[path],
+    });
+    if (path === '/app/calendar' && esgPaths.length > 0) {
+      for (const p of esgPaths) {
+        items.push({
+          key: p,
+          icon: ESG_MENU_ICONS[p],
+          label: ESG_MENU_LABEL[p],
+        });
+      }
+    }
+  }
+  return items;
+}
+
+function useAppShellSiderMenuItems(): MenuProps['items'] {
   const { status, user } = useAuth();
   const isAdmin = user?.isSystemAdmin === true;
   const { data: esgConfig } = useQuery({
@@ -125,6 +173,7 @@ function useAppShellMenuItems() {
         : [...base.slice(0, settingsIdx), ...adminDocItem, ...base.slice(settingsIdx)];
 
     const esgPaths = ESG_MENU_PATH_ORDER.filter((p) => shouldShowEsgMenuItem(p, esgConfig ?? null, isAdmin));
+    return buildAppShellMenuItems(esgPaths);
     if (esgPaths.length === 0) {
       return menu;
     }
@@ -446,11 +495,21 @@ function menuSelectedKeyFromPath(pathname: string): string[] {
   return [];
 }
 
-export function AppShellLayout() {
+function AppShellLayout() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const navigate = useNavigate();
   const menuSelectedKey = useMemo(() => menuSelectedKeyFromPath(pathname), [pathname]);
-  const appShellMenuItems = useAppShellMenuItems();
+  const appShellMenuItems = useAppShellSiderMenuItems();
+
+  const [menuOpenKeys, setMenuOpenKeys] = useState<string[]>(() =>
+    TALENT_HUB_PATH_SET.has(pathname) ? [TALENT_HUB_GROUP_KEY] : [],
+  );
+
+  useEffect(() => {
+    if (TALENT_HUB_PATH_SET.has(pathname)) {
+      setMenuOpenKeys((prev) => (prev.includes(TALENT_HUB_GROUP_KEY) ? prev : [...prev, TALENT_HUB_GROUP_KEY]));
+    }
+  }, [pathname]);
 
   return (
     <Layout className="tw-flex tw-h-[100dvh] tw-min-h-0 tw-bg-slate-50">
@@ -465,12 +524,17 @@ export function AppShellLayout() {
           </div>
           <div className="wf-scrollbar tw-min-h-0 tw-w-full tw-flex-1 tw-overflow-y-auto tw-overflow-x-hidden">
             <Menu
-              className="tw-mt-2 tw-w-full !tw-border-0 tw-bg-transparent tw-px-2 tw-pb-3 [&_.ant-menu-item::after]:tw-hidden"
+              className="tw-mt-2 tw-w-full !tw-border-0 tw-bg-transparent tw-px-2 tw-pb-3 [&_.ant-menu-item::after]:tw-hidden [&_.ant-menu-submenu-title]:tw-px-3 [&_.ant-menu-submenu-title]:tw-rounded-lg [&_.ant-menu-item-only-child]:tw-rounded-lg"
               theme="light"
               mode="inline"
               selectedKeys={menuSelectedKey}
-              items={appShellMenuItems as import('antd').MenuProps['items']}
+              openKeys={menuOpenKeys}
+              onOpenChange={(keys) => {
+                setMenuOpenKeys(keys as string[]);
+              }}
+              items={appShellMenuItems}
               onClick={({ key }) => {
+                if (key === TALENT_HUB_GROUP_KEY) return;
                 void navigate({ to: key });
               }}
             />
@@ -488,3 +552,5 @@ export function AppShellLayout() {
     </Layout>
   );
 }
+
+export default AppShellLayout
