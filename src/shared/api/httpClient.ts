@@ -16,10 +16,12 @@ export const httpClient = axios.create({
 httpClient.interceptors.request.use((config) => {
   const token = getAccessToken();
   config.headers = config.headers ?? {};
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+  const trimmedToken = token?.trim() || null;
+  if (trimmedToken) {
+    /** `Bearer` + 공백 1개 + 토큰 (RFC 관례). 토큰 앞뒤 공백은 제거 */
+    config.headers.Authorization = `Bearer ${trimmedToken}`;
   }
-  const tenant = getTenantHeadersFromToken(token);
+  const tenant = getTenantHeadersFromToken(trimmedToken);
   if (tenant['X-Member-Id']) {
     config.headers['X-Member-Id'] = tenant['X-Member-Id'];
     /** company-service 등 `@RequestHeader("X-User-Id")` 와 동일 멤버 UUID */
@@ -38,8 +40,8 @@ httpClient.interceptors.request.use((config) => {
   if (refreshIdentity['X-User-MemberPositionId']) {
     config.headers['X-User-MemberPositionId'] = refreshIdentity['X-User-MemberPositionId'];
   }
-  if (token) {
-    const payload = decodeJwtPayload(token);
+  if (trimmedToken) {
+    const payload = decodeJwtPayload(trimmedToken);
     /** member-service `PermissionAspect`: YES면 Redis 권한 없이 통과, NO면 Redis ESG:READ 등 필요 */
     config.headers['X-User-IsSystemAdmin'] =
       payload && isSystemAdminFromJwtPayload(payload) ? 'YES' : 'NO';

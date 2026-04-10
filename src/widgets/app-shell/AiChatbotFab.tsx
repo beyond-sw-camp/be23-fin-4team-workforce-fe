@@ -1,9 +1,60 @@
-import { CloseOutlined, DeleteOutlined, RobotOutlined, SendOutlined } from '@ant-design/icons';
+import { CloseOutlined, DeleteOutlined, RobotOutlined, SendOutlined, UserOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Input, Modal, Popconfirm, Spin, Typography } from 'antd';
+import { App, Popconfirm, Spin } from 'antd';
 import dayjs from 'dayjs';
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { aiApi } from '@/features/ai/api/aiApi';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { aiApi, sortAiChatHistoryChronological } from '@/features/ai/api/aiApi';
+import type { ApiError } from '@/shared/api/types';
+
+const MSG_502 =
+  '[502] member-service\u2192n8n \uC5F0\uB3D9\uC5D0 \uBB38\uC81C\uAC00 \uC788\uC744 \uC218 \uC788\uC2B5\uB2C8\uB2E4. \uC11C\uBC84 \uB85C\uADF8\u00B7n8n \uC6CC\uD06C\uD50C\uB85C(JSON\u00B7answer)\uB97C \uD655\uC778\uD558\uC138\uC694. \uBE0C\uB77C\uC6B0\uC800 \uC694\uCCAD URL\uC740 http://\u2026/chat \uC785\uB2C8\uB2E4.';
+const MSG_RETRY = '\uC7A0\uC2DC \uD6C4 \uB2E4\uC2DC \uC2DC\uB3C4\uD574 \uC8FC\uC138\uC694.';
+const ERR_CHAT = '\uB2F5\uBCC0\uC744 \uAC00\uC838\uC624\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.';
+const OK_CLEAR = '\uB300\uD654 \uC774\uB825\uC774 \uC0AD\uC81C\uB418\uC5C8\uC2B5\uB2C8\uB2E4.';
+const ERR_CLEAR = '\uC0AD\uC81C\uC5D0 \uC2E4\uD328\uD588\uC2B5\uB2C8\uB2E4.';
+const ARIA_EXPAND_PANEL = 'AI \uBE44\uC11C \uD3BC\uCE58\uAE30';
+const ARIA_COLLAPSE_PANEL = 'AI \uBE44\uC11C \uC811\uAE30';
+const BTN_BOTTOM = '\uB9E8 \uC544\uB798';
+const POP_TITLE = '\uC804\uCCB4 \uB300\uD654 \uC774\uB825\uC744 \uC0AD\uC81C\uD560\uAE4C\uC694?';
+const POP_OK = '\uC0AD\uC81C';
+const POP_CANCEL = '\uCDE8\uC18C';
+const ARIA_DEL = '\uB300\uD654 \uC774\uB825 \uC0AD\uC81C';
+const ARIA_CLOSE = '\uB2EB\uAE30';
+const WELCOME =
+  '\u2014 \uC5F0\uCC28\u00B7HR \uC815\uCC45\u00B7"\uB0B4 \uC815\uBCF4 \uC54C\uB824\uC918" \uB4F1 \uC9C8\uBB38\uD574 \uBCF4\uC138\uC694 \u2014';
+const PENDING =
+  '\uB2F5\uBCC0 \uC0DD\uC131 \uC911\u2026 (\uC218 \uCD08~10\uCD08 \uC774\uC0C1 \uAC78\uB9B4 \uC218 \uC788\uC2B5\uB2C8\uB2E4)';
+const SOURCES_LABEL = '\uCC38\uACE0 \uBB38\uC11C';
+const PH_PENDING = '\uB2F5\uBCC0 \uB300\uAE30 \uC911\u2026';
+const PH_INPUT = '\uBA54\uC2DC\uC9C0\uB97C \uC785\uB825\uD558\uC138\uC694\u2026';
+const HINT_KEYS = 'Enter \uC804\uC1A1 \u00B7 Shift+Enter \uC904\uBC14\uAFC8';
+const AI_TITLE = 'AI \uBE44\uC11C';
+const SOURCES_PREFIX = '\uCC38\uACE0: ';
+
+function chatUserMessage(e: unknown, fallback: string): string {
+  const err = e as Partial<ApiError>;
+  const status = typeof err.status === 'number' ? err.status : 0;
+  const msg = typeof err.message === 'string' ? err.message.trim() : '';
+  if (status === 502) {
+    return msg || MSG_502;
+  }
+  if (status >= 500) {
+    return msg || MSG_RETRY;
+  }
+  return msg || fallback;
+}
+
+/** Vue room `formatMsgTime` \uACFC \uB3D9\uC77C \uD328\uD134 */
+function formatAiMsgTime(dt: string): string {
+  if (!dt || dt === '\u2014') return '';
+  const d = dayjs(dt);
+  if (!d.isValid()) return '';
+  const h = d.hour();
+  const m = d.format('mm');
+  const ap = h < 12 ? '\uC624\uC804' : '\uC624\uD6C4';
+  const h12 = h % 12 || 12;
+  return `${ap} ${h12}:${m}`;
+}
 
 export function AiChatbotFab() {
   const { message } = App.useApp();
@@ -21,22 +72,32 @@ export function AiChatbotFab() {
     staleTime: 30_000,
   });
 
+  const displayHistory = useMemo(() => sortAiChatHistoryChronological(history), [history]);
+
   const chatM = useMutation({
     mutationFn: (question: string) => aiApi.chat(question),
     onSuccess: (data) => {
-      setSourcesHint(Array.isArray(data.sources) ? data.sources : []);
+      const src = Array.isArray(data.sources)
+        ? data.sources.filter((s): s is string => typeof s === 'string' && s.trim() !== '')
+        : [];
+      setSourcesHint(src.length > 0 ? src : null);
       void qc.invalidateQueries({ queryKey: ['ai', 'chat-history'] });
     },
-    onError: (e: Error) => message.error(e.message || '답변을 가져오지 못했습니다.'),
+    onError: (e: unknown) => {
+      if (import.meta.env.DEV) {
+        console.warn('[AiChatbotFab] POST /chat failed', e);
+      }
+      message.error(chatUserMessage(e, ERR_CHAT));
+    },
   });
 
   const clearM = useMutation({
     mutationFn: () => aiApi.clearChatHistory(),
     onSuccess: () => {
-      message.success('대화 이력이 삭제되었습니다.');
+      message.success(OK_CLEAR);
       void qc.invalidateQueries({ queryKey: ['ai', 'chat-history'] });
     },
-    onError: (e: Error) => message.error(e.message || '삭제에 실패했습니다.'),
+    onError: (e: unknown) => message.error(chatUserMessage(e, ERR_CLEAR)),
   });
 
   const pending = chatM.isPending;
@@ -47,12 +108,15 @@ export function AiChatbotFab() {
     return () => window.clearTimeout(t);
   }, [sourcesHint]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) return;
     const el = listRef.current;
     if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-  }, [history, open, pending]);
+    const id = requestAnimationFrame(() => {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [displayHistory, open, pending]);
 
   const send = useCallback(() => {
     const text = input.trim();
@@ -61,179 +125,193 @@ export function AiChatbotFab() {
     chatM.mutate(text);
   }, [input, pending, chatM]);
 
-  const showWelcome = !historyLoading && history.length === 0 && !pending;
+  const scrollToBottom = useCallback(() => {
+    const el = listRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  }, []);
+
+  const showWelcome = !historyLoading && displayHistory.length === 0 && !pending;
 
   return (
-    <>
-      <button
-        type="button"
-        className="tw-fixed tw-bottom-6 tw-right-6 tw-z-[100] tw-flex tw-h-14 tw-w-14 tw-items-center tw-justify-center tw-rounded-full tw-border-0 tw-bg-[#2563EB] tw-text-2xl tw-text-white tw-shadow-lg tw-shadow-blue-500/30 tw-transition-[transform,box-shadow,filter] hover:tw-brightness-110 hover:tw-shadow-xl focus-visible:tw-outline focus-visible:tw-outline-2 focus-visible:tw-outline-offset-2 focus-visible:tw-outline-[#2563EB] active:tw-scale-95"
-        aria-label="AI 비서 열기"
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        onClick={() => setOpen(true)}
-      >
-        <RobotOutlined aria-hidden />
-      </button>
-
-      <Modal
-        title={null}
-        open={open}
-        onCancel={() => setOpen(false)}
-        footer={null}
-        width={520}
-        centered
-        destroyOnHidden={false}
-        maskClosable
-        classNames={{ body: '!tw-p-0' }}
-        className="[&_.ant-modal-content]:tw-overflow-hidden [&_.ant-modal-content]:tw-p-0"
+    <div
+      className="tw-pointer-events-none tw-fixed tw-bottom-6 tw-right-6 tw-z-[100] tw-flex tw-flex-col tw-items-end tw-gap-3"
+      style={{ maxWidth: 'calc(100vw - 1.5rem)' }}
+    >
+      <div
+        id="ai-chatbot-panel"
+        className={[
+          'tw-pointer-events-auto tw-w-[min(440px,calc(100vw-1.5rem))] tw-overflow-hidden tw-rounded-2xl tw-border tw-border-slate-200/90 tw-bg-white tw-shadow-2xl tw-shadow-slate-900/12',
+          'tw-origin-bottom tw-transition-[max-height,opacity,transform] tw-duration-300 tw-ease-out',
+          open
+            ? 'tw-max-h-[min(82vh,680px)] tw-translate-y-0 tw-opacity-100'
+            : 'tw-pointer-events-none tw-max-h-0 -tw-translate-y-1 tw-opacity-0',
+        ].join(' ')}
+        aria-hidden={!open}
+        role="region"
         aria-labelledby={titleId}
       >
-        <div className="tw-flex tw-h-[min(78vh,640px)] tw-flex-col tw-bg-white">
-          <div className="tw-flex tw-shrink-0 tw-items-center tw-justify-between tw-gap-2 tw-border-b tw-border-slate-200 tw-bg-slate-50 tw-px-4 tw-py-3">
-            <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
-              <span className="tw-flex tw-h-9 tw-w-9 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-full tw-bg-[#2563EB] tw-text-lg tw-text-white">
-                <RobotOutlined aria-hidden />
-              </span>
-              <div className="tw-min-w-0">
-                <Typography.Text id={titleId} strong className="tw-block tw-text-base tw-text-slate-900">
-                  AI 비서
-                </Typography.Text>
-                <Typography.Text type="secondary" className="tw-block tw-text-xs">
-                  HR 정책·개인화 질의 (최근 대화는 서버에 저장됩니다)
-                </Typography.Text>
+        <div className="tw-flex tw-h-[min(82vh,680px)] tw-flex-col tw-overflow-hidden tw-bg-white">
+          <div className="tw-relative tw-z-[1] tw-shrink-0 tw-cursor-default tw-bg-gradient-to-br tw-from-[#4A7FF7] tw-to-[#7BB3FF] tw-shadow-[0_4px_14px_rgba(74,127,247,0.38)]">
+            <div className="tw-flex tw-items-center tw-gap-2.5 tw-px-3.5 tw-py-3">
+              <div className="tw-flex tw-h-[34px] tw-w-[34px] tw-shrink-0 tw-items-center tw-justify-center tw-rounded-full tw-bg-white/25 tw-text-white">
+                <RobotOutlined className="!tw-text-base" aria-hidden />
               </div>
-            </div>
-            <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-1">
-              <Popconfirm
-                title="전체 대화 이력을 삭제할까요?"
-                okText="삭제"
-                cancelText="취소"
-                okButtonProps={{ danger: true, loading: clearM.isPending }}
-                disabled={history.length === 0 && !historyLoading}
-                onConfirm={() => clearM.mutate()}
-              >
-                <Button
-                  type="text"
-                  size="small"
-                  danger
-                  icon={<DeleteOutlined />}
-                  className="tw-text-slate-600"
-                  disabled={(history.length === 0 && !historyLoading) || clearM.isPending}
+              <div className="tw-min-w-0 tw-flex-1 tw-text-white">
+                <p id={titleId} className="tw-m-0 tw-text-[10px] tw-font-extrabold tw-tracking-wide tw-text-white/75">
+                  {AI_TITLE}
+                </p>
+              </div>
+              <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-1">
+                <button
+                  type="button"
+                  className="tw-whitespace-nowrap tw-rounded-full tw-border-0 tw-bg-white tw-px-3 tw-py-1 tw-text-[11px] tw-font-bold tw-text-[#4A7FF7] tw-shadow-md tw-transition-opacity hover:tw-opacity-90"
+                  onClick={() => scrollToBottom()}
                 >
-                  이력 삭제
-                </Button>
-              </Popconfirm>
-              <Button
-                type="text"
-                size="small"
-                icon={<CloseOutlined />}
-                className="tw-text-slate-500"
-                aria-label="닫기"
-                onClick={() => setOpen(false)}
-              />
+                  {BTN_BOTTOM}
+                </button>
+                <Popconfirm
+                  title={POP_TITLE}
+                  okText={POP_OK}
+                  cancelText={POP_CANCEL}
+                  okButtonProps={{ danger: true, loading: clearM.isPending }}
+                  disabled={history.length === 0 && !historyLoading}
+                  onConfirm={() => clearM.mutate()}
+                >
+                  <button
+                    type="button"
+                    className="tw-flex tw-h-8 tw-w-8 tw-items-center tw-justify-center tw-rounded-full tw-bg-white/20 tw-text-white tw-transition-colors hover:tw-bg-white/30 disabled:tw-opacity-40"
+                    disabled={(history.length === 0 && !historyLoading) || clearM.isPending}
+                    aria-label={ARIA_DEL}
+                  >
+                    <DeleteOutlined className="!tw-text-sm" />
+                  </button>
+                </Popconfirm>
+                <button
+                  type="button"
+                  className="tw-flex tw-h-8 tw-w-8 tw-items-center tw-justify-center tw-rounded-full tw-bg-white/20 tw-text-white tw-transition-colors hover:tw-bg-white/30"
+                  aria-label={ARIA_CLOSE}
+                  onClick={() => setOpen(false)}
+                >
+                  <CloseOutlined className="!tw-text-sm" />
+                </button>
+              </div>
             </div>
           </div>
 
           <div
             ref={listRef}
-            className="wf-scrollbar tw-min-h-0 tw-flex-1 tw-overflow-y-auto tw-bg-slate-50/80 tw-px-4 tw-py-3"
+            className="wf-scrollbar tw-min-h-0 tw-flex-1 tw-overflow-y-auto tw-bg-[#F4F6F9] tw-px-2.5 tw-py-2.5"
             role="log"
             aria-live="polite"
           >
-            <Spin spinning={historyLoading && history.length === 0}>
-              {showWelcome && (
-                <div className="tw-mb-4 tw-rounded-xl tw-border tw-border-dashed tw-border-slate-200 tw-bg-white tw-px-3 tw-py-3 tw-text-sm tw-text-slate-600">
-                  안녕하세요. 연차·취업규칙 등 HR 질문이나 &quot;나는 누구야&quot;처럼 개인화 질문도 해 보세요. 답변은 정책
-                  문서와 프로필 정보를 바탕으로 제공됩니다.
-                </div>
-              )}
+            {historyLoading && displayHistory.length === 0 ? (
+              <div className="tw-flex tw-h-40 tw-items-center tw-justify-center">
+                <Spin size="large" />
+              </div>
+            ) : null}
 
-              {history.map((item) => (
-                <article
-                  key={item.id}
-                  className="tw-mb-4 tw-rounded-xl tw-border tw-border-slate-200 tw-bg-white tw-p-3 tw-shadow-sm last:tw-mb-0"
-                >
-                  <div className="tw-mb-2 tw-flex tw-items-center tw-justify-between tw-gap-2">
-                    <Typography.Text type="secondary" className="tw-text-[11px]">
-                      {dayjs(item.createdAt).isValid()
-                        ? dayjs(item.createdAt).format('YYYY-MM-DD HH:mm')
-                        : item.createdAt}
-                    </Typography.Text>
-                  </div>
-                  <div className="tw-mb-2 tw-flex tw-justify-end">
-                    <div className="tw-max-w-[95%] tw-rounded-2xl tw-rounded-br-md tw-bg-[#2563EB] tw-px-3 tw-py-2 tw-text-sm tw-leading-relaxed tw-text-white">
-                      {item.question}
-                    </div>
-                  </div>
-                  <div className="tw-flex tw-justify-start">
-                    <div className="tw-max-w-[95%] tw-rounded-2xl tw-rounded-bl-md tw-border tw-border-slate-100 tw-bg-slate-50 tw-px-3 tw-py-2 tw-text-sm tw-leading-relaxed tw-text-slate-800">
-                      <span className="tw-whitespace-pre-wrap">{item.answer}</span>
-                      {item.sources && item.sources.length > 0 && (
-                        <div className="tw-mt-2 tw-border-t tw-border-slate-200 tw-pt-2 tw-text-[11px] tw-text-slate-500">
-                          참고 문서: {item.sources.join(', ')}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </article>
-              ))}
-
-              {pending && (
-                <div className="tw-flex tw-items-center tw-gap-2 tw-rounded-lg tw-border tw-border-slate-200 tw-bg-white tw-px-3 tw-py-3 tw-text-sm tw-text-slate-600">
-                  <Spin size="small" />
-                  <span>답변을 생성하는 중입니다… (수 초 걸릴 수 있습니다)</span>
-                </div>
-              )}
-            </Spin>
-          </div>
-
-          {sourcesHint && (
-            <div className="tw-shrink-0 tw-border-t tw-border-amber-100 tw-bg-amber-50/80 tw-px-4 tw-py-2 tw-text-[11px] tw-text-slate-700">
-              {sourcesHint.length > 0 ? (
-                <>
-                  <span className="tw-font-medium tw-text-amber-900">참고 문서</span>: {sourcesHint.join(', ')}
-                </>
-              ) : (
-                <span className="tw-text-slate-600">
-                  참고 문서 없음 — 개인화 답변이거나 관련 정책 문서가 없을 수 있습니다.
+            {showWelcome ? (
+              <div className="tw-mb-2 tw-flex tw-justify-center">
+                <span className="tw-rounded-full tw-bg-[#EEF0F3] tw-px-2.5 tw-py-0.5 tw-text-[10px] tw-text-[#94A3B8]">
+                  {WELCOME}
                 </span>
-              )}
-            </div>
-          )}
+              </div>
+            ) : null}
 
-          <div className="tw-shrink-0 tw-border-t tw-border-slate-200 tw-bg-white tw-p-3">
-            <div className="tw-flex tw-items-end tw-gap-2">
-              <Input.TextArea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="질문을 입력하세요…"
-                autoSize={{ minRows: 1, maxRows: 4 }}
-                className="tw-flex-1"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    send();
-                  }
-                }}
-                disabled={pending}
-              />
-              <Button
-                type="primary"
-                icon={<SendOutlined />}
-                className="tw-shrink-0"
-                aria-label="보내기"
-                onClick={() => void send()}
-                disabled={pending || !input.trim()}
-                loading={pending}
-              />
-            </div>
-            <Typography.Text type="secondary" className="tw-mt-1 tw-block tw-text-[11px]">
-              Enter로 전송 · Shift+Enter로 줄 바꿈
-            </Typography.Text>
+            {displayHistory.map((item) => (
+              <div key={item.id} className="tw-mb-2.5">
+                <div className="tw-mb-1.5 tw-flex tw-items-end tw-justify-end tw-gap-1">
+                  <div className="tw-flex tw-max-w-[72%] tw-flex-col tw-items-end tw-gap-0.5">
+                    <div className="tw-cursor-default tw-rounded-[14px_2px_14px_14px] tw-bg-[#3B82F6] tw-px-3 tw-py-1.5 tw-text-[0.8rem] tw-leading-relaxed tw-text-white tw-shadow-[0_1px_4px_rgba(59,130,246,0.25)] tw-transition-[filter] hover:tw-brightness-[0.97]">
+                      <p className="tw-m-0 tw-whitespace-pre-wrap tw-break-words">{item.question}</p>
+                    </div>
+                    <span className="tw-text-[9px] tw-text-[#94A3B8]">{formatAiMsgTime(item.createdAt)}</span>
+                  </div>
+                </div>
+                <div className="tw-flex tw-items-end tw-justify-start tw-gap-1">
+                  <div className="tw-flex tw-h-[30px] tw-w-[30px] tw-shrink-0 tw-items-center tw-justify-center tw-rounded-full tw-bg-[#3B82F6] tw-text-white">
+                    <RobotOutlined className="!tw-text-[15px]" aria-hidden />
+                  </div>
+                  <div className="tw-flex tw-max-w-[72%] tw-flex-col tw-gap-0.5">
+                    <span className="tw-mb-0.5 tw-text-[10px] tw-font-bold tw-text-[#475569]">{AI_TITLE}</span>
+                    <div className="tw-cursor-default tw-rounded-[2px_14px_14px_14px] tw-bg-white tw-px-3 tw-py-1.5 tw-text-[0.8rem] tw-leading-relaxed tw-text-[#1E293B] tw-shadow-[0_1px_3px_rgba(0,0,0,0.07)] tw-transition-[filter] hover:tw-brightness-[0.97]">
+                      <p className="tw-m-0 tw-whitespace-pre-wrap tw-break-words">{item.answer}</p>
+                      {item.sources && item.sources.length > 0 ? (
+                        <div className="tw-mt-2 tw-border-t tw-border-[#E8ECF0] tw-pt-2 tw-text-[10px] tw-text-[#64748B]">
+                          {SOURCES_PREFIX}
+                          {item.sources.join(', ')}
+                        </div>
+                      ) : null}
+                    </div>
+                    <span className="tw-text-[9px] tw-text-[#94A3B8]">{formatAiMsgTime(item.createdAt)}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            {pending ? (
+              <div className="tw-flex tw-items-end tw-justify-start tw-gap-1">
+                <div className="tw-flex tw-h-[30px] tw-w-[30px] tw-shrink-0 tw-items-center tw-justify-center tw-rounded-full tw-bg-[#d1d5db] tw-text-white">
+                  <RobotOutlined className="!tw-text-[15px]" aria-hidden />
+                </div>
+                <div className="tw-flex tw-items-center tw-gap-2 tw-rounded-[2px_14px_14px_14px] tw-bg-white tw-px-3 tw-py-2.5 tw-text-[0.8rem] tw-text-[#64748B] tw-shadow-[0_1px_3px_rgba(0,0,0,0.07)]">
+                  <Spin size="small" />
+                  <span>{PENDING}</span>
+                </div>
+              </div>
+            ) : null}
           </div>
+
+          {sourcesHint != null && sourcesHint.length > 0 ? (
+            <div className="tw-shrink-0 tw-border-t tw-border-[#C7DAFF] tw-bg-[#EEF4FF] tw-px-3 tw-py-2 tw-text-[11px] tw-text-[#2A5FD4]">
+              <span className="tw-font-bold">{SOURCES_LABEL}</span>: {sourcesHint.join(', ')}
+            </div>
+          ) : null}
+
+          <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-1.5 tw-border-t tw-border-[#E8ECF0] tw-bg-white tw-px-2.5 tw-py-2">
+            <div className="tw-flex tw-h-[34px] tw-w-[34px] tw-shrink-0 tw-items-center tw-justify-center tw-rounded-full tw-bg-[#F0F4F8] tw-text-[#64748B]">
+              <UserOutlined className="!tw-text-base" aria-hidden />
+            </div>
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder={pending ? PH_PENDING : PH_INPUT}
+              disabled={pending}
+              rows={1}
+              className="tw-max-h-24 tw-min-h-[34px] tw-flex-1 tw-resize-none tw-rounded-[20px] tw-border-[1.5px] tw-border-transparent tw-bg-[#F0F4F8] tw-px-3 tw-py-2 tw-text-[0.8rem] tw-text-[#1E293B] tw-outline-none tw-transition-[border-color,background] placeholder:tw-text-[#CBD5E1] focus:tw-border-[#3B82F6] focus:tw-bg-white disabled:tw-cursor-not-allowed disabled:tw-opacity-60"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  send();
+                }
+              }}
+            />
+            <button
+              type="button"
+              className="tw-flex tw-h-[34px] tw-w-[34px] tw-shrink-0 tw-items-center tw-justify-center tw-rounded-full tw-border-0 tw-bg-[#3B82F6] tw-text-white tw-shadow-[0_2px_8px_rgba(59,130,246,0.3)] tw-transition-[filter,transform] hover:tw-brightness-105 active:tw-scale-[1.04] disabled:tw-cursor-not-allowed disabled:tw-opacity-45"
+              aria-label={'\uC804\uC1A1'}
+              disabled={pending || !input.trim()}
+              onClick={() => void send()}
+            >
+              {pending ? <Spin size="small" className="!tw-text-white" /> : <SendOutlined className="!tw-text-sm" />}
+            </button>
+          </div>
+          <p className="tw-m-0 tw-border-t tw-border-transparent tw-bg-white tw-px-3 tw-pb-2 tw-text-center tw-text-[10px] tw-text-[#94A3B8]">
+            {HINT_KEYS}
+          </p>
         </div>
-      </Modal>
-    </>
+      </div>
+
+      <button
+        type="button"
+        className="tw-pointer-events-auto tw-flex tw-h-14 tw-w-14 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-full tw-border-0 tw-bg-[#3B82F6] tw-text-2xl tw-text-white tw-shadow-lg tw-shadow-[rgba(59,130,246,0.35)] tw-transition-[transform,box-shadow,filter] hover:tw-brightness-105 hover:tw-shadow-xl focus-visible:tw-outline focus-visible:tw-outline-2 focus-visible:tw-outline-offset-2 focus-visible:tw-outline-[#3B82F6] active:tw-scale-95"
+        aria-label={open ? ARIA_COLLAPSE_PANEL : ARIA_EXPAND_PANEL}
+        aria-expanded={open}
+        aria-controls="ai-chatbot-panel"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <RobotOutlined aria-hidden />
+      </button>
+    </div>
   );
 }
