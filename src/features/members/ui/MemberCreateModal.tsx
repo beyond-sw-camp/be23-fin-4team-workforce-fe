@@ -5,7 +5,7 @@ import dayjs from 'dayjs';
 import { useEffect, useMemo } from 'react';
 import type { CreateMemberPayload, EmploymentType } from '@/features/member/api/memberApi';
 import { memberApi } from '@/features/member/api/memberApi';
-import { organizationApi } from '@/features/organization/api/organizationApi';
+import {organizationApi, OrganizationTreeNode} from '@/features/organization/api/organizationApi';
 import { flattenOrganizationsWithMeta } from '@/features/organization/lib/flattenOrganizationTree';
 import { membersKeys } from '@/features/members/queries';
 import { EMPLOYMENT_TYPE_KO } from '@/app/locale/app-ko';
