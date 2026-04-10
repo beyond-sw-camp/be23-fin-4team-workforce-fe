@@ -31,6 +31,7 @@ import { EvaluationWritePage } from '@/pages/app/EvaluationWritePage';
 import { PerformancePage } from '@/pages/app/PerformancePage';
 import { GoalApprovalDetailPage } from '@/pages/app/GoalApprovalDetailPage';
 import { GoalApprovalsListPage } from '@/pages/app/GoalApprovalsListPage';
+import { ApprovalsPage } from '@/pages/app/ApprovalsPage';
 import { GenericPage } from '@/pages/app/GenericPage';
 import { AiDocumentsAdminPage } from '@/pages/app/AiDocumentsAdminPage';
 import { OrganizationPage } from '@/pages/app/OrganizationPage';
@@ -207,6 +208,12 @@ const goalApprovalDetailRoute = createRoute({
   component: GoalApprovalDetailPage,
 });
 
+const approvalsAdminRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/approvals',
+  component: ApprovalsPage,
+});
+
 const evaluationsRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/evaluations',
@@ -245,7 +252,6 @@ const aiDocumentsAdminRoute = createRoute({
 const genericPaths = [
   '/attendance',
   '/leave',
-  '/approvals',
   '/payroll',
   '/mail',
   '/meetings',
@@ -288,6 +294,7 @@ const routeTree = rootRoute.addChildren([
       memberDetailRoute,
       notificationsRoute,
       performanceRoute,
+      approvalsAdminRoute,
       goalApprovalsListRoute,
       goalApprovalDetailRoute,
       evaluationsRoute,
