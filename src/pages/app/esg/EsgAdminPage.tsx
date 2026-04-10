@@ -7,6 +7,7 @@ import {
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  Alert,
   App,
   Button,
   Card,
@@ -25,6 +26,7 @@ import {
 } from 'antd';
 import dayjs from 'dayjs';
 import { useEffect, useMemo, useState } from 'react';
+import type { ApiError } from '@/shared/api/types';
 import type { EsgActivity, EsgCampaign, EsgSubject, EsgSubjectCategory } from '@/features/esg/api/esgApi';
 import { esgApi } from '@/features/esg/api/esgApi';
 import {
@@ -52,6 +54,13 @@ import {
   pickTotalScore,
   pickYearMonth,
 } from '@/features/esg/esgScoreDisplay';
+
+/** 401·403·404는 재시도하지 않음 (콘솔 스팸·불필요한 부하 방지) */
+function retryUnlessAuthDenied(failureCount: number, error: unknown): boolean {
+  const status = (error as Partial<ApiError> | undefined)?.status;
+  if (status === 401 || status === 403 || status === 404) return false;
+  return failureCount < 2;
+}
 
 const CAT_OPTS: { value: EsgSubjectCategory; label: string }[] = [
   { value: 'E', label: 'E · 환경' },
@@ -82,11 +91,19 @@ export function EsgAdminPage() {
   const [shopForm] = Form.useForm();
   const [shopFile, setShopFile] = useState<File | null>(null);
   const [scoreMonth, setScoreMonth] = useState('');
+  const [esg403BannerDismissed, setEsg403BannerDismissed] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.sessionStorage.getItem('esgAdmin403BannerDismissed') === '1';
+  });
 
-  const { data: cfg } = useQuery({
+  const cfgQuery = useQuery({
     queryKey: ['esg', 'config'],
     queryFn: () => esgApi.getConfig(),
+    retry: retryUnlessAuthDenied,
   });
+  const { data: cfg } = cfgQuery;
+  /** ESG OFF면 서버가 주제·활동·캠페인·샵 등 READ API를 403으로 막는 경우가 있어, 호출하지 않음 */
+  const esgModuleOn = cfgQuery.isSuccess && cfg?.esgEnabledYn === 'YES';
 
   useEffect(() => {
     if (!cfg) return;
@@ -117,10 +134,13 @@ export function EsgAdminPage() {
     onError: (e: Error) => message.error(e.message || '저장에 실패했습니다.'),
   });
 
-  const { data: subjects = [], isLoading: subLoad } = useQuery({
+  const subjectsQuery = useQuery({
     queryKey: ['esg', 'subjects'],
     queryFn: () => esgApi.listSubjects(),
+    enabled: esgModuleOn,
+    retry: retryUnlessAuthDenied,
   });
+  const { data: subjects = [], isLoading: subLoad } = subjectsQuery;
 
   const subjectTitleById = useMemo(() => {
     const m = new Map<string, string>();
@@ -166,10 +186,13 @@ export function EsgAdminPage() {
     onError: (e: Error) => message.error(e.message || '삭제에 실패했습니다.'),
   });
 
-  const { data: pendingActs = [], isLoading: pendLoad } = useQuery({
+  const pendingActsQuery = useQuery({
     queryKey: ['esg', 'activities', 'admin', 'PENDING'],
     queryFn: () => esgApi.listActivitiesAdmin('PENDING'),
+    enabled: esgModuleOn,
+    retry: retryUnlessAuthDenied,
   });
+  const { data: pendingActs = [], isLoading: pendLoad } = pendingActsQuery;
 
   const approveM = useMutation({
     mutationFn: (id: string) => esgApi.approveActivity(id),
@@ -192,10 +215,13 @@ export function EsgAdminPage() {
     onError: (e: Error) => message.error(e.message || '반려에 실패했습니다.'),
   });
 
-  const { data: campaigns = [], isLoading: campLoad } = useQuery({
+  const campaignsQuery = useQuery({
     queryKey: ['esg', 'campaigns', 'admin'],
     queryFn: () => esgApi.listCampaigns(),
+    enabled: esgModuleOn,
+    retry: retryUnlessAuthDenied,
   });
+  const { data: campaigns = [], isLoading: campLoad } = campaignsQuery;
 
   const createCamp = useMutation({
     mutationFn: async () => {
@@ -228,10 +254,13 @@ export function EsgAdminPage() {
     onError: (e: Error) => message.error(e.message || '종료에 실패했습니다.'),
   });
 
-  const { data: shopItems = [], isLoading: shopLoad } = useQuery({
+  const shopItemsQuery = useQuery({
     queryKey: ['esg', 'shop', 'items'],
     queryFn: () => esgApi.listShopItems(),
+    enabled: esgModuleOn,
+    retry: retryUnlessAuthDenied,
   });
+  const { data: shopItems = [], isLoading: shopLoad } = shopItemsQuery;
 
   const createShop = useMutation({
     mutationFn: async () => {
@@ -253,15 +282,51 @@ export function EsgAdminPage() {
     onError: (e: Error) => message.error(e.message || '등록에 실패했습니다.'),
   });
 
-  const { data: allOrders = [], isLoading: ordLoad } = useQuery({
+  const allOrdersQuery = useQuery({
     queryKey: ['esg', 'shop', 'orders', 'all'],
     queryFn: () => esgApi.listAllOrders(),
+    enabled: esgModuleOn,
+    retry: retryUnlessAuthDenied,
   });
+  const { data: allOrders = [], isLoading: ordLoad } = allOrdersQuery;
 
-  const { data: scoreHist = [], isLoading: scoreLoad } = useQuery({
+  const scoreHistQuery = useQuery({
     queryKey: ['esg', 'scores', 'history'],
     queryFn: () => esgApi.getScoreHistory(),
+    enabled: esgModuleOn,
+    retry: retryUnlessAuthDenied,
   });
+  const { data: scoreHist = [], isLoading: scoreLoad } = scoreHistQuery;
+
+  const esgAdminApi403 = useMemo(() => {
+    if (!esgModuleOn) return false;
+    const queries = [
+      cfgQuery,
+      subjectsQuery,
+      pendingActsQuery,
+      campaignsQuery,
+      shopItemsQuery,
+      allOrdersQuery,
+      scoreHistQuery,
+    ];
+    return queries.some((q) => q.isError && (q.error as ApiError | undefined)?.status === 403);
+  }, [
+    esgModuleOn,
+    cfgQuery.isError,
+    cfgQuery.error,
+    subjectsQuery.isError,
+    subjectsQuery.error,
+    pendingActsQuery.isError,
+    pendingActsQuery.error,
+    campaignsQuery.isError,
+    campaignsQuery.error,
+    shopItemsQuery.isError,
+    shopItemsQuery.error,
+    allOrdersQuery.isError,
+    allOrdersQuery.error,
+    scoreHistQuery.isError,
+    scoreHistQuery.error,
+  ]);
 
   const aggScore = useMutation({
     mutationFn: () => {
@@ -297,6 +362,35 @@ export function EsgAdminPage() {
       <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
         ESG 관리
       </Typography.Title>
+
+      {cfgQuery.isSuccess && cfg?.esgEnabledYn === 'NO' ? (
+        <Alert
+          type="info"
+          showIcon
+          className="tw-w-full"
+          message="ESG 기능이 OFF입니다"
+          description="이 상태에서는 주제·활동 승인·캠페인·샵 등 데이터를 불러오지 않습니다. 설정 탭에서 ON으로 바꾼 뒤 저장하면 목록 API가 호출됩니다."
+        />
+      ) : null}
+
+      {esgAdminApi403 && !esg403BannerDismissed ? (
+        <Alert
+          type="warning"
+          showIcon
+          closable
+          className="tw-w-full"
+          message="ESG 관리 API 접근이 거부되었습니다 (HTTP 403)"
+          description="권한 헤더·Redis 권한 캐시·백엔드 PermissionAspect 규칙을 확인하세요. (닫기는 이 브라우저 세션 동안만 유지됩니다.)"
+          onClose={() => {
+            try {
+              window.sessionStorage.setItem('esgAdmin403BannerDismissed', '1');
+            } catch {
+              /* ignore */
+            }
+            setEsg403BannerDismissed(true);
+          }}
+        />
+      ) : null}
 
       <Tabs
         items={[
@@ -673,7 +767,7 @@ export function EsgAdminPage() {
             children: (
               <Card className="tw-border-slate-200/80 tw-shadow-sm">
                 <Table
-                  rowKey={(_, i) => String(i)}
+                  rowKey={(row) => JSON.stringify(row)}
                   loading={ordLoad}
                   dataSource={allOrders as Record<string, unknown>[]}
                   columns={[
@@ -706,7 +800,7 @@ export function EsgAdminPage() {
                 </Card>
                 <Card className="tw-border-slate-200/80 tw-shadow-sm" title="점수 이력">
                   <Table<EsgScoreHistoryRow>
-                    rowKey={(row, i) => pickEsgScoreRowId(row) || String(i)}
+                    rowKey={(row) => pickEsgScoreRowId(row) || JSON.stringify(row)}
                     loading={scoreLoad}
                     dataSource={scoreHist as EsgScoreHistoryRow[]}
                     scroll={{ x: 720 }}

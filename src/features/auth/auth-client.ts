@@ -200,7 +200,14 @@ async function getMeOrThrow() {
       .filter((x): x is string => typeof x === 'string');
   }
 
-  const isSystemAdminFromJwt = parseIsSystemAdmin(jwtPayload.isSystemAdmin);
+  const isSystemAdminFromJwt = (() => {
+    const a = parseIsSystemAdmin(jwtPayload.isSystemAdmin);
+    if (a !== undefined) return a;
+    if (jwtPayload.isSystemAdminYn !== undefined) {
+      return parseIsSystemAdmin(jwtPayload.isSystemAdminYn);
+    }
+    return undefined;
+  })();
 
   const flagsFromToken = (jwtPayload.flags && typeof jwtPayload.flags === 'object' ? jwtPayload.flags : {}) as
     | Record<string, unknown>
@@ -363,6 +370,7 @@ export const authClient: AuthClient = {
   async getMe() {
     return getMeOrThrow();
   },
+  /** POST /member/generate-at — 연장 버튼 전용. 401 시 httpClient 인터셉터가 스토어 정리 후 /login 이동. */
   async refreshSession() {
     try {
       const response = await httpClient.post('/member/generate-at');
@@ -380,7 +388,6 @@ export const authClient: AuthClient = {
       currentSession = { user: me };
       return currentSession;
     } catch {
-      clearAccessToken();
       currentSession = null;
       return null;
     }

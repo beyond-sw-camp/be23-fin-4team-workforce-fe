@@ -4,12 +4,14 @@ import {
   App,
   Button,
   Calendar,
+  Checkbox,
   Card,
   DatePicker,
   Form,
   Input,
   Modal,
   Popconfirm,
+  Popover,
   Radio,
   Select,
   Segmented,
@@ -18,11 +20,11 @@ import {
   Tag,
   Typography,
 } from 'antd';
-import type { CellRenderInfo } from 'antd/es/calendar/generateCalendar';
+import type { CalendarProps } from 'antd';
 import clsx from 'clsx';
 import dayjs, { type Dayjs } from 'dayjs';
 import 'dayjs/locale/ko';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   type CalendarEvent,
   type CalendarListEventTypeParam,
@@ -85,6 +87,8 @@ function formatEventTimeRange(e: CalendarEvent): string {
 const MINUTES_PER_DAY = 24 * 60;
 /** 일간 타임라인 한 시간당 높이(px) — 전체 24시간 = 24 * 이 값 */
 const DAY_VIEW_HOUR_PX = 48;
+const EVENT_CHIP_CLASS =
+  'tw-block tw-w-full tw-truncate tw-rounded tw-border-0 tw-bg-rose-200/75 tw-px-1.5 tw-py-0.5 tw-text-left tw-text-[10px] tw-font-medium tw-leading-tight tw-text-rose-900 hover:tw-bg-rose-200';
 
 function clipEventToDayMinutes(e: CalendarEvent, day: Dayjs): { startMin: number; endMin: number } | null {
   const dayStart = day.startOf('day');
@@ -184,36 +188,100 @@ function toPayload(values: FormValues): CreatePersonalCalendarPayload | CreateTe
 
 type CalendarViewMode = 'month' | 'week' | 'day';
 
+function CalendarDateStepper({
+  mode,
+  monthValue,
+  selectedDay,
+  onPrev,
+  onNext,
+  onPick,
+}: {
+  mode: CalendarViewMode;
+  monthValue: Dayjs;
+  selectedDay: Dayjs;
+  onPrev: () => void;
+  onNext: () => void;
+  onPick: (d: Dayjs) => void;
+}) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [panelValue, setPanelValue] = useState(mode === 'month' ? monthValue : selectedDay);
+  const weekMonday = mondayOfCalendarWeek(selectedDay);
+  const label =
+    mode === 'month'
+      ? monthValue.format('YYYY.MM')
+      : mode === 'week'
+        ? `${weekMonday.format('YYYY.MM.DD')} ~ ${weekMonday.add(6, 'day').format('MM.DD')}`
+        : selectedDay.format('YYYY.MM.DD');
+
+  const popoverCalendarValue = mode === 'month' ? monthValue : selectedDay;
+
+  return (
+    <div className="tw-flex tw-items-center tw-gap-1">
+      <Button type="text" icon={<LeftOutlined />} aria-label="이전" onClick={onPrev} />
+      <Popover
+        open={pickerOpen}
+        onOpenChange={(o) => {
+          setPickerOpen(o);
+          if (o) setPanelValue(popoverCalendarValue);
+        }}
+        trigger="click"
+        placement="bottom"
+        content={
+          <div className="tw-w-[270px]">
+            <Calendar
+              fullscreen={false}
+              value={popoverCalendarValue}
+              mode={mode === 'month' ? 'year' : 'month'}
+              onPanelChange={(d) => setPanelValue(d)}
+              onSelect={(d) => {
+                if (mode === 'month') onPick(d.startOf('month'));
+                else if (mode === 'week') onPick(mondayOfCalendarWeek(d));
+                else onPick(d.startOf('day'));
+                setPickerOpen(false);
+              }}
+              onChange={(d) => setPanelValue(d)}
+            />
+          </div>
+        }
+      >
+        <Button type="text" className="!tw-px-2 !tw-font-semibold">
+          {label}
+        </Button>
+      </Popover>
+      <Button type="text" icon={<RightOutlined />} aria-label="다음" onClick={onNext} />
+    </div>
+  );
+}
+
 export function CalendarPage() {
   const { message } = App.useApp();
   const qc = useQueryClient();
   const [viewMode, setViewMode] = useState<CalendarViewMode>('month');
-  const [eventTypeFilter, setEventTypeFilter] = useState<'ALL' | CalendarListEventTypeParam>('ALL');
   const [monthValue, setMonthValue] = useState(() => dayjs());
   const [selectedDay, setSelectedDay] = useState<Dayjs>(() => dayjs());
+  const [showPersonal, setShowPersonal] = useState(true);
+  const [selectedTeamOrgIds, setSelectedTeamOrgIds] = useState<string[]>([]);
 
   const year = monthValue.year();
   const month = monthValue.month() + 1;
-  const eventTypeParam: CalendarListEventTypeParam | undefined =
-    eventTypeFilter === 'ALL' ? undefined : eventTypeFilter;
 
   const weekMonday = useMemo(() => mondayOfCalendarWeek(selectedDay), [selectedDay]);
 
   const monthQuery = useQuery({
-    queryKey: ['calendar', 'month', year, month, eventTypeParam],
-    queryFn: () => calendarApi.listMonth(year, month, eventTypeParam),
+    queryKey: ['calendar', 'month', year, month],
+    queryFn: () => calendarApi.listMonth(year, month),
     enabled: viewMode === 'month',
   });
 
   const weekQuery = useQuery({
-    queryKey: ['calendar', 'week', weekMonday.format('YYYY-MM-DD'), eventTypeParam],
-    queryFn: () => calendarApi.listWeekly(weekMonday.format('YYYY-MM-DD'), eventTypeParam),
+    queryKey: ['calendar', 'week', weekMonday.format('YYYY-MM-DD')],
+    queryFn: () => calendarApi.listWeekly(weekMonday.format('YYYY-MM-DD')),
     enabled: viewMode === 'week',
   });
 
   const dayQuery = useQuery({
-    queryKey: ['calendar', 'day', selectedDay.format('YYYY-MM-DD'), eventTypeParam],
-    queryFn: () => calendarApi.listDaily(selectedDay.format('YYYY-MM-DD'), eventTypeParam),
+    queryKey: ['calendar', 'day', selectedDay.format('YYYY-MM-DD')],
+    queryFn: () => calendarApi.listDaily(selectedDay.format('YYYY-MM-DD')),
     enabled: viewMode === 'day',
   });
 
@@ -222,6 +290,22 @@ export function CalendarPage() {
     if (viewMode === 'week') return weekQuery.data ?? [];
     return dayQuery.data ?? [];
   }, [viewMode, monthQuery.data, weekQuery.data, dayQuery.data]);
+
+  const filteredEvents = useMemo(
+    () =>
+      events.filter((e) => {
+        const team = isTeamEvent(e);
+        if (!team && !showPersonal) return false;
+        if (team) {
+          const orgId = e.organizationId?.trim() || '';
+          if (!orgId) return false;
+          if (selectedTeamOrgIds.length === 0) return false;
+          if (!selectedTeamOrgIds.includes(orgId)) return false;
+        }
+        return true;
+      }),
+    [events, showPersonal, selectedTeamOrgIds],
+  );
 
   const isLoading =
     (viewMode === 'month' && monthQuery.isLoading) ||
@@ -233,6 +317,62 @@ export function CalendarPage() {
     queryFn: () => organizationApi.list(),
   });
   const orgOptions = useMemo(() => flattenOrgList(orgTree), [orgTree]);
+  const orgMetaById = useMemo(() => {
+    const map = new Map<string, { name: string; isRoot: boolean }>();
+    const walk = (nodes: OrganizationTreeNode[], isRoot: boolean) => {
+      for (const n of nodes) {
+        const id =
+          (typeof n.id === 'string' && n.id) ||
+          (typeof n.organizationId === 'string' && n.organizationId) ||
+          (typeof n.organization_id === 'string' && n.organization_id) ||
+          '';
+        const name = typeof n.name === 'string' ? n.name : '';
+        if (id) map.set(id, { name: name || id, isRoot });
+        const ch = n.children as OrganizationTreeNode[] | undefined;
+        if (Array.isArray(ch) && ch.length > 0) walk(ch, false);
+      }
+    };
+    walk(orgTree, true);
+    return map;
+  }, [orgTree]);
+
+  const teamOrgFilters = useMemo(() => {
+    const fromOrgTree = Array.from(orgMetaById.entries()).map(([id, meta]) => ({
+      id,
+      label: meta.isRoot ? (meta.name && meta.name !== '전사' ? `전사(${meta.name})` : '전사') : meta.name,
+      isRoot: meta.isRoot,
+    }));
+    const fromEventsUnknown = Array.from(
+      new Set(
+        events
+          .filter((e) => isTeamEvent(e))
+          .map((e) => e.organizationId?.trim())
+          .filter((id): id is string => Boolean(id) && !orgMetaById.has(id)),
+      ),
+    ).map((id) => ({ id, label: id, isRoot: false }));
+
+    return [...fromOrgTree, ...fromEventsUnknown]
+      .filter((x) => !x.isRoot)
+      .sort((a, b) => {
+      if (a.isRoot !== b.isRoot) return a.isRoot ? -1 : 1;
+      return a.label.localeCompare(b.label, 'ko');
+      });
+  }, [events, orgMetaById]);
+
+  const teamOrganizationOptions = useMemo(() => {
+    const nonRootIds = new Set(teamOrgFilters.map((x) => x.id));
+    return orgOptions
+      .filter((o) => nonRootIds.has(o.id))
+      .map((o) => ({ value: o.id, label: o.name }));
+  }, [orgOptions, teamOrgFilters]);
+
+  useEffect(() => {
+    const valid = new Set(teamOrgFilters.map((x) => x.id));
+    setSelectedTeamOrgIds((prev) => {
+      const kept = prev.filter((id) => valid.has(id));
+      return kept.length > 0 ? kept : teamOrgFilters.map((x) => x.id);
+    });
+  }, [teamOrgFilters]);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<CalendarEvent | null>(null);
@@ -310,15 +450,16 @@ export function CalendarPage() {
     enabled: detailOpen && Boolean(detailEvent?.eventId),
   });
 
-  const openCreate = () => {
+  const openCreate = (baseDay?: Dayjs) => {
+    const seed = (baseDay ?? selectedDay).startOf('day');
     setEditing(null);
     form.setFieldsValue({
       kind: 'personal',
       title: '',
       description: '',
-      range: [selectedDay.hour(9).minute(0), selectedDay.hour(10).minute(0)],
+      range: [seed.hour(9).minute(0), seed.hour(10).minute(0)],
       isPublicYn: 'YES',
-      organizationId: orgOptions[0]?.id,
+      organizationId: teamOrganizationOptions[0]?.value,
     });
     setFormOpen(true);
   };
@@ -333,7 +474,7 @@ export function CalendarPage() {
       description: e.description ?? '',
       range: [start, end],
       isPublicYn: e.isPublicYn ?? 'YES',
-      organizationId: e.organizationId ?? orgOptions[0]?.id,
+      organizationId: e.organizationId ?? teamOrganizationOptions[0]?.value,
     });
     setFormOpen(true);
   };
@@ -352,24 +493,25 @@ export function CalendarPage() {
     }
   };
 
-  const dayList = useMemo(() => eventsOnDay(events, selectedDay), [events, selectedDay]);
+  const dayList = useMemo(() => eventsOnDay(filteredEvents, selectedDay), [filteredEvents, selectedDay]);
 
   const dayPlacedEvents = useMemo(
     () => (viewMode === 'day' ? placeEventsInDayLanes(dayList, selectedDay) : []),
     [viewMode, dayList, selectedDay],
   );
 
-  const cellRender = (current: Dayjs, info: CellRenderInfo<Dayjs>) => {
+  const cellRender: CalendarProps<Dayjs>['cellRender'] = (current, info) => {
+    if (!info) return null;
     if (info.type !== 'date') return info.originNode;
-    const list = eventsOnDay(events, current);
+    const list = eventsOnDay(filteredEvents, current);
     return (
-      <div className="tw-flex tw-min-h-[52px] tw-flex-col tw-gap-0.5">
+      <div className="tw-flex tw-min-h-[112px] tw-flex-col tw-gap-0.5">
         <ul className="tw-m-0 tw-list-none tw-space-y-0.5 tw-p-0">
-          {list.slice(0, 2).map((e) => (
+          {list.slice(0, 4).map((e) => (
             <li key={e.eventId}>
               <button
                 type="button"
-                className="tw-block tw-w-full tw-truncate tw-rounded tw-border-0 tw-bg-blue-50 tw-px-1 tw-text-left tw-text-[10px] tw-text-blue-900 tw-leading-tight hover:tw-bg-blue-100"
+                className={EVENT_CHIP_CLASS}
                 onClick={(ev) => {
                   ev.preventDefault();
                   ev.stopPropagation();
@@ -382,8 +524,8 @@ export function CalendarPage() {
             </li>
           ))}
         </ul>
-        {list.length > 2 && (
-          <span className="tw-text-[10px] tw-text-slate-400">+{list.length - 2}</span>
+        {list.length > 4 && (
+          <span className="tw-text-[10px] tw-text-slate-400">+{list.length - 4}</span>
         )}
       </div>
     );
@@ -391,22 +533,67 @@ export function CalendarPage() {
 
   return (
     <div className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-gap-4">
-      <div className="tw-flex tw-flex-wrap tw-items-start tw-justify-between tw-gap-3">
-        <div>
-          <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
-            일정
-          </Typography.Title>
-          <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-sm">
-            개인 일정과 팀 일정을 캘린더에서 확인합니다.
-          </Typography.Paragraph>
-        </div>
-        <AppButton type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-          일정 추가
-        </AppButton>
-      </div>
+      <div className="tw-grid tw-min-h-0 tw-flex-1 tw-gap-4 lg:tw-grid-cols-[280px_1fr]">
+        <Card className="tw-h-fit tw-border-slate-200/80 tw-shadow-sm" styles={{ body: { padding: 12 } }}>
+          <div className="tw-space-y-3">
+            <AppButton type="primary" block icon={<PlusOutlined />} onClick={openCreate}>
+              일정등록
+            </AppButton>
 
-      <div className="tw-grid tw-min-h-0 tw-flex-1 tw-gap-4 lg:tw-grid-cols-[1fr_320px]">
+            <div className="tw-rounded-lg tw-border tw-border-slate-200 tw-bg-white tw-p-3">
+              <Typography.Text className="tw-text-xs tw-font-semibold tw-text-slate-700">내 캘린더 표시</Typography.Text>
+              <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-[11px]">
+                월/주/일 일정 목록에 개인 일정을 표시할지 선택합니다.
+              </Typography.Paragraph>
+              <div className="tw-mt-2 tw-space-y-2">
+                <label className="tw-flex tw-items-center">
+                  <Checkbox checked={showPersonal} onChange={(e) => setShowPersonal(e.target.checked)}>
+                    개인 일정
+                  </Checkbox>
+                </label>
+              </div>
+            </div>
+
+            <div className="tw-rounded-lg tw-border tw-border-slate-200 tw-bg-white tw-p-3">
+              <Typography.Text className="tw-text-xs tw-font-semibold tw-text-slate-700">팀 캘린더 표시</Typography.Text>
+              <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-[11px]">
+                TEAM 일정 중 조직별 표시 여부를 선택합니다.
+              </Typography.Paragraph>
+              <div className="tw-mt-2 tw-space-y-2">
+                {teamOrgFilters.length > 0 ? (
+                  <div className="tw-space-y-1 tw-pl-1">
+                    {teamOrgFilters.map((org) => (
+                      <label key={org.id} className="tw-flex tw-items-center">
+                        <Checkbox
+                          checked={selectedTeamOrgIds.includes(org.id)}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setSelectedTeamOrgIds((prev) =>
+                              checked ? [...new Set([...prev, org.id])] : prev.filter((id) => id !== org.id),
+                            );
+                          }}
+                        >
+                          {org.label}
+                        </Checkbox>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <Typography.Text type="secondary" className="tw-text-xs">
+                    팀 일정 조직이 없습니다.
+                  </Typography.Text>
+                )}
+              </div>
+            </div>
+          </div>
+        </Card>
+
         <Card className="tw-border-slate-200/80 tw-shadow-sm" styles={{ body: { padding: 12 } }}>
+          <div className="tw-mb-3">
+            <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
+              일정목록
+            </Typography.Title>
+          </div>
           <div className="tw-mb-3 tw-flex tw-flex-wrap tw-items-center tw-gap-3">
             <Segmented
               value={viewMode}
@@ -423,54 +610,81 @@ export function CalendarPage() {
                 { label: '일', value: 'day' },
               ]}
             />
-            <Select
-              value={eventTypeFilter}
-              onChange={(v) => setEventTypeFilter(v)}
-              className="tw-min-w-[120px]"
-              options={[
-                { value: 'ALL', label: '전체' },
-                { value: 'PERSONAL', label: '개인' },
-                { value: 'TEAM', label: '팀' },
-              ]}
-            />
+            <div className="tw-ml-auto tw-flex tw-items-center tw-gap-2">
+              <Button
+                type="default"
+                size="small"
+                onClick={() => {
+                  const today = dayjs();
+                  setSelectedDay(today);
+                  setMonthValue(today.startOf('month'));
+                }}
+              >
+                오늘
+              </Button>
+              <CalendarDateStepper
+                mode={viewMode}
+                monthValue={monthValue}
+                selectedDay={selectedDay}
+                onPrev={() => {
+                  if (viewMode === 'month') {
+                    const next = monthValue.subtract(1, 'month').startOf('month');
+                    setMonthValue(next);
+                    setSelectedDay(next);
+                    return;
+                  }
+                  if (viewMode === 'week') {
+                    setSelectedDay((d) => d.subtract(7, 'day'));
+                    return;
+                  }
+                  setSelectedDay((d) => d.subtract(1, 'day'));
+                }}
+                onNext={() => {
+                  if (viewMode === 'month') {
+                    const next = monthValue.add(1, 'month').startOf('month');
+                    setMonthValue(next);
+                    setSelectedDay(next);
+                    return;
+                  }
+                  if (viewMode === 'week') {
+                    setSelectedDay((d) => d.add(7, 'day'));
+                    return;
+                  }
+                  setSelectedDay((d) => d.add(1, 'day'));
+                }}
+                onPick={(d) => {
+                  setSelectedDay(d);
+                  if (viewMode === 'month') setMonthValue(d.startOf('month'));
+                }}
+              />
+            </div>
           </div>
           <Spin spinning={isLoading}>
             {viewMode === 'month' && (
               <Calendar
+                className="[&_.ant-picker-calendar-header]:tw-hidden [&_.ant-picker-content_td]:tw-px-1 [&_.ant-picker-cell-inner]:tw-min-h-[128px] [&_.ant-picker-calendar-date]:tw-w-full [&_.ant-picker-cell-selected::before]:!tw-border-0 [&_.ant-picker-cell-selected_.ant-picker-calendar-date]:!tw-bg-transparent [&_.ant-picker-cell-selected_.ant-picker-calendar-date]:!tw-shadow-none [&_.ant-picker-cell-today_.ant-picker-calendar-date]:!tw-bg-transparent [&_.ant-picker-cell-today_.ant-picker-calendar-date]:!tw-shadow-none [&_.ant-picker-cell-today_.ant-picker-calendar-date-value]:tw-inline-flex [&_.ant-picker-cell-today_.ant-picker-calendar-date-value]:tw-h-6 [&_.ant-picker-cell-today_.ant-picker-calendar-date-value]:tw-min-w-6 [&_.ant-picker-cell-today_.ant-picker-calendar-date-value]:tw-items-center [&_.ant-picker-cell-today_.ant-picker-calendar-date-value]:tw-justify-center [&_.ant-picker-cell-today_.ant-picker-calendar-date-value]:tw-rounded-full [&_.ant-picker-cell-today_.ant-picker-calendar-date-value]:tw-bg-slate-900 [&_.ant-picker-cell-today_.ant-picker-calendar-date-value]:tw-px-1.5 [&_.ant-picker-cell-today_.ant-picker-calendar-date-value]:tw-text-white"
                 fullscreen={false}
-                value={monthValue}
+                value={selectedDay}
                 onChange={(d) => {
                   setMonthValue(d);
                   setSelectedDay(d);
                 }}
-                onSelect={(d) => setSelectedDay(d)}
+                onSelect={(d, info) => {
+                  setSelectedDay(d);
+                  if (info?.source === 'date') {
+                    openCreate(d);
+                  }
+                }}
                 onPanelChange={(d) => setMonthValue(d)}
                 cellRender={cellRender}
               />
             )}
             {viewMode === 'week' && (
               <div className="tw-space-y-3">
-                <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
-                  <Button
-                    type="text"
-                    icon={<LeftOutlined />}
-                    aria-label="이전 주"
-                    onClick={() => setSelectedDay((d) => d.subtract(7, 'day'))}
-                  />
-                  <Typography.Text className="tw-text-sm tw-font-medium tw-text-slate-800">
-                    {weekMonday.format('YYYY.MM.DD')} – {weekMonday.add(6, 'day').format('YYYY.MM.DD')}
-                  </Typography.Text>
-                  <Button
-                    type="text"
-                    icon={<RightOutlined />}
-                    aria-label="다음 주"
-                    onClick={() => setSelectedDay((d) => d.add(7, 'day'))}
-                  />
-                </div>
                 <div className="tw-grid tw-grid-cols-7 tw-gap-2 max-sm:tw-grid-cols-1">
                   {Array.from({ length: 7 }, (_, i) => {
                     const d = weekMonday.add(i, 'day');
-                    const list = eventsOnDay(events, d);
+                    const list = eventsOnDay(filteredEvents, d);
                     const isSel = d.isSame(selectedDay, 'day');
                     return (
                       <div
@@ -485,7 +699,10 @@ export function CalendarPage() {
                         <button
                           type="button"
                           className="tw-mb-1 tw-w-full tw-border-0 tw-bg-transparent tw-p-0 tw-text-left tw-text-xs tw-font-semibold tw-text-slate-700 hover:tw-text-slate-900"
-                          onClick={() => setSelectedDay(d)}
+                          onClick={() => {
+                            setSelectedDay(d);
+                            openCreate(d);
+                          }}
                         >
                           {d.format('ddd')}{' '}
                           <span className="tw-text-slate-900">{d.format('D')}</span>
@@ -495,7 +712,7 @@ export function CalendarPage() {
                             <li key={e.eventId}>
                               <button
                                 type="button"
-                                className="tw-block tw-w-full tw-truncate tw-rounded tw-border-0 tw-bg-blue-50 tw-px-1 tw-text-left tw-text-[10px] tw-text-blue-900 tw-leading-tight hover:tw-bg-blue-100"
+                                className={EVENT_CHIP_CLASS}
                                 onClick={() => {
                                   setDetailEvent(e);
                                   setDetailOpen(true);
@@ -519,32 +736,6 @@ export function CalendarPage() {
             )}
             {viewMode === 'day' && (
               <div className="tw-space-y-3">
-                <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
-                  <Button
-                    type="default"
-                    icon={<LeftOutlined />}
-                    onClick={() => setSelectedDay((d) => d.subtract(1, 'day'))}
-                  >
-                    전날
-                  </Button>
-                  <DatePicker
-                    value={selectedDay}
-                    onChange={(d) => {
-                      if (d) setSelectedDay(d);
-                    }}
-                    className="tw-min-w-[140px]"
-                  />
-                  <Button
-                    type="default"
-                    icon={<RightOutlined />}
-                    onClick={() => setSelectedDay((d) => d.add(1, 'day'))}
-                  >
-                    다음날
-                  </Button>
-                  <Typography.Text type="secondary" className="tw-text-xs">
-                    00:00 ~ 24:00 기준
-                  </Typography.Text>
-                </div>
                 <div className="tw-overflow-hidden tw-rounded-lg tw-border tw-border-slate-200 tw-bg-white">
                   <div className="tw-flex tw-max-h-[min(72vh,800px)] tw-overflow-y-auto">
                     <div
@@ -583,7 +774,7 @@ export function CalendarPage() {
                           <button
                             key={e.eventId}
                             type="button"
-                            className="tw-absolute tw-box-border tw-overflow-hidden tw-rounded tw-border tw-border-blue-200 tw-bg-blue-50 tw-px-1 tw-py-0.5 tw-text-left tw-text-[11px] tw-leading-tight tw-text-blue-900 hover:tw-bg-blue-100"
+                            className="tw-absolute tw-box-border tw-overflow-hidden tw-rounded tw-border tw-border-rose-300 tw-bg-rose-100/90 tw-px-1 tw-py-0.5 tw-text-left tw-text-[11px] tw-leading-tight tw-text-rose-900 hover:tw-bg-rose-100"
                             style={{
                               top: `${pctTop}%`,
                               height: `${pctH}%`,
@@ -617,41 +808,6 @@ export function CalendarPage() {
           </Spin>
         </Card>
 
-        <Card
-          title={
-            <span className="tw-text-base tw-font-semibold">
-              {selectedDay.format('M월 D일 (ddd)')} 일정
-            </span>
-          }
-          className="tw-border-slate-200/80 tw-shadow-sm"
-        >
-          {dayList.length === 0 ? (
-            <Typography.Text type="secondary">이 날짜에 등록된 일정이 없습니다.</Typography.Text>
-          ) : (
-            <ul className="tw-m-0 tw-list-none tw-space-y-2 tw-p-0">
-              {dayList.map((e) => (
-                <li key={e.eventId}>
-                  <button
-                    type="button"
-                    className="tw-w-full tw-rounded-lg tw-border tw-border-solid tw-border-slate-200 tw-bg-white tw-px-3 tw-py-2 tw-text-left tw-transition-colors hover:tw-bg-slate-50"
-                    onClick={() => {
-                      setDetailEvent(e);
-                      setDetailOpen(true);
-                    }}
-                  >
-                    <div className="tw-flex tw-items-center tw-justify-between tw-gap-2">
-                      <span className="tw-font-medium tw-text-slate-900">{e.title}</span>
-                      {isTeamEvent(e) ? <Tag color="blue">팀</Tag> : <Tag>개인</Tag>}
-                    </div>
-                    <div className="tw-mt-0.5 tw-text-xs tw-text-slate-500">
-                      {formatEventTimeRange(e)}
-                    </div>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
       </div>
 
       <Modal
@@ -700,7 +856,7 @@ export function CalendarPage() {
                     showSearch
                     optionFilterProp="label"
                     placeholder="조직 선택"
-                    options={orgOptions.map((o) => ({ value: o.id, label: o.name }))}
+                    options={teamOrganizationOptions}
                   />
                 </Form.Item>
               ) : null
