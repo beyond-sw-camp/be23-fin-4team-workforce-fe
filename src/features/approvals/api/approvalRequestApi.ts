@@ -20,6 +20,10 @@ export type ApprovalLine = {
   isSignedYn: string | null;
   createdAt: string;
   updatedAt: string;
+  /** 응답에 포함될 수 있음 — 없으면 프론트에서 member 상세로 보강 */
+  approverName?: string;
+  approverOrganizationName?: string;
+  approverJobTitleName?: string;
 };
 
 export type ApprovalViewer = {
@@ -32,6 +36,9 @@ export type ApprovalViewer = {
   viewedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  viewerName?: string;
+  viewerOrganizationName?: string;
+  viewerJobTitleName?: string;
 };
 
 export type ApprovalRequestDetail = {
@@ -102,11 +109,25 @@ function pickArray(raw: unknown, depth = 0): unknown[] {
   return [];
 }
 
+function optionalNonEmptyText(value: unknown): string | undefined {
+  const s = asText(value);
+  return s || undefined;
+}
+
 function normalizeApprovalLine(raw: unknown): ApprovalLine | null {
   if (!raw || typeof raw !== 'object') return null;
   const o = raw as Record<string, unknown>;
   const approvalId = asText(o.approvalId ?? o.approval_id);
   if (!approvalId) return null;
+  const approverName = optionalNonEmptyText(
+    o.approverName ?? o.approver_name ?? o.memberName ?? o.member_name ?? o.name,
+  );
+  const approverOrganizationName = optionalNonEmptyText(
+    o.approverOrganizationName ?? o.approver_organization_name ?? o.organizationName ?? o.organization_name,
+  );
+  const approverJobTitleName = optionalNonEmptyText(
+    o.approverJobTitleName ?? o.approver_job_title_name ?? o.jobTitleName ?? o.job_title_name,
+  );
   return {
     approvalId,
     requestId: asText(o.requestId ?? o.request_id),
@@ -120,6 +141,9 @@ function normalizeApprovalLine(raw: unknown): ApprovalLine | null {
     isSignedYn: asNullableText(o.isSignedYn ?? o.is_signed_yn),
     createdAt: asText(o.createdAt ?? o.created_at),
     updatedAt: asText(o.updatedAt ?? o.updated_at),
+    ...(approverName ? { approverName } : {}),
+    ...(approverOrganizationName ? { approverOrganizationName } : {}),
+    ...(approverJobTitleName ? { approverJobTitleName } : {}),
   };
 }
 
@@ -128,6 +152,13 @@ function normalizeViewer(raw: unknown): ApprovalViewer | null {
   const o = raw as Record<string, unknown>;
   const viewerId = asText(o.viewerId ?? o.viewer_id);
   if (!viewerId) return null;
+  const viewerName = optionalNonEmptyText(o.viewerName ?? o.viewer_name ?? o.memberName ?? o.member_name ?? o.name);
+  const viewerOrganizationName = optionalNonEmptyText(
+    o.viewerOrganizationName ?? o.viewer_organization_name ?? o.organizationName ?? o.organization_name,
+  );
+  const viewerJobTitleName = optionalNonEmptyText(
+    o.viewerJobTitleName ?? o.viewer_job_title_name ?? o.jobTitleName ?? o.job_title_name,
+  );
   return {
     viewerId,
     requestId: asText(o.requestId ?? o.request_id),
@@ -138,6 +169,9 @@ function normalizeViewer(raw: unknown): ApprovalViewer | null {
     viewedAt: asNullableText(o.viewedAt ?? o.viewed_at),
     createdAt: asText(o.createdAt ?? o.created_at),
     updatedAt: asText(o.updatedAt ?? o.updated_at),
+    ...(viewerName ? { viewerName } : {}),
+    ...(viewerOrganizationName ? { viewerOrganizationName } : {}),
+    ...(viewerJobTitleName ? { viewerJobTitleName } : {}),
   };
 }
 

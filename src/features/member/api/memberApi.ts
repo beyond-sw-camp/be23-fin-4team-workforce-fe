@@ -45,6 +45,51 @@ export type MemberSummary = {
   status?: string;
 };
 
+/** GET /member/list — 전자결재 참조·공람 선택용 (memberId·memberPositionId 필수) */
+export type MemberListItemForApproval = {
+  memberId: string;
+  memberPositionId: string;
+  name: string;
+  organizationName: string;
+  jobTitleName: string;
+  email?: string;
+};
+
+function asTextMemberField(value: unknown): string {
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number') return String(value);
+  return '';
+}
+
+function extractMemberListRows(raw: unknown): unknown[] {
+  if (Array.isArray(raw)) return raw;
+  if (!raw || typeof raw !== 'object') return [];
+  const o = raw as Record<string, unknown>;
+  for (const k of ['content', 'items', 'list', 'data', 'rows']) {
+    const v = o[k];
+    if (Array.isArray(v)) return v;
+  }
+  return [];
+}
+
+function normalizeMemberListItemForApproval(raw: unknown): MemberListItemForApproval | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const memberId = asTextMemberField(o.memberId ?? o.member_id ?? o.id);
+  const memberPositionId = asTextMemberField(o.memberPositionId ?? o.member_position_id);
+  const name = asTextMemberField(o.name);
+  if (!memberId || !memberPositionId || !name) return null;
+  const email = asTextMemberField(o.email);
+  return {
+    memberId,
+    memberPositionId,
+    name,
+    organizationName: asTextMemberField(o.organizationName ?? o.organization_name),
+    jobTitleName: asTextMemberField(o.jobTitleName ?? o.job_title_name),
+    ...(email ? { email } : {}),
+  };
+}
+
 export type LoginResult = {
   accessToken?: string;
   memberId?: string;
@@ -334,6 +379,23 @@ export const memberApi = {
   async list(params?: Record<string, unknown>) {
     const response = await httpClient.get('/member/list', { params });
     return unwrapApiResponse<MemberSummary[]>(response.data);
+  },
+  /** 결재 참조(CC)·공람(CIRCULATION) 선택 — 직원 목록을 memberPositionId 포함 형태로 정규화 */
+  async listMembersForApprovals(params?: { keyword?: string }) {
+    const response = await httpClient.get('/member/list', { params });
+    const raw = unwrapApiResponse<unknown>(response.data);
+    const rows = extractMemberListRows(raw)
+      .map(normalizeMemberListItemForApproval)
+      .filter((v): v is MemberListItemForApproval => v != null);
+    const kw = params?.keyword?.trim().toLowerCase();
+    if (!kw) return rows;
+    return rows.filter(
+      (r) =>
+        r.name.toLowerCase().includes(kw) ||
+        r.organizationName.toLowerCase().includes(kw) ||
+        r.jobTitleName.toLowerCase().includes(kw) ||
+        (r.email?.toLowerCase().includes(kw) ?? false),
+    );
   },
   async detail(memberId: string) {
     const id = memberId?.trim();
