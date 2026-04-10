@@ -27,7 +27,6 @@ import 'dayjs/locale/ko';
 import { useEffect, useMemo, useState } from 'react';
 import {
   type CalendarEvent,
-  type CalendarListEventTypeParam,
   calendarApi,
   type CreatePersonalCalendarPayload,
   type CreateTeamCalendarPayload,
@@ -37,6 +36,8 @@ import { organizationApi } from '@/features/organization/api/organizationApi';
 import { AppButton } from '@/shared/ui/AppButton';
 
 dayjs.locale('ko');
+
+const EMPTY_ORG_TREE: OrganizationTreeNode[] = [];
 
 function flattenOrgList(nodes: OrganizationTreeNode[]): { id: string; name: string }[] {
   const out: { id: string; name: string }[] = [];
@@ -135,7 +136,8 @@ function placeEventsInDayLanes(events: CalendarEvent[], day: Dayjs): DayPlacedEv
   for (const { event: ev, clip } of clips) {
     let lane = -1;
     for (let i = 0; i < lanesEnd.length; i++) {
-      if (lanesEnd[i] <= clip.startMin) {
+      const laneEnd = lanesEnd[i];
+      if (laneEnd !== undefined && laneEnd <= clip.startMin) {
         lane = i;
         break;
       }
@@ -312,10 +314,11 @@ export function CalendarPage() {
     (viewMode === 'week' && weekQuery.isLoading) ||
     (viewMode === 'day' && dayQuery.isLoading);
 
-  const { data: orgTree = [] } = useQuery({
+  const { data: orgTreeData } = useQuery({
     queryKey: ['organization', 'list'],
     queryFn: () => organizationApi.list(),
   });
+  const orgTree = orgTreeData ?? EMPTY_ORG_TREE;
   const orgOptions = useMemo(() => flattenOrgList(orgTree), [orgTree]);
   const orgMetaById = useMemo(() => {
     const map = new Map<string, { name: string; isRoot: boolean }>();
@@ -347,7 +350,10 @@ export function CalendarPage() {
         events
           .filter((e) => isTeamEvent(e))
           .map((e) => e.organizationId?.trim())
-          .filter((id): id is string => Boolean(id) && !orgMetaById.has(id)),
+          .filter(
+            (id): id is string =>
+              typeof id === 'string' && id.length > 0 && !orgMetaById.has(id),
+          ),
       ),
     ).map((id) => ({ id, label: id, isRoot: false }));
 
@@ -370,7 +376,16 @@ export function CalendarPage() {
     const valid = new Set(teamOrgFilters.map((x) => x.id));
     setSelectedTeamOrgIds((prev) => {
       const kept = prev.filter((id) => valid.has(id));
-      return kept.length > 0 ? kept : teamOrgFilters.map((x) => x.id);
+      if (kept.length > 0) {
+        // No-op if nothing was dropped (preserve reference).
+        return kept.length === prev.length ? prev : kept;
+      }
+      const all = teamOrgFilters.map((x) => x.id);
+      // No-op if current selection already equals the full set (preserve reference).
+      if (all.length === prev.length && all.every((id, i) => id === prev[i])) {
+        return prev;
+      }
+      return all;
     });
   }, [teamOrgFilters]);
 
@@ -450,8 +465,8 @@ export function CalendarPage() {
     enabled: detailOpen && Boolean(detailEvent?.eventId),
   });
 
-  const openCreate = (baseDay?: Dayjs) => {
-    const seed = (baseDay ?? selectedDay).startOf('day');
+  const openCreate = (baseDay?: Dayjs | undefined) => {
+    const seed = (dayjs.isDayjs(baseDay) ? baseDay : selectedDay).startOf('day');
     setEditing(null);
     form.setFieldsValue({
       kind: 'personal',
@@ -536,7 +551,7 @@ export function CalendarPage() {
       <div className="tw-grid tw-min-h-0 tw-flex-1 tw-gap-4 lg:tw-grid-cols-[280px_1fr]">
         <Card className="tw-h-fit tw-border-slate-200/80 tw-shadow-sm" styles={{ body: { padding: 12 } }}>
           <div className="tw-space-y-3">
-            <AppButton type="primary" block icon={<PlusOutlined />} onClick={openCreate}>
+            <AppButton type="primary" block icon={<PlusOutlined />} onClick={() => openCreate()}>
               일정등록
             </AppButton>
 
