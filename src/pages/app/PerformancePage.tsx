@@ -402,7 +402,7 @@ function parseCommentReactions(v: string | null | undefined): Array<{ emoji: str
   }
 }
 
-export function PerformancePage() {
+function PerformancePage() {
   const { user } = useAuth();
   const { hasPermission } = usePermissions();
   const queryClient = useQueryClient();
@@ -524,7 +524,8 @@ export function PerformancePage() {
   });
 
   const sortedDetailActivities = useMemo(() => {
-    const list = detailActivitiesQuery.data ?? [];
+    const raw = detailActivitiesQuery.data;
+    const list = Array.isArray(raw) ? raw : [];
     return [...list].sort((a, b) => {
       const ta = dayjs(a.createdAt).valueOf();
       const tb = dayjs(b.createdAt).valueOf();
@@ -786,7 +787,8 @@ export function PerformancePage() {
     }
     const approverId = detailApprovalQuery.data?.approverId?.trim();
     if (approverId) s.add(approverId);
-    for (const a of detailActivitiesQuery.data ?? []) {
+    const activityRows = Array.isArray(detailActivitiesQuery.data) ? detailActivitiesQuery.data : [];
+    for (const a of activityRows) {
       const aid = a.actorId?.trim();
       if (aid && aid.toLowerCase() !== 'system') s.add(aid);
     }
@@ -1689,7 +1691,7 @@ export function PerformancePage() {
               ownerType: values.ownerType,
               ownerId,
               title: values.title.trim(),
-              description: values.description.trim(),
+              description: (values.description ?? '').trim(),
               startDate: start.format('YYYY-MM-DD'),
               endDate: end.format('YYYY-MM-DD'),
               measureType: values.measureType,
@@ -2113,7 +2115,7 @@ export function PerformancePage() {
             onFinish={async (values) => {
               const body: UpdateGoalPayload = {
                 title: values.title.trim(),
-                description: values.description.trim(),
+                description: (values.description ?? '').trim(),
                 visibility: values.visibility,
               };
               const parentTrim = String(values.parentGoalId ?? '').trim();
@@ -2911,3 +2913,5 @@ export function PerformancePage() {
     </div>
   );
 }
+
+export default PerformancePage

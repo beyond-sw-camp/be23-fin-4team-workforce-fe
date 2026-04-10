@@ -28,7 +28,7 @@ import { MemberDetailPage } from '@/pages/app/MemberDetailPage';
 import { NotificationsPage } from '@/pages/app/NotificationsPage';
 import EvaluationsPage from '@/pages/app/EvaluationsPage';
 import { EvaluationWritePage } from '@/pages/app/EvaluationWritePage';
-import { PerformancePage } from '@/pages/app/PerformancePage';
+import PerformancePage from '@/pages/app/PerformancePage';
 import { GoalApprovalDetailPage } from '@/pages/app/GoalApprovalDetailPage';
 import { GoalApprovalsListPage } from '@/pages/app/GoalApprovalsListPage';
 import { GenericPage } from '@/pages/app/GenericPage';
