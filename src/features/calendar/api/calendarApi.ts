@@ -52,7 +52,7 @@ function normalizeEvent(raw: unknown): CalendarEvent | null {
     return null;
   }
   const desc = r.description;
-  const orgId = r.organizationId ?? r.organization_id;
+  const orgId = r.organizationId ?? r.organization_id ?? r.organizerId ?? r.organizer_id;
   const scopeRaw = r.scope ?? r.eventScope ?? r.event_scope ?? r.calendarType ?? r.calendar_type;
   let scope: CalendarEventScope | undefined;
   if (scopeRaw === 'personal' || scopeRaw === 'PERSONAL') scope = 'personal';

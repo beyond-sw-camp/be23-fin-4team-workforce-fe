@@ -259,6 +259,7 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
                   label="사업자번호"
                   rules={[{ required: true, message: '사업자번호를 입력해 주세요.' }]}
                   className="!tw-mb-3"
+                  getValueFromEvent={(e) => sanitizeBusinessNumberDigits(e?.target?.value ?? '')}
                 >
                   <Input
                     size="large"
@@ -266,10 +267,7 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
                     autoComplete="off"
                     placeholder="1234567890"
                     maxLength={10}
-                    onChange={(event) => {
-                      setBusinessChecked(false);
-                      form.setFieldValue('businessNumber', sanitizeBusinessNumberDigits(event.target.value));
-                    }}
+                    onChange={() => setBusinessChecked(false)}
                   />
                 </Form.Item>
                 <div className="tw-flex tw-justify-end">
