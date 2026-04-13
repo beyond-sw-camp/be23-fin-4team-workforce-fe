@@ -213,6 +213,22 @@ export const organizationApi = {
     return Array.isArray(arr) ? arr : [];
   },
 
+  /**
+   * GET /organization/simple-list — 응답 형식은 list와 동일, 권한 완화(캘린더 팀 필터 등).
+   */
+  async simpleList() {
+    const response = await httpClient.get('/organization/simple-list', {
+      params: { _: Date.now() },
+      headers: {
+        'Cache-Control': 'no-cache',
+        Pragma: 'no-cache',
+      },
+    });
+    const unwrapped = unwrapApiResponse<unknown>(response.data);
+    const arr = normalizeOrgListPayload(unwrapped);
+    return Array.isArray(arr) ? arr : [];
+  },
+
   /** GET /organization/org-chart — 회사명·조직 트리·직급별 구성원 */
   async getOrgChart(): Promise<OrgChartData> {
     const response = await httpClient.get('/organization/org-chart');

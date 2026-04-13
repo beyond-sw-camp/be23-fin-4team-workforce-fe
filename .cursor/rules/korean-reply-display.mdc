@@ -1,0 +1,30 @@
+---
+description: Simplify Korean replies; reduce garbled text in some Cursor clients.
+alwaysApply: true
+---
+
+# Korean reply formatting
+
+When answering the user in Korean:
+
+1. Prefer plain paragraphs. Use markdown bold, blockquotes, and nested lists sparingly.
+2. Use straight ASCII quotes ' and " and hyphen-minus - only. Avoid curly quotes and fancy dashes.
+3. Write full Korean sentences. Do not substitute Korean with symbols, filler, or broken fragments.
+4. For lists, use simple numbered lines (1. 2.) or short plain lines.
+5. When citing code from this repo, keep the project's required code citation format.
+
+## Encoding and Hangul (avoid mojibake)
+
+- Emit Korean as normal UTF-8 Hangul syllables (precomposed syllable blocks, mainly U+AC00 through U+D7A3). Do not emit half-formed syllables, lone jamo where a full syllable is intended, or unusual compatibility sequences.
+- Never intentionally output U+FFFD (replacement character) or placeholder glyphs instead of Korean.
+- Avoid packing many emoji or rare Unicode symbols into the same sentence as Korean; keep replies mostly Hangul plus basic ASCII punctuation.
+- In chat replies, do not HTML-escape Korean (no numeric or named entities for Hangul).
+
+Note: Some chat UIs still show mojibake because of client or transport encoding bugs. This rule only reduces common triggers. If garbling continues after Cursor updates, report it to Cursor support with a sample thread.
+
+## If the user says Korean chat text still looks garbled
+
+The project rule cannot fix Cursor's chat renderer. Do this in the same reply:
+
+1. Keep answering in normal Korean as usual.
+2. After the Korean body, add a short separator line `---` then a block titled `English (if Korean shows broken in Cursor):` written in ASCII English only. Repeat only the essential facts (diagnosis, next steps, file paths). No non-ASCII characters in that block so the user can read it even when Hangul breaks in the UI.

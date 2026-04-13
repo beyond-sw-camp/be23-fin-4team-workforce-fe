@@ -1,6 +1,6 @@
 import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Alert, Button, Card, Form, Input, Modal, Popconfirm, Select, Space, Table, Typography } from 'antd';
+import { App, Alert, Button, Card, Checkbox, Form, Input, Modal, Popconfirm, Select, Space, Table, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useState } from 'react';
 import {
@@ -64,6 +64,35 @@ const defaultPermissionRow = (): RolePermissionItem => ({
   action: 'READ',
   permissionRange: 'COMPANY',
 });
+
+type CheckboxLineOption = { value: string; label: string };
+
+/** 노출형 체크박스로 단일 값만 선택 (같은 그룹에서 하나만 체크). 액션·범위 필드용. */
+function SinglePickCheckboxLine({
+  value,
+  onChange,
+  options,
+}: {
+  value?: string;
+  onChange?: (v: string) => void;
+  options: CheckboxLineOption[];
+}) {
+  return (
+    <Space wrap={false} size={[6, 6]} className="tw-w-full tw-flex-nowrap [&_.ant-checkbox+span]:tw-pl-1.5 [&_.ant-checkbox-wrapper]:tw-mr-0">
+      {options.map((opt) => (
+        <Checkbox
+          key={opt.value}
+          checked={value === opt.value}
+          onChange={(e) => {
+            if (e.target.checked) onChange?.(opt.value);
+          }}
+        >
+          {opt.label}
+        </Checkbox>
+      ))}
+    </Space>
+  );
+}
 
 export function RolesPage() {
   const { message } = App.useApp();
@@ -268,7 +297,7 @@ export function RolesPage() {
         onOk={() => void handleModalOk()}
         okText={modal?.type === 'edit' ? '저장' : '등록'}
         cancelText="취소"
-        width={720}
+        width={960}
         destroyOnHidden
         confirmLoading={createM.isPending || updateM.isPending}
       >
@@ -289,51 +318,58 @@ export function RolesPage() {
                 {fields.map((field) => (
                   <div
                     key={field.key}
-                    className="tw-flex tw-flex-wrap tw-items-end tw-gap-2 tw-rounded-lg tw-border tw-border-slate-200 tw-bg-slate-50/80 tw-p-3"
+                    className="tw-flex tw-flex-nowrap tw-items-end tw-gap-3 tw-overflow-x-auto tw-rounded-lg tw-border tw-border-slate-200 tw-bg-slate-50/80 tw-p-3"
                   >
                     <Form.Item
-                      label="리소스"
+                      label="권한"
                       name={[field.name, 'resource']}
-                      className="tw-mb-0 tw-min-w-[140px] tw-flex-1"
-                      rules={[{ required: true, message: '선택' }]}
+                      className="tw-mb-0 tw-w-[11rem] tw-shrink-0"
+                      rules={[{ required: true, message: '권한을 선택하세요.' }]}
                     >
                       <Select
-                        placeholder="리소스"
+                        className="tw-w-full"
+                        placeholder="선택"
+                        optionFilterProp="label"
+                        showSearch
                         options={ROLE_RESOURCES.map((r) => ({
                           value: r,
-                          label: `${RESOURCE_LABELS[r]} (${r})`,
+                          label: RESOURCE_LABELS[r],
                         }))}
                       />
                     </Form.Item>
                     <Form.Item
                       label="액션"
                       name={[field.name, 'action']}
-                      className="tw-mb-0 tw-min-w-[120px] tw-flex-1"
-                      rules={[{ required: true, message: '선택' }]}
+                      className="tw-mb-0 tw-min-w-0 tw-shrink-0"
+                      rules={[{ required: true, message: '액션을 선택하세요.' }]}
                     >
-                      <Select
-                        placeholder="액션"
+                      <SinglePickCheckboxLine
                         options={ROLE_ACTIONS.map((a) => ({
                           value: a,
-                          label: `${ACTION_LABELS[a]} (${a})`,
+                          label: ACTION_LABELS[a],
                         }))}
                       />
                     </Form.Item>
                     <Form.Item
                       label="범위"
                       name={[field.name, 'permissionRange']}
-                      className="tw-mb-0 tw-min-w-[130px] tw-flex-1"
-                      rules={[{ required: true, message: '선택' }]}
+                      className="tw-mb-0 tw-min-w-0 tw-shrink-0"
+                      rules={[{ required: true, message: '범위를 선택하세요.' }]}
                     >
-                      <Select
-                        placeholder="범위"
+                      <SinglePickCheckboxLine
                         options={ROLE_PERMISSION_RANGES.map((x) => ({
                           value: x,
-                          label: `${RANGE_LABELS[x]} (${x})`,
+                          label: RANGE_LABELS[x],
                         }))}
                       />
                     </Form.Item>
-                    <Button type="text" danger onClick={() => remove(field.name)} disabled={fields.length <= 1}>
+                    <Button
+                      type="text"
+                      danger
+                      className="tw-shrink-0"
+                      onClick={() => remove(field.name)}
+                      disabled={fields.length <= 1}
+                    >
                       삭제
                     </Button>
                   </div>

@@ -221,6 +221,15 @@ function pickNumericOptional(v: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
+/** 상세 JSON이 camelCase / snake_case 혼용일 때 문자열 필드 보강 */
+function pickDetailString(r: Record<string, unknown>, keys: readonly string[]): string | undefined {
+  for (const k of keys) {
+    const v = r[k];
+    if (typeof v === 'string' && v.trim()) return v.trim();
+  }
+  return undefined;
+}
+
 function normalizeMemberDetailResponse(raw: unknown): MemberDetail {
   if (!raw || typeof raw !== 'object') {
     return raw as MemberDetail;
@@ -232,9 +241,13 @@ function normalizeMemberDetailResponse(raw: unknown): MemberDetail {
   const phone = normalizeYnFlag(phoneRaw);
   const addr = normalizeYnFlag(addrRaw);
   const esgScore = pickNumericOptional(r.esgScore ?? r.esg_score);
+  const memberStatus = pickDetailString(r, ['memberStatus', 'member_status']);
+  const accountStatus = pickDetailString(r, ['accountStatus', 'account_status']);
   const organizationId = asTextMemberField(r.organizationId ?? r.organization_id);
   return {
     ...base,
+    ...(memberStatus ? { memberStatus: memberStatus as MemberDetail['memberStatus'] } : {}),
+    ...(accountStatus ? { accountStatus: accountStatus as MemberDetail['accountStatus'] } : {}),
     phonePublicYn: phone !== undefined ? phone : normalizeYnFlag(base.phonePublicYn as unknown) ?? base.phonePublicYn,
     addressPublicYn: addr !== undefined ? addr : normalizeYnFlag(base.addressPublicYn as unknown) ?? base.addressPublicYn,
     ...(esgScore !== undefined ? { esgScore } : {}),

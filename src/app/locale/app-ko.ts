@@ -13,7 +13,6 @@ export const APP_MENU_LABEL: Record<string, string> = {
   '/app/approvals': '결재함',
   '/app/approvals/department': '부서 문서함',
   '/app/payroll': '급여',
-  '/app/mail': '메일',
   '/app/notifications': '알림',
   '/app/performance': '성과',
   '/app/evaluations': '평가',
@@ -33,7 +32,6 @@ export const APP_MENU_PATH_ORDER = [
   '/app/leave',
   '/app/approvals',
   '/app/payroll',
-  '/app/mail',
   '/app/performance',
   '/app/evaluations',
   '/app/meetings',
@@ -63,6 +61,10 @@ export const APP_MENU_TALENT_HUB_LABEL = '인재·성과';
 
 /** 구성원·조직·권한 묶음 */
 export const APP_MENU_ORG_HR_GROUP_LABEL = '인사·조직';
+
+/** 사이드바 전용 — 라우트 없음, 조직도 모달 트리거 */
+export const APP_MENU_ORG_CHART_SIDEBAR_KEY = '__wf_org_chart__';
+export const APP_MENU_ORG_CHART_LABEL = '조직도';
 
 /** ESG 하위 화면 묶음 */
 export const APP_MENU_ESG_GROUP_LABEL = '지속·경영';
@@ -103,10 +105,6 @@ export const APP_GENERIC_PAGE_COPY: Record<string, { title: string; description:
   '/payroll': {
     title: '급여',
     description: '급여 명세·정산 기능을 준비 중입니다.',
-  },
-  '/mail': {
-    title: '메일',
-    description: '내부 메일·알림 연동 기능을 준비 중입니다.',
   },
   '/meetings': {
     title: '미팅',
