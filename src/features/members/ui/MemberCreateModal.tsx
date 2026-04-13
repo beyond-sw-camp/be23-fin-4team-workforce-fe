@@ -107,7 +107,7 @@ function pickRowName(row: Record<string, unknown>): string {
 const EMPLOYMENT_TYPES: EmploymentType[] = ['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERN'];
 const EMPLOYMENT_OPTIONS = EMPLOYMENT_TYPES.map((v) => ({
   value: v,
-  label: `${EMPLOYMENT_TYPE_KO[v] ?? v} (${v})`,
+  label: EMPLOYMENT_TYPE_KO[v] ?? v,
 }));
 
 type FormValues = {
