@@ -60,7 +60,8 @@ import {
 } from '@/app/locale/app-ko';
 import { AppSearchField } from '@/shared/ui/AppSearchField';
 import { AiChatbotFab } from '@/widgets/app-shell/AiChatbotFab';
-<<<<<<< HEAD
+import { OrgChartModal } from '@/widgets/organization/OrgChartModal';
+import { HeaderSearchMemberDetailModal } from '@/widgets/app-shell/HeaderSearchMemberDetailModal';
 import {
   APPROVAL_SIDEBAR_ROOT_KEY,
   APPROVAL_SUBMENU_DEPT_KEY,
@@ -71,10 +72,6 @@ import {
   buildApprovalMenuGroupChildren,
   decodeWfNavKey,
 } from '@/widgets/app-shell/approvalSiderMenu';
-=======
-import { OrgChartModal } from '@/widgets/organization/OrgChartModal';
-import { HeaderSearchMemberDetailModal } from '@/widgets/app-shell/HeaderSearchMemberDetailModal';
->>>>>>> origin/main
 
 /** 왼쪽 날개 패널 + 본문 — 접기·펼치기 동일 아이콘(선형·둥근 테두리). */
 function SiderPanelToggleIcon({ className }: { className?: string }) {
@@ -175,10 +172,10 @@ function SiderGroupedMenuLabel({ icon, text }: { icon: ReactNode; text: string }
 }
 
 function buildAppShellMenuItems(
-  esgPaths: readonly string[],
-  isAdmin: boolean,
-  approvalMenuRoot: NonNullable<MenuProps['items']>[number],
-  memberDirectoryAccess: boolean,
+    esgPaths: readonly string[],
+    isAdmin: boolean,
+    approvalMenuRoot: NonNullable<MenuProps['items']>[number],
+    memberDirectoryAccess: boolean,
 ): NonNullable<MenuProps['items']> {
   const items: NonNullable<MenuProps['items']> = [];
   let hubInserted = false;
@@ -308,7 +305,6 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
     const memberDirectoryAccess =
       hasPermission(PERM.MEMBER_READ) && hasPermission(PERM.MEMBER_CREATE);
     const esgPaths = ESG_MENU_PATH_ORDER.filter((p) => shouldShowEsgMenuItem(p, esgConfig ?? null, isAdmin));
-<<<<<<< HEAD
     const approvalMenuRoot = {
       key: APPROVAL_SIDEBAR_ROOT_KEY,
       label: (
@@ -316,10 +312,7 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
       ),
       children: buildApprovalMenuGroupChildren(approvalOrgChart?.organizations ?? []),
     };
-    const items = buildAppShellMenuItems(esgPaths, isAdmin, approvalMenuRoot);
-=======
-    const items = buildAppShellMenuItems(esgPaths, isAdmin, memberDirectoryAccess);
->>>>>>> origin/main
+    const items = buildAppShellMenuItems(esgPaths, isAdmin, approvalMenuRoot, memberDirectoryAccess);
     if (!isAdmin) return items;
     const doc = {
       key: '/app/ai-documents',
@@ -328,11 +321,7 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
       title: 'HR 정책 문서',
     };
     return [...items, doc];
-<<<<<<< HEAD
-  }, [esgConfig, isAdmin, approvalOrgChart?.organizations]);
-=======
-  }, [esgConfig, isAdmin, hasPermission]);
->>>>>>> origin/main
+  }, [esgConfig, isAdmin, hasPermission, approvalOrgChart?.organizations]);
 }
 
 const headerGhostIconClass =
@@ -944,20 +933,19 @@ function AppShellLayout() {
                 ) {
                   return;
                 }
-<<<<<<< HEAD
                 const wf = decodeWfNavKey(String(key));
                 if (wf) {
                   if (siderCollapsed) {
                     setMenuOpenKeys([]);
                   }
                   void navigate({ to: wf.to, search: wf.search ?? {} });
-=======
+                  return;
+                }
                 if (key === APP_MENU_ORG_CHART_SIDEBAR_KEY) {
                   setOrgChartModalOpen(true);
                   if (siderCollapsed) {
                     setMenuOpenKeys([]);
                   }
->>>>>>> origin/main
                   return;
                 }
                 if (siderCollapsed) {
