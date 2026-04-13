@@ -5,6 +5,11 @@ import { Link } from '@tanstack/react-router';
 import { useAuth } from '@/features/auth/useAuth';
 import { esgApi } from '@/features/esg/api/esgApi';
 import { memberApi, normalizeYnFlag } from '@/features/member/api/memberApi';
+import {
+  displayAddressByPublicYn,
+  displayDetailAddressByPublicYn,
+  displayPhoneByPublicYn,
+} from '@/features/member/lib/memberPrivateFieldDisplay';
 import { EMPLOYMENT_TYPE_KO } from '@/app/locale/app-ko';
 import { AppButton } from '@/shared/ui/AppButton';
 
@@ -172,10 +177,7 @@ export function MyProfilePage() {
       <Card className="tw-border-slate-200/80 tw-shadow-sm" title="연락처">
         <Descriptions bordered column={1} size="small">
           <Descriptions.Item label="휴대폰">
-            {displayText(
-              member.phoneNumber,
-              normalizeYnFlag(member.phonePublicYn) === 'NO' ? '비공개' : '—',
-            )}
+            {displayPhoneByPublicYn(member.phoneNumber, member.phonePublicYn)}
           </Descriptions.Item>
           <Descriptions.Item label="연락처 공개">{ynPublicLabel(member.phonePublicYn)}</Descriptions.Item>
           <Descriptions.Item label="내선번호">{displayText(member.extensionNumber)}</Descriptions.Item>
@@ -187,12 +189,11 @@ export function MyProfilePage() {
       <Card className="tw-border-slate-200/80 tw-shadow-sm" title="주소">
         <Descriptions bordered column={1} size="small">
           <Descriptions.Item label="주소">
-            {displayText(
-              member.address,
-              normalizeYnFlag(member.addressPublicYn) === 'NO' ? '비공개' : '—',
-            )}
+            {displayAddressByPublicYn(member.address, member.addressPublicYn)}
           </Descriptions.Item>
-          <Descriptions.Item label="상세 주소">{displayText(member.detailAddress)}</Descriptions.Item>
+          <Descriptions.Item label="상세 주소">
+            {displayDetailAddressByPublicYn(member.detailAddress, member.addressPublicYn)}
+          </Descriptions.Item>
           <Descriptions.Item label="주소 공개">{ynPublicLabel(member.addressPublicYn)}</Descriptions.Item>
         </Descriptions>
       </Card>

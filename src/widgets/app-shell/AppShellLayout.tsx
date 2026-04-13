@@ -12,10 +12,10 @@ import {
   FormOutlined,
   GlobalOutlined,
   LineChartOutlined,
-  MailOutlined,
   MoreOutlined,
   KeyOutlined,
   MessageOutlined,
+  PartitionOutlined,
   PoweroffOutlined,
   ProjectOutlined,
   RobotOutlined,
@@ -35,6 +35,8 @@ import { useContext, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import { useAuth } from '@/features/auth/useAuth';
+import { PERM } from '@/features/permissions/backend-permissions';
+import { usePermissions } from '@/features/permissions/usePermissionsHook';
 import type { EsgConfig } from '@/features/esg/api/esgApi';
 import { esgApi } from '@/features/esg/api/esgApi';
 import { notificationApi } from '@/features/notification/api/notificationApi';
@@ -45,6 +47,8 @@ import {
   APP_BRAND_NAME,
   APP_MENU_ESG_GROUP_LABEL,
   APP_MENU_LABEL,
+  APP_MENU_ORG_CHART_LABEL,
+  APP_MENU_ORG_CHART_SIDEBAR_KEY,
   APP_MENU_ORG_HR_GROUP_LABEL,
   APP_MENU_PATH_ORDER,
   APP_MENU_TALENT_HUB_LABEL,
@@ -54,6 +58,8 @@ import {
 } from '@/app/locale/app-ko';
 import { AppSearchField } from '@/shared/ui/AppSearchField';
 import { AiChatbotFab } from '@/widgets/app-shell/AiChatbotFab';
+import { OrgChartModal } from '@/widgets/organization/OrgChartModal';
+import { HeaderSearchMemberDetailModal } from '@/widgets/app-shell/HeaderSearchMemberDetailModal';
 
 /** 왼쪽 날개 패널 + 본문 — 접기·펼치기 동일 아이콘(선형·둥근 테두리). */
 function SiderPanelToggleIcon({ className }: { className?: string }) {
@@ -83,7 +89,6 @@ const APP_MENU_ICONS: Record<string, ReactNode> = {
   '/app/leave': <ScheduleOutlined className="tw-text-lg" />,
   '/app/approvals': <FileDoneOutlined className="tw-text-lg" />,
   '/app/payroll': <DollarOutlined className="tw-text-lg" />,
-  '/app/mail': <MailOutlined className="tw-text-lg" />,
   '/app/notifications': <BellOutlined className="tw-text-lg" />,
   '/app/performance': <LineChartOutlined className="tw-text-lg" />,
   '/app/evaluations': <StarOutlined className="tw-text-lg" />,
@@ -122,6 +127,10 @@ const TALENT_HUB_PATH_SET = new Set<string>(TALENT_HUB_PATHS);
 const ORG_HR_GROUP_KEY = 'group-org-hr';
 const ORG_HR_PATHS = ['/app/members', '/app/organization', '/app/roles'] as const;
 const ORG_HR_PATH_SET = new Set<string>(ORG_HR_PATHS);
+/** 조직 설정·역할·권한 메뉴는 시스템 관리자만 사이드바에 표시 */
+const ORG_HR_ADMIN_ONLY_PATHS = new Set<string>(['/app/organization', '/app/roles']);
+/** 구성원 메뉴는 MEMBER 조회·생성 권한을 모두 가진 경우에만 표시 */
+const ORG_HR_MEMBERS_PATH = '/app/members';
 
 const ESG_GROUP_KEY = 'group-esg';
 
@@ -149,7 +158,11 @@ function SiderGroupedMenuLabel({ icon, text }: { icon: ReactNode; text: string }
   );
 }
 
-function buildAppShellMenuItems(esgPaths: readonly string[], isAdmin: boolean): NonNullable<MenuProps['items']> {
+function buildAppShellMenuItems(
+  esgPaths: readonly string[],
+  isAdmin: boolean,
+  memberDirectoryAccess: boolean,
+): NonNullable<MenuProps['items']> {
   const items: NonNullable<MenuProps['items']> = [];
   let hubInserted = false;
   let orgInserted = false;
@@ -182,12 +195,24 @@ function buildAppShellMenuItems(esgPaths: readonly string[], isAdmin: boolean): 
           label: (
             <SiderGroupedMenuLabel icon={<TeamOutlined className="tw-text-lg" />} text={APP_MENU_ORG_HR_GROUP_LABEL} />
           ),
-          children: ORG_HR_PATHS.map((p) => ({
-            key: p,
-            icon: APP_MENU_ICONS[p],
-            label: APP_MENU_LABEL[p],
-            title: APP_MENU_LABEL[p],
-          })),
+          children: [
+            ...ORG_HR_PATHS.filter((p) => {
+              if (p === ORG_HR_MEMBERS_PATH) return memberDirectoryAccess;
+              if (ORG_HR_ADMIN_ONLY_PATHS.has(p)) return isAdmin;
+              return true;
+            }).map((p) => ({
+              key: p,
+              icon: APP_MENU_ICONS[p],
+              label: APP_MENU_LABEL[p],
+              title: APP_MENU_LABEL[p],
+            })),
+            {
+              key: APP_MENU_ORG_CHART_SIDEBAR_KEY,
+              icon: <PartitionOutlined className="tw-text-lg" />,
+              label: APP_MENU_ORG_CHART_LABEL,
+              title: APP_MENU_ORG_CHART_LABEL,
+            },
+          ],
         });
       }
       continue;
@@ -241,6 +266,7 @@ function buildAppShellMenuItems(esgPaths: readonly string[], isAdmin: boolean): 
 
 function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
   const { status, user } = useAuth();
+  const { hasPermission } = usePermissions();
   const isAdmin = user?.isSystemAdmin === true;
   const { data: esgConfig } = useQuery({
     queryKey: ['esg', 'config'],
@@ -251,8 +277,10 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
   });
 
   return useMemo(() => {
+    const memberDirectoryAccess =
+      hasPermission(PERM.MEMBER_READ) && hasPermission(PERM.MEMBER_CREATE);
     const esgPaths = ESG_MENU_PATH_ORDER.filter((p) => shouldShowEsgMenuItem(p, esgConfig ?? null, isAdmin));
-    const items = buildAppShellMenuItems(esgPaths, isAdmin);
+    const items = buildAppShellMenuItems(esgPaths, isAdmin, memberDirectoryAccess);
     if (!isAdmin) return items;
     const doc = {
       key: '/app/ai-documents',
@@ -261,7 +289,7 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
       title: 'HR 정책 문서',
     };
     return [...items, doc];
-  }, [esgConfig, isAdmin]);
+  }, [esgConfig, isAdmin, hasPermission]);
 }
 
 const headerGhostIconClass =
@@ -629,6 +657,7 @@ function AppShellHeader() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [headerDetailMemberId, setHeaderDetailMemberId] = useState<string | null>(null);
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -687,12 +716,22 @@ function AppShellHeader() {
                 {list.map((row) => {
                   if (!row.memberId) return null;
                   return (
-                    <Link
+                    <div
                       key={row.memberId}
-                      to="/app/members/$memberId"
-                      params={{ memberId: row.memberId }}
-                      className="tw-flex tw-items-start tw-gap-3 tw-px-4 tw-py-3 tw-no-underline hover:tw-bg-slate-50"
-                      onClick={() => setSearch('')}
+                      role="button"
+                      tabIndex={0}
+                      className="tw-flex tw-cursor-pointer tw-items-start tw-gap-3 tw-px-4 tw-py-3 hover:tw-bg-slate-50"
+                      onClick={() => {
+                        setHeaderDetailMemberId(row.memberId);
+                        setSearch('');
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setHeaderDetailMemberId(row.memberId);
+                          setSearch('');
+                        }
+                      }}
                     >
                       <Avatar
                         src={row.profileUrl || undefined}
@@ -711,7 +750,7 @@ function AppShellHeader() {
                           {[row.organizationName, row.jobTitleName, row.memberStatus].filter(Boolean).join(' · ') || '—'}
                         </div>
                       </div>
-                    </Link>
+                    </div>
                   );
                 })}
               </div>
@@ -719,6 +758,12 @@ function AppShellHeader() {
           </div>
         )}
       </div>
+
+      <HeaderSearchMemberDetailModal
+        open={headerDetailMemberId != null}
+        memberId={headerDetailMemberId}
+        onClose={() => setHeaderDetailMemberId(null)}
+      />
 
       <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-2 tw-overflow-visible md:tw-gap-4">
         <SessionAccessTimer />
@@ -759,6 +804,7 @@ function AppShellLayout() {
   const navigate = useNavigate();
   const menuSelectedKey = useMemo(() => menuSelectedKeyFromPath(pathname), [pathname]);
   const appShellMenuItems = useAppShellSiderMenuItems();
+  const [orgChartModalOpen, setOrgChartModalOpen] = useState(false);
 
   const [siderCollapsed, setSiderCollapsed] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -844,6 +890,13 @@ function AppShellLayout() {
                 ) {
                   return;
                 }
+                if (key === APP_MENU_ORG_CHART_SIDEBAR_KEY) {
+                  setOrgChartModalOpen(true);
+                  if (siderCollapsed) {
+                    setMenuOpenKeys([]);
+                  }
+                  return;
+                }
                 if (siderCollapsed) {
                   setMenuOpenKeys([]);
                 }
@@ -882,6 +935,7 @@ function AppShellLayout() {
         </Layout.Content>
       </Layout>
       <AiChatbotFab />
+      <OrgChartModal open={orgChartModalOpen} onClose={() => setOrgChartModalOpen(false)} />
     </Layout>
   );
 }

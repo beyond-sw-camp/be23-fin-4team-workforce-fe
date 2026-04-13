@@ -7,7 +7,8 @@ import {
 } from '@tanstack/react-router';
 import { z } from 'zod';
 import type { AppRouterContext } from '@/app/router/types';
-import { requireAuth } from '@/app/router/guards';
+import { requireAuth, requirePermissions } from '@/app/router/guards';
+import { PERM } from '@/features/permissions/backend-permissions';
 import { HomePublicLayout } from '@/pages/public/HomePublicLayout';
 import { LandingHomePage } from '@/pages/public/LandingHomePage';
 import LoginPage from '@/pages/public/LoginPage';
@@ -178,12 +179,18 @@ const membersRoute = createRoute({
     sortOrder: z.enum(['asc', 'desc']).optional(),
   }),
   component: MembersPage,
+  beforeLoad: ({ context }) => {
+    requirePermissions(context, [PERM.MEMBER_READ, PERM.MEMBER_CREATE]);
+  },
 });
 
 const memberDetailRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/members/$memberId',
   component: MemberDetailPage,
+  beforeLoad: ({ context }) => {
+    requirePermissions(context, [PERM.MEMBER_READ, PERM.MEMBER_CREATE]);
+  },
 });
 const notificationsRoute = createRoute({
   getParentRoute: () => appBaseRoute,
@@ -225,12 +232,22 @@ const organizationRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/organization',
   component: OrganizationPage,
+  beforeLoad: ({ context }) => {
+    if (!context.auth.user?.isSystemAdmin) {
+      throw redirect({ to: '/403' });
+    }
+  },
 });
 
 const rolesRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/roles',
   component: RolesPage,
+  beforeLoad: ({ context }) => {
+    if (!context.auth.user?.isSystemAdmin) {
+      throw redirect({ to: '/403' });
+    }
+  },
 });
 
 const aiDocumentsAdminRoute = createRoute({
@@ -261,7 +278,7 @@ const genericPaths = [
   '/leave',
   '/approvals',
   '/payroll',
-  '/mail',
+  '/meetings',
   '/ai-assistant',
   '/settings',
 ] as const;

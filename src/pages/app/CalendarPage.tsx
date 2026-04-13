@@ -315,8 +315,8 @@ export function CalendarPage() {
     (viewMode === 'day' && dayQuery.isLoading);
 
   const { data: orgTreeData } = useQuery({
-    queryKey: ['organization', 'list'],
-    queryFn: () => organizationApi.list(),
+    queryKey: ['organization', 'simple-list'],
+    queryFn: () => organizationApi.simpleList(),
   });
   const orgTree = orgTreeData ?? EMPTY_ORG_TREE;
   const orgOptions = useMemo(() => flattenOrgList(orgTree), [orgTree]);
