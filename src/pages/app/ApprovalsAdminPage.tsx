@@ -33,8 +33,12 @@ type DocForm = {
   documentName: string;
   requestType: ApprovalRequestType;
   autoApproveYn?: 'Y' | 'N';
+  /** 부서 문서함 노출 — 급여·부서이동 등은 기본 N 권장 */
+  isDeptVisibleYn?: 'Y' | 'N';
   formSchema: string;
 };
+
+const REQUEST_TYPES_DEFAULT_DEPT_HIDDEN: ReadonlySet<ApprovalRequestType> = new Set(['SALARY', 'HR_MOVEMENT']);
 
 type PolicyLineDraft = {
   key: string;
@@ -222,6 +226,16 @@ export function ApprovalsAdminPage() {
     onError: (e: Error) => message.error(e.message || '자동승인 변경에 실패했습니다.'),
   });
 
+  const deptVisibleM = useMutation({
+    mutationFn: ({ documentId, visible }: { documentId: string; visible: boolean }) =>
+      visible ? approvalApi.enableDeptVisible(documentId) : approvalApi.disableDeptVisible(documentId),
+    onSuccess: async () => {
+      message.success('부서 문서함 노출 설정을 변경했습니다.');
+      await refreshAll();
+    },
+    onError: (e: Error) => message.error(e.message || '부서 문서함 노출 변경에 실패했습니다.'),
+  });
+
   const savePolicyLineM = useMutation({
     mutationFn: approvalApi.savePolicyLines,
     onSuccess: async () => {
@@ -247,6 +261,7 @@ export function ApprovalsAdminPage() {
       documentName: '',
       requestType: 'GENERAL',
       autoApproveYn: 'N',
+      isDeptVisibleYn: 'Y',
       formSchema: defaultSchemaText(),
     });
   };
@@ -260,6 +275,7 @@ export function ApprovalsAdminPage() {
         requestType: values.requestType,
         formSchema: values.formSchema,
         autoApproveYn: values.autoApproveYn ?? 'N',
+        isDeptVisibleYn: values.isDeptVisibleYn ?? 'Y',
       });
     } catch (error) {
       if (error instanceof SyntaxError) {
@@ -325,7 +341,7 @@ export function ApprovalsAdminPage() {
           결재 관리자
         </Typography.Title>
         <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-sm">
-          양식 옵션(활성/자동승인)과 결재 순서(직책/단계)를 설정합니다.
+          양식 옵션(활성·자동승인·부서 문서함 노출)과 결재 순서(직책/단계)를 설정합니다.
         </Typography.Paragraph>
       </div>
 
@@ -428,6 +444,43 @@ export function ApprovalsAdminPage() {
                         ),
                       },
                       {
+                        title: '부서 문서함',
+                        dataIndex: 'isDeptVisibleYn',
+                        key: 'isDeptVisibleYn',
+                        width: 160,
+                        render: (value: 'Y' | 'N', row) => (
+                          <Button
+                            size="small"
+                            type={value === 'Y' ? 'primary' : 'default'}
+                            disabled={!canUpdate || deptVisibleM.isPending}
+                            onClick={() => {
+                              if (value === 'Y') {
+                                Modal.confirm({
+                                  title: '부서 문서함 노출을 끌까요?',
+                                  content:
+                                    '해당 양식으로 올린 기존 결재도 부서 문서함에서 숨겨집니다. 진행하시겠습니까?',
+                                  okText: '예, 숨기기',
+                                  cancelText: '취소',
+                                  onOk: () =>
+                                    deptVisibleM.mutateAsync({ documentId: row.documentId, visible: false }),
+                                });
+                                return;
+                              }
+                              Modal.confirm({
+                                title: '부서 문서함에 노출할까요?',
+                                content:
+                                  '해당 양식으로 이미 처리된(승인·반려) 결재가 있으면 부서 문서함 목록에 나타날 수 있습니다. 진행하시겠습니까?',
+                                okText: '예, 노출하기',
+                                cancelText: '취소',
+                                onOk: () => deptVisibleM.mutateAsync({ documentId: row.documentId, visible: true }),
+                              });
+                            }}
+                          >
+                            {value === 'Y' ? '노출' : '숨김'}
+                          </Button>
+                        ),
+                      },
+                      {
                         title: '정책라인',
                         key: 'actions',
                         width: 120,
@@ -485,6 +538,9 @@ export function ApprovalsAdminPage() {
                           </Tag>
                           <Tag color={selectedDocument.autoApproveYn === 'Y' ? 'processing' : 'default'}>
                             자동승인 {selectedDocument.autoApproveYn === 'Y' ? 'ON' : 'OFF'}
+                          </Tag>
+                          <Tag color={selectedDocument.isDeptVisibleYn === 'Y' ? 'blue' : 'default'}>
+                            부서함 {selectedDocument.isDeptVisibleYn === 'Y' ? '노출' : '숨김'}
                           </Tag>
                         </Space>
                       </Card>
@@ -640,7 +696,19 @@ export function ApprovalsAdminPage() {
         destroyOnHidden
         width={760}
       >
-        <Form<DocForm> form={form} layout="vertical" className="tw-pt-2">
+        <Form<DocForm>
+          form={form}
+          layout="vertical"
+          className="tw-pt-2"
+          onValuesChange={(changed) => {
+            if ('requestType' in changed && changed.requestType != null) {
+              const t = changed.requestType as ApprovalRequestType;
+              form.setFieldsValue({
+                isDeptVisibleYn: REQUEST_TYPES_DEFAULT_DEPT_HIDDEN.has(t) ? 'N' : 'Y',
+              });
+            }
+          }}
+        >
           <Form.Item name="documentName" label="양식명" rules={[{ required: true, message: '양식명을 입력해 주세요.' }]}>
             <Input placeholder="예: 연차신청서" maxLength={100} showCount />
           </Form.Item>
@@ -650,6 +718,18 @@ export function ApprovalsAdminPage() {
                 value: type,
                 label: `${REQUEST_TYPE_LABEL[type]} (${type})`,
               }))}
+            />
+          </Form.Item>
+          <Form.Item
+            name="isDeptVisibleYn"
+            label="부서 문서함 노출"
+            extra="급여·부서이동 유형은 기본 숨김(N)으로 맞춰집니다. 민감 양식은 N을 권장합니다."
+          >
+            <Select
+              options={[
+                { value: 'Y', label: '노출 (Y)' },
+                { value: 'N', label: '숨김 (N)' },
+              ]}
             />
           </Form.Item>
           <Form.Item name="autoApproveYn" label="자동승인">

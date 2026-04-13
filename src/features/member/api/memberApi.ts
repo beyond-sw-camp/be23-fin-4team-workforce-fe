@@ -158,6 +158,8 @@ export type MemberDetail = {
   bank?: string | null;
   bankAccount?: string | null;
   memberPositionId?: string;
+  /** GET 응답에 포함될 때 — 부서 문서함 등에서 조직 선택 기본값으로 사용 */
+  organizationId?: string;
   organizationName?: string;
   jobGradeName?: string;
   jobTitleName?: string;
@@ -168,6 +170,39 @@ export type MemberDetail = {
   /** ESG 집계 점수 — `esgEnabledYn=YES`일 때 마이페이지 등에서 노출 */
   esgScore?: number | null;
 };
+
+/** GET /member/position/internal/{memberPositionId} — 결재라인 원·실 결재자 표시 (MemberPositionResDto) */
+export type MemberPositionInternalRes = {
+  memberPositionId: string;
+  memberId: string;
+  memberName: string;
+  organizationId?: string;
+  organizationName: string;
+  jobTitleName: string;
+  jobGradeName?: string;
+};
+
+function normalizeMemberPositionInternal(raw: unknown): MemberPositionInternalRes {
+  if (!raw || typeof raw !== 'object') {
+    throw new Error('직위 정보 응답을 해석할 수 없습니다.');
+  }
+  const o = raw as Record<string, unknown>;
+  const memberPositionId = asTextMemberField(o.memberPositionId ?? o.member_position_id);
+  const memberId = asTextMemberField(o.memberId ?? o.member_id);
+  const memberName = asTextMemberField(o.memberName ?? o.member_name);
+  if (!memberPositionId || !memberId || !memberName) {
+    throw new Error('직위 정보 응답에 필수 필드가 없습니다.');
+  }
+  return {
+    memberPositionId,
+    memberId,
+    memberName,
+    organizationId: asTextMemberField(o.organizationId ?? o.organization_id) || undefined,
+    organizationName: asTextMemberField(o.organizationName ?? o.organization_name),
+    jobTitleName: asTextMemberField(o.jobTitleName ?? o.job_title_name),
+    jobGradeName: asTextMemberField(o.jobGradeName ?? o.job_grade_name) || undefined,
+  };
+}
 
 /** 백엔드가 `Y`/`y`/`YES` 등으로 줄 수 있음 → `YES` | `NO` 로 통일 */
 export function normalizeYnFlag(value: unknown): YnFlag | undefined {
@@ -197,11 +232,13 @@ function normalizeMemberDetailResponse(raw: unknown): MemberDetail {
   const phone = normalizeYnFlag(phoneRaw);
   const addr = normalizeYnFlag(addrRaw);
   const esgScore = pickNumericOptional(r.esgScore ?? r.esg_score);
+  const organizationId = asTextMemberField(r.organizationId ?? r.organization_id);
   return {
     ...base,
     phonePublicYn: phone !== undefined ? phone : normalizeYnFlag(base.phonePublicYn as unknown) ?? base.phonePublicYn,
     addressPublicYn: addr !== undefined ? addr : normalizeYnFlag(base.addressPublicYn as unknown) ?? base.addressPublicYn,
     ...(esgScore !== undefined ? { esgScore } : {}),
+    ...(organizationId ? { organizationId } : {}),
   };
 }
 
@@ -405,6 +442,24 @@ export const memberApi = {
     const response = await httpClient.get(`/member/detail/${encodeURIComponent(id)}`);
     const raw = unwrapApiResponse<unknown>(response.data);
     return normalizeMemberDetailResponse(raw);
+  },
+  /** 결재 상세 등 — approvalLines 의 직위 ID로 이름·부서·직책 조회 */
+  async positionInternal(memberPositionId: string) {
+    const id = memberPositionId?.trim();
+    if (!id) {
+      throw new Error('직위 ID가 없습니다.');
+    }
+    const response = await httpClient.get(`/member/position/internal/${encodeURIComponent(id)}`);
+    const raw = unwrapApiResponse<unknown>(response.data);
+    return normalizeMemberPositionInternal(raw);
+  },
+  /** 경로/권한 오류 시 null — member/detail 등으로 폴백 */
+  async positionInternalOrNull(memberPositionId: string): Promise<MemberPositionInternalRes | null> {
+    try {
+      return await this.positionInternal(memberPositionId);
+    } catch {
+      return null;
+    }
   },
   async update(memberId: string, payload: Record<string, unknown>) {
     const response = await httpClient.put(`/member/update/${memberId}`, payload);

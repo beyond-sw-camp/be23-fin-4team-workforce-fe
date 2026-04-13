@@ -130,15 +130,57 @@ const stampVertLabelClass = `${stampLine} ${stampLabelBg} tw-w-[1.85rem] tw-min-
 const stampDataColW =
   'tw-w-[3.35rem] tw-min-w-[3.35rem] tw-max-w-[3.6rem] sm:tw-w-[3.5rem] sm:tw-min-w-[3.5rem] sm:tw-max-w-[3.75rem]';
 const stampDataColOnlyW = 'tw-w-[3.35rem] sm:tw-w-[3.5rem]';
-const stampRowTopWhite = `${stampLine} tw-bg-white tw-min-h-[1.5rem] tw-px-0.5 tw-py-1 tw-text-center tw-align-middle ${stampDataColW}`;
 const stampRowTopRole = `${stampLine} ${stampLabelBg} tw-min-h-[1.5rem] tw-px-0.5 tw-py-1 tw-text-center tw-align-middle tw-text-[10px] tw-font-normal tw-text-black [word-break:keep-all] ${stampDataColW}`;
 const stampRowMidName = `${stampLine} tw-bg-white tw-px-0.5 tw-py-1 tw-text-center tw-align-middle tw-text-[11px] tw-font-semibold tw-leading-tight tw-text-black [word-break:keep-all] ${stampDataColW} tw-h-[3.35rem] tw-min-h-[3.2rem] tw-max-h-[3.6rem] sm:tw-h-[3.5rem] sm:tw-max-h-[3.75rem]`;
 const stampRowBotEmpty = `${stampLine} tw-bg-white tw-min-h-[1.5rem] tw-px-0.5 tw-py-0.5 tw-text-center tw-align-middle ${stampDataColW}`;
+const stampRowBotDate = `${stampLine} tw-bg-white tw-min-h-[1.5rem] tw-px-0.5 tw-py-0.5 tw-text-center tw-align-middle tw-text-[9px] tw-font-normal tw-leading-tight tw-text-black sm:tw-text-[10px] ${stampDataColW}`;
 
-/** 신청 블록: 세로「신 청」+ 3행(상 빈칸 / 중 성명 / 하 일시용) */
-function ApprovalStampApplicationTable({ name }: { name: string }) {
+/** 승인·반려 처리일 — 미처리·기타 상태는 빈 칸 */
+export function formatApprovalStampActionDate(actedAt: string | null | undefined, approvalStatus: string | undefined): string {
+  const st = String(approvalStatus ?? '').trim().toUpperCase();
+  if (st !== 'APPROVED' && st !== 'REJECTED') return '';
+  const raw = actedAt?.trim();
+  if (!raw) return '';
+  const d = dayjs(raw);
+  return d.isValid() ? d.format('YYYY/MM/DD') : '';
+}
+
+export type ApprovalStampApproverItem = {
+  id: string;
+  memberName: string;
+  jobTitleName?: string;
+  /** 대리결재(부재 위임) 건 */
+  isProxy?: boolean;
+  /** 처리일(승인·반려) 표시 시 이름 아래 파란 `(대결: …)` — 값 없으면 `(대결)`만 */
+  proxyActorName?: string;
+  /** 승인·반려 시 처리일시(API `actedAt`) */
+  actedAt?: string | null;
+  approvalStatus?: string;
+};
+
+/** 신청란 하단: 기안일 등 (YYYY/MM/DD) */
+function formatApplicationStampDate(isoDate: string | undefined): string {
+  if (!isoDate?.trim()) return '';
+  const d = dayjs(isoDate.trim());
+  return d.isValid() ? d.format('YYYY/MM/DD') : '';
+}
+
+/** 신청 블록: 세로「신 청」+ 3행(직위·성명 / 하 기안일) */
+function ApprovalStampApplicationTable({
+  name,
+  jobTitleName,
+  writtenDateIso,
+}: {
+  name: string;
+  /** 상단 칸 직위 — 없으면 빈 칸 */
+  jobTitleName?: string;
+  /** 하단 YYYY/MM/DD — `YYYY-MM-DD` 등 dayjs 파싱 가능 문자열 */
+  writtenDateIso?: string;
+}) {
   const nbsp = '\u00a0';
   const displayName = name.trim() || '—';
+  const topRole = jobTitleName?.trim() ?? '';
+  const bottomDate = formatApplicationStampDate(writtenDateIso);
   return (
     <table className="tw-h-full tw-w-auto tw-table-fixed tw-border-collapse tw-text-sm">
       <colgroup>
@@ -154,25 +196,21 @@ function ApprovalStampApplicationTable({ name }: { name: string }) {
           >
             {'\uC2E0 \uCCAD'}
           </td>
-          <td className={stampRowTopWhite}>{nbsp}</td>
+          <td className={stampRowTopRole}>{topRole ? topRole : nbsp}</td>
         </tr>
         <tr>
           <td className={stampRowMidName}>{displayName}</td>
         </tr>
         <tr>
-          <td className={stampRowBotEmpty}>{nbsp}</td>
+          <td className={bottomDate ? stampRowBotDate : stampRowBotEmpty}>{bottomDate || nbsp}</td>
         </tr>
       </tbody>
     </table>
   );
 }
 
-/** 승인 블록: 세로「승 인」한 번 + 결재자별 열(직위 / 성명 / 하 빈칸) */
-function ApprovalStampApprovalTable({
-  approvers,
-}: {
-  approvers: { id: string; memberName: string; jobTitleName?: string }[];
-}) {
+/** 승인 블록: 세로「승 인」한 번 + 결재자별 열(직위 / 성명 / 처리일) */
+function ApprovalStampApprovalTable({ approvers }: { approvers: ApprovalStampApproverItem[] }) {
   const nbsp = '\u00a0';
   const columns =
     approvers.length > 0
@@ -180,8 +218,20 @@ function ApprovalStampApprovalTable({
           key: a.id,
           role: a.jobTitleName?.trim() ?? '',
           name: a.memberName?.trim() || '—',
+          isProxy: a.isProxy === true,
+          proxyActorName: a.proxyActorName?.trim() || '',
+          bottom: formatApprovalStampActionDate(a.actedAt, a.approvalStatus),
         }))
-      : [{ key: 'placeholder', role: '', name: '\uBBF8\uC9C0\uC815' }];
+      : [
+          {
+            key: 'placeholder',
+            role: '',
+            name: '\uBBF8\uC9C0\uC815',
+            isProxy: false,
+            proxyActorName: '',
+            bottom: '',
+          },
+        ];
 
   return (
     <table className="tw-h-full tw-w-auto tw-table-fixed tw-border-collapse tw-text-sm">
@@ -209,14 +259,27 @@ function ApprovalStampApprovalTable({
         <tr>
           {columns.map((c) => (
             <td key={`${c.key}-m`} className={stampRowMidName}>
-              {c.name}
+              <div className="tw-flex tw-flex-col tw-items-center tw-justify-center tw-gap-0.5 tw-leading-tight">
+                {c.isProxy && c.bottom ? (
+                  <>
+                    <span className="tw-inline-block tw-max-w-full tw-whitespace-normal tw-text-center [word-break:keep-all] tw-text-[11px] tw-font-semibold tw-leading-tight tw-text-black">
+                      {c.name}
+                    </span>
+                    <span className="tw-inline-block tw-max-w-full tw-whitespace-normal tw-text-center [word-break:keep-all] tw-text-[9px] tw-font-normal tw-leading-tight tw-text-sky-600 sm:tw-text-[10px]">
+                      {c.proxyActorName ? '(대결: ' + c.proxyActorName + ')' : '(대결)'}
+                    </span>
+                  </>
+                ) : (
+                  <span className="tw-font-semibold">{c.name}</span>
+                )}
+              </div>
             </td>
           ))}
         </tr>
         <tr>
           {columns.map((c) => (
-            <td key={`${c.key}-b`} className={stampRowBotEmpty}>
-              {nbsp}
+            <td key={`${c.key}-b`} className={c.bottom ? stampRowBotDate : stampRowBotEmpty}>
+              {c.bottom || nbsp}
             </td>
           ))}
         </tr>
@@ -228,27 +291,30 @@ function ApprovalStampApprovalTable({
 /** 우측 결재란: 신청·승인 두 테이블 + 간격, 그룹웨어식 1px 검정 실선 */
 export function ApprovalFormStampColumn({
   drafterName,
-  drafterJobTitle: _unusedDrafterJobTitle,
+  drafterJobTitle,
   approvers,
   onOpenEdit,
+  /** 신청란 하단 날짜 — 없으면 비움 */
+  applicationWrittenDateIso,
 }: {
   drafterName: string;
   drafterJobTitle?: string;
-  approvers: { id: string; memberName: string; jobTitleName?: string }[];
+  approvers: ApprovalStampApproverItem[];
   onOpenEdit?: () => void;
+  applicationWrittenDateIso?: string;
 }) {
-  void _unusedDrafterJobTitle;
   const nm = drafterName?.trim() || '—';
+  const dTitle = drafterJobTitle?.trim();
 
-  return (
-    <button
-      type="button"
-      onClick={onOpenEdit}
-      className="tw-block tw-w-fit tw-max-w-full tw-cursor-pointer tw-border-0 tw-bg-transparent tw-p-0 tw-text-left tw-transition-opacity hover:tw-opacity-95 focus:tw-outline-none focus-visible:tw-ring-2 focus-visible:tw-ring-blue-500 focus-visible:tw-ring-offset-1"
-    >
+  const inner = (
+    <>
       <div className="tw-flex tw-flex-row tw-flex-nowrap tw-items-stretch tw-justify-end tw-gap-1.5 tw-overflow-x-auto tw-rounded-none sm:tw-gap-2">
         <div className="tw-w-auto tw-shrink-0">
-          <ApprovalStampApplicationTable name={nm} />
+          <ApprovalStampApplicationTable
+            name={nm}
+            jobTitleName={dTitle}
+            writtenDateIso={applicationWrittenDateIso}
+          />
         </div>
         <div className="tw-w-auto tw-shrink-0">
           <ApprovalStampApprovalTable approvers={approvers} />
@@ -257,6 +323,20 @@ export function ApprovalFormStampColumn({
       {onOpenEdit ? (
         <div className="tw-mt-1.5 tw-text-center tw-text-[10px] tw-text-slate-400">클릭하여 편집</div>
       ) : null}
+    </>
+  );
+
+  if (!onOpenEdit) {
+    return <div className="tw-block tw-w-fit tw-max-w-full tw-border-0 tw-bg-transparent tw-p-0 tw-text-left">{inner}</div>;
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onOpenEdit}
+      className="tw-block tw-w-fit tw-max-w-full tw-cursor-pointer tw-border-0 tw-bg-transparent tw-p-0 tw-text-left tw-transition-opacity hover:tw-opacity-95 focus:tw-outline-none focus-visible:tw-ring-2 focus-visible:tw-ring-blue-500 focus-visible:tw-ring-offset-1"
+    >
+      {inner}
     </button>
   );
 }

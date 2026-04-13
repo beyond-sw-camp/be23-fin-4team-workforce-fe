@@ -21,6 +21,8 @@ export type ApprovalDocument = {
   isActiveYn: 'Y' | 'N';
   requestType: ApprovalRequestType | string;
   autoApproveYn: 'Y' | 'N';
+  /** 부서 문서함 노출 — 민감 양식은 N */
+  isDeptVisibleYn: 'Y' | 'N';
   createdAt: string;
   updatedAt: string;
 };
@@ -102,6 +104,9 @@ function normalizeApprovalDocument(raw: unknown): ApprovalDocument | null {
   const documentName = asText(o.documentName ?? o.document_name);
   const requestType = asText(o.requestType ?? o.request_type);
   if (!documentId || !documentName || !requestType) return null;
+  const deptRaw = o.isDeptVisibleYn ?? o.is_dept_visible_yn;
+  const isDeptVisibleYn =
+    deptRaw == null || deptRaw === '' ? 'Y' : asYn(deptRaw);
   return {
     documentId,
     companyId: asText(o.companyId ?? o.company_id),
@@ -110,6 +115,7 @@ function normalizeApprovalDocument(raw: unknown): ApprovalDocument | null {
     isActiveYn: asYn(o.isActiveYn ?? o.is_active_yn),
     requestType,
     autoApproveYn: asYn(o.autoApproveYn ?? o.auto_approve_yn),
+    isDeptVisibleYn,
     createdAt: asText(o.createdAt ?? o.created_at),
     updatedAt: asText(o.updatedAt ?? o.updated_at),
   };
@@ -197,6 +203,7 @@ export const approvalApi = {
     requestType: ApprovalRequestType;
     formSchema: string;
     autoApproveYn?: 'Y' | 'N';
+    isDeptVisibleYn?: 'Y' | 'N';
   }): Promise<ApprovalDocument> {
     const response = await httpClient.post('/approval/documents', payload);
     return unwrapDocument(unwrapApiResponse<unknown>(response.data));
@@ -224,6 +231,20 @@ export const approvalApi = {
 
   async disableAutoApprove(documentId: string): Promise<ApprovalDocument> {
     const response = await httpClient.patch(`/approval/documents/${encodeURIComponent(documentId)}/auto-approve/disable`);
+    return unwrapDocument(unwrapApiResponse<unknown>(response.data));
+  },
+
+  async enableDeptVisible(documentId: string): Promise<ApprovalDocument> {
+    const response = await httpClient.patch(
+      `/approval/documents/${encodeURIComponent(documentId)}/dept-visible/enable`,
+    );
+    return unwrapDocument(unwrapApiResponse<unknown>(response.data));
+  },
+
+  async disableDeptVisible(documentId: string): Promise<ApprovalDocument> {
+    const response = await httpClient.patch(
+      `/approval/documents/${encodeURIComponent(documentId)}/dept-visible/disable`,
+    );
     return unwrapDocument(unwrapApiResponse<unknown>(response.data));
   },
 

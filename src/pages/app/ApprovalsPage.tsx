@@ -30,7 +30,7 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
   App,
@@ -69,6 +69,7 @@ import {
   type Key,
   type ReactNode,
 } from 'react';
+import { useNavigate, useRouterState } from '@tanstack/react-router';
 import {
   APPROVAL_REQUEST_TYPES,
   approvalApi,
@@ -84,10 +85,12 @@ import { useAuth } from '@/features/auth/useAuth';
 import clsx from 'clsx';
 import {
   APPROVAL_REQUEST_STATUS,
+  type ApprovalRequestStatus,
   approvalRequestApi,
+  isPendingApprovalLineForProxyActor,
+  requestIncludesMyProxyAct,
   type ApprovalLine,
   type ApprovalRequestDetail,
-  type ApprovalRequestStatus,
   type ApprovalViewer,
   type CreateApprovalRequestPayload,
   type ViewerType,
@@ -97,35 +100,15 @@ import { organizationApi, type OrgChartOrgNode } from '@/features/organization/a
 import { PERM } from '@/features/permissions/backend-permissions';
 import { usePermissions } from '@/features/permissions/usePermissionsHook';
 import { ApprovalsAdminPage } from '@/pages/app/ApprovalsAdminPage';
-
-const FORM_SCHEMA_FIELD_TYPES = [
-  'text',
-  'textarea',
-  'number',
-  'date',
-  'select',
-  'datetime-local',
-  'time',
-] as const;
+import { parseDetailContentJson, parseFormSchema } from '@/features/approvals/lib/approvalFormSchema';
+import { syncApprovalQueryCachesAfterAct } from '@/features/approvals/lib/syncApprovalQueryCaches';
+import { ApprovalRequestReadOnlyModal } from '@/features/approvals/ui/ApprovalRequestReadOnlyModal';
+import { getRefreshIdentityHeaders } from '@/shared/stores/authRefreshIdentityStore';
 
 /** 결재 작성 보조 영역: 카드 테두리·회색 헤더 최소화 */
 const APPROVAL_COMPOSE_CARD_CLASS = 'tw-shadow-none tw-bg-transparent';
 const APPROVAL_COMPOSE_TABLE_CLASS =
   '[&_.ant-table-thead_.ant-table-cell]:!tw-bg-white [&_.ant-table-thead_.ant-table-cell]:!tw-text-slate-600 [&_.ant-table-thead_.ant-table-cell]:!tw-font-semibold';
-
-type FormFieldType = (typeof FORM_SCHEMA_FIELD_TYPES)[number];
-
-type FormFieldSchema = {
-  name: string;
-  label: string;
-  type: FormFieldType;
-  options?: string[];
-  placeholder?: string;
-};
-
-type FormSchema = {
-  fields: FormFieldSchema[];
-};
 
 type ApprovalLineMemberDraft = {
   kind: 'member';
@@ -267,17 +250,6 @@ function flattenCirculationViewersForPayload(rows: ViewerDraft[]) {
     }
   }
   return out;
-}
-
-function parseDetailContentJson(detail: ApprovalRequestDetail): Record<string, unknown> {
-  const raw = detail.contentJson?.trim();
-  if (!raw) return {};
-  try {
-    const v = JSON.parse(raw) as unknown;
-    return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
-  } catch {
-    return {};
-  }
 }
 
 function approvalLinesToMemberDrafts(lines: ApprovalLine[]): ApprovalLineDraft[] {
@@ -651,41 +623,6 @@ function formatDateTime(value?: string | null) {
   return d.isValid() ? d.format('YYYY-MM-DD HH:mm') : value;
 }
 
-function parseFormSchema(raw: string): FormSchema {
-  try {
-    const parsed = JSON.parse(raw) as { fields?: unknown };
-    const fields = Array.isArray(parsed.fields)
-      ? parsed.fields
-          .map((item): FormFieldSchema | null => {
-            if (!item || typeof item !== 'object') return null;
-            const o = item as Record<string, unknown>;
-            const name = typeof o.name === 'string' ? o.name.trim() : '';
-            const label = typeof o.label === 'string' ? o.label.trim() : '';
-            const rawType = typeof o.type === 'string' ? o.type.trim() : 'text';
-            const type: FormFieldType = (FORM_SCHEMA_FIELD_TYPES as readonly string[]).includes(rawType)
-              ? (rawType as FormFieldType)
-              : 'text';
-            const options = Array.isArray(o.options)
-              ? o.options.filter((v): v is string => typeof v === 'string').map((v) => v.trim())
-              : undefined;
-            const placeholder = typeof o.placeholder === 'string' ? o.placeholder.trim() : undefined;
-            if (!name || !label) return null;
-            return {
-              name,
-              label,
-              type,
-              ...(options?.length ? { options } : {}),
-              ...(placeholder ? { placeholder } : {}),
-            };
-          })
-          .filter((f): f is FormFieldSchema => f != null)
-      : [];
-    return { fields };
-  } catch {
-    return { fields: [] };
-  }
-}
-
 function statusTag(status: string) {
   const u = status.toUpperCase();
   if (u === 'APPROVED') return <Tag color="success">승인</Tag>;
@@ -728,42 +665,6 @@ function ApprovalLineDragHandle() {
 type SortableApprovalTableRowProps = HTMLAttributes<HTMLTableRowElement> & {
   'data-row-key'?: Key;
 };
-
-type DetailMemberLookupRow = {
-  name: string;
-  organizationName: string;
-  jobTitleName: string;
-  pending: boolean;
-};
-
-function DetailPersonCell({
-  apiName,
-  apiOrganizationName,
-  apiJobTitleName,
-  lookup,
-}: {
-  apiName?: string;
-  apiOrganizationName?: string;
-  apiJobTitleName?: string;
-  lookup?: DetailMemberLookupRow;
-}) {
-  const name = (apiName?.trim() || lookup?.name || '').trim();
-  const title = (apiJobTitleName?.trim() || lookup?.jobTitleName || '').trim();
-  const org = (apiOrganizationName?.trim() || lookup?.organizationName || '').trim();
-  if (lookup?.pending && !name) {
-    return <Typography.Text type="secondary">이름 조회 중…</Typography.Text>;
-  }
-  const primary = name || '—';
-  return (
-    <div className="tw-min-w-0">
-      <div className="tw-break-words">
-        <span>{primary}</span>
-        {title ? <span className="tw-text-slate-600"> ({title})</span> : null}
-      </div>
-      {org ? <div className="tw-text-xs tw-text-slate-500">{org}</div> : null}
-    </div>
-  );
-}
 
 function SortableApprovalTableRow({ children, style, className, ...rest }: SortableApprovalTableRowProps) {
   const id = String(rest['data-row-key'] ?? '');
@@ -956,6 +857,10 @@ function ApprovalOrgDropZone(props: {
 export function ApprovalsPage() {
   const { message } = App.useApp();
   const qc = useQueryClient();
+  const navigate = useNavigate();
+  const routeSearch = useRouterState({
+    select: (s) => s.location.search as { tab?: string; myStatus?: string; compose?: string; sideNav?: string },
+  });
   const { hasPermission } = usePermissions();
   const [tab, setTab] = useState('compose');
   const [requestStatusFilter, setRequestStatusFilter] = useState<ApprovalRequestStatus | 'ALL'>('ALL');
@@ -983,7 +888,53 @@ export function ApprovalsPage() {
 
   const canAdmin = hasPermission(PERM.APPROVAL_AD_READ);
   const { user } = useAuth();
-  const authMemberId = user?.id?.trim();
+  /** 결재 API·라인의 memberId와 동일해야 함 — JWT/로컬 저장 `X-User-UUID`로 보강 */
+  const authMemberId =
+    user?.id?.trim() || getRefreshIdentityHeaders()['X-User-UUID']?.trim() || undefined;
+
+  const allowedTabs = useMemo(() => ['compose', 'my', 'pending', 'acted', ...(canAdmin ? ['admin'] : [])], [canAdmin]);
+
+  useEffect(() => {
+    const rawTab = routeSearch.tab;
+    const nextTab =
+      typeof rawTab === 'string' && allowedTabs.includes(rawTab) ? rawTab : 'compose';
+    setTab(nextTab);
+
+    if (nextTab === 'my') {
+      const ms = routeSearch.myStatus;
+      if (
+        ms === 'ALL' ||
+        (typeof ms === 'string' &&
+          (APPROVAL_REQUEST_STATUS as readonly string[]).includes(ms))
+      ) {
+        setRequestStatusFilter(ms as ApprovalRequestStatus | 'ALL');
+      } else {
+        setRequestStatusFilter('ALL');
+      }
+    }
+  }, [routeSearch.tab, routeSearch.myStatus, allowedTabs]);
+
+  useEffect(() => {
+    if (routeSearch.tab === 'admin' && !canAdmin) {
+      navigate({ to: '/app/approvals', search: { tab: 'compose' }, replace: true });
+    }
+  }, [routeSearch.tab, canAdmin, navigate]);
+
+  const sideNavHintKeyRef = useRef('');
+  useEffect(() => {
+    const k = `${routeSearch.tab ?? ''}|${routeSearch.compose ?? ''}|${routeSearch.sideNav ?? ''}`;
+    if (sideNavHintKeyRef.current === k) return;
+    sideNavHintKeyRef.current = k;
+    if (routeSearch.compose === 'scheduled') {
+      message.info('결재 예정 문서는 양식을 선택한 뒤 작성·제출하면 결재가 시작됩니다.');
+    }
+    if (routeSearch.compose === 'official') {
+      message.info('공문 문서함은 추후 연동 예정입니다. 일반 기안은 「기안 문서함」을 이용해 주세요.');
+    }
+    if (routeSearch.sideNav === 'cc-wait' || routeSearch.sideNav === 'cc-box') {
+      message.info('참조·공람자 지정 내역은 각 결재 상세에서 확인할 수 있습니다.');
+    }
+  }, [routeSearch.compose, routeSearch.sideNav, routeSearch.tab, message]);
 
   const { data: drafterProfile } = useQuery({
     queryKey: ['member', 'detail', authMemberId],
@@ -1073,49 +1024,6 @@ export function ApprovalsPage() {
     queryFn: () => approvalRequestApi.listActedApprovals(),
   });
 
-  const { data: selectedRequestDetail, isFetching: detailLoading } = useQuery({
-    queryKey: ['approval-user', 'request-detail', selectedRequestId],
-    queryFn: () => approvalRequestApi.getRequest(selectedRequestId!),
-    enabled: Boolean(selectedRequestId),
-  });
-
-  const detailMemberIds = useMemo(() => {
-    if (!selectedRequestId || !selectedRequestDetail) return [] as string[];
-    const ids = new Set<string>();
-    for (const l of selectedRequestDetail.approvalLines) {
-      const id = l.approverMemberId?.trim();
-      if (id) ids.add(id);
-    }
-    for (const v of selectedRequestDetail.viewers ?? []) {
-      const id = v.viewerMemberId?.trim();
-      if (id) ids.add(id);
-    }
-    return [...ids];
-  }, [selectedRequestId, selectedRequestDetail]);
-
-  const approvalDetailMemberQueries = useQueries({
-    queries: detailMemberIds.map((memberId) => ({
-      queryKey: ['member', 'detail', memberId],
-      queryFn: () => memberApi.detail(memberId),
-      enabled: Boolean(selectedRequestId && memberId),
-      staleTime: 5 * 60_000,
-    })),
-  });
-
-  const approvalDetailMemberLookup = useMemo(() => {
-    const map = new Map<string, DetailMemberLookupRow>();
-    detailMemberIds.forEach((id, i) => {
-      const q = approvalDetailMemberQueries[i];
-      map.set(id, {
-        name: q?.data?.name?.trim() ?? '',
-        organizationName: q?.data?.organizationName?.trim() ?? '',
-        jobTitleName: q?.data?.jobTitleName?.trim() ?? '',
-        pending: Boolean(q && (q.isPending || q.isFetching) && !q.data),
-      });
-    });
-    return map;
-  }, [detailMemberIds, approvalDetailMemberQueries]);
-
   const refreshUserQueries = async () => {
     await qc.invalidateQueries({ queryKey: ['approval-user'] });
     await qc.invalidateQueries({ queryKey: ['approval', 'documents', 'active'] });
@@ -1144,7 +1052,7 @@ export function ApprovalsPage() {
         composeDraftHydratingRef.current = false;
       });
       await refreshUserQueries();
-      setTab('my');
+      navigate({ to: '/app/approvals', search: { tab: 'my' }, replace: true });
     },
     onError: (e: Error) => message.error(e.message || '결재 요청 처리에 실패했습니다.'),
   });
@@ -1172,7 +1080,7 @@ export function ApprovalsPage() {
         composeDraftHydratingRef.current = false;
       });
       await refreshUserQueries();
-      setTab('my');
+      navigate({ to: '/app/approvals', search: { tab: 'my' }, replace: true });
     },
     onError: (e: Error) => message.error(e.message || '결재 요청 처리에 실패했습니다.'),
   });
@@ -1220,7 +1128,7 @@ export function ApprovalsPage() {
         setOrgTreeSelectedKey(undefined);
         setComposePhase('fill');
         setLineInfoTab(doc.autoApproveYn === 'Y' ? 'cc' : 'approval');
-        setTab('compose');
+        navigate({ to: '/app/approvals', search: { tab: 'compose' }, replace: true });
         message.success('임시저장 문서를 불러왔습니다.');
         void qc.invalidateQueries({ queryKey: ['approval-user', 'my-requests'] });
         queueMicrotask(() => {
@@ -1232,7 +1140,7 @@ export function ApprovalsPage() {
         message.error(e instanceof Error ? e.message : '문서를 불러오지 못했습니다.');
       }
     },
-    [activeDocuments, form, message, qc],
+    [activeDocuments, form, message, navigate, qc],
   );
 
   const cancelRequestM = useMutation({
@@ -1250,11 +1158,22 @@ export function ApprovalsPage() {
   const approveM = useMutation({
     mutationFn: ({ approvalId, comment }: { approvalId: string; comment?: string }) =>
       approvalRequestApi.approve(approvalId, comment),
-    onSuccess: async () => {
-      message.success('승인 처리했습니다.');
+    onSuccess: async (detail) => {
+      const pid =
+        getRefreshIdentityHeaders()['X-User-MemberPositionId']?.trim() ||
+        drafterProfile?.memberPositionId?.trim();
+      syncApprovalQueryCachesAfterAct(qc, detail, {
+        myMemberId: authMemberId,
+        myMemberPositionId: pid,
+      });
+      const proxy = requestIncludesMyProxyAct(detail, {
+        myMemberId: authMemberId,
+        myMemberPositionId: pid,
+      });
+      message.success(proxy ? '대결로 승인 처리했습니다.' : '승인 처리했습니다.');
       setApprovalAction(null);
       setApprovalComment('');
-      await refreshUserQueries();
+      await qc.invalidateQueries({ queryKey: ['approval', 'documents', 'active'] });
     },
     onError: (e: Error) => message.error(e.message || '승인 처리에 실패했습니다.'),
   });
@@ -1262,11 +1181,22 @@ export function ApprovalsPage() {
   const rejectM = useMutation({
     mutationFn: ({ approvalId, comment }: { approvalId: string; comment: string }) =>
       approvalRequestApi.reject(approvalId, comment),
-    onSuccess: async () => {
-      message.success('반려 처리했습니다.');
+    onSuccess: async (detail) => {
+      const pid =
+        getRefreshIdentityHeaders()['X-User-MemberPositionId']?.trim() ||
+        drafterProfile?.memberPositionId?.trim();
+      syncApprovalQueryCachesAfterAct(qc, detail, {
+        myMemberId: authMemberId,
+        myMemberPositionId: pid,
+      });
+      const proxy = requestIncludesMyProxyAct(detail, {
+        myMemberId: authMemberId,
+        myMemberPositionId: pid,
+      });
+      message.success(proxy ? '대결로 반려 처리했습니다.' : '반려 처리했습니다.');
       setApprovalAction(null);
       setApprovalComment('');
-      await refreshUserQueries();
+      await qc.invalidateQueries({ queryKey: ['approval', 'documents', 'active'] });
     },
     onError: (e: Error) => message.error(e.message || '반려 처리에 실패했습니다.'),
   });
@@ -1660,11 +1590,30 @@ export function ApprovalsPage() {
     },
   ];
 
+  /** 승인 시 게이트웨이와 동일한 직위 ID 우선(멤버 상세와 불일치할 수 있음) */
+  const myPositionIdForProxy =
+    getRefreshIdentityHeaders()['X-User-MemberPositionId']?.trim() ||
+    drafterProfile?.memberPositionId?.trim();
+
   const pendingColumns = [
     {
       title: '양식',
       dataIndex: 'documentName',
       key: 'documentName',
+    },
+    {
+      title: '구분',
+      key: 'proxyKind',
+      width: 88,
+      render: (_: unknown, row: ApprovalRequestDetail) => {
+        const myLine = row.approvalLines.find((l) => String(l.approvalStatus).toUpperCase() === 'PENDING');
+        if (!myLine) return '—';
+        return isPendingApprovalLineForProxyActor(myLine, myPositionIdForProxy) ? (
+          <Tag color="purple">대결</Tag>
+        ) : (
+          <Tag>직접</Tag>
+        );
+      },
     },
     {
       title: '요청 상태',
@@ -2029,7 +1978,7 @@ export function ApprovalsPage() {
             size="small"
             icon={<MenuOutlined className="tw-text-[14px] tw-text-[#333]" />}
             className={composeToolbarGhostBtn}
-            onClick={() => setTab('my')}
+            onClick={() => navigate({ to: '/app/approvals', search: { tab: 'my' }, replace: true })}
           >
             목록
           </Button>
@@ -2444,7 +2393,9 @@ export function ApprovalsPage() {
 
       <Tabs
         activeKey={tab}
-        onChange={setTab}
+        onChange={(key) => {
+          navigate({ to: '/app/approvals', search: { tab: key }, replace: true });
+        }}
         items={[
           {
             key: 'compose',
@@ -2499,8 +2450,10 @@ export function ApprovalsPage() {
                         loading={docsLoading}
                         myPendingApprovalCount={pendingRequests.length}
                         mySubmittedInProgressCount={mySubmittedInProgressCount}
-                        onOpenPendingTab={() => setTab('pending')}
-                        onOpenMyTab={() => setTab('my')}
+                        onOpenPendingTab={() =>
+                          navigate({ to: '/app/approvals', search: { tab: 'pending' }, replace: true })
+                        }
+                        onOpenMyTab={() => navigate({ to: '/app/approvals', search: { tab: 'my' }, replace: true })}
                         onAfterPick={() => {
                           setComposePhase((p) => (p === 'select' ? 'fill' : p));
                           queueMicrotask(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
@@ -2605,6 +2558,7 @@ export function ApprovalsPage() {
                                     drafterJobTitle={
                                       drafterProfile?.jobTitleName?.trim() || user?.jobTitle?.trim() || undefined
                                     }
+                                    applicationWrittenDateIso={dayjs().format('YYYY-MM-DD')}
                                     approvers={orderedApprovalLineDrafts.map((r) =>
                                       r.kind === 'org'
                                         ? {
@@ -2777,7 +2731,17 @@ export function ApprovalsPage() {
                 <div className="tw-mb-3 tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2">
                   <Select<ApprovalRequestStatus | 'ALL'>
                     value={requestStatusFilter}
-                    onChange={(v) => setRequestStatusFilter(v)}
+                    onChange={(v) => {
+                      setRequestStatusFilter(v);
+                      navigate({
+                        to: '/app/approvals',
+                        search: {
+                          tab: 'my',
+                          ...(v === 'ALL' ? {} : { myStatus: v }),
+                        },
+                        replace: true,
+                      });
+                    }}
                     style={{ width: 220 }}
                     options={[
                       { value: 'ALL', label: '전체 상태' },
@@ -2820,6 +2784,20 @@ export function ApprovalsPage() {
                   loading={actedLoading}
                   columns={[
                     { title: '양식', dataIndex: 'documentName', key: 'documentName' },
+                    {
+                      title: '처리',
+                      key: 'proxyAct',
+                      width: 88,
+                      render: (_: unknown, row: ApprovalRequestDetail) =>
+                        requestIncludesMyProxyAct(row, {
+                          myMemberId: authMemberId,
+                          myMemberPositionId: myPositionIdForProxy,
+                        }) ? (
+                          <Tag color="purple">대결</Tag>
+                        ) : (
+                          <Tag>직접</Tag>
+                        ),
+                    },
                     {
                       title: '요청 상태',
                       dataIndex: 'requestStatus',
@@ -2903,121 +2881,10 @@ export function ApprovalsPage() {
         {selectedDocument ? renderComposeApprovalInfoContent({ stacked: false }) : null}
       </Modal>
 
-      <Modal
-        title="결재 상세"
-        open={selectedRequestId != null}
-        onCancel={() => setSelectedRequestId(null)}
-        footer={null}
-        width={860}
-      >
-        {detailLoading || !selectedRequestDetail ? (
-          <Typography.Text type="secondary">불러오는 중...</Typography.Text>
-        ) : (
-          <Space direction="vertical" size={12} className="tw-w-full">
-            <Descriptions size="small" bordered column={2}>
-              <Descriptions.Item label="양식">{selectedRequestDetail.documentName}</Descriptions.Item>
-              <Descriptions.Item label="상태">{statusTag(selectedRequestDetail.requestStatus)}</Descriptions.Item>
-              <Descriptions.Item label="요청일">{formatDateTime(selectedRequestDetail.createdAt)}</Descriptions.Item>
-              <Descriptions.Item label="수정일">{formatDateTime(selectedRequestDetail.updatedAt)}</Descriptions.Item>
-            </Descriptions>
-            <Card size="small" title="내용">
-              <pre className="tw-m-0 tw-whitespace-pre-wrap tw-break-words">
-                {selectedRequestDetail.contentJson || '{}'}
-              </pre>
-            </Card>
-            <Card size="small" title="결재라인">
-              <Table
-                size="small"
-                rowKey="approvalId"
-                pagination={false}
-                dataSource={[...selectedRequestDetail.approvalLines].sort((a, b) => a.stepOrder - b.stepOrder)}
-                columns={[
-              { title: '순서', dataIndex: 'stepOrder', key: 'stepOrder', width: 56 },
-                  {
-                    title: '결재자',
-                    key: 'approver',
-                    width: 260,
-                    render: (_: unknown, line: ApprovalLine) => (
-                      <DetailPersonCell
-                        apiName={line.approverName}
-                        apiOrganizationName={line.approverOrganizationName}
-                        apiJobTitleName={line.approverJobTitleName}
-                        lookup={approvalDetailMemberLookup.get(line.approverMemberId)}
-                      />
-                    ),
-                  },
-                  {
-                    title: '상태',
-                    dataIndex: 'approvalStatus',
-                    key: 'approvalStatus',
-                    width: 130,
-                    render: (v: string) => <Tag>{v}</Tag>,
-                  },
-                  {
-                    title: '의견',
-                    dataIndex: 'comment',
-                    key: 'comment',
-                    render: (v: string | null) => v || '—',
-                  },
-                  {
-                    title: '처리일',
-                    dataIndex: 'actedAt',
-                    key: 'actedAt',
-                    width: 180,
-                    render: (v: string | null) => formatDateTime(v),
-                  },
-                ]}
-              />
-            </Card>
-            <Card size="small" title="참조·공람">
-              <Table
-                size="small"
-                rowKey="viewerId"
-                pagination={false}
-                dataSource={selectedRequestDetail.viewers ?? []}
-                locale={{ emptyText: '지정된 참조·공람자가 없습니다.' }}
-                columns={[
-                  {
-                    title: '구분',
-                    dataIndex: 'viewerType',
-                    key: 'viewerType',
-                    width: 100,
-                    render: (t: string) =>
-                      String(t).toUpperCase() === 'CC' ? <Tag>참조</Tag> : <Tag color="blue">공람</Tag>,
-                  },
-                  {
-                    title: '이름',
-                    key: 'viewerDisplay',
-                    width: 260,
-                    render: (_: unknown, row: ApprovalViewer) => (
-                      <DetailPersonCell
-                        apiName={row.viewerName}
-                        apiOrganizationName={row.viewerOrganizationName}
-                        apiJobTitleName={row.viewerJobTitleName}
-                        lookup={approvalDetailMemberLookup.get(row.viewerMemberId)}
-                      />
-                    ),
-                  },
-                  {
-                    title: '열람 상태',
-                    dataIndex: 'viewerReadStatus',
-                    key: 'viewerReadStatus',
-                    width: 100,
-                    render: (v: string) => <Tag>{String(v).toUpperCase() === 'READ' ? '확인' : '미확인'}</Tag>,
-                  },
-                  {
-                    title: '열람일',
-                    dataIndex: 'viewedAt',
-                    key: 'viewedAt',
-                    width: 180,
-                    render: (v: string | null) => formatDateTime(v),
-                  },
-                ]}
-              />
-            </Card>
-          </Space>
-        )}
-      </Modal>
+      <ApprovalRequestReadOnlyModal
+        requestId={selectedRequestId}
+        onClose={() => setSelectedRequestId(null)}
+      />
 
       <Modal
         title="결재 취소"
