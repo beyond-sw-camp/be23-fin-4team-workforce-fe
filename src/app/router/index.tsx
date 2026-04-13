@@ -37,6 +37,8 @@ import { OrganizationPage } from '@/pages/app/OrganizationPage';
 import { RolesPage } from '@/pages/app/RolesPage';
 import { MyProfilePage } from '@/pages/app/MyProfilePage';
 import { MyProfileEditPage } from '@/pages/app/MyProfileEditPage';
+import MeetingsPage from '@/pages/app/MeetingsPage';
+import MeetingDetailPage from '@/pages/app/MeetingDetailPage';
 import { ForbiddenPage } from '@/pages/ForbiddenPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { APP_POST_LOGIN_PATH } from '@/app/config/paths';
@@ -242,13 +244,24 @@ const aiDocumentsAdminRoute = createRoute({
   },
 });
 
+const meetingsRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/meetings',
+  component: MeetingsPage,
+});
+
+const meetingDetailRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/meetings/$meetingId',
+  component: MeetingDetailPage,
+});
+
 const genericPaths = [
   '/attendance',
   '/leave',
   '/approvals',
   '/payroll',
   '/mail',
-  '/meetings',
   '/ai-assistant',
   '/settings',
 ] as const;
@@ -294,6 +307,8 @@ const routeTree = rootRoute.addChildren([
       evaluationWriteRoute,
       organizationRoute,
       rolesRoute,
+      meetingsRoute,
+      meetingDetailRoute,
       aiDocumentsAdminRoute,
       ...genericRoutes,
     ]),

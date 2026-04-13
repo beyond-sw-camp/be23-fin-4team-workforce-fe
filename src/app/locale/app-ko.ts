@@ -16,7 +16,7 @@ export const APP_MENU_LABEL: Record<string, string> = {
   '/app/notifications': '알림',
   '/app/performance': '성과',
   '/app/evaluations': '평가',
-  '/app/meetings': '미팅',
+  '/app/meetings': '1:1 면담',
   '/app/settings': '설정',
   '/app/ai-documents': 'HR 정책 문서',
 };
@@ -82,6 +82,7 @@ export function appHeaderTitleFromPath(
   if (pathname === '/app/me') return '마이페이지';
   if (pathname === '/app/me/edit') return '내 정보 수정';
   if (/^\/app\/members\/[^/]+$/.test(pathname)) return '구성원 상세';
+  if (/^\/app\/meetings\/[^/]+$/.test(pathname)) return '면담 상세';
   return APP_BRAND_NAME;
 }
 
@@ -105,10 +106,6 @@ export const APP_GENERIC_PAGE_COPY: Record<string, { title: string; description:
   '/mail': {
     title: '메일',
     description: '내부 메일·알림 연동 기능을 준비 중입니다.',
-  },
-  '/meetings': {
-    title: '미팅',
-    description: '1:1·팀 미팅 일정·기록 기능을 준비 중입니다.',
   },
   '/ai-assistant': {
     title: 'AI 비서',
@@ -183,6 +180,15 @@ export const PERFORMANCE_PAGE_KO = {
   /** 기간 만료일이 지났는데도 진행 중인 목표 */
   statDelayed: '지연',
   statScopeNote: '집계 범위는 상단 「내 목표 / 전체」 선택과 동일합니다.',
+  approvalStripTitle: '완료 제출 승인',
+  approvalStripCenter: '승인 센터',
+  approvalStripPending: '내가 처리할 승인',
+  approvalStripPendingShort: '처리 대기',
+  approvalStripMine: '내가 보낸 요청',
+  approvalStripMineShort: '내 요청',
+  approvalStripEmptyPending: '대기 중인 요청이 없습니다.',
+  approvalStripEmptyMine: '요청 내역이 없습니다.',
+  approvalStripLoading: '불러오는 중…',
   tabGoals: '목표 및 실적',
   tabTemplates: '지표 템플릿',
   tabTemplatesIntro:
@@ -191,6 +197,9 @@ export const PERFORMANCE_PAGE_KO = {
     '조건은 이 화면에만 적용됩니다. 목표 카드에서 「진행 시작」하면 상태가 반영됩니다. 실적 제출 후 검토·확정은 권한과 백엔드 정책을 따릅니다.',
   ctaAddGoal: '목표 추가',
   ctaAddTemplate: '템플릿 등록',
+  kpiPresetButton: '추천 템플릿',
+  kpiPresetTooltip: '자주 쓰는 지표 형식으로 양식을 채웁니다. 저장 전에 이름·수치를 조정하세요.',
+  kpiPresetApplied: '추천 템플릿이 적용되었습니다.',
   searchPlaceholder: '찾으시는 목표가 있나요?',
   searchTemplatesPlaceholder: '템플릿 이름으로 검색',
   /** 목표 탭 목록 — 데이터 없음·필터 결과 없음 공통(두 줄 + SVG) */
@@ -292,6 +301,8 @@ export const EVALUATION_PAGE_KO = {
   tabCalibration: '등급 캘리브레이션',
   tabAnalytics: '분포 분석',
   tabAnomalies: '오류 감지',
+  myEvaluationsEmptyHint:
+    '할당된 평가가 없을 때: 시즌이 초안이면 관리자가 시즌을 시작해야 평가 할당이 생깁니다. 이미 진행 중인 시즌이면 그룹에 평가자를 지정한 뒤 저장했는지 확인하세요. (저장 시 할당이 갱신됩니다)',
 
   // Season
   seasonAdd: '시즌 추가',

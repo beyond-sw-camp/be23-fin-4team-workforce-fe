@@ -5,6 +5,7 @@ import {
   ClockCircleOutlined,
   DeleteOutlined,
   EditOutlined,
+  FileDoneOutlined,
   CloseCircleOutlined,
   FilterOutlined,
   MessageOutlined,
@@ -21,10 +22,12 @@ import {
   Checkbox,
   Col,
   DatePicker,
+  Dropdown,
   Empty,
   Form,
   Input,
   InputNumber,
+  Modal,
   Popover,
   Progress,
   Row,
@@ -49,7 +52,6 @@ import 'dayjs/locale/ko';
 
 dayjs.extend(relativeTime);
 dayjs.locale('ko');
-import { Link } from '@tanstack/react-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type {
   CreateGoalPayload,
@@ -73,6 +75,7 @@ import { organizationApi } from '@/features/organization/api/organizationApi';
 import { flattenOrganizationsWithMeta } from '@/features/organization/lib/flattenOrganizationTree';
 import { defaultGoalListFilters, filterGoals, type GoalCycleKey, type GoalListFilters } from '@/features/goals/lib/filterGoals';
 import { sortGoals, type GoalListSortKey } from '@/features/goals/lib/sortGoals';
+import { GoalApprovalCenterPanel } from '@/features/goals/ui/GoalApprovalCenterPanel';
 import { computeGoalProgressPercent } from '@/features/goals/ui/goalProgressDisplay';
 import { buildGoalDisplayProgressMap } from '@/features/goals/ui/goalProgressRollup';
 import { GoalsListCards } from '@/features/goals/ui/GoalsListCards';
@@ -121,6 +124,82 @@ const CYCLE_OPTIONS: { value: KpiCycle; label: string }[] = [
   { value: 'MONTHLY', label: '월간' },
   { value: 'QUARTERLY', label: '분기' },
   { value: 'ANYTIME', label: '상시' },
+];
+
+/** KPI 템플릿 등록 모달 — 추천 템플릿 드롭다운 */
+type KpiTemplatePresetDef = {
+  key: string;
+  label: string;
+  description: string;
+  name: string;
+  measureType: MeasureType;
+  unitType: UnitType;
+  cycle: KpiCycle;
+  capPct: number;
+  customUnitLabel?: string;
+};
+
+const KPI_TEMPLATE_PRESETS: KpiTemplatePresetDef[] = [
+  {
+    key: 'revenue-achievement',
+    label: '분기 매출 달성률',
+    description: '백분율 · 높을수록 유리 · 분기',
+    name: '분기 매출 달성률',
+    measureType: 'HIGHER_BETTER',
+    unitType: 'PERCENTAGE',
+    cycle: 'QUARTERLY',
+    capPct: 120,
+  },
+  {
+    key: 'cost-reduction',
+    label: '비용 절감률',
+    description: '백분율 · 낮을수록 유리 · 분기',
+    name: '비용 절감률',
+    measureType: 'LOWER_BETTER',
+    unitType: 'PERCENTAGE',
+    cycle: 'QUARTERLY',
+    capPct: 120,
+  },
+  {
+    key: 'defect-rate',
+    label: '불량률',
+    description: '백분율 · 낮을수록 유리 · 월간',
+    name: '제품·프로세스 불량률',
+    measureType: 'LOWER_BETTER',
+    unitType: 'PERCENTAGE',
+    cycle: 'MONTHLY',
+    capPct: 100,
+  },
+  {
+    key: 'nps-score',
+    label: 'NPS·만족 점수',
+    description: '일반 수치 · 목표치 일치 · 분기',
+    name: '고객 NPS',
+    measureType: 'TARGET_MATCH',
+    unitType: 'NUMBER',
+    cycle: 'QUARTERLY',
+    capPct: 110,
+  },
+  {
+    key: 'arr-amount',
+    label: 'ARR(금액)',
+    description: '금액 · 높을수록 유리 · 분기',
+    name: '연간 반복 매출(ARR)',
+    measureType: 'HIGHER_BETTER',
+    unitType: 'AMOUNT',
+    cycle: 'QUARTERLY',
+    capPct: 120,
+  },
+  {
+    key: 'okr-progress',
+    label: 'OKR 달성률',
+    description: '비율 · 높을수록 유리 · 분기',
+    name: '핵심 결과(KR) 달성률',
+    measureType: 'HIGHER_BETTER',
+    unitType: 'RATIO',
+    cycle: 'QUARTERLY',
+    capPct: 120,
+  },
 ];
 
 const VISIBILITY_OPTIONS: { value: Visibility; label: string }[] = [
@@ -469,6 +548,7 @@ function PerformancePage() {
   }>();
   const [goalCommentDraft, setGoalCommentDraft] = useState('');
   const [goalProgressUpdateModalOpen, setGoalProgressUpdateModalOpen] = useState(false);
+  const [approvalHubOpen, setApprovalHubOpen] = useState(false);
 
   const goalsQuery = useQuery({
     queryKey: ['goals', 'list', companyId],
@@ -1085,6 +1165,7 @@ function PerformancePage() {
       ) : null}
 
       {companyId ? (
+        <>
         <section
           className="tw-rounded-2xl tw-border tw-border-slate-200/80"
           aria-label={PERFORMANCE_PAGE_KO.heroTitle}
@@ -1177,8 +1258,89 @@ function PerformancePage() {
                 {PERFORMANCE_PAGE_KO.statScopeNote}
               </Text>
             </div>
+
+            <div className="tw-mt-5 tw-flex tw-flex-col tw-gap-2 tw-rounded-xl tw-border tw-border-slate-200/80 tw-bg-white tw-px-3 tw-py-2.5 tw-shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:tw-flex-row sm:tw-flex-wrap sm:tw-items-center sm:tw-justify-between sm:tw-gap-3 sm:tw-px-4 sm:tw-py-3">
+              <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
+                <FileDoneOutlined className="tw-shrink-0 tw-text-[15px] tw-text-slate-400" />
+                <Text className="tw-text-xs tw-font-semibold tw-text-slate-600 sm:tw-text-sm">
+                  {PERFORMANCE_PAGE_KO.approvalStripTitle}
+                </Text>
+              </div>
+              <div className="tw-flex tw-min-w-0 tw-flex-wrap tw-items-center tw-gap-2 sm:tw-gap-3">
+                <div className="tw-flex tw-min-w-[7rem] tw-items-baseline tw-gap-1.5 tw-rounded-lg tw-border tw-border-slate-200/90 tw-bg-slate-50/80 tw-px-2.5 tw-py-1 sm:tw-px-3 sm:tw-py-1.5">
+                  <span className="tw-text-[11px] tw-text-slate-500 sm:tw-text-xs">
+                    {PERFORMANCE_PAGE_KO.approvalStripPendingShort}
+                  </span>
+                  <span className="tw-text-base tw-font-semibold tw-tabular-nums tw-text-[#1e3a5f] sm:tw-text-lg">
+                    {pendingApprovalsQuery.isPending
+                      ? '…'
+                      : pendingApprovalsQuery.data?.length ?? 0}
+                  </span>
+                </div>
+                <div className="tw-flex tw-min-w-[7rem] tw-items-baseline tw-gap-1.5 tw-rounded-lg tw-border tw-border-slate-200/90 tw-bg-white tw-px-2.5 tw-py-1 sm:tw-px-3 sm:tw-py-1.5">
+                  <span className="tw-text-[11px] tw-text-slate-500 sm:tw-text-xs">
+                    {PERFORMANCE_PAGE_KO.approvalStripMineShort}
+                  </span>
+                  <span className="tw-text-base tw-font-semibold tw-tabular-nums tw-text-[#1e3a5f] sm:tw-text-lg">
+                    {approvalHistoryQuery.isPending
+                      ? '…'
+                      : approvalHistoryQuery.data?.length ?? 0}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="tw-ml-auto tw-shrink-0 tw-border-0 tw-bg-transparent tw-p-0 tw-text-xs tw-font-semibold tw-text-[#1e3a5f] hover:tw-underline sm:tw-text-sm"
+                  onClick={() => setApprovalHubOpen(true)}
+                >
+                  {PERFORMANCE_PAGE_KO.approvalStripCenter} →
+                </button>
+              </div>
+            </div>
           </div>
         </section>
+        <Modal
+          title={
+            <div className="tw-flex tw-items-center tw-gap-2.5">
+              <span className="tw-flex tw-h-9 tw-w-9 tw-items-center tw-justify-center tw-rounded-xl tw-bg-[#eff6ff] tw-text-[#2563eb]">
+                <FileDoneOutlined className="tw-text-[18px]" />
+              </span>
+              <div>
+                <div className="tw-text-base tw-font-semibold tw-leading-tight tw-text-[#0f172a]">
+                  {PERFORMANCE_PAGE_KO.approvalStripCenter}
+                </div>
+                <div className="tw-mt-0.5 tw-text-xs tw-font-normal tw-text-slate-500">
+                  완료 제출 건을 확인하고 승인하거나, 보낸 요청을 조회합니다.
+                </div>
+              </div>
+            </div>
+          }
+          open={approvalHubOpen}
+          onCancel={() => setApprovalHubOpen(false)}
+          footer={null}
+          width="min(720px, calc(100vw - 24px))"
+          centered
+          destroyOnClose
+          classNames={{ content: '!tw-rounded-2xl !tw-overflow-hidden' }}
+          styles={{
+            header: {
+              marginBottom: 0,
+              paddingBottom: 16,
+              borderBottom: '1px solid rgb(241 245 249)',
+            },
+            body: {
+              maxHeight: 'min(78vh, 720px)',
+              overflowY: 'auto',
+              paddingTop: 20,
+              paddingBottom: 20,
+              background: 'linear-gradient(180deg, rgb(248 250 252) 0%, rgb(255 255 255) 48px)',
+            },
+            mask: { backdropFilter: 'blur(2px)' },
+          }}
+          zIndex={1050}
+        >
+          <GoalApprovalCenterPanel showIntro={false} embeddedInModal />
+        </Modal>
+        </>
       ) : null}
 
       <Card className="tw-overflow-hidden tw-rounded-2xl tw-border-slate-200/80 tw-bg-white tw-shadow-[0_1px_3px_rgba(15,23,42,0.06)] [&_.ant-card-body]:tw-px-5 [&_.ant-card-body]:tw-pb-6 [&_.ant-card-body]:tw-pt-5 sm:[&_.ant-card-body]:tw-px-7 [&_.ant-tabs-nav]:tw-mb-2 [&_.ant-tabs-nav]:tw-px-0 [&_.ant-tabs-tab]:!tw-pb-3 [&_.ant-tabs-tab]:!tw-pt-1 [&_.ant-tabs-tab]:!tw-text-slate-600 [&_.ant-tabs-tab.ant-tabs-tab-active_.ant-tabs-tab-btn]:!tw-text-[#1e3a5f] [&_.ant-tabs-tab.ant-tabs-tab-active_.ant-tabs-tab-btn]:!tw-font-semibold [&_.ant-tabs-ink-bar]:!tw-bg-[#3b82f6]">
@@ -1203,14 +1365,6 @@ function PerformancePage() {
                           { label: PERFORMANCE_PAGE_KO.scopeMembers, value: 'members' },
                         ]}
                       />
-                      {(pendingApprovalsQuery.data?.length ?? 0) > 0 ? (
-                        <Link
-                          to="/app/performance/approvals"
-                          className="tw-text-sm tw-font-medium tw-text-[#1e3a5f] tw-underline tw-underline-offset-2"
-                        >
-                          완료 제출 승인 대기 {pendingApprovalsQuery.data!.length}건 →
-                        </Link>
-                      ) : null}
                     </div>
                     <AppSearchField
                       className="lg:tw-flex-1"
@@ -1322,108 +1476,6 @@ function PerformancePage() {
                       <Tag color="gold" className="!tw-m-0 !tw-text-[11px]">
                         상태 {goalFilters.statuses.length}개 필터
                       </Tag>
-                    )}
-                  </div>
-
-                  <div className="tw-rounded-xl tw-border tw-border-slate-200/90 tw-bg-slate-50/60 tw-px-4 tw-py-3">
-                      <div className="tw-flex tw-items-center tw-justify-between tw-gap-2">
-                        <div>
-                          <div className="tw-text-xs tw-font-semibold tw-text-slate-500">완료 제출 승인 대기함</div>
-                          <div className="tw-mt-0.5 tw-text-sm tw-font-medium tw-text-slate-800">
-                            현재 {pendingApprovalsQuery.data?.length ?? 0}건의 승인 요청이 대기 중입니다.
-                          </div>
-                        </div>
-                        <Link
-                          to="/app/performance/approvals"
-                          className="tw-shrink-0 tw-text-sm tw-font-semibold tw-text-[#1e3a5f] hover:tw-underline"
-                        >
-                          전체 보기
-                        </Link>
-                      </div>
-                      {pendingApprovalsQuery.isPending ? (
-                        <div className="tw-mt-3 tw-text-xs tw-text-slate-500">승인 대기 목록을 불러오는 중입니다...</div>
-                      ) : (pendingApprovalsQuery.data?.length ?? 0) === 0 ? (
-                        <div className="tw-mt-3 tw-rounded-lg tw-border tw-border-slate-200 tw-bg-white tw-px-3 tw-py-2.5 tw-text-xs tw-text-slate-500">
-                          지금은 처리할 완료 제출 승인 요청이 없습니다.
-                        </div>
-                      ) : (
-                        <div className="tw-mt-3 tw-space-y-2">
-                          {pendingApprovalsQuery.data!.slice(0, 3).map((r) => (
-                            <Link
-                              key={r.requestId}
-                              to="/app/performance/approvals/$requestId"
-                              params={{ requestId: r.requestId }}
-                              className="tw-flex tw-items-center tw-justify-between tw-gap-3 tw-rounded-lg tw-border tw-border-slate-200 tw-bg-white tw-px-3 tw-py-2.5 hover:tw-border-slate-300"
-                            >
-                              <div className="tw-min-w-0">
-                                <div className="tw-truncate tw-text-sm tw-font-medium tw-text-slate-800">
-                                  요청 {r.requestId.slice(0, 8)}...
-                                </div>
-                                <div className="tw-mt-0.5 tw-text-xs tw-text-slate-500">
-                                  목표 {r.goalCount}건 · {r.requestedAt ?? '-'}
-                                </div>
-                                {r.completionSummary ? (
-                                  <div className="tw-mt-1 tw-truncate tw-text-xs tw-text-slate-600">
-                                    요약: {r.completionSummary}
-                                  </div>
-                                ) : null}
-                              </div>
-                              <Tag color={String(r.status ?? '').toLowerCase() === 'rejected' ? 'error' : 'processing'} className="!tw-m-0">
-                                {String(r.status ?? '').toLowerCase() === 'rejected' ? '반려' : '대기'}
-                              </Tag>
-                            </Link>
-                          ))}
-                        </div>
-                      )}
-                  </div>
-
-                  <div className="tw-rounded-xl tw-border tw-border-slate-200/90 tw-bg-white tw-px-4 tw-py-3">
-                    <div className="tw-flex tw-items-center tw-justify-between tw-gap-2">
-                      <div className="tw-text-xs tw-font-semibold tw-text-slate-500">내 승인 요청 흐름</div>
-                      <Link to="/app/performance/approvals" className="tw-text-xs tw-font-semibold tw-text-[#1e3a5f] hover:tw-underline">
-                        상세 보기
-                      </Link>
-                    </div>
-                    {approvalHistoryQuery.isPending ? (
-                      <div className="tw-mt-2 tw-text-xs tw-text-slate-500">요청 흐름을 불러오는 중입니다...</div>
-                    ) : (approvalHistoryQuery.data?.length ?? 0) === 0 ? (
-                      <div className="tw-mt-2 tw-text-xs tw-text-slate-500">아직 승인 요청 이력이 없습니다.</div>
-                    ) : (
-                      <div className="tw-mt-2 tw-space-y-2">
-                        {approvalHistoryQuery.data!.slice(0, 4).map((r) => (
-                          <Link
-                            key={r.requestId}
-                            to="/app/performance/approvals/$requestId"
-                            params={{ requestId: r.requestId }}
-                            className="tw-flex tw-items-center tw-justify-between tw-gap-3 tw-rounded-lg tw-border tw-border-slate-200 tw-bg-slate-50/40 tw-px-3 tw-py-2"
-                          >
-                            <div className="tw-min-w-0">
-                              <div className="tw-truncate tw-text-xs tw-font-medium tw-text-slate-800">
-                                {r.completionSummary?.trim() ? r.completionSummary : `요청 ${r.requestId.slice(0, 8)}...`}
-                              </div>
-                              <div className="tw-mt-0.5 tw-text-[11px] tw-text-slate-500">
-                                목표 {r.goalCount}건 · {r.requestedAt ?? '-'}
-                              </div>
-                            </div>
-                            <Tag
-                              className="!tw-m-0"
-                              color={
-                                String(r.status ?? '').toLowerCase() === 'approved'
-                                  ? 'success'
-                                  : String(r.status ?? '').toLowerCase() === 'rejected'
-                                    ? 'error'
-                                    : 'processing'
-                              }
-                            >
-                              {String(r.status ?? '').toLowerCase() === 'approved'
-                                ? '승인'
-                                : String(r.status ?? '').toLowerCase() === 'rejected'
-                                  ? '반려'
-                                  : '대기'}
-                            </Tag>
-                          </Link>
-                        ))}
-                      </div>
                     )}
                   </div>
 
@@ -1581,6 +1633,47 @@ function PerformancePage() {
             capPct: 120,
           }}
         >
+          <div className="tw-flex tw-justify-end tw-mb-2">
+            <Dropdown
+              menu={{
+                items: KPI_TEMPLATE_PRESETS.map((p) => ({
+                  key: p.key,
+                  label: (
+                    <div>
+                      <div className="tw-font-medium">{p.label}</div>
+                      <div className="tw-text-xs tw-text-gray-400">{p.description}</div>
+                    </div>
+                  ),
+                })),
+                onClick: ({ key }) => {
+                  const preset = KPI_TEMPLATE_PRESETS.find((x) => x.key === key);
+                  if (!preset) return;
+                  const ut = preset.unitType;
+                  const unitLabel =
+                    ut === 'CUSTOM'
+                      ? String(preset.customUnitLabel ?? '').trim()
+                      : fixedUnitLabelForType(ut);
+                  tplForm.setFieldsValue({
+                    name: preset.name,
+                    measureType: preset.measureType,
+                    unitType: ut,
+                    unitLabel,
+                    cycle: preset.cycle,
+                    capPct: preset.capPct,
+                  });
+                  message.success(PERFORMANCE_PAGE_KO.kpiPresetApplied);
+                },
+              }}
+              placement="bottomRight"
+              trigger={['click']}
+            >
+              <Tooltip title={PERFORMANCE_PAGE_KO.kpiPresetTooltip}>
+                <Button type="primary" ghost size="small" icon={<ThunderboltOutlined />}>
+                  {PERFORMANCE_PAGE_KO.kpiPresetButton}
+                </Button>
+              </Tooltip>
+            </Dropdown>
+          </div>
           <Form.Item name="name" label="템플릿 이름" rules={[{ required: true }]}>
             <Input placeholder="예: 매출 달성률" />
           </Form.Item>

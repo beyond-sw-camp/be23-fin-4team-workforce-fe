@@ -9,10 +9,10 @@ import { useNavigate, useParams } from '@tanstack/react-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EVALUATION_PAGE_KO as L } from '@/app/locale/app-ko';
 import { evaluationApi } from '@/features/evaluation/api/evaluationApi';
+import { normalizeEvaluationDesign } from '@/features/evaluation/lib/normalizeEvaluationDesign';
 import type {
-  Answer, DesignSection, DesignQuestion, EvaluationDesign, EvaluationResponse,
+  Answer, DesignSection, DesignQuestion, EvaluationDesign,
 } from '@/features/evaluation/model/types';
-import { useAuth } from '@/features/auth/useAuth';
 import { AppButton } from '@/shared/ui/AppButton';
 
 const { Text, Title, Paragraph } = Typography;
@@ -21,7 +21,6 @@ export function EvaluationWritePage() {
   const { responseId } = useParams({ strict: false }) as { responseId: string };
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { user } = useAuth();
   const autoSaveRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Data ──
@@ -30,15 +29,26 @@ export function EvaluationWritePage() {
     queryFn: () => evaluationApi.getResponse(responseId),
   });
 
-  // Load the design for this response's group
-  const { data: designs = [] } = useQuery({
-    queryKey: ['eval-designs'],
-    queryFn: () => evaluationApi.listDesigns(),
+  const { data: designRaw, isLoading: designLoading, isError: designError } = useQuery({
+    queryKey: ['eval-design', response?.designId],
+    queryFn: () => evaluationApi.getDesign(response!.designId!),
+    enabled: !!response?.designId,
   });
+
+  const design: EvaluationDesign | undefined = useMemo(
+    () => (designRaw ? normalizeEvaluationDesign(designRaw) : undefined),
+    [designRaw],
+  );
+  const sections: DesignSection[] = design?.sections ?? [];
 
   // ── Local answer state ──
   const [answers, setAnswers] = useState<Record<string, Answer>>({});
   const [initialized, setInitialized] = useState(false);
+
+  useEffect(() => {
+    setInitialized(false);
+    setAnswers({});
+  }, [responseId]);
 
   // Initialize answers from response
   useEffect(() => {
@@ -51,10 +61,6 @@ export function EvaluationWritePage() {
       setInitialized(true);
     }
   }, [response, initialized]);
-
-  // ── Find design (simplified - in production would fetch from group→design relationship) ──
-  const design: EvaluationDesign | undefined = designs[0]; // Placeholder - would be fetched via group
-  const sections: DesignSection[] = design?.sections ?? [];
   const allQuestions = useMemo(() => sections.flatMap(s => s.questions), [sections]);
   const requiredQuestions = useMemo(() => allQuestions.filter(q => q.required), [allQuestions]);
 
@@ -126,6 +132,7 @@ export function EvaluationWritePage() {
       if (q.type === 'text') return !a.textValue?.trim();
       if (q.type === 'scale') return a.scaleValue == null;
       if (q.type === 'grade') return !a.gradeValue;
+      if (q.type === 'gap') return a.scaleValue == null;
       return false;
     });
     if (unanswered.length > 0) {
@@ -140,6 +147,29 @@ export function EvaluationWritePage() {
 
   if (responseLoading) return <div className="tw-flex tw-justify-center tw-py-20"><Spin size="large" /></div>;
   if (!response) return <div className="tw-p-6"><Text type="danger">평가 응답을 찾을 수 없습니다.</Text></div>;
+  if (response.designId && designLoading) {
+    return <div className="tw-flex tw-justify-center tw-py-20"><Spin size="large" /></div>;
+  }
+  if (response.designId && designError) {
+    return (
+      <div className="tw-p-6">
+        <Text type="danger">평가 설계를 불러오지 못했습니다. 관리자에게 문의하세요.</Text>
+      </div>
+    );
+  }
+  if (!response.designId) {
+    return (
+      <div className="tw-p-6 tw-max-w-screen-xl tw-mx-auto">
+        <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate({ to: '/app/evaluations' })} className="tw-mb-4" />
+        <Card>
+          <div className="tw-text-center tw-py-12 tw-text-gray-500">
+            <InfoCircleOutlined className="tw-text-3xl tw-mb-2" />
+            <div>이 평가 그룹에 연결된 설계가 없습니다. 관리자가 평가 그룹에 설계를 지정한 뒤 다시 시도해 주세요.</div>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   const isReadOnly = response.status === 'SUBMITTED';
 

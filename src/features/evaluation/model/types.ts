@@ -1,6 +1,15 @@
 // ── Enums ──
 export type SeasonType = 'ANNUAL' | 'HALF_YEAR' | 'QUARTER';
 export type SeasonStatus = 'DRAFT' | 'ACTIVE' | 'CLOSED';
+export type SeasonPhase =
+  | 'NOT_STARTED'
+  | 'SELF_EVAL'
+  | 'PEER_EVAL'
+  | 'UPWARD_EVAL'
+  | 'DOWNWARD_EVAL'
+  | 'CALIBRATION'
+  | 'CONFIRMED'
+  | 'PUBLISHED';
 export type EvalType = 'SELF' | 'DOWNWARD' | 'UPWARD' | 'PEER';
 export type EvaluationStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'SUBMITTED';
 export type GradeType = 'ABSOLUTE' | 'RELATIVE';
@@ -25,6 +34,8 @@ export type EvaluationSeason = {
   startDate: string;
   endDate: string;
   status: SeasonStatus;
+  phase: SeasonPhase;
+  phaseUpdatedAt?: string;
   resultPublishDate?: string;
   schedule?: EvalSchedule;
 };
@@ -133,7 +144,11 @@ export type Calibration = {
 export type EvaluationResponse = {
   responseId: string;
   companyId: string;
+  /** 그룹이 속한 평가 시즌 */
+  seasonId?: string;
   groupId: string;
+  /** 그룹에 연결된 평가 설계 ID — 작성 화면에서 문항 로드 */
+  designId?: string;
   targetMemberId: string;
   evaluatorId: string;
   evaluationType: EvalType;
@@ -142,6 +157,8 @@ export type EvaluationResponse = {
   lastRemindedAt?: string;
   answers: Answer[];
   calibration?: Calibration;
+  normalizedScore?: number;
+  targetGoalIds?: string[];
 };
 
 export type SaveResponsePayload = {
