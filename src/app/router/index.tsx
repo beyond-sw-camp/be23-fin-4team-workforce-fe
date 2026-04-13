@@ -278,7 +278,6 @@ const genericPaths = [
   '/leave',
   '/approvals',
   '/payroll',
-  '/meetings',
   '/ai-assistant',
   '/settings',
 ] as const;
