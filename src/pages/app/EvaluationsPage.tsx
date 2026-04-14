@@ -6,8 +6,8 @@ import {
 import type {ColumnsType} from 'antd/es/table';
 import {
     PlusOutlined, EditOutlined, PlayCircleOutlined, StopOutlined,
-    EyeOutlined, SendOutlined, WarningOutlined, CheckCircleOutlined,
-    ExclamationCircleOutlined, DeleteOutlined, MinusCircleOutlined,
+    EyeOutlined, SendOutlined, CheckCircleOutlined,
+    DeleteOutlined, MinusCircleOutlined,
     ThunderboltOutlined, UserOutlined, TeamOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -24,11 +24,10 @@ import {PERM} from '@/features/permissions/backend-permissions';
 import {usePermissions} from '@/features/permissions/usePermissionsHook';
 import {useAuth} from '@/features/auth/useAuth';
 import {AppButton} from '@/shared/ui/AppButton';
-import {AppPageHeader} from '@/shared/ui/AppPageHeader';
 import {MemberRemoteSelect} from '@/features/members/ui/MemberRemoteSelect';
 import {useMemberDisplayNames} from '@/features/members/hooks/useMemberDisplayNames';
 
-const {Text} = Typography;
+const {Text, Title, Paragraph} = Typography;
 
 // ── 평가 설계 프리셋 ──
 type DesignPreset = {
@@ -610,11 +609,6 @@ function EvaluationsPage() {
         queryFn: () => selectedSeasonId ? evaluationApi.getProgress(selectedSeasonId) : Promise.resolve([]),
         enabled: !!selectedSeasonId && tab === 'progress',
     });
-    const {data: anomalyData = []} = useQuery({
-        queryKey: ['eval-anomalies', selectedSeasonId],
-        queryFn: () => selectedSeasonId ? evaluationApi.listAnomalies(selectedSeasonId) : Promise.resolve([]),
-        enabled: !!selectedSeasonId && tab === 'anomalies',
-    });
     const {data: calibrationData = []} = useQuery({
         queryKey: ['eval-calibration', selectedSeasonId],
         queryFn: () => selectedSeasonId ? evaluationApi.getCalibrationOverview(selectedSeasonId) : Promise.resolve([]),
@@ -629,7 +623,6 @@ function EvaluationsPage() {
         queryClient.invalidateQueries({queryKey: ['eval-my-responses']});
         queryClient.invalidateQueries({queryKey: ['eval-progress']});
         queryClient.invalidateQueries({queryKey: ['eval-calibration']});
-        queryClient.invalidateQueries({queryKey: ['eval-anomalies']});
     };
 
     // Season mutations
@@ -704,17 +697,6 @@ function EvaluationsPage() {
         },
     });
 
-    // Review request
-    const requestReviewMut = useMutation({
-        mutationFn: ({seasonId, responseId}: {
-            seasonId: string;
-            responseId: string
-        }) => evaluationApi.requestReview(seasonId, responseId),
-        onSuccess: () => {
-            message.success(L.reviewRequested);
-            invalidateAll();
-        },
-    });
 
     // auto-select first active season
     const activeSeason = useMemo(() => seasons.find(s => s.status === 'ACTIVE'), [seasons]);
@@ -833,39 +815,6 @@ function EvaluationsPage() {
         },
     ];
 
-    // ── Anomaly Columns ──
-    const anomalyCols: ColumnsType<EvaluationResponse> = [
-        {title: L.anomalyEvaluator, dataIndex: 'evaluatorId', key: 'evaluator', ellipsis: true},
-        {title: L.evaluationTarget, dataIndex: 'targetMemberId', key: 'target', ellipsis: true},
-        {
-            title: L.anomalyType, key: 'anomalyType', render: (_: unknown, r: EvaluationResponse) => {
-                const flagged = r.answers.filter(a => a.flagged);
-                if (flagged.length === 0) return '—';
-                return flagged.map(a => {
-                    const labels: Record<string, string> = {
-                        all_same: L.anomalyAllSame,
-                        too_short: L.anomalyTooShort,
-                        insincere: L.anomalyInsincere,
-                        contradiction: L.anomalyContradiction
-                    };
-                    return <Tag key={a.questionId}
-                                color={a.anomalySeverity === 'critical' ? 'red' : a.anomalySeverity === 'warning' ? 'orange' : 'blue'}>{labels[a.anomalyType ?? ''] ?? a.anomalyType}</Tag>;
-                });
-            },
-        },
-        {
-            title: L.anomalyAction, key: 'action', render: (_: unknown, r: EvaluationResponse) =>
-                selectedSeasonId ? (
-                    <Space>
-                        <Button type="link" size="small" onClick={() => requestReviewMut.mutate({
-                            seasonId: selectedSeasonId!,
-                            responseId: r.responseId
-                        })}>{L.anomalyRequestReview}</Button>
-                        <Button type="text" size="small">{L.anomalyDismiss}</Button>
-                    </Space>
-                ) : null,
-        },
-    ];
 
     // ── Calibration Columns ──
     const calibrationCols: ColumnsType<EvaluationResponse> = [
@@ -1019,28 +968,6 @@ function EvaluationsPage() {
             ),
         }] : []),
         ...(canUpdate ? [{
-            key: 'anomalies',
-            label: L.tabAnomalies,
-            children: (
-                <div className="tw-space-y-4">
-                    <div className="tw-flex tw-justify-between tw-items-center">
-                        <div className="tw-flex tw-items-center tw-gap-4">
-                            <Text strong className="tw-text-base">{L.anomalyTitle}</Text>
-                            <Select value={selectedSeasonId} onChange={setSelectedSeasonId} placeholder={L.seasonSelect}
-                                    className="tw-w-48"
-                                    options={seasons.filter(s => s.status !== 'DRAFT').map(s => ({
-                                        value: s.seasonId,
-                                        label: s.name
-                                    }))}/>
-                        </div>
-                        <Tag color="orange"><WarningOutlined/> {L.anomalyCount}: {anomalyData.length}</Tag>
-                    </div>
-                    <Table<EvaluationResponse> columns={anomalyCols} dataSource={anomalyData} rowKey="responseId"
-                                               size="middle" pagination={{pageSize: 20}}/>
-                </div>
-            ),
-        }] : []),
-        ...(canUpdate ? [{
             key: 'analytics',
             label: L.tabAnalytics,
             children: (
@@ -1068,9 +995,19 @@ function EvaluationsPage() {
     ];
 
     return (
-        <div className="tw-p-6 tw-max-w-screen-xl tw-mx-auto">
-            <AppPageHeader title={L.pageTitle}/>
-            <Tabs activeKey={tab} onChange={setTab} items={tabItems} className="tw-mt-4"/>
+        <div className="tw-mx-auto tw-w-full tw-space-y-4">
+            <div>
+                <Title
+                    level={3}
+                    className="!tw-m-0 !tw-mb-2 !tw-text-[24px] !tw-font-bold !tw-leading-tight !tw-tracking-tight !tw-text-[#1e3a5f] sm:!tw-text-[26px]"
+                >
+                    {L.pageTitle}
+                </Title>
+                <Paragraph className="!tw-mb-0 !tw-max-w-2xl !tw-text-[15px] !tw-leading-relaxed !tw-text-slate-600">
+                    평가 시즌 운영, 설계, 진행도 점검을 한 화면에서 관리합니다.
+                </Paragraph>
+            </div>
+            <Tabs activeKey={tab} onChange={setTab} items={tabItems}/>
 
             {/* Season Create Drawer */}
             <Drawer title={L.seasonAdd} open={seasonDrawer} onClose={() => setSeasonDrawer(false)} width={480}

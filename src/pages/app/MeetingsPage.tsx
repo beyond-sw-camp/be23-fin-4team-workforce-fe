@@ -39,7 +39,6 @@ import type {
   CreateMeetingPayload,
   RepeatCycle,
 } from '@/features/meetings/model/types';
-import { AppPageHeader } from '@/shared/ui/AppPageHeader';
 import { MemberRemoteSelect } from '@/features/members/ui/MemberRemoteSelect';
 import { useMemberDisplayNames } from '@/features/members/hooks/useMemberDisplayNames';
 
@@ -170,6 +169,7 @@ export default function MeetingsPage() {
   // ── Columns ──
   const partnerField = tab === 'member' ? 'managerId' : 'memberId';
   const partnerLabel = tab === 'member' ? '매니저' : '구성원';
+  const { Title, Paragraph } = Typography;
 
   const columns = [
     {
@@ -229,18 +229,25 @@ export default function MeetingsPage() {
 
   // ── Render ──
   return (
-    <div className="tw-p-6 tw-max-w-[1200px] tw-mx-auto">
-      <AppPageHeader
-        title={MEETING_KO.pageTitle}
-        subtitle={MEETING_KO.pageSubtitle}
-        extra={
-          tab === 'manager' ? (
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setDrawerOpen(true)}>
-              {MEETING_KO.newMeeting}
-            </Button>
-          ) : undefined
-        }
-      />
+    <div className="tw-mx-auto tw-w-full tw-space-y-4">
+      <div className="tw-flex tw-items-start tw-justify-between tw-gap-3">
+        <div className="tw-min-w-0">
+          <Title
+            level={3}
+            className="!tw-m-0 !tw-mb-2 !tw-text-[24px] !tw-font-bold !tw-leading-tight !tw-tracking-tight !tw-text-[#1e3a5f] sm:!tw-text-[26px]"
+          >
+            {MEETING_KO.pageTitle}
+          </Title>
+          <Paragraph className="!tw-mb-0 !tw-max-w-2xl !tw-text-[15px] !tw-leading-relaxed !tw-text-slate-600">
+            {MEETING_KO.pageSubtitle}
+          </Paragraph>
+        </div>
+        {tab === 'manager' ? (
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setDrawerOpen(true)}>
+            {MEETING_KO.newMeeting}
+          </Button>
+        ) : null}
+      </div>
 
       {/* ── 통계 요약 ── */}
       <Row gutter={16} className="tw-mb-5">

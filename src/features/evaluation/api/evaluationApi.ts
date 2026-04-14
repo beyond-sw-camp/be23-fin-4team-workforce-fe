@@ -211,11 +211,6 @@ export const evaluationApi = {
     return mapDesign(unwrapApiResponse<any>(res.data));
   },
 
-  async previewDesign(designId: string): Promise<EvaluationDesign> {
-    const res = await httpClient.get(`/evaluation/evaluation-designs/${designId}/preview`);
-    return mapDesign(unwrapApiResponse<any>(res.data));
-  },
-
   // ── Responses ──
   async listMyResponses(): Promise<EvaluationResponse[]> {
     const res = await httpClient.get('/evaluation/evaluation-responses');
