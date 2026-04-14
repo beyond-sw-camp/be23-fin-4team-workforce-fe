@@ -45,6 +45,51 @@ export type MemberSummary = {
   status?: string;
 };
 
+/** GET /member/list — 전자결재 참조·공람 선택용 (memberId·memberPositionId 필수) */
+export type MemberListItemForApproval = {
+  memberId: string;
+  memberPositionId: string;
+  name: string;
+  organizationName: string;
+  jobTitleName: string;
+  email?: string;
+};
+
+function asTextMemberField(value: unknown): string {
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number') return String(value);
+  return '';
+}
+
+function extractMemberListRows(raw: unknown): unknown[] {
+  if (Array.isArray(raw)) return raw;
+  if (!raw || typeof raw !== 'object') return [];
+  const o = raw as Record<string, unknown>;
+  for (const k of ['content', 'items', 'list', 'data', 'rows']) {
+    const v = o[k];
+    if (Array.isArray(v)) return v;
+  }
+  return [];
+}
+
+function normalizeMemberListItemForApproval(raw: unknown): MemberListItemForApproval | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const memberId = asTextMemberField(o.memberId ?? o.member_id ?? o.id);
+  const memberPositionId = asTextMemberField(o.memberPositionId ?? o.member_position_id);
+  const name = asTextMemberField(o.name);
+  if (!memberId || !memberPositionId || !name) return null;
+  const email = asTextMemberField(o.email);
+  return {
+    memberId,
+    memberPositionId,
+    name,
+    organizationName: asTextMemberField(o.organizationName ?? o.organization_name),
+    jobTitleName: asTextMemberField(o.jobTitleName ?? o.job_title_name),
+    ...(email ? { email } : {}),
+  };
+}
+
 export type LoginResult = {
   accessToken?: string;
   memberId?: string;
@@ -113,6 +158,8 @@ export type MemberDetail = {
   bank?: string | null;
   bankAccount?: string | null;
   memberPositionId?: string;
+  /** GET 응답에 포함될 때 — 부서 문서함 등에서 조직 선택 기본값으로 사용 */
+  organizationId?: string;
   organizationName?: string;
   jobGradeName?: string;
   jobTitleName?: string;
@@ -123,6 +170,39 @@ export type MemberDetail = {
   /** ESG 집계 점수 — `esgEnabledYn=YES`일 때 마이페이지 등에서 노출 */
   esgScore?: number | null;
 };
+
+/** GET /member/position/internal/{memberPositionId} — 결재라인 원·실 결재자 표시 (MemberPositionResDto) */
+export type MemberPositionInternalRes = {
+  memberPositionId: string;
+  memberId: string;
+  memberName: string;
+  organizationId?: string;
+  organizationName: string;
+  jobTitleName: string;
+  jobGradeName?: string;
+};
+
+function normalizeMemberPositionInternal(raw: unknown): MemberPositionInternalRes {
+  if (!raw || typeof raw !== 'object') {
+    throw new Error('직위 정보 응답을 해석할 수 없습니다.');
+  }
+  const o = raw as Record<string, unknown>;
+  const memberPositionId = asTextMemberField(o.memberPositionId ?? o.member_position_id);
+  const memberId = asTextMemberField(o.memberId ?? o.member_id);
+  const memberName = asTextMemberField(o.memberName ?? o.member_name);
+  if (!memberPositionId || !memberId || !memberName) {
+    throw new Error('직위 정보 응답에 필수 필드가 없습니다.');
+  }
+  return {
+    memberPositionId,
+    memberId,
+    memberName,
+    organizationId: asTextMemberField(o.organizationId ?? o.organization_id) || undefined,
+    organizationName: asTextMemberField(o.organizationName ?? o.organization_name),
+    jobTitleName: asTextMemberField(o.jobTitleName ?? o.job_title_name),
+    jobGradeName: asTextMemberField(o.jobGradeName ?? o.job_grade_name) || undefined,
+  };
+}
 
 /** 백엔드가 `Y`/`y`/`YES` 등으로 줄 수 있음 → `YES` | `NO` 로 통일 */
 export function normalizeYnFlag(value: unknown): YnFlag | undefined {
@@ -163,6 +243,7 @@ function normalizeMemberDetailResponse(raw: unknown): MemberDetail {
   const esgScore = pickNumericOptional(r.esgScore ?? r.esg_score);
   const memberStatus = pickDetailString(r, ['memberStatus', 'member_status']);
   const accountStatus = pickDetailString(r, ['accountStatus', 'account_status']);
+  const organizationId = asTextMemberField(r.organizationId ?? r.organization_id);
   return {
     ...base,
     ...(memberStatus ? { memberStatus: memberStatus as MemberDetail['memberStatus'] } : {}),
@@ -170,6 +251,7 @@ function normalizeMemberDetailResponse(raw: unknown): MemberDetail {
     phonePublicYn: phone !== undefined ? phone : normalizeYnFlag(base.phonePublicYn as unknown) ?? base.phonePublicYn,
     addressPublicYn: addr !== undefined ? addr : normalizeYnFlag(base.addressPublicYn as unknown) ?? base.addressPublicYn,
     ...(esgScore !== undefined ? { esgScore } : {}),
+    ...(organizationId ? { organizationId } : {}),
   };
 }
 
@@ -348,6 +430,23 @@ export const memberApi = {
     const response = await httpClient.get('/member/list', { params });
     return unwrapApiResponse<MemberSummary[]>(response.data);
   },
+  /** 결재 참조(CC)·공람(CIRCULATION) 선택 — 직원 목록을 memberPositionId 포함 형태로 정규화 */
+  async listMembersForApprovals(params?: { keyword?: string }) {
+    const response = await httpClient.get('/member/list', { params });
+    const raw = unwrapApiResponse<unknown>(response.data);
+    const rows = extractMemberListRows(raw)
+      .map(normalizeMemberListItemForApproval)
+      .filter((v): v is MemberListItemForApproval => v != null);
+    const kw = params?.keyword?.trim().toLowerCase();
+    if (!kw) return rows;
+    return rows.filter(
+      (r) =>
+        r.name.toLowerCase().includes(kw) ||
+        r.organizationName.toLowerCase().includes(kw) ||
+        r.jobTitleName.toLowerCase().includes(kw) ||
+        (r.email?.toLowerCase().includes(kw) ?? false),
+    );
+  },
   async detail(memberId: string) {
     const id = memberId?.trim();
     if (!id) {
@@ -356,6 +455,24 @@ export const memberApi = {
     const response = await httpClient.get(`/member/detail/${encodeURIComponent(id)}`);
     const raw = unwrapApiResponse<unknown>(response.data);
     return normalizeMemberDetailResponse(raw);
+  },
+  /** 결재 상세 등 — approvalLines 의 직위 ID로 이름·부서·직책 조회 */
+  async positionInternal(memberPositionId: string) {
+    const id = memberPositionId?.trim();
+    if (!id) {
+      throw new Error('직위 ID가 없습니다.');
+    }
+    const response = await httpClient.get(`/member/position/internal/${encodeURIComponent(id)}`);
+    const raw = unwrapApiResponse<unknown>(response.data);
+    return normalizeMemberPositionInternal(raw);
+  },
+  /** 경로/권한 오류 시 null — member/detail 등으로 폴백 */
+  async positionInternalOrNull(memberPositionId: string): Promise<MemberPositionInternalRes | null> {
+    try {
+      return await this.positionInternal(memberPositionId);
+    } catch {
+      return null;
+    }
   },
   async update(memberId: string, payload: Record<string, unknown>) {
     const response = await httpClient.put(`/member/update/${memberId}`, payload);
