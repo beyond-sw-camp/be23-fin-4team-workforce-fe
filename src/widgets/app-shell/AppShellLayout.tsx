@@ -9,6 +9,7 @@ import {
   DollarOutlined,
   FileDoneOutlined,
   FlagOutlined,
+  FolderOpenOutlined,
   FormOutlined,
   GlobalOutlined,
   LineChartOutlined,
@@ -43,6 +44,7 @@ import { notificationApi } from '@/features/notification/api/notificationApi';
 import { companyApi } from '@/features/organization/api/companyApi';
 import { searchApi } from '@/features/search/api/searchApi';
 import { memberApi } from '@/features/member/api/memberApi';
+import { organizationApi } from '@/features/organization/api/organizationApi';
 import {
   APP_BRAND_NAME,
   APP_MENU_ESG_GROUP_LABEL,
@@ -60,6 +62,16 @@ import { AppSearchField } from '@/shared/ui/AppSearchField';
 import { AiChatbotFab } from '@/widgets/app-shell/AiChatbotFab';
 import { OrgChartModal } from '@/widgets/organization/OrgChartModal';
 import { HeaderSearchMemberDetailModal } from '@/widgets/app-shell/HeaderSearchMemberDetailModal';
+import {
+  APPROVAL_SIDEBAR_ROOT_KEY,
+  APPROVAL_SUBMENU_DEPT_KEY,
+  APPROVAL_SUBMENU_DO_KEY,
+  APPROVAL_SUBMENU_PERSONAL_KEY,
+  approvalSiderOpenKeys,
+  approvalSiderSelectedMenuKeys,
+  buildApprovalMenuGroupChildren,
+  decodeWfNavKey,
+} from '@/widgets/app-shell/approvalSiderMenu';
 
 /** 왼쪽 날개 패널 + 본문 — 접기·펼치기 동일 아이콘(선형·둥근 테두리). */
 function SiderPanelToggleIcon({ className }: { className?: string }) {
@@ -88,6 +100,7 @@ const APP_MENU_ICONS: Record<string, ReactNode> = {
   '/app/attendance': <ClockCircleOutlined className="tw-text-lg" />,
   '/app/leave': <ScheduleOutlined className="tw-text-lg" />,
   '/app/approvals': <FileDoneOutlined className="tw-text-lg" />,
+  '/app/approvals/department': <FolderOpenOutlined className="tw-text-lg" />,
   '/app/payroll': <DollarOutlined className="tw-text-lg" />,
   '/app/notifications': <BellOutlined className="tw-text-lg" />,
   '/app/performance': <LineChartOutlined className="tw-text-lg" />,
@@ -159,9 +172,10 @@ function SiderGroupedMenuLabel({ icon, text }: { icon: ReactNode; text: string }
 }
 
 function buildAppShellMenuItems(
-  esgPaths: readonly string[],
-  isAdmin: boolean,
-  memberDirectoryAccess: boolean,
+    esgPaths: readonly string[],
+    isAdmin: boolean,
+    approvalMenuRoot: NonNullable<MenuProps['items']>[number],
+    memberDirectoryAccess: boolean,
 ): NonNullable<MenuProps['items']> {
   const items: NonNullable<MenuProps['items']> = [];
   let hubInserted = false;
@@ -238,6 +252,10 @@ function buildAppShellMenuItems(
       }
       continue;
     }
+    if (path === '/app/approvals') {
+      items.push(approvalMenuRoot);
+      continue;
+    }
     const leafLabel =
       path === '/app/dashboard' && isAdmin ? '관리자 대시보드' : APP_MENU_LABEL[path];
     items.push({
@@ -268,6 +286,13 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
   const { status, user } = useAuth();
   const { hasPermission } = usePermissions();
   const isAdmin = user?.isSystemAdmin === true;
+  const memberId = user?.id?.trim();
+  const { data: meMember } = useQuery({
+    queryKey: ['member', 'detail', 'app-shell-me', memberId],
+    queryFn: () => memberApi.detail(memberId!),
+    enabled: status === 'authenticated' && Boolean(memberId),
+    staleTime: 60_000,
+  });
   const { data: esgConfig } = useQuery({
     queryKey: ['esg', 'config'],
     queryFn: () => esgApi.getConfig(),
@@ -276,11 +301,28 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
     staleTime: 60_000,
   });
 
+  const { data: approvalOrgChart } = useQuery({
+    queryKey: ['organization', 'org-chart', 'sider'],
+    queryFn: () => organizationApi.getOrgChart(),
+    enabled: status === 'authenticated',
+    staleTime: 60_000,
+  });
+
   return useMemo(() => {
     const memberDirectoryAccess =
       hasPermission(PERM.MEMBER_READ) && hasPermission(PERM.MEMBER_CREATE);
     const esgPaths = ESG_MENU_PATH_ORDER.filter((p) => shouldShowEsgMenuItem(p, esgConfig ?? null, isAdmin));
-    const items = buildAppShellMenuItems(esgPaths, isAdmin, memberDirectoryAccess);
+    const approvalMenuRoot = {
+      key: APPROVAL_SIDEBAR_ROOT_KEY,
+      label: (
+        <SiderGroupedMenuLabel icon={<FileDoneOutlined className="tw-text-lg" />} text="전자결재" />
+      ),
+      children: buildApprovalMenuGroupChildren(approvalOrgChart?.organizations ?? [], {
+        myOrganizationId: meMember?.organizationId,
+        myOrganizationName: meMember?.organizationName,
+      }),
+    };
+    const items = buildAppShellMenuItems(esgPaths, isAdmin, approvalMenuRoot, memberDirectoryAccess);
     if (!isAdmin) return items;
     const doc = {
       key: '/app/ai-documents',
@@ -289,7 +331,7 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
       title: 'HR 정책 문서',
     };
     return [...items, doc];
-  }, [esgConfig, isAdmin, hasPermission]);
+  }, [esgConfig, isAdmin, hasPermission, approvalOrgChart?.organizations, meMember?.organizationId, meMember?.organizationName]);
 }
 
 const headerGhostIconClass =
@@ -777,14 +819,17 @@ function AppShellHeader() {
   );
 }
 
-function menuSelectedKeyFromPath(pathname: string): string[] {
+function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknown>): string[] {
   if (/^\/app\/members\/[^/]+$/.test(pathname)) return ['/app/members'];
+  if (pathname.startsWith('/app/approvals')) {
+    return approvalSiderSelectedMenuKeys(pathname, search);
+  }
   const menuPaths = new Set<string>([...APP_MENU_PATH_ORDER, ...ESG_MENU_PATH_ORDER, '/app/ai-documents']);
   if (menuPaths.has(pathname)) return [pathname];
   return [];
 }
 
-function menuOpenKeysForPath(pathname: string): string[] {
+function menuOpenKeysForPath(pathname: string, search: Record<string, unknown>): string[] {
   const keys: string[] = [];
   if (TALENT_HUB_PATH_SET.has(pathname)) keys.push(TALENT_HUB_GROUP_KEY);
   if (ORG_HR_PATH_SET.has(pathname) || /^\/app\/members\/[^/]+$/.test(pathname)) {
@@ -792,15 +837,20 @@ function menuOpenKeysForPath(pathname: string): string[] {
   }
   if (pathname.startsWith('/app/esg')) keys.push(ESG_GROUP_KEY);
   if (WORK_LEAVE_PATH_SET.has(pathname)) keys.push(WORK_LEAVE_GROUP_KEY);
+  if (pathname.startsWith('/app/approvals')) {
+    keys.push(...approvalSiderOpenKeys(pathname, search));
+  }
   return keys;
 }
 
 const SIDER_COLLAPSED_STORAGE_KEY = 'wf-app-shell-sider-collapsed';
 
 function AppShellLayout() {
-  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const location = useRouterState({ select: (state) => state.location });
+  const pathname = location.pathname;
+  const search = location.search as Record<string, unknown>;
   const navigate = useNavigate();
-  const menuSelectedKey = useMemo(() => menuSelectedKeyFromPath(pathname), [pathname]);
+  const menuSelectedKey = useMemo(() => menuSelectedKeyFromPath(pathname, search), [pathname, search]);
   const appShellMenuItems = useAppShellSiderMenuItems();
   const [orgChartModalOpen, setOrgChartModalOpen] = useState(false);
 
@@ -829,7 +879,7 @@ function AppShellLayout() {
     } catch {
       /* ignore */
     }
-    return menuOpenKeysForPath(pathname);
+    return menuOpenKeysForPath(pathname, search);
   });
 
   useEffect(() => {
@@ -839,10 +889,10 @@ function AppShellLayout() {
     }
     setMenuOpenKeys((prev) => {
       const merged = new Set(prev);
-      for (const k of menuOpenKeysForPath(pathname)) merged.add(k);
+      for (const k of menuOpenKeysForPath(pathname, search)) merged.add(k);
       return [...merged];
     });
-  }, [pathname, siderCollapsed]);
+  }, [pathname, search, siderCollapsed]);
 
   return (
     <Layout className="tw-flex tw-h-[100dvh] tw-min-h-0 tw-bg-slate-50">
@@ -884,8 +934,21 @@ function AppShellLayout() {
                   key === TALENT_HUB_GROUP_KEY ||
                   key === ORG_HR_GROUP_KEY ||
                   key === ESG_GROUP_KEY ||
-                  key === WORK_LEAVE_GROUP_KEY
+                  key === WORK_LEAVE_GROUP_KEY ||
+                  key === APPROVAL_SIDEBAR_ROOT_KEY ||
+                  key === APPROVAL_SUBMENU_DO_KEY ||
+                  key === APPROVAL_SUBMENU_PERSONAL_KEY ||
+                  key === APPROVAL_SUBMENU_DEPT_KEY ||
+                  key.startsWith('approval-dept-org-')
                 ) {
+                  return;
+                }
+                const wf = decodeWfNavKey(String(key));
+                if (wf) {
+                  if (siderCollapsed) {
+                    setMenuOpenKeys([]);
+                  }
+                  void navigate({ to: wf.to, search: wf.search ?? {} });
                   return;
                 }
                 if (key === APP_MENU_ORG_CHART_SIDEBAR_KEY) {

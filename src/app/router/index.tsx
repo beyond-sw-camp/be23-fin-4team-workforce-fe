@@ -32,6 +32,9 @@ import { EvaluationWritePage } from '@/pages/app/EvaluationWritePage';
 import PerformancePage from '@/pages/app/PerformancePage';
 import { GoalApprovalDetailPage } from '@/pages/app/GoalApprovalDetailPage';
 import { GoalApprovalsListPage } from '@/pages/app/GoalApprovalsListPage';
+import { ApprovalsPage } from '@/pages/app/ApprovalsPage';
+import { AbsenceProxyPage } from '@/pages/app/AbsenceProxyPage';
+import { DepartmentApprovalsInboxPage } from '@/pages/app/DepartmentApprovalsInboxPage';
 import { GenericPage } from '@/pages/app/GenericPage';
 import { AiDocumentsAdminPage } from '@/pages/app/AiDocumentsAdminPage';
 import { OrganizationPage } from '@/pages/app/OrganizationPage';
@@ -214,6 +217,38 @@ const goalApprovalDetailRoute = createRoute({
   component: GoalApprovalDetailPage,
 });
 
+const approvalsSearchSchema = z.object({
+  tab: z.string().optional(),
+  myStatus: z.string().optional(),
+  compose: z.string().optional(),
+  sideNav: z.string().optional(),
+});
+
+const approvalsAdminRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/approvals',
+  validateSearch: approvalsSearchSchema,
+  component: ApprovalsPage,
+});
+
+const departmentApprovalsSearchSchema = z.object({
+  organizationId: z.string().optional(),
+  deptView: z.enum(['draft', 'ref', 'official']).optional(),
+});
+
+const departmentApprovalsInboxRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/approvals/department',
+  validateSearch: departmentApprovalsSearchSchema,
+  component: DepartmentApprovalsInboxPage,
+});
+
+const absenceProxyRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/approvals/absence-proxy',
+  component: AbsenceProxyPage,
+});
+
 const evaluationsRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/evaluations',
@@ -262,7 +297,6 @@ const aiDocumentsAdminRoute = createRoute({
 const genericPaths = [
   '/attendance',
   '/leave',
-  '/approvals',
   '/payroll',
   '/meetings',
   '/ai-assistant',
@@ -304,6 +338,9 @@ const routeTree = rootRoute.addChildren([
       memberDetailRoute,
       notificationsRoute,
       performanceRoute,
+      approvalsAdminRoute,
+      absenceProxyRoute,
+      departmentApprovalsInboxRoute,
       goalApprovalsListRoute,
       goalApprovalDetailRoute,
       evaluationsRoute,
