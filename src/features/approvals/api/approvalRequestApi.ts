@@ -614,6 +614,15 @@ export function requestIncludesMyProxyAct(
   }
 
   if (!hasMyId) return false;
+  /**
+   * 부재자 복귀 후에도, 내 지정 결재선이 대결(실제 처리자≠지정 결재자)로 완료된 건은
+   * 결재 완료함 「처리」에서 `대결`로 표시한다.
+   */
+  const proxyOnMyDesignatedSlot = terminalLines.some(
+    (l) => lineImDesignated(l, mid, pid) && approvalLineIsProxy(l),
+  );
+  if (proxyOnMyDesignatedSlot) return true;
+
   const iHaveDirectSlotInRequest = terminalLines.some((l) => lineImDesignated(l, mid, pid));
   if (iHaveDirectSlotInRequest) return false;
   return terminalLines.some(

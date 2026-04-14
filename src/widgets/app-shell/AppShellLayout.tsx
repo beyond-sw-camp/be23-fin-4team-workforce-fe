@@ -286,6 +286,13 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
   const { status, user } = useAuth();
   const { hasPermission } = usePermissions();
   const isAdmin = user?.isSystemAdmin === true;
+  const memberId = user?.id?.trim();
+  const { data: meMember } = useQuery({
+    queryKey: ['member', 'detail', 'app-shell-me', memberId],
+    queryFn: () => memberApi.detail(memberId!),
+    enabled: status === 'authenticated' && Boolean(memberId),
+    staleTime: 60_000,
+  });
   const { data: esgConfig } = useQuery({
     queryKey: ['esg', 'config'],
     queryFn: () => esgApi.getConfig(),
@@ -310,7 +317,10 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
       label: (
         <SiderGroupedMenuLabel icon={<FileDoneOutlined className="tw-text-lg" />} text="전자결재" />
       ),
-      children: buildApprovalMenuGroupChildren(approvalOrgChart?.organizations ?? []),
+      children: buildApprovalMenuGroupChildren(approvalOrgChart?.organizations ?? [], {
+        myOrganizationId: meMember?.organizationId,
+        myOrganizationName: meMember?.organizationName,
+      }),
     };
     const items = buildAppShellMenuItems(esgPaths, isAdmin, approvalMenuRoot, memberDirectoryAccess);
     if (!isAdmin) return items;
@@ -321,7 +331,7 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
       title: 'HR 정책 문서',
     };
     return [...items, doc];
-  }, [esgConfig, isAdmin, hasPermission, approvalOrgChart?.organizations]);
+  }, [esgConfig, isAdmin, hasPermission, approvalOrgChart?.organizations, meMember?.organizationId, meMember?.organizationName]);
 }
 
 const headerGhostIconClass =

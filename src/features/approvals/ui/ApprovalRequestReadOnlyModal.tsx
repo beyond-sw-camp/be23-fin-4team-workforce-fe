@@ -451,7 +451,7 @@ export function ApprovalRequestReadOnlyModal({
                             <span className="tw-text-slate-600">{' (' + disp.title + ')'}</span>
                           ) : null}
                           {showProxyWithDate ? (
-                            <span className="tw-text-sky-600">
+                            <span className="tw-text-black">
                               {actual.name.trim()
                                 ? ' (대결: ' + actual.name.trim() + ')'
                                 : actual.pending
@@ -475,17 +475,11 @@ export function ApprovalRequestReadOnlyModal({
                     const hasProcessDate =
                       Boolean(line.actedAt?.trim()) &&
                       (lineSt === 'APPROVED' || lineSt === 'REJECTED');
-                    const proxyY = approvalLineIsProxy(line) && hasProcessDate;
                     const statusColor =
                       lineSt === 'APPROVED' ? 'success' : lineSt === 'REJECTED' ? 'error' : 'default';
                     return (
                       <Space size={4} wrap>
                         <Tag color={statusColor}>{v}</Tag>
-                        {proxyY ? (
-                          <Tag color="orange" className="tw-m-0">
-                            대결
-                          </Tag>
-                        ) : null}
                       </Space>
                     );
                   },

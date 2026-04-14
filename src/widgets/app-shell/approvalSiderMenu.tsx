@@ -39,6 +39,17 @@ function collectNonQaRootOrgs(nodes: OrgChartOrgNode[]): OrgChartOrgNode[] {
   return nodes.filter((n) => !isQaRoomOrgName(n.name));
 }
 
+function findOrgNodeById(nodes: OrgChartOrgNode[], organizationId: string): OrgChartOrgNode | null {
+  const target = organizationId.trim();
+  if (!target) return null;
+  for (const node of nodes) {
+    if (node.organizationId === target) return node;
+    const child = findOrgNodeById(node.children ?? [], target);
+    if (child) return child;
+  }
+  return null;
+}
+
 function navApprovals(partial: Record<string, string | undefined>): string {
   return encodeWfNavKey({ to: '/app/approvals', search: partial });
 }
@@ -98,11 +109,18 @@ export function approvalSiderOpenKeys(pathname: string, rawSearch: Record<string
   return keys;
 }
 
-export function buildApprovalMenuGroupChildren(organizations: OrgChartOrgNode[]): NonNullable<MenuProps['items']> {
+export function buildApprovalMenuGroupChildren(
+  organizations: OrgChartOrgNode[],
+  opts?: { myOrganizationId?: string; myOrganizationName?: string },
+): NonNullable<MenuProps['items']> {
   const deptRoots = collectNonQaRootOrgs(organizations);
+  const myOrgId = opts?.myOrganizationId?.trim() ?? '';
+  const myOrgName = opts?.myOrganizationName?.trim() ?? '';
+  const myOrgNode = myOrgId ? findOrgNodeById(deptRoots, myOrgId) : null;
+  const deptOrgNodes = myOrgNode ? [myOrgNode] : deptRoots;
 
   const deptChildren: NonNullable<MenuProps['items']> =
-    deptRoots.length === 0
+    deptOrgNodes.length === 0
       ? [
           {
             key: navDepartment({}),
@@ -110,10 +128,10 @@ export function buildApprovalMenuGroupChildren(organizations: OrgChartOrgNode[])
             title: '부서 문서함',
           },
         ]
-      : deptRoots.map((org) => ({
+      : deptOrgNodes.map((org) => ({
           key: approvalDeptOrgSubKey(org.organizationId),
-          label: org.name,
-          title: org.name,
+          label: myOrgNode && myOrgName ? myOrgName : org.name,
+          title: myOrgNode && myOrgName ? myOrgName : org.name,
           children: [
             {
               key: navDepartment({ organizationId: org.organizationId, deptView: 'draft' }),

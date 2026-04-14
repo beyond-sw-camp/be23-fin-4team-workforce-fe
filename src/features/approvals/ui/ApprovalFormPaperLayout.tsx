@@ -151,7 +151,7 @@ export type ApprovalStampApproverItem = {
   jobTitleName?: string;
   /** 대리결재(부재 위임) 건 */
   isProxy?: boolean;
-  /** 처리일(승인·반려) 표시 시 이름 아래 파란 `(대결: …)` — 값 없으면 `(대결)`만 */
+  /** 처리일(승인·반려) 표시 시 이름 아래 `(대결: …)` — 값 없으면 `(대결)`만 */
   proxyActorName?: string;
   /** 승인·반려 시 처리일시(API `actedAt`) */
   actedAt?: string | null;
@@ -265,7 +265,7 @@ function ApprovalStampApprovalTable({ approvers }: { approvers: ApprovalStampApp
                     <span className="tw-inline-block tw-max-w-full tw-whitespace-normal tw-text-center [word-break:keep-all] tw-text-[11px] tw-font-semibold tw-leading-tight tw-text-black">
                       {c.name}
                     </span>
-                    <span className="tw-inline-block tw-max-w-full tw-whitespace-normal tw-text-center [word-break:keep-all] tw-text-[9px] tw-font-normal tw-leading-tight tw-text-sky-600 sm:tw-text-[10px]">
+                    <span className="tw-inline-block tw-max-w-full tw-whitespace-normal tw-text-center [word-break:keep-all] tw-text-[9px] tw-font-normal tw-leading-tight tw-text-black sm:tw-text-[10px]">
                       {c.proxyActorName ? '(대결: ' + c.proxyActorName + ')' : '(대결)'}
                     </span>
                   </>
