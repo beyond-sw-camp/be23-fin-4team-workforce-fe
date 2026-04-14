@@ -35,6 +35,8 @@ function mapSeason(raw: any): EvaluationSeason {
     startDate: raw.startDate,
     endDate: raw.endDate,
     status: raw.status,
+    phase: raw.phase ?? 'NOT_STARTED',
+    phaseUpdatedAt: raw.phaseUpdatedAt ?? undefined,
     resultPublishDate: raw.resultPublishDate,
     schedule: safeJsonParse(raw.scheduleJson, undefined),
   };
@@ -67,7 +69,9 @@ function mapResponse(raw: any): EvaluationResponse {
   return {
     responseId: raw.responseId,
     companyId: raw.companyId,
+    seasonId: raw.seasonId ?? undefined,
     groupId: raw.groupId,
+    designId: raw.designId ?? undefined,
     targetMemberId: raw.targetMemberId,
     evaluatorId: raw.evaluatorId,
     evaluationType: raw.evaluationType,
@@ -76,6 +80,8 @@ function mapResponse(raw: any): EvaluationResponse {
     lastRemindedAt: raw.lastRemindedAt,
     answers: safeJsonParse(raw.answersJson, []),
     calibration: safeJsonParse(raw.calibrationJson, undefined),
+    normalizedScore: raw.normalizedScore ?? undefined,
+    targetGoalIds: safeJsonParse(raw.targetGoalIdsJson, undefined),
   };
 }
 
@@ -94,44 +100,53 @@ function normalizeArray<T>(payload: unknown, mapFn: (r: any) => T): T[] {
 export const evaluationApi = {
   // ── Seasons ──
   async listSeasons(): Promise<EvaluationSeason[]> {
-    const res = await httpClient.get('/api/evaluation-seasons');
+    const res = await httpClient.get('/evaluation/evaluation-seasons');
     return normalizeArray(unwrapApiResponse<unknown>(res.data), mapSeason);
   },
 
   async createSeason(body: CreateSeasonPayload): Promise<EvaluationSeason> {
     const payload = { ...body, scheduleJson: body.scheduleJson ?? JSON.stringify({}) };
-    const res = await httpClient.post('/api/evaluation-seasons', payload);
+    const res = await httpClient.post('/evaluation/evaluation-seasons', payload);
     return mapSeason(unwrapApiResponse<any>(res.data));
   },
 
   async getSeason(seasonId: string): Promise<EvaluationSeason> {
-    const res = await httpClient.get(`/api/evaluation-seasons/${seasonId}`);
+    const res = await httpClient.get(`/evaluation/evaluation-seasons/${seasonId}`);
     return mapSeason(unwrapApiResponse<any>(res.data));
   },
 
   async updateSeason(seasonId: string, body: UpdateSeasonPayload): Promise<EvaluationSeason> {
-    const res = await httpClient.patch(`/api/evaluation-seasons/${seasonId}`, body);
+    const res = await httpClient.patch(`/evaluation/evaluation-seasons/${seasonId}`, body);
     return mapSeason(unwrapApiResponse<any>(res.data));
   },
 
   async startSeason(seasonId: string): Promise<EvaluationSeason> {
-    const res = await httpClient.post(`/api/evaluation-seasons/${seasonId}/start`);
+    const res = await httpClient.post(`/evaluation/evaluation-seasons/${seasonId}/start`);
     return mapSeason(unwrapApiResponse<any>(res.data));
   },
 
   async closeSeason(seasonId: string): Promise<EvaluationSeason> {
-    const res = await httpClient.post(`/api/evaluation-seasons/${seasonId}/close`);
+    const res = await httpClient.post(`/evaluation/evaluation-seasons/${seasonId}/close`);
     return mapSeason(unwrapApiResponse<any>(res.data));
+  },
+
+  async transitionPhase(seasonId: string, next: string): Promise<EvaluationSeason> {
+    const res = await httpClient.post(`/evaluation/evaluation-seasons/${seasonId}/phase?next=${next}`);
+    return mapSeason(unwrapApiResponse<any>(res.data));
+  },
+
+  async publishResults(seasonId: string): Promise<void> {
+    await httpClient.post(`/evaluation/evaluation-seasons/${seasonId}/publish`);
   },
 
   // ── Groups ──
   async listGroups(seasonId: string): Promise<EvaluationGroup[]> {
-    const res = await httpClient.get(`/api/evaluation-seasons/${seasonId}/groups`);
+    const res = await httpClient.get(`/evaluation/evaluation-seasons/${seasonId}/groups`);
     return normalizeArray(unwrapApiResponse<unknown>(res.data), mapGroup);
   },
 
   async createGroup(seasonId: string, body: CreateGroupPayload): Promise<EvaluationGroup> {
-    const res = await httpClient.post(`/api/evaluation-seasons/${seasonId}/groups`, body);
+    const res = await httpClient.post(`/evaluation/evaluation-seasons/${seasonId}/groups`, body);
     return mapGroup(unwrapApiResponse<any>(res.data));
   },
 
@@ -141,14 +156,14 @@ export const evaluationApi = {
     body: UpdateGroupPayload,
   ): Promise<EvaluationGroup> {
     const res = await httpClient.patch(
-      `/api/evaluation-seasons/${seasonId}/groups/${groupId}`,
+      `/evaluation/evaluation-seasons/${seasonId}/groups/${groupId}`,
       body,
     );
     return mapGroup(unwrapApiResponse<any>(res.data));
   },
 
   async deleteGroup(seasonId: string, groupId: string): Promise<void> {
-    await httpClient.delete(`/api/evaluation-seasons/${seasonId}/groups/${groupId}`);
+    await httpClient.delete(`/evaluation/evaluation-seasons/${seasonId}/groups/${groupId}`);
   },
 
   async autoAssignEvaluators(
@@ -157,7 +172,7 @@ export const evaluationApi = {
     basis: string,
   ): Promise<EvaluationGroup> {
     const res = await httpClient.post(
-      `/api/evaluation-seasons/${seasonId}/groups/${groupId}/evaluator-maps/auto`,
+      `/evaluation/evaluation-seasons/${seasonId}/groups/${groupId}/evaluator-maps/auto`,
       { basis },
     );
     return mapGroup(unwrapApiResponse<any>(res.data));
@@ -169,7 +184,7 @@ export const evaluationApi = {
     evaluatorMapsJson: string,
   ): Promise<EvaluationGroup> {
     const res = await httpClient.patch(
-      `/api/evaluation-seasons/${seasonId}/groups/${groupId}/evaluator-maps`,
+      `/evaluation/evaluation-seasons/${seasonId}/groups/${groupId}/evaluator-maps`,
       { evaluatorMapsJson },
     );
     return mapGroup(unwrapApiResponse<any>(res.data));
@@ -177,98 +192,98 @@ export const evaluationApi = {
 
   // ── Designs ──
   async listDesigns(): Promise<EvaluationDesign[]> {
-    const res = await httpClient.get('/api/evaluation-designs');
+    const res = await httpClient.get('/evaluation/evaluation-designs');
     return normalizeArray(unwrapApiResponse<unknown>(res.data), mapDesign);
   },
 
   async createDesign(body: CreateDesignPayload): Promise<EvaluationDesign> {
-    const res = await httpClient.post('/api/evaluation-designs', body);
+    const res = await httpClient.post('/evaluation/evaluation-designs', body);
     return mapDesign(unwrapApiResponse<any>(res.data));
   },
 
   async getDesign(designId: string): Promise<EvaluationDesign> {
-    const res = await httpClient.get(`/api/evaluation-designs/${designId}`);
+    const res = await httpClient.get(`/evaluation/evaluation-designs/${designId}`);
     return mapDesign(unwrapApiResponse<any>(res.data));
   },
 
   async updateDesign(designId: string, body: UpdateDesignPayload): Promise<EvaluationDesign> {
-    const res = await httpClient.patch(`/api/evaluation-designs/${designId}`, body);
+    const res = await httpClient.patch(`/evaluation/evaluation-designs/${designId}`, body);
     return mapDesign(unwrapApiResponse<any>(res.data));
   },
 
   // ── Responses ──
   async listMyResponses(): Promise<EvaluationResponse[]> {
-    const res = await httpClient.get('/api/evaluation-responses');
+    const res = await httpClient.get('/evaluation/evaluation-responses');
     return normalizeArray(unwrapApiResponse<unknown>(res.data), mapResponse);
   },
 
   async getResponse(responseId: string): Promise<EvaluationResponse> {
-    const res = await httpClient.get(`/api/evaluation-responses/${responseId}`);
+    const res = await httpClient.get(`/evaluation/evaluation-responses/${responseId}`);
     return mapResponse(unwrapApiResponse<any>(res.data));
   },
 
   async saveResponse(responseId: string, body: SaveResponsePayload): Promise<EvaluationResponse> {
-    const res = await httpClient.patch(`/api/evaluation-responses/${responseId}`, body);
+    const res = await httpClient.patch(`/evaluation/evaluation-responses/${responseId}`, body);
     return mapResponse(unwrapApiResponse<any>(res.data));
   },
 
   async submitResponse(responseId: string): Promise<EvaluationResponse> {
-    const res = await httpClient.post(`/api/evaluation-responses/${responseId}/submit`);
+    const res = await httpClient.post(`/evaluation/evaluation-responses/${responseId}/submit`);
     return mapResponse(unwrapApiResponse<any>(res.data));
   },
 
   async reopenResponse(responseId: string): Promise<EvaluationResponse> {
-    const res = await httpClient.post(`/api/evaluation-responses/${responseId}/reopen`);
+    const res = await httpClient.post(`/evaluation/evaluation-responses/${responseId}/reopen`);
     return mapResponse(unwrapApiResponse<any>(res.data));
   },
 
   // ── Reminders ──
   async sendBulkReminder(seasonId: string): Promise<void> {
-    await httpClient.post(`/api/evaluation-responses/seasons/${seasonId}/reminders`);
+    await httpClient.post(`/evaluation/evaluation-responses/seasons/${seasonId}/reminders`);
   },
 
   async sendReminder(seasonId: string, memberId: string): Promise<void> {
-    await httpClient.post(`/api/evaluation-responses/seasons/${seasonId}/reminders/${memberId}`);
+    await httpClient.post(`/evaluation/evaluation-responses/seasons/${seasonId}/reminders/${memberId}`);
   },
 
   // ── Calibration ──
   async getCalibrationOverview(seasonId: string): Promise<EvaluationResponse[]> {
-    const res = await httpClient.get(`/api/evaluation-responses/seasons/${seasonId}/calibration`);
+    const res = await httpClient.get(`/evaluation/evaluation-responses/seasons/${seasonId}/calibration`);
     return normalizeArray(unwrapApiResponse<unknown>(res.data), mapResponse);
   },
 
   async applyBaseline(seasonId: string, body: CalibrationBaselinePayload): Promise<void> {
     await httpClient.post(
-      `/api/evaluation-responses/seasons/${seasonId}/calibration/baseline`,
+      `/evaluation/evaluation-responses/seasons/${seasonId}/calibration/baseline`,
       body,
     );
   },
 
   async adjustCalibrations(seasonId: string, body: CalibrationAdjustPayload): Promise<void> {
     await httpClient.patch(
-      `/api/evaluation-responses/seasons/${seasonId}/calibration/adjustments`,
+      `/evaluation/evaluation-responses/seasons/${seasonId}/calibration/adjustments`,
       body,
     );
   },
 
   async confirmCalibration(seasonId: string): Promise<void> {
-    await httpClient.post(`/api/evaluation-responses/seasons/${seasonId}/calibration/confirm`);
+    await httpClient.post(`/evaluation/evaluation-responses/seasons/${seasonId}/calibration/confirm`);
   },
 
   // ── Progress & Anomalies ──
   async getProgress(seasonId: string): Promise<EvaluationResponse[]> {
-    const res = await httpClient.get(`/api/evaluation-responses/seasons/${seasonId}/progress`);
+    const res = await httpClient.get(`/evaluation/evaluation-responses/seasons/${seasonId}/progress`);
     return normalizeArray(unwrapApiResponse<unknown>(res.data), mapResponse);
   },
 
   async listAnomalies(seasonId: string): Promise<EvaluationResponse[]> {
-    const res = await httpClient.get(`/api/evaluation-responses/seasons/${seasonId}/anomalies`);
+    const res = await httpClient.get(`/evaluation/evaluation-responses/seasons/${seasonId}/anomalies`);
     return normalizeArray(unwrapApiResponse<unknown>(res.data), mapResponse);
   },
 
   async requestReview(seasonId: string, responseId: string): Promise<EvaluationResponse> {
     const res = await httpClient.post(
-      `/api/evaluation-responses/seasons/${seasonId}/anomalies/${responseId}/request-review`,
+      `/evaluation/evaluation-responses/seasons/${seasonId}/anomalies/${responseId}/request-review`,
     );
     return mapResponse(unwrapApiResponse<any>(res.data));
   },

@@ -474,8 +474,18 @@ export const goalApi = {
     return mapped;
   },
 
+  async getKpiTemplate(kpiTemplateId: string): Promise<KpiTemplate> {
+    const response = await httpClient.get(`/goal/kpi-template/${kpiTemplateId}`);
+    const raw = unwrapApiResponse<unknown>(response.data);
+    return mapKpiTemplateFromApi(raw);
+  },
+
   async deactivateKpiTemplate(kpiTemplateId: string): Promise<void> {
     await httpClient.patch(`/goal/kpi-template/${kpiTemplateId}/deactivate`);
+  },
+
+  async generateGoalsFromTemplate(kpiTemplateId: string): Promise<void> {
+    await httpClient.post(`/goal/kpi-template/${kpiTemplateId}/generate`);
   },
 
   async listGoals(): Promise<Goal[]> {
@@ -644,6 +654,18 @@ export const goalApi = {
     return c;
   },
 
+  async updateComment(goalId: string, commentId: string, body: { content: string }): Promise<GoalComment> {
+    const response = await httpClient.patch(`/goal/${goalId}/comments/${commentId}`, body);
+    const raw = unwrapApiResponse<unknown>(response.data);
+    const c = mapGoalCommentFromApi(raw);
+    if (!c) throw new Error('댓글 수정 응답을 해석할 수 없습니다.');
+    return c;
+  },
+
+  async deleteComment(goalId: string, commentId: string): Promise<void> {
+    await httpClient.delete(`/goal/${goalId}/comments/${commentId}`);
+  },
+
   async toggleCommentReaction(goalId: string, commentId: string, emoji: string, memberId: string): Promise<GoalComment> {
     const response = await httpClient.post(`/goal/${goalId}/comments/${commentId}/reactions`, { emoji, memberId });
     const raw = unwrapApiResponse<unknown>(response.data);
@@ -694,21 +716,21 @@ export const goalApi = {
   },
 
   async listApprovalRequests(): Promise<GoalApprovalBundleSummary[]> {
-    const response = await httpClient.get('/approval-requests');
+    const response = await httpClient.get('/goal/approval-requests');
     const raw = unwrapApiResponse<unknown>(response.data);
     const rows = Array.isArray(raw) ? raw : normalizeArray<unknown>(raw, ['items', 'data', 'list']);
     return rows.map(mapApprovalBundleSummaryFromApi).filter((x): x is GoalApprovalBundleSummary => x !== null);
   },
 
   async listApprovalRequestsHistory(): Promise<GoalApprovalBundleSummary[]> {
-    const response = await httpClient.get('/approval-requests/history');
+    const response = await httpClient.get('/goal/approval-requests/history');
     const raw = unwrapApiResponse<unknown>(response.data);
     const rows = Array.isArray(raw) ? raw : normalizeArray<unknown>(raw, ['items', 'data', 'list']);
     return rows.map(mapApprovalBundleSummaryFromApi).filter((x): x is GoalApprovalBundleSummary => x !== null);
   },
 
   async getApprovalRequest(requestId: string): Promise<GoalApprovalBundleDetail> {
-    const response = await httpClient.get(`/approval-requests/${requestId}`);
+    const response = await httpClient.get(`/goal/approval-requests/${requestId}`);
     const raw = unwrapApiResponse<unknown>(response.data);
     const mapped = mapApprovalBundleDetailFromApi(raw);
     if (!mapped) throw new Error('승인 요청 상세를 해석할 수 없습니다.');
@@ -716,7 +738,7 @@ export const goalApi = {
   },
 
   async approveApprovalRequest(requestId: string, body?: GoalApprovalDecisionPayload): Promise<GoalApprovalBundleDetail> {
-    const response = await httpClient.post(`/approval-requests/${requestId}/approve`, body ?? {});
+    const response = await httpClient.post(`/goal/approval-requests/${requestId}/approve`, body ?? {});
     const raw = unwrapApiResponse<unknown>(response.data);
     const mapped = mapApprovalBundleDetailFromApi(raw);
     if (!mapped) throw new Error('승인 응답을 해석할 수 없습니다.');
@@ -724,7 +746,7 @@ export const goalApi = {
   },
 
   async rejectApprovalRequest(requestId: string, body?: GoalApprovalDecisionPayload): Promise<GoalApprovalBundleDetail> {
-    const response = await httpClient.post(`/approval-requests/${requestId}/reject`, body ?? {});
+    const response = await httpClient.post(`/goal/approval-requests/${requestId}/reject`, body ?? {});
     const raw = unwrapApiResponse<unknown>(response.data);
     const mapped = mapApprovalBundleDetailFromApi(raw);
     if (!mapped) throw new Error('반려 응답을 해석할 수 없습니다.');

@@ -15,6 +15,8 @@ export type NotificationType =
   | 'APPROVAL_REJECTED'
   | 'SALARY_PUBLISHED'
   | 'GOAL_EVALUATED'
+  | 'EVALUATION_REMINDER'
+  | 'EVALUATION_REOPENED'
   | 'MEMBER_DORMANT'
   | 'MEMBER_RETURN'
   | 'ESG_ACTIVITY_APPROVED'
@@ -51,6 +53,8 @@ const NOTIFICATION_TYPE_KO: Record<string, string> = {
   APPROVAL_REJECTED: '결재 반려',
   SALARY_PUBLISHED: '급여 명세서 발행',
   GOAL_EVALUATED: '목표 평가 완료',
+  EVALUATION_REMINDER: '평가 미제출 안내',
+  EVALUATION_REOPENED: '평가 재작성 가능',
   MEMBER_DORMANT: '휴직 처리',
   MEMBER_RETURN: '복직 처리',
   ESG_ACTIVITY_APPROVED: '활동 승인됨',

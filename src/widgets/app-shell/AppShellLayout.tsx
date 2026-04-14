@@ -821,6 +821,8 @@ function AppShellHeader() {
 
 function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknown>): string[] {
   if (/^\/app\/members\/[^/]+$/.test(pathname)) return ['/app/members'];
+  if (/^\/app\/meetings\/[^/]+$/.test(pathname)) return ['/app/meetings'];
+  if (/^\/app\/performance\//.test(pathname)) return ['/app/performance'];
   if (pathname.startsWith('/app/approvals')) {
     return approvalSiderSelectedMenuKeys(pathname, search);
   }
@@ -831,7 +833,7 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
 
 function menuOpenKeysForPath(pathname: string, search: Record<string, unknown>): string[] {
   const keys: string[] = [];
-  if (TALENT_HUB_PATH_SET.has(pathname)) keys.push(TALENT_HUB_GROUP_KEY);
+  if (TALENT_HUB_PATH_SET.has(pathname) || /^\/app\/(meetings|performance|evaluations)\//.test(pathname)) keys.push(TALENT_HUB_GROUP_KEY);
   if (ORG_HR_PATH_SET.has(pathname) || /^\/app\/members\/[^/]+$/.test(pathname)) {
     keys.push(ORG_HR_GROUP_KEY);
   }
