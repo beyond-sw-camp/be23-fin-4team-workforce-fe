@@ -372,7 +372,13 @@ function SessionAccessTimer() {
   );
 }
 
-function SiderBrandHeader({ collapsed }: { collapsed?: boolean }) {
+function SiderBrandHeader({
+  collapsed,
+  onClick,
+}: {
+  collapsed?: boolean;
+  onClick?: () => void;
+}) {
   const { user, status } = useAuth();
   const { data: companyInfo } = useQuery({
     queryKey: ['company', 'info'],
@@ -417,13 +423,25 @@ function SiderBrandHeader({ collapsed }: { collapsed?: boolean }) {
   if (collapsed) {
     return (
       <Tooltip title={companyName} placement="right">
-        <div className="tw-flex tw-w-full tw-justify-center tw-px-1">{avatar}</div>
+        <button
+          type="button"
+          className="tw-flex tw-w-full tw-cursor-pointer tw-justify-center tw-border-0 tw-bg-transparent tw-px-1 tw-py-0"
+          onClick={onClick}
+          aria-label="대시보드로 이동"
+        >
+          {avatar}
+        </button>
       </Tooltip>
     );
   }
 
   return (
-    <div className="tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-2">
+    <button
+      type="button"
+      className="tw-flex tw-min-w-0 tw-flex-1 tw-cursor-pointer tw-items-center tw-gap-2 tw-border-0 tw-bg-transparent tw-p-0 tw-text-left"
+      onClick={onClick}
+      aria-label="대시보드로 이동"
+    >
       {avatar}
       <div className="tw-flex tw-min-w-0 tw-flex-col tw-leading-tight">
         <span className="tw-truncate tw-text-base tw-font-semibold tw-tracking-tight tw-text-slate-900" title={companyName}>
@@ -436,7 +454,7 @@ function SiderBrandHeader({ collapsed }: { collapsed?: boolean }) {
           {domainLine}
         </span>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -904,7 +922,12 @@ function AppShellLayout() {
               siderCollapsed ? 'tw-justify-center tw-px-2' : 'tw-px-4'
             }`}
           >
-            <SiderBrandHeader collapsed={siderCollapsed} />
+            <SiderBrandHeader
+              collapsed={siderCollapsed}
+              onClick={() => {
+                window.location.assign('/app/dashboard');
+              }}
+            />
           </div>
           <div className="wf-scrollbar tw-min-h-0 tw-w-full tw-flex-1 tw-overflow-y-auto tw-overflow-x-hidden">
             <Menu
