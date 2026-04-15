@@ -1,6 +1,6 @@
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {
-    Button, Card, DatePicker, Drawer, Dropdown, Form, Input, Progress, Select, Space, Table, Tabs, Tag, Tooltip, Typography, message,
+    Button, Card, DatePicker, Dropdown, Form, Input, Modal, Progress, Select, Space, Table, Tabs, Tag, Tooltip, Typography, message,
     Checkbox, Popconfirm, Row, Col,
 } from 'antd';
 import type {ColumnsType} from 'antd/es/table';
@@ -291,12 +291,13 @@ function EvaluatorAssignDrawer({
     const targets = group.targetMemberIds ?? [];
 
     return (
-        <Drawer
+        <Modal
             title={<Space><EditOutlined/><span>평가자 지정 — {group.name}</span></Space>}
             open={state.open}
-            onClose={onClose}
-            width={720}
-            destroyOnHidden
+            onCancel={onClose}
+            width={820}
+            destroyOnClose
+            centered
             footer={
                 <div className="tw-flex tw-justify-end tw-gap-2">
                     <Button onClick={onClose}>취소</Button>
@@ -394,7 +395,7 @@ function EvaluatorAssignDrawer({
                     </div>
                 )}
             </div>
-        </Drawer>
+        </Modal>
     );
 }
 
@@ -1009,9 +1010,15 @@ function EvaluationsPage() {
             </div>
             <Tabs activeKey={tab} onChange={setTab} items={tabItems}/>
 
-            {/* Season Create Drawer */}
-            <Drawer title={L.seasonAdd} open={seasonDrawer} onClose={() => setSeasonDrawer(false)} width={480}
-                    destroyOnHidden>
+            {/* Season Create Modal */}
+            <Modal
+                title={L.seasonAdd}
+                open={seasonDrawer}
+                onCancel={() => setSeasonDrawer(false)}
+                width={520}
+                destroyOnClose
+                footer={null}
+            >
                 <Form form={seasonForm} layout="vertical" onFinish={(v) => {
                     const schedule = {
                         self: {startDate: '', endDate: ''},
@@ -1050,11 +1057,17 @@ function EvaluationsPage() {
                                    loading={createSeasonMut.isPending}>{L.save}</AppButton>
                     </div>
                 </Form>
-            </Drawer>
+            </Modal>
 
-            {/* Design Create Drawer */}
-            <Drawer title={L.designAdd} open={designDrawer} onClose={() => setDesignDrawer(false)} width={640}
-                    destroyOnHidden>
+            {/* Design Create Modal */}
+            <Modal
+                title={L.designAdd}
+                open={designDrawer}
+                onCancel={() => setDesignDrawer(false)}
+                width={760}
+                destroyOnClose
+                footer={null}
+            >
                 <Form form={designForm} layout="vertical" onFinish={(v) => {
                     const sections = (v.sections ?? []).map((s: any) => ({
                         title: s.title,
@@ -1278,11 +1291,17 @@ function EvaluationsPage() {
                                    loading={createDesignMut.isPending}>{L.save}</AppButton>
                     </div>
                 </Form>
-            </Drawer>
+            </Modal>
 
-            {/* Group Create Drawer */}
-            <Drawer title={L.groupAdd} open={groupDrawer} onClose={() => setGroupDrawer(false)} width={520}
-                    destroyOnHidden>
+            {/* Group Create Modal */}
+            <Modal
+                title={L.groupAdd}
+                open={groupDrawer}
+                onCancel={() => setGroupDrawer(false)}
+                width={560}
+                destroyOnClose
+                footer={null}
+            >
                 <Form form={groupForm} layout="vertical" onFinish={(v) => {
                     createGroupMut.mutate({
                         name: v.name,
@@ -1331,7 +1350,7 @@ function EvaluationsPage() {
                                    loading={createGroupMut.isPending}>{L.save}</AppButton>
                     </div>
                 </Form>
-            </Drawer>
+            </Modal>
         </div>
     );
 }

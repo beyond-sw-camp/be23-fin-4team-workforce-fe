@@ -5,7 +5,7 @@ import {
   Button,
   Tag,
   Space,
-  Drawer,
+  Modal,
   Form,
   Input,
   DatePicker,
@@ -123,7 +123,7 @@ function scheduleDisplay(scheduledAt: string) {
 export default function MeetingsPage() {
   const qc = useQueryClient();
   const [tab, setTab] = useState<'member' | 'manager'>('member');
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
   const [form] = Form.useForm();
 
   // ── Queries ──
@@ -140,7 +140,7 @@ export default function MeetingsPage() {
     mutationFn: (body: CreateMeetingPayload) => meetingApi.createMeeting(body),
     onSuccess: () => {
       message.success(MEETING_KO.created);
-      setDrawerOpen(false);
+      setCreateModalOpen(false);
       form.resetFields();
       qc.invalidateQueries({ queryKey: ['meetings'] });
     },
@@ -243,7 +243,7 @@ export default function MeetingsPage() {
           </Paragraph>
         </div>
         {tab === 'manager' ? (
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setDrawerOpen(true)}>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalOpen(true)}>
             {MEETING_KO.newMeeting}
           </Button>
         ) : null}
@@ -312,15 +312,16 @@ export default function MeetingsPage() {
         }}
       />
 
-      {/* ── 생성 Drawer ── */}
-      <Drawer
+      {/* ── 생성 Modal ── */}
+      <Modal
         title={MEETING_KO.drawerTitle}
-        width={420}
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        extra={
+        width={520}
+        open={createModalOpen}
+        onCancel={() => setCreateModalOpen(false)}
+        destroyOnClose
+        footer={
           <Space>
-            <Button onClick={() => setDrawerOpen(false)}>{MEETING_KO.cancel}</Button>
+            <Button onClick={() => setCreateModalOpen(false)}>{MEETING_KO.cancel}</Button>
             <Button
               type="primary"
               loading={createMut.isPending}
@@ -375,7 +376,7 @@ export default function MeetingsPage() {
             <Input.TextArea rows={3} placeholder="면담 안건을 간단히 적어 주세요." />
           </Form.Item>
         </Form>
-      </Drawer>
+      </Modal>
     </div>
   );
 }
