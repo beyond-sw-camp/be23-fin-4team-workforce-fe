@@ -1,3 +1,4 @@
+import { env } from '@/app/config/env';
 import { httpClient } from '@/shared/api/httpClient';
 import { unwrapApiResponse } from '@/shared/api/response';
 import type {
@@ -154,13 +155,23 @@ export const memberChatApi = {
     return unwrapApiResponse<MemberChatPresignedUploadResponse>(response.data);
   },
 
+  /** S3 presigned PUT 대신 서버 경유 업로드(브라우저 CORS 회피) */
+  async uploadFile(file: File): Promise<MemberChatPresignedUploadResponse> {
+    const form = new FormData();
+    form.append('file', file);
+    const response = await httpClient.post(`${MEMBER_CHAT_PREFIX}/file-upload`, form, {
+      timeout: Math.max(env.apiRequestTimeoutMs, 120_000),
+    });
+    return unwrapApiResponse<MemberChatPresignedUploadResponse>(response.data);
+  },
+
   async confirmUpload(key: string): Promise<void> {
     await httpClient.post(`${MEMBER_CHAT_PREFIX}/files/confirm`, { key });
   },
 
   async issuePresignedDownload(key: string): Promise<{ downloadUrl: string }> {
-    const response = await httpClient.get(`${MEMBER_CHAT_PREFIX}/files/${encodeURIComponent(key)}`, {
-      params: { scanStatus: 'CLEAN' },
+    const response = await httpClient.get(`${MEMBER_CHAT_PREFIX}/files/download`, {
+      params: { key, scanStatus: 'CLEAN' },
       maxRedirects: 0,
       validateStatus: (status) => status === 302 || status === 200,
     });

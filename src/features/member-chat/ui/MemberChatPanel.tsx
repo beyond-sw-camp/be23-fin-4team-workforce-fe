@@ -1,7 +1,7 @@
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Avatar, Button, Input, List, Modal, Space, Tag, Typography, Upload, message } from 'antd';
-import { FileImageOutlined, FileOutlined, SearchOutlined } from '@ant-design/icons';
+import { FileImageOutlined, FileOutlined, PaperClipOutlined, SearchOutlined, SendOutlined } from '@ant-design/icons';
+import { Avatar, Button, Input, List, Modal, Tag, Tooltip, Typography, Upload, message } from 'antd';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/features/auth/useAuth';
 import { memberChatApi } from '@/features/member-chat/api/memberChatApi';
@@ -21,6 +21,27 @@ function isImageMessage(item: MemberChatMessage) {
 
 function isFileMessage(item: MemberChatMessage) {
   return item.type === 'FILE';
+}
+
+function ChatImagePreview({ storageKey }: { storageKey: string }) {
+  const { data, isPending, isError } = useQuery({
+    queryKey: ['member-chat', 'file-url', storageKey],
+    queryFn: () => memberChatApi.issuePresignedDownload(storageKey),
+    staleTime: 1000 * 60 * 45,
+  });
+  if (isPending) {
+    return <Typography.Text type="secondary">이미지 불러오는 중…</Typography.Text>;
+  }
+  if (isError || !data?.downloadUrl) {
+    return <Typography.Text type="secondary">이미지를 표시할 수 없습니다.</Typography.Text>;
+  }
+  return (
+    <img
+      src={data.downloadUrl}
+      alt=""
+      className="tw-max-h-64 tw-max-w-full tw-rounded-lg tw-object-contain"
+    />
+  );
 }
 
 function formatChatTime(iso?: string) {
@@ -156,6 +177,9 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
   const threadRef = useRef<HTMLDivElement | null>(null);
   const userScrolledUpRef = useRef(false);
   const lastRoomIdForScrollRef = useRef<number | null>(null);
+  /** 방 전환 시 리셋. 하단에 보이는 최신 메시지까지 읽음 처리한 ID (중복 API 방지) */
+  const lastAckedMessageIdRef = useRef(0);
+  const orderedMessagesRef = useRef<MemberChatMessage[]>([]);
 
   const scrollThreadToBottom = useCallback((force: boolean) => {
     requestAnimationFrame(() => {
@@ -168,12 +192,28 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
     });
   }, []);
 
+  const ackLatestIfViewing = useCallback(() => {
+    const roomId = activeRoom?.roomId;
+    if (!roomId) return;
+    const list = orderedMessagesRef.current;
+    if (list.length === 0) return;
+    const last = list[list.length - 1]!;
+    if (last.messageId <= lastAckedMessageIdRef.current) return;
+    lastAckedMessageIdRef.current = last.messageId;
+    void memberChatStompClient.sendReadAck(roomId, { messageId: last.messageId, deviceId: 'web' });
+    void memberChatApi.ackRead(roomId, { messageId: last.messageId, deviceId: 'web' });
+  }, [activeRoom?.roomId]);
+
   const onThreadScroll = useCallback(() => {
     const el = threadRef.current;
     if (!el) return;
     const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
-    userScrolledUpRef.current = dist > 96;
-  }, []);
+    const atBottom = dist <= 96;
+    userScrolledUpRef.current = !atBottom;
+    if (atBottom) {
+      ackLatestIfViewing();
+    }
+  }, [ackLatestIfViewing]);
 
   const isFloating = variant === 'floating';
   const splitHeight = isFloating ? 'tw-h-full tw-min-h-0 tw-flex-1' : 'tw-min-h-[640px]';
@@ -226,12 +266,9 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
         });
         unsubMessage = memberChatStompClient.subscribeRoomMessages<MemberChatMessage>(
           activeRoom.roomId,
-          (payload) => {
+          () => {
             void queryClient.invalidateQueries({ queryKey: ['member-chat', 'history', activeRoom.roomId] });
-            const mid = payload?.messageId;
-            if (typeof mid === 'number' && mid > 0) {
-              void memberChatStompClient.sendReadAck(activeRoom.roomId, { messageId: mid });
-            }
+            /** 읽음은 스크롤이 하단일 때만 ackLatestIfViewing 에서 일괄 처리 */
           },
         );
         unsubRead = memberChatStompClient.subscribeReadEvents(activeRoom.roomId, (payload) => {
@@ -311,6 +348,8 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
     return [...items].sort((a, b) => a.messageId - b.messageId);
   }, [history?.items]);
 
+  orderedMessagesRef.current = orderedMessages;
+
   const { getRow } = useChatSenderProfiles(orderedMessages, user);
 
   const latestReadMap = useMemo(() => {
@@ -324,19 +363,13 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
     return byMessageId;
   }, [readEvents]);
 
-  const handleReadAckLatest = () => {
-    if (!activeRoom || orderedMessages.length === 0) return;
-    const last = orderedMessages[orderedMessages.length - 1]!;
-    void memberChatStompClient.sendReadAck(activeRoom.roomId, { messageId: last.messageId, deviceId: 'web' });
-    void memberChatApi.ackRead(activeRoom.roomId, { messageId: last.messageId, deviceId: 'web' });
-  };
-
   useEffect(() => {
     const rid = activeRoom?.roomId ?? null;
     const changed = lastRoomIdForScrollRef.current !== rid;
     lastRoomIdForScrollRef.current = rid;
     if (changed) {
       userScrolledUpRef.current = false;
+      lastAckedMessageIdRef.current = 0;
       scrollThreadToBottom(true);
     }
   }, [activeRoom?.roomId, scrollThreadToBottom]);
@@ -345,29 +378,23 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
     scrollThreadToBottom(false);
   }, [orderedMessages, loadingMessages, scrollThreadToBottom]);
 
+  /** 스레드 하단을 보고 있을 때만 최신 메시지까지 읽음(수동 버튼 없음 — 일반 메신저와 동일) */
+  useEffect(() => {
+    if (loadingMessages || !activeRoom?.roomId) return;
+    if (orderedMessages.length === 0) return;
+    if (userScrolledUpRef.current) return;
+    ackLatestIfViewing();
+  }, [activeRoom?.roomId, orderedMessages, loadingMessages, ackLatestIfViewing]);
+
   const uploadBefore = async (file: File) => {
     if (!activeRoom?.roomId) return Upload.LIST_IGNORE;
     setUploading(true);
     try {
-      const mime = file.type || 'application/octet-stream';
-      const presigned = await memberChatApi.issuePresignedUpload({
-        filename: file.name,
-        mime,
-        size: file.size,
-      });
-      const put = await fetch(presigned.url, {
-        method: 'PUT',
-        headers: { 'Content-Type': mime },
-        body: file,
-      });
-      if (!put.ok) {
-        throw new Error('파일 업로드(S3 PUT)에 실패했습니다.');
-      }
-      await memberChatApi.confirmUpload(presigned.key);
-      /** 텍스트와 동일하게 REST — 저장·Redis·STOMP fan-out 경로 통일, WS 미연결 시에도 전송 가능 */
+      const uploaded = await memberChatApi.uploadFile(file);
+      /** 서버가 S3 저장 후 메시지 전송 — REST로 Redis·STOMP fan-out */
       await memberChatApi.sendRoomMessage(activeRoom.roomId, {
-        type: mime.startsWith('image/') ? 'IMAGE' : 'FILE',
-        content: presigned.key,
+        type: uploaded.mimeType.startsWith('image/') ? 'IMAGE' : 'FILE',
+        content: uploaded.key,
         clientMessageId: crypto.randomUUID(),
       });
       await queryClient.refetchQueries({ queryKey: ['member-chat', 'history', activeRoom.roomId] });
@@ -590,8 +617,8 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
                           <Tag icon={<FileImageOutlined />} className="!tw-mb-1">
                             이미지
                           </Tag>
-                          <Typography.Text className="tw-break-all tw-text-sm">{item.content}</Typography.Text>
-                          <div className="tw-mt-1">
+                          {item.content ? <ChatImagePreview storageKey={item.content} /> : null}
+                          <div className="tw-mt-1 tw-flex tw-flex-wrap tw-items-center tw-gap-2">
                             <button
                               type="button"
                               className="tw-text-xs tw-text-blue-600 hover:tw-underline"
@@ -599,7 +626,7 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
                                 if (item.content) void downloadMutation.mutateAsync(item.content);
                               }}
                             >
-                              열기
+                              새 탭에서 열기
                             </button>
                           </div>
                         </div>
@@ -743,51 +770,66 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
                   }}
                 />
               </div>
-              <div className="tw-flex tw-shrink-0 tw-flex-col tw-gap-1">
-                <Input.TextArea
-                  rows={isFloating ? 2 : 3}
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  onKeyDown={(e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
-                    if (e.key !== 'Enter' || e.shiftKey) return;
-                    e.preventDefault();
-                    if (sendMutation.isPending || uploading || !activeRoom?.roomId) return;
-                    if (!draft.trim()) return;
-                    void sendMutation.mutateAsync();
-                  }}
-                  placeholder="메시지를 입력하세요."
-                  disabled={Boolean(!activeRoom || uploading)}
-                  className="tw-min-h-[88px] tw-shrink-0 tw-resize-y tw-rounded-lg focus:!tw-border-blue-400 focus:!tw-shadow-[0_0_0_2px_rgba(37,99,235,0.15)]"
-                  aria-label="메시지 입력"
-                />
-                <span className="tw-select-none tw-text-[11px] tw-text-slate-400">
-                  Enter로 전송 · Shift+Enter로 줄바꿈
-                </span>
-              </div>
-              <div className="tw-flex tw-shrink-0 tw-justify-between">
-                <Space>
-                  <Upload showUploadList={false} beforeUpload={(file) => uploadBefore(file as File)}>
-                    <AppButton variant="secondary" loading={uploading}>
-                      파일 업로드
-                    </AppButton>
-                  </Upload>
-                  <AppButton
-                    variant="secondary"
-                    onClick={handleReadAckLatest}
-                    disabled={!activeRoom || orderedMessages.length === 0}
-                  >
-                    최신 읽음 처리
-                  </AppButton>
-                </Space>
-                <AppButton
-                  loading={sendMutation.isPending}
-                  onClick={() => {
-                    void sendMutation.mutateAsync();
-                  }}
-                  disabled={!activeRoom || !draft.trim()}
-                >
-                  전송
-                </AppButton>
+              <div className="tw-flex tw-shrink-0 tw-flex-col tw-gap-1.5">
+                <div className="tw-rounded-2xl tw-border tw-border-slate-200/90 tw-bg-white tw-px-3 tw-py-2 tw-shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
+                  <Input.TextArea
+                    autoSize={{ minRows: 1, maxRows: isFloating ? 5 : 8 }}
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onKeyDown={(e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+                      if (e.key !== 'Enter' || e.shiftKey) return;
+                      e.preventDefault();
+                      if (sendMutation.isPending || uploading || !activeRoom?.roomId) return;
+                      if (!draft.trim()) return;
+                      void sendMutation.mutateAsync();
+                    }}
+                    placeholder={activeRoom ? '메시지를 입력하세요' : '채팅방을 선택해 주세요'}
+                    disabled={Boolean(!activeRoom || uploading)}
+                    className="!tw-max-h-[168px] !tw-min-h-[44px] !tw-border-0 !tw-bg-transparent !tw-p-0 !tw-text-[15px] !tw-leading-relaxed !tw-shadow-none placeholder:!tw-text-slate-400 focus:!tw-shadow-none"
+                    style={{ resize: 'none' }}
+                    aria-label="메시지 입력"
+                  />
+                  <div className="tw-mt-2 tw-flex tw-items-center tw-justify-between tw-gap-2 tw-border-t tw-border-slate-100 tw-pt-2">
+                    <Tooltip
+                      title="사진·파일 보내기"
+                      zIndex={MEMBER_CHAT_OVERLAY_Z + 50}
+                      getPopupContainer={(n) => n.parentElement ?? document.body}
+                    >
+                      <span className="tw-inline-flex">
+                        <Upload showUploadList={false} beforeUpload={(file) => uploadBefore(file as File)}>
+                          <button
+                            type="button"
+                            disabled={Boolean(!activeRoom || uploading)}
+                            className="tw-flex tw-h-9 tw-w-9 tw-items-center tw-justify-center tw-rounded-full tw-border-0 tw-bg-transparent tw-text-slate-500 tw-transition-colors hover:tw-bg-slate-100 hover:tw-text-slate-800 disabled:tw-cursor-not-allowed disabled:tw-opacity-40"
+                            aria-label="파일 보내기"
+                          >
+                            <PaperClipOutlined className="tw-text-[18px]" />
+                          </button>
+                        </Upload>
+                      </span>
+                    </Tooltip>
+                    <Tooltip
+                      title="전송 (Enter)"
+                      zIndex={MEMBER_CHAT_OVERLAY_Z + 50}
+                      getPopupContainer={(n) => n.parentElement ?? document.body}
+                    >
+                      <AppButton
+                        variant="primary"
+                        loading={sendMutation.isPending}
+                        onClick={() => {
+                          void sendMutation.mutateAsync();
+                        }}
+                        disabled={!activeRoom || !draft.trim()}
+                        className="!tw-h-10 !tw-min-h-10 !tw-w-10 !tw-min-w-10 !tw-rounded-full !tw-border-0 !tw-p-0 !tw-shadow-md"
+                        icon={<SendOutlined className="tw-text-base" />}
+                        aria-label="메시지 전송"
+                      />
+                    </Tooltip>
+                  </div>
+                </div>
+                <p className="tw-m-0 tw-select-none tw-text-center tw-text-[10px] tw-leading-snug tw-text-slate-400">
+                  Enter로 전송 · Shift+Enter로 줄바꿈 · 맨 아래를 보면 자동 읽음
+                </p>
               </div>
             </div>
           </>

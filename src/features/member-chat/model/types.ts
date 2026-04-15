@@ -71,7 +71,8 @@ export type MemberChatPresignedUploadRequest = {
 };
 
 export type MemberChatPresignedUploadResponse = {
-  url: string;
+  /** presigned PUT 시에만 사용. 서버 업로드(`/files/upload`)는 비어 있을 수 있음 */
+  url?: string;
   key: string;
   mimeType: string;
   sizeBytes: number;
