@@ -39,6 +39,7 @@ import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-route
 import { useAuth } from '@/features/auth/useAuth';
 import type { EsgConfig } from '@/features/esg/api/esgApi';
 import { esgApi } from '@/features/esg/api/esgApi';
+import { memberChatApi } from '@/features/member-chat/api/memberChatApi';
 import { notificationApi } from '@/features/notification/api/notificationApi';
 import { companyApi } from '@/features/organization/api/companyApi';
 import { searchApi } from '@/features/search/api/searchApi';
@@ -60,6 +61,7 @@ import { AppSearchField } from '@/shared/ui/AppSearchField';
 import { AiChatbotFab } from '@/widgets/app-shell/AiChatbotFab';
 import { OrgChartModal } from '@/widgets/organization/OrgChartModal';
 import { HeaderSearchMemberDetailModal } from '@/widgets/app-shell/HeaderSearchMemberDetailModal';
+import { MemberChatModal } from '@/widgets/app-shell/MemberChatModal';
 import {
   APPROVAL_SIDEBAR_ROOT_KEY,
   APPROVAL_SUBMENU_DEPT_KEY,
@@ -102,6 +104,7 @@ const APP_MENU_ICONS: Record<string, ReactNode> = {
   '/app/approvals/department': <FolderOpenOutlined className="tw-text-lg" />,
   '/app/payroll': <DollarOutlined className="tw-text-lg" />,
   '/app/notifications': <BellOutlined className="tw-text-lg" />,
+  '/app/member-chat/admin': <MessageOutlined className="tw-text-lg" />,
   '/app/performance': <LineChartOutlined className="tw-text-lg" />,
   '/app/evaluations': <StarOutlined className="tw-text-lg" />,
   '/app/meetings': <VideoCameraOutlined className="tw-text-lg" />,
@@ -289,18 +292,24 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
     };
     const items = buildAppShellMenuItems(esgPaths, isAdmin, approvalMenuRoot);
     if (!isAdmin) return items;
+    const chatAdmin = {
+      key: '/app/member-chat/admin',
+      icon: <MessageOutlined className="tw-text-lg" />,
+      label: '보안·컴플라이언스 조회',
+      title: '보안·컴플라이언스 조회',
+    };
     const doc = {
       key: '/app/ai-documents',
       icon: <RobotOutlined className="tw-text-lg" />,
       label: 'HR 정책 문서',
       title: 'HR 정책 문서',
     };
-    return [...items, doc];
+    return [...items, chatAdmin, doc];
   }, [esgConfig, isAdmin, approvalOrgChart?.organizations, meMember?.organizationId, meMember?.organizationName]);
 }
 
 const headerGhostIconClass =
-  'tw-flex tw-size-11 tw-items-center tw-justify-center tw-rounded-full tw-text-slate-500 tw-transition-colors hover:tw-bg-slate-100 hover:tw-text-slate-800 focus-visible:tw-outline focus-visible:tw-outline-2 focus-visible:tw-outline-offset-2 focus-visible:tw-outline-[#2563EB]';
+  'tw-flex tw-size-11 tw-appearance-none tw-items-center tw-justify-center tw-rounded-full tw-border-0 tw-bg-transparent tw-text-slate-500 tw-shadow-none tw-transition-colors hover:tw-bg-slate-100 hover:tw-text-slate-800 focus-visible:tw-outline focus-visible:tw-outline-2 focus-visible:tw-outline-offset-2 focus-visible:tw-outline-[#2563EB]';
 
 function formatSessionCountdown(totalSeconds: number): string {
   const s = Math.max(0, totalSeconds);
@@ -364,7 +373,13 @@ function SessionAccessTimer() {
   );
 }
 
-function SiderBrandHeader({ collapsed }: { collapsed?: boolean }) {
+function SiderBrandHeader({
+  collapsed,
+  onClick,
+}: {
+  collapsed?: boolean;
+  onClick?: () => void;
+}) {
   const { user, status } = useAuth();
   const { data: companyInfo } = useQuery({
     queryKey: ['company', 'info'],
@@ -409,13 +424,25 @@ function SiderBrandHeader({ collapsed }: { collapsed?: boolean }) {
   if (collapsed) {
     return (
       <Tooltip title={companyName} placement="right">
-        <div className="tw-flex tw-w-full tw-justify-center tw-px-1">{avatar}</div>
+        <button
+          type="button"
+          className="tw-flex tw-w-full tw-cursor-pointer tw-justify-center tw-border-0 tw-bg-transparent tw-px-1 tw-py-0"
+          onClick={onClick}
+          aria-label="대시보드로 이동"
+        >
+          {avatar}
+        </button>
       </Tooltip>
     );
   }
 
   return (
-    <div className="tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-2">
+    <button
+      type="button"
+      className="tw-flex tw-min-w-0 tw-flex-1 tw-cursor-pointer tw-items-center tw-gap-2 tw-border-0 tw-bg-transparent tw-p-0 tw-text-left"
+      onClick={onClick}
+      aria-label="대시보드로 이동"
+    >
       {avatar}
       <div className="tw-flex tw-min-w-0 tw-flex-col tw-leading-tight">
         <span className="tw-truncate tw-text-base tw-font-semibold tw-tracking-tight tw-text-slate-900" title={companyName}>
@@ -428,7 +455,7 @@ function SiderBrandHeader({ collapsed }: { collapsed?: boolean }) {
           {domainLine}
         </span>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -665,6 +692,7 @@ function AppShellHeader() {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [headerDetailMemberId, setHeaderDetailMemberId] = useState<string | null>(null);
+  const [memberChatOpen, setMemberChatOpen] = useState(false);
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -689,6 +717,25 @@ function AppShellHeader() {
     enabled: status === 'authenticated',
     staleTime: 10_000,
   });
+
+  /**
+   * 헤더 채팅 아이콘 뱃지 — 내 모든 방의 unreadCount 합.
+   * `MemberChatPanel` 과 동일한 query key 를 공유하므로 캐시/invalidate 가 자동 동기화된다.
+   */
+  const { data: myChatRooms = [] } = useQuery({
+    queryKey: ['member-chat', 'rooms'],
+    queryFn: () => memberChatApi.listMyRooms(),
+    enabled: status === 'authenticated',
+    // 방별 unreadCount 합(헤더 뱃지)과 목록 카운트를 실시간에 가깝게 유지
+    // 현재는 활성 방 외에는 STOMP 직접 구독이 없으므로 짧은 polling으로 동기화한다.
+    staleTime: 0,
+    refetchInterval: 3_000,
+    refetchIntervalInBackground: true,
+  });
+  const chatUnreadTotal = myChatRooms.reduce(
+    (sum, r) => sum + (typeof r.unreadCount === 'number' ? r.unreadCount : 0),
+    0,
+  );
 
   useEffect(() => {
     if (status !== 'authenticated') return;
@@ -772,8 +819,22 @@ function AppShellHeader() {
         onClose={() => setHeaderDetailMemberId(null)}
       />
 
+      <MemberChatModal open={memberChatOpen} onClose={() => setMemberChatOpen(false)} />
+
       <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-2 tw-overflow-visible md:tw-gap-4">
         <SessionAccessTimer />
+        <Tooltip title="멤버 채팅">
+          <Badge count={chatUnreadTotal} color="#EF4444" offset={[-8, 8]} showZero={false} overflowCount={99}>
+            <button
+              type="button"
+              className={headerGhostIconClass}
+              aria-label={`멤버 채팅${chatUnreadTotal > 0 ? ` (안 읽은 메시지 ${chatUnreadTotal}건)` : ''}`}
+              onClick={() => setMemberChatOpen(true)}
+            >
+              <MessageOutlined className="tw-text-[20px]" />
+            </button>
+          </Badge>
+        </Tooltip>
         <Badge count={unreadCount} color="#EF4444" offset={[-2, 4]} showZero={false}>
           <Link to="/app/notifications" className={headerGhostIconClass} aria-label="알림">
             <BellOutlined className="tw-text-[20px]" />
@@ -791,7 +852,12 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
   if (pathname.startsWith('/app/approvals')) {
     return approvalSiderSelectedMenuKeys(pathname, search);
   }
-  const menuPaths = new Set<string>([...APP_MENU_PATH_ORDER, ...ESG_MENU_PATH_ORDER, '/app/ai-documents']);
+  const menuPaths = new Set<string>([
+    ...APP_MENU_PATH_ORDER,
+    ...ESG_MENU_PATH_ORDER,
+    '/app/member-chat/admin',
+    '/app/ai-documents',
+  ]);
   if (menuPaths.has(pathname)) return [pathname];
   return [];
 }
@@ -878,7 +944,12 @@ function AppShellLayout() {
               siderCollapsed ? 'tw-justify-center tw-px-2' : 'tw-px-4'
             }`}
           >
-            <SiderBrandHeader collapsed={siderCollapsed} />
+            <SiderBrandHeader
+              collapsed={siderCollapsed}
+              onClick={() => {
+                window.location.assign('/app/dashboard');
+              }}
+            />
           </div>
           <div className="wf-scrollbar tw-min-h-0 tw-w-full tw-flex-1 tw-overflow-y-auto tw-overflow-x-hidden">
             <Menu

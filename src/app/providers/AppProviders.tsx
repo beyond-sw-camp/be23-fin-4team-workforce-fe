@@ -26,6 +26,10 @@ function InnerRouterProvider() {
     [auth, permissions],
   );
 
+  if (auth.status === 'loading') {
+    return <div className="tw-h-[100dvh] tw-bg-slate-50" aria-busy="true" />;
+  }
+
   return <RouterProvider router={router} />;
 }
 

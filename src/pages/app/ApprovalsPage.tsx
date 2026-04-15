@@ -2876,7 +2876,7 @@ export function ApprovalsPage() {
             </Button>
           </div>
         }
-        destroyOnClose={false}
+        destroyOnHidden={false}
       >
         {selectedDocument ? renderComposeApprovalInfoContent({ stacked: false }) : null}
       </Modal>

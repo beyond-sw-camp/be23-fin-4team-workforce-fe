@@ -28,7 +28,7 @@ export function GoalApprovalDetailPage() {
         title="완료 제출 승인"
         footer={null}
         onCancel={goApprovals}
-        destroyOnClose
+        destroyOnHidden
         maskClosable
         styles={{ body: { maxHeight: 'min(80vh, 720px)', overflowY: 'auto', paddingTop: 8 } }}
       >

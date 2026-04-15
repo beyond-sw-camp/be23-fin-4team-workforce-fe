@@ -3,6 +3,11 @@ import type { PermissionSpec } from '@/features/permissions/model';
 import type { AppRouterContext } from '@/app/router/types';
 
 export function requireAuth(context: AppRouterContext) {
+  // 초기 새로고침 시 인증 복원(getSession) 완료 전에는 리다이렉트를 보류한다.
+  if (context.auth.status === 'loading') {
+    return;
+  }
+
   if (!context.auth.isAuthenticated) {
     throw redirect({ to: '/login' });
   }
