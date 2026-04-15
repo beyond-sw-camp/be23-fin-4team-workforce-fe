@@ -296,7 +296,7 @@ function EvaluatorAssignDrawer({
             open={state.open}
             onClose={onClose}
             width={720}
-            destroyOnClose
+            destroyOnHidden
             footer={
                 <div className="tw-flex tw-justify-end tw-gap-2">
                     <Button onClick={onClose}>취소</Button>
@@ -1011,7 +1011,7 @@ function EvaluationsPage() {
 
             {/* Season Create Drawer */}
             <Drawer title={L.seasonAdd} open={seasonDrawer} onClose={() => setSeasonDrawer(false)} width={480}
-                    destroyOnClose>
+                    destroyOnHidden>
                 <Form form={seasonForm} layout="vertical" onFinish={(v) => {
                     const schedule = {
                         self: {startDate: '', endDate: ''},
@@ -1054,7 +1054,7 @@ function EvaluationsPage() {
 
             {/* Design Create Drawer */}
             <Drawer title={L.designAdd} open={designDrawer} onClose={() => setDesignDrawer(false)} width={640}
-                    destroyOnClose>
+                    destroyOnHidden>
                 <Form form={designForm} layout="vertical" onFinish={(v) => {
                     const sections = (v.sections ?? []).map((s: any) => ({
                         title: s.title,
@@ -1282,7 +1282,7 @@ function EvaluationsPage() {
 
             {/* Group Create Drawer */}
             <Drawer title={L.groupAdd} open={groupDrawer} onClose={() => setGroupDrawer(false)} width={520}
-                    destroyOnClose>
+                    destroyOnHidden>
                 <Form form={groupForm} layout="vertical" onFinish={(v) => {
                     createGroupMut.mutate({
                         name: v.name,

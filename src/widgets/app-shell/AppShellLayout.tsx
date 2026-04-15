@@ -62,6 +62,7 @@ import { AppSearchField } from '@/shared/ui/AppSearchField';
 import { AiChatbotFab } from '@/widgets/app-shell/AiChatbotFab';
 import { OrgChartModal } from '@/widgets/organization/OrgChartModal';
 import { HeaderSearchMemberDetailModal } from '@/widgets/app-shell/HeaderSearchMemberDetailModal';
+import { MemberChatModal } from '@/widgets/app-shell/MemberChatModal';
 import {
   APPROVAL_SIDEBAR_ROOT_KEY,
   APPROVAL_SUBMENU_DEPT_KEY,
@@ -700,6 +701,7 @@ function AppShellHeader() {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [headerDetailMemberId, setHeaderDetailMemberId] = useState<string | null>(null);
+  const [memberChatOpen, setMemberChatOpen] = useState(false);
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -807,8 +809,20 @@ function AppShellHeader() {
         onClose={() => setHeaderDetailMemberId(null)}
       />
 
+      <MemberChatModal open={memberChatOpen} onClose={() => setMemberChatOpen(false)} />
+
       <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-2 tw-overflow-visible md:tw-gap-4">
         <SessionAccessTimer />
+        <Tooltip title="멤버 채팅">
+          <button
+            type="button"
+            className={headerGhostIconClass}
+            aria-label="멤버 채팅"
+            onClick={() => setMemberChatOpen(true)}
+          >
+            <MessageOutlined className="tw-text-[20px]" />
+          </button>
+        </Tooltip>
         <Badge count={unreadCount} color="#EF4444" offset={[-2, 4]} showZero={false}>
           <Link to="/app/notifications" className={headerGhostIconClass} aria-label="알림">
             <BellOutlined className="tw-text-[20px]" />
