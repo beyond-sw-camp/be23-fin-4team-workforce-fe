@@ -122,6 +122,55 @@ export type UpdateMyInfoPayload = {
   telNumber?: string | null;
 };
 
+/** GET /member/dashboard-profile */
+export type DashboardProfile = {
+  memberId: string;
+  name: string;
+  profileUrl?: string | null;
+  organizationName?: string | null;
+  jobGradeName?: string | null;
+  jobTitleName?: string | null;
+  todayEventCount: number;
+};
+
+function normalizeDashboardProfile(raw: unknown): DashboardProfile | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const memberId = asTextMemberField(r.memberId ?? r.member_id);
+  const name = asTextMemberField(r.name);
+  if (!memberId || !name) return null;
+  const profileRaw = r.profileUrl ?? r.profile_url;
+  const tc = r.todayEventCount ?? r.today_event_count;
+  let todayEventCount = 0;
+  if (typeof tc === 'number' && Number.isFinite(tc)) todayEventCount = tc;
+  else if (typeof tc === 'string' && tc.trim()) {
+    const n = Number(tc);
+    if (Number.isFinite(n)) todayEventCount = n;
+  }
+  return {
+    memberId,
+    name,
+    profileUrl: typeof profileRaw === 'string' && profileRaw.trim() ? profileRaw.trim() : null,
+    organizationName: asTextMemberField(r.organizationName ?? r.organization_name) || null,
+    jobGradeName: asTextMemberField(r.jobGradeName ?? r.job_grade_name) || null,
+    jobTitleName: asTextMemberField(r.jobTitleName ?? r.job_title_name) || null,
+    todayEventCount,
+  };
+}
+
+/** PUT /member/update/{targetMemberId} — 인사 전용(MEMBER:UPDATE). 본인 정보는 PUT /member/my-info */
+export type UpdateMemberHrPayload = {
+  name: string;
+  sabun: string;
+  joinDate: string;
+  employmentType: EmploymentType;
+  extensionNumber: string;
+  telNumber: string;
+  organizationId: string;
+  jobGradeId: string;
+  jobTitleId: string;
+};
+
 /** POST /member/create */
 export type CreateMemberPayload = {
   name: string;
@@ -160,6 +209,8 @@ export type MemberDetail = {
   memberPositionId?: string;
   /** GET 응답에 포함될 때 — 부서 문서함 등에서 조직 선택 기본값으로 사용 */
   organizationId?: string;
+  jobGradeId?: string;
+  jobTitleId?: string;
   organizationName?: string;
   jobGradeName?: string;
   jobTitleName?: string;
@@ -244,6 +295,8 @@ function normalizeMemberDetailResponse(raw: unknown): MemberDetail {
   const memberStatus = pickDetailString(r, ['memberStatus', 'member_status']);
   const accountStatus = pickDetailString(r, ['accountStatus', 'account_status']);
   const organizationId = asTextMemberField(r.organizationId ?? r.organization_id);
+  const jobGradeId = asTextMemberField(r.jobGradeId ?? r.job_grade_id);
+  const jobTitleId = asTextMemberField(r.jobTitleId ?? r.job_title_id);
   return {
     ...base,
     ...(memberStatus ? { memberStatus: memberStatus as MemberDetail['memberStatus'] } : {}),
@@ -252,6 +305,8 @@ function normalizeMemberDetailResponse(raw: unknown): MemberDetail {
     addressPublicYn: addr !== undefined ? addr : normalizeYnFlag(base.addressPublicYn as unknown) ?? base.addressPublicYn,
     ...(esgScore !== undefined ? { esgScore } : {}),
     ...(organizationId ? { organizationId } : {}),
+    ...(jobGradeId ? { jobGradeId } : {}),
+    ...(jobTitleId ? { jobTitleId } : {}),
   };
 }
 
@@ -456,6 +511,24 @@ export const memberApi = {
     const raw = unwrapApiResponse<unknown>(response.data);
     return normalizeMemberDetailResponse(raw);
   },
+
+  /** GET /member/dashboard-profile */
+  async dashboardProfile() {
+    const response = await httpClient.get('/member/dashboard-profile');
+    const root = response.data;
+    if (root && typeof root === 'object' && 'success' in root && (root as { success?: boolean }).success === false) {
+      const msg = (root as { message?: string }).message;
+      throw new Error(
+        typeof msg === 'string' && msg.trim() ? msg : '\ub300\uc2dc\ubcf4\ub4dc \ud504\ub85c\ud544\uc744 \ubd88\ub7ec\uc624\uc9c0 \ubabb\ud588\uc2b5\ub2c8\ub2e4.',
+      );
+    }
+    const data = unwrapApiResponse<unknown>(response.data);
+    const parsed = normalizeDashboardProfile(data);
+    if (!parsed) {
+      throw new Error('\ub300\uc2dc\ubcf4\ub4dc \ud504\ub85c\ud544 \uc751\ub2f5\uc744 \ud574\uc11d\ud560 \uc218 \uc5c6\uc2b5\ub2c8\ub2e4.');
+    }
+    return parsed;
+  },
   /** 결재 상세 등 — approvalLines 의 직위 ID로 이름·부서·직책 조회 */
   async positionInternal(memberPositionId: string) {
     const id = memberPositionId?.trim();
@@ -474,8 +547,13 @@ export const memberApi = {
       return null;
     }
   },
-  async update(memberId: string, payload: Record<string, unknown>) {
-    const response = await httpClient.put(`/member/update/${memberId}`, payload);
+  /** 인사용 직원 정보 수정 — PUT /member/update/{targetMemberId} */
+  async updateHr(targetMemberId: string, payload: UpdateMemberHrPayload) {
+    const id = targetMemberId?.trim();
+    if (!id) {
+      throw new Error('수정 대상 직원 ID가 없습니다.');
+    }
+    const response = await httpClient.put(`/member/update/${encodeURIComponent(id)}`, payload);
     return unwrapApiResponse<Record<string, unknown>>(response.data);
   },
   /** 내 정보 수정 — `Authorization`, `X-User-UUID` 는 httpClient 인터셉터. 미변경 필드는 `null` */

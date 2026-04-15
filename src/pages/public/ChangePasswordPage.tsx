@@ -1,5 +1,5 @@
 import { ArrowLeftOutlined, LockOutlined } from '@ant-design/icons';
-import { Alert, Card, Form, Input, Typography } from 'antd';
+import { Alert, App, Card, Form, Input, Typography } from 'antd';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { useState } from 'react';
 import { APP_POST_LOGIN_PATH } from '@/app/config/paths';
@@ -14,11 +14,11 @@ type FormValues = {
 };
 
 export function ChangePasswordPage() {
+  const { message } = App.useApp();
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as { forced?: boolean };
   const { refreshAuth, logout } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const onFinish = async (values: FormValues) => {
@@ -30,11 +30,13 @@ export function ChangePasswordPage() {
         newPassword: values.newPassword,
         newPasswordCheck: values.newPasswordCheck,
       });
-      await refreshAuth();
-      setDone(true);
-      window.setTimeout(() => {
-        void navigate({ to: APP_POST_LOGIN_PATH, replace: true });
-      }, 800);
+      const ok = await refreshAuth();
+      if (!ok) {
+        setError('세션을 갱신하지 못했습니다. 다시 로그인해 주세요.');
+        return;
+      }
+      message.success('비밀번호가 변경되었습니다.');
+      void navigate({ to: APP_POST_LOGIN_PATH, replace: true });
     } catch (e) {
       const msg =
         e && typeof e === 'object' && 'message' in e && typeof (e as { message: unknown }).message === 'string'
@@ -85,9 +87,6 @@ export function ChangePasswordPage() {
 
           {search.forced ? (
             <Alert type="info" showIcon message="보안을 위해 최초 로그인 시 비밀번호 변경이 필요합니다." className="tw-mb-4" />
-          ) : null}
-          {done ? (
-            <Alert type="success" showIcon message="비밀번호가 변경되었습니다. 잠시 후 대시보드로 이동합니다." className="tw-mb-4" />
           ) : null}
           {error ? <Alert type="error" showIcon message={error} className="tw-mb-4" /> : null}
 

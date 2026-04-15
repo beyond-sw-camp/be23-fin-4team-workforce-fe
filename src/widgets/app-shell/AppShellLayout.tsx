@@ -13,6 +13,7 @@ import {
   FormOutlined,
   GlobalOutlined,
   LineChartOutlined,
+  PieChartOutlined,
   MoreOutlined,
   KeyOutlined,
   MessageOutlined,
@@ -36,8 +37,6 @@ import { useContext, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import { useAuth } from '@/features/auth/useAuth';
-import { PERM } from '@/features/permissions/backend-permissions';
-import { usePermissions } from '@/features/permissions/usePermissionsHook';
 import type { EsgConfig } from '@/features/esg/api/esgApi';
 import { esgApi } from '@/features/esg/api/esgApi';
 import { notificationApi } from '@/features/notification/api/notificationApi';
@@ -54,7 +53,6 @@ import {
   APP_MENU_ORG_HR_GROUP_LABEL,
   APP_MENU_PATH_ORDER,
   APP_MENU_TALENT_HUB_LABEL,
-  APP_MENU_WORK_LEAVE_GROUP_LABEL,
   ESG_MENU_LABEL,
   ESG_MENU_PATH_ORDER,
 } from '@/app/locale/app-ko';
@@ -94,6 +92,7 @@ function SiderPanelToggleIcon({ className }: { className?: string }) {
 
 const APP_MENU_ICONS: Record<string, ReactNode> = {
   '/app/dashboard': <DashboardOutlined className="tw-text-lg" />,
+  '/app/insights': <PieChartOutlined className="tw-text-lg" />,
   '/app/calendar': <CalendarOutlined className="tw-text-lg" />,
   '/app/members': <TeamOutlined className="tw-text-lg" />,
   '/app/organization': <ApartmentOutlined className="tw-text-lg" />,
@@ -141,16 +140,8 @@ const TALENT_HUB_PATH_SET = new Set<string>(TALENT_HUB_PATHS);
 const ORG_HR_GROUP_KEY = 'group-org-hr';
 const ORG_HR_PATHS = ['/app/members', '/app/organization', '/app/roles'] as const;
 const ORG_HR_PATH_SET = new Set<string>(ORG_HR_PATHS);
-/** 조직 설정·역할·권한 메뉴는 시스템 관리자만 사이드바에 표시 */
-const ORG_HR_ADMIN_ONLY_PATHS = new Set<string>(['/app/organization', '/app/roles']);
-/** 구성원 메뉴는 MEMBER 조회·생성 권한을 모두 가진 경우에만 표시 */
-const ORG_HR_MEMBERS_PATH = '/app/members';
 
 const ESG_GROUP_KEY = 'group-esg';
-
-const WORK_LEAVE_GROUP_KEY = 'group-work-leave';
-const WORK_LEAVE_PATHS = ['/app/attendance', '/app/leave'] as const;
-const WORK_LEAVE_PATH_SET = new Set<string>(WORK_LEAVE_PATHS);
 
 /**
  * antd SubMenu는 접힘 상태에서 기본 툴팁이 없음 — 아이콘+텍스트를 한 덩어리로 감싸 호버 시 그룹명 표시.
@@ -176,14 +167,22 @@ function buildAppShellMenuItems(
     esgPaths: readonly string[],
     isAdmin: boolean,
     approvalMenuRoot: NonNullable<MenuProps['items']>[number],
-    memberDirectoryAccess: boolean,
 ): NonNullable<MenuProps['items']> {
   const items: NonNullable<MenuProps['items']> = [];
   let hubInserted = false;
   let orgInserted = false;
-  let workLeaveInserted = false;
+  let orgChartInserted = false;
 
   for (const path of APP_MENU_PATH_ORDER) {
+    if (path === '/app/members' && !orgChartInserted) {
+      orgChartInserted = true;
+      items.push({
+        key: APP_MENU_ORG_CHART_SIDEBAR_KEY,
+        icon: <PartitionOutlined className="tw-text-lg" />,
+        label: APP_MENU_ORG_CHART_LABEL,
+        title: APP_MENU_ORG_CHART_LABEL,
+      });
+    }
     if (TALENT_HUB_PATH_SET.has(path)) {
       if (!hubInserted) {
         hubInserted = true;
@@ -203,6 +202,9 @@ function buildAppShellMenuItems(
       continue;
     }
     if (ORG_HR_PATH_SET.has(path)) {
+      if (!isAdmin) {
+        continue;
+      }
       if (!orgInserted) {
         orgInserted = true;
         items.push({
@@ -210,40 +212,7 @@ function buildAppShellMenuItems(
           label: (
             <SiderGroupedMenuLabel icon={<TeamOutlined className="tw-text-lg" />} text={APP_MENU_ORG_HR_GROUP_LABEL} />
           ),
-          children: [
-            ...ORG_HR_PATHS.filter((p) => {
-              if (p === ORG_HR_MEMBERS_PATH) return memberDirectoryAccess;
-              if (ORG_HR_ADMIN_ONLY_PATHS.has(p)) return isAdmin;
-              return true;
-            }).map((p) => ({
-              key: p,
-              icon: APP_MENU_ICONS[p],
-              label: APP_MENU_LABEL[p],
-              title: APP_MENU_LABEL[p],
-            })),
-            {
-              key: APP_MENU_ORG_CHART_SIDEBAR_KEY,
-              icon: <PartitionOutlined className="tw-text-lg" />,
-              label: APP_MENU_ORG_CHART_LABEL,
-              title: APP_MENU_ORG_CHART_LABEL,
-            },
-          ],
-        });
-      }
-      continue;
-    }
-    if (WORK_LEAVE_PATH_SET.has(path)) {
-      if (!workLeaveInserted) {
-        workLeaveInserted = true;
-        items.push({
-          key: WORK_LEAVE_GROUP_KEY,
-          label: (
-            <SiderGroupedMenuLabel
-              icon={<ClockCircleOutlined className="tw-text-lg" />}
-              text={APP_MENU_WORK_LEAVE_GROUP_LABEL}
-            />
-          ),
-          children: WORK_LEAVE_PATHS.map((p) => ({
+          children: ORG_HR_PATHS.map((p) => ({
             key: p,
             icon: APP_MENU_ICONS[p],
             label: APP_MENU_LABEL[p],
@@ -257,8 +226,7 @@ function buildAppShellMenuItems(
       items.push(approvalMenuRoot);
       continue;
     }
-    const leafLabel =
-      path === '/app/dashboard' && isAdmin ? '관리자 대시보드' : APP_MENU_LABEL[path];
+    const leafLabel = APP_MENU_LABEL[path];
     items.push({
       key: path,
       icon: APP_MENU_ICONS[path],
@@ -285,7 +253,6 @@ function buildAppShellMenuItems(
 
 function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
   const { status, user } = useAuth();
-  const { hasPermission } = usePermissions();
   const isAdmin = user?.isSystemAdmin === true;
   const memberId = user?.id?.trim();
   const { data: meMember } = useQuery({
@@ -310,8 +277,6 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
   });
 
   return useMemo(() => {
-    const memberDirectoryAccess =
-      hasPermission(PERM.MEMBER_READ) && hasPermission(PERM.MEMBER_CREATE);
     const esgPaths = ESG_MENU_PATH_ORDER.filter((p) => shouldShowEsgMenuItem(p, esgConfig ?? null, isAdmin));
     const approvalMenuRoot = {
       key: APPROVAL_SIDEBAR_ROOT_KEY,
@@ -323,7 +288,7 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
         myOrganizationName: meMember?.organizationName,
       }),
     };
-    const items = buildAppShellMenuItems(esgPaths, isAdmin, approvalMenuRoot, memberDirectoryAccess);
+    const items = buildAppShellMenuItems(esgPaths, isAdmin, approvalMenuRoot);
     if (!isAdmin) return items;
     const doc = {
       key: '/app/ai-documents',
@@ -332,7 +297,7 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
       title: 'HR 정책 문서',
     };
     return [...items, doc];
-  }, [esgConfig, isAdmin, hasPermission, approvalOrgChart?.organizations, meMember?.organizationId, meMember?.organizationName]);
+  }, [esgConfig, isAdmin, approvalOrgChart?.organizations, meMember?.organizationId, meMember?.organizationName]);
 }
 
 const headerGhostIconClass =
@@ -852,7 +817,6 @@ function menuOpenKeysForPath(pathname: string, search: Record<string, unknown>):
     keys.push(ORG_HR_GROUP_KEY);
   }
   if (pathname.startsWith('/app/esg')) keys.push(ESG_GROUP_KEY);
-  if (WORK_LEAVE_PATH_SET.has(pathname)) keys.push(WORK_LEAVE_GROUP_KEY);
   if (pathname.startsWith('/app/approvals')) {
     keys.push(...approvalSiderOpenKeys(pathname, search));
   }
@@ -950,7 +914,6 @@ function AppShellLayout() {
                   key === TALENT_HUB_GROUP_KEY ||
                   key === ORG_HR_GROUP_KEY ||
                   key === ESG_GROUP_KEY ||
-                  key === WORK_LEAVE_GROUP_KEY ||
                   key === APPROVAL_SIDEBAR_ROOT_KEY ||
                   key === APPROVAL_SUBMENU_DO_KEY ||
                   key === APPROVAL_SUBMENU_PERSONAL_KEY ||
