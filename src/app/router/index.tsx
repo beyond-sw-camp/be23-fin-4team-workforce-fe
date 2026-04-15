@@ -19,6 +19,7 @@ import { VerifyEmailPage } from '@/pages/public/VerifyEmailPage';
 import { CompanyOnboardingPage } from '@/pages/public/CompanyOnboardingPage';
 import { CalendarPage } from '@/pages/app/CalendarPage';
 import { DashboardPage } from '@/pages/app/DashboardPage';
+import { HrInsightsPage } from '@/pages/app/HrInsightsPage';
 import { EsgActivitiesPage } from '@/pages/app/esg/EsgActivitiesPage';
 import { EsgAdminPage } from '@/pages/app/esg/EsgAdminPage';
 import { EsgCampaignsPage } from '@/pages/app/esg/EsgCampaignsPage';
@@ -26,6 +27,7 @@ import { EsgHomePage } from '@/pages/app/esg/EsgHomePage';
 import { EsgShopPage } from '@/pages/app/esg/EsgShopPage';
 import { MembersPage } from '@/pages/app/MembersPage';
 import { MemberDetailPage } from '@/pages/app/MemberDetailPage';
+import { MemberEditPage } from '@/pages/app/MemberEditPage';
 import { NotificationsPage } from '@/pages/app/NotificationsPage';
 import EvaluationsPage from '@/pages/app/EvaluationsPage';
 import { EvaluationWritePage } from '@/pages/app/EvaluationWritePage';
@@ -122,6 +124,12 @@ const dashboardRoute = createRoute({
   component: DashboardPage,
 });
 
+const hrInsightsRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/insights',
+  component: HrInsightsPage,
+});
+
 const calendarRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/calendar',
@@ -193,6 +201,15 @@ const memberDetailRoute = createRoute({
   component: MemberDetailPage,
   beforeLoad: ({ context }) => {
     requirePermissions(context, [PERM.MEMBER_READ, PERM.MEMBER_CREATE]);
+  },
+});
+
+const memberEditRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/members/$memberId/edit',
+  component: MemberEditPage,
+  beforeLoad: ({ context }) => {
+    requirePermissions(context, [PERM.MEMBER_UPDATE]);
   },
 });
 const notificationsRoute = createRoute({
@@ -339,6 +356,7 @@ const routeTree = rootRoute.addChildren([
   appLayoutRoute.addChildren([
     appBaseRoute.addChildren([
       dashboardRoute,
+      hrInsightsRoute,
       calendarRoute,
       esgHomeRoute,
       esgActivitiesRoute,
@@ -349,6 +367,7 @@ const routeTree = rootRoute.addChildren([
       myProfileRoute,
       membersRoute,
       memberDetailRoute,
+      memberEditRoute,
       notificationsRoute,
       performanceRoute,
       approvalsAdminRoute,
