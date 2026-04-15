@@ -39,6 +39,7 @@ import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-route
 import { useAuth } from '@/features/auth/useAuth';
 import type { EsgConfig } from '@/features/esg/api/esgApi';
 import { esgApi } from '@/features/esg/api/esgApi';
+import { memberChatApi } from '@/features/member-chat/api/memberChatApi';
 import { notificationApi } from '@/features/notification/api/notificationApi';
 import { companyApi } from '@/features/organization/api/companyApi';
 import { searchApi } from '@/features/search/api/searchApi';
@@ -308,7 +309,7 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
 }
 
 const headerGhostIconClass =
-  'tw-flex tw-size-11 tw-items-center tw-justify-center tw-rounded-full tw-text-slate-500 tw-transition-colors hover:tw-bg-slate-100 hover:tw-text-slate-800 focus-visible:tw-outline focus-visible:tw-outline-2 focus-visible:tw-outline-offset-2 focus-visible:tw-outline-[#2563EB]';
+  'tw-flex tw-size-11 tw-appearance-none tw-items-center tw-justify-center tw-rounded-full tw-border-0 tw-bg-transparent tw-text-slate-500 tw-shadow-none tw-transition-colors hover:tw-bg-slate-100 hover:tw-text-slate-800 focus-visible:tw-outline focus-visible:tw-outline-2 focus-visible:tw-outline-offset-2 focus-visible:tw-outline-[#2563EB]';
 
 function formatSessionCountdown(totalSeconds: number): string {
   const s = Math.max(0, totalSeconds);
@@ -717,6 +718,25 @@ function AppShellHeader() {
     staleTime: 10_000,
   });
 
+  /**
+   * 헤더 채팅 아이콘 뱃지 — 내 모든 방의 unreadCount 합.
+   * `MemberChatPanel` 과 동일한 query key 를 공유하므로 캐시/invalidate 가 자동 동기화된다.
+   */
+  const { data: myChatRooms = [] } = useQuery({
+    queryKey: ['member-chat', 'rooms'],
+    queryFn: () => memberChatApi.listMyRooms(),
+    enabled: status === 'authenticated',
+    // 방별 unreadCount 합(헤더 뱃지)과 목록 카운트를 실시간에 가깝게 유지
+    // 현재는 활성 방 외에는 STOMP 직접 구독이 없으므로 짧은 polling으로 동기화한다.
+    staleTime: 0,
+    refetchInterval: 3_000,
+    refetchIntervalInBackground: true,
+  });
+  const chatUnreadTotal = myChatRooms.reduce(
+    (sum, r) => sum + (typeof r.unreadCount === 'number' ? r.unreadCount : 0),
+    0,
+  );
+
   useEffect(() => {
     if (status !== 'authenticated') return;
     const unsubscribe = notificationApi.subscribe(() => {
@@ -804,14 +824,16 @@ function AppShellHeader() {
       <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-2 tw-overflow-visible md:tw-gap-4">
         <SessionAccessTimer />
         <Tooltip title="멤버 채팅">
-          <button
-            type="button"
-            className={headerGhostIconClass}
-            aria-label="멤버 채팅"
-            onClick={() => setMemberChatOpen(true)}
-          >
-            <MessageOutlined className="tw-text-[20px]" />
-          </button>
+          <Badge count={chatUnreadTotal} color="#EF4444" offset={[-8, 8]} showZero={false} overflowCount={99}>
+            <button
+              type="button"
+              className={headerGhostIconClass}
+              aria-label={`멤버 채팅${chatUnreadTotal > 0 ? ` (안 읽은 메시지 ${chatUnreadTotal}건)` : ''}`}
+              onClick={() => setMemberChatOpen(true)}
+            >
+              <MessageOutlined className="tw-text-[20px]" />
+            </button>
+          </Badge>
         </Tooltip>
         <Badge count={unreadCount} color="#EF4444" offset={[-2, 4]} showZero={false}>
           <Link to="/app/notifications" className={headerGhostIconClass} aria-label="알림">

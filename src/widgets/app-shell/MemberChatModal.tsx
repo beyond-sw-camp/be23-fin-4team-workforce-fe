@@ -198,7 +198,7 @@ export function MemberChatModal({ open, onClose }: MemberChatModalProps) {
       aria-hidden={false}
     >
       <div
-        className="tw-pointer-events-auto tw-absolute tw-flex tw-flex-col tw-overflow-hidden tw-rounded-xl tw-border tw-border-solid tw-border-slate-200 tw-bg-white tw-shadow-2xl"
+        className="tw-pointer-events-auto tw-absolute tw-flex tw-flex-col tw-overflow-hidden tw-rounded-xl tw-bg-white tw-shadow-2xl"
         style={{
           left: rect.x,
           top: rect.y,
@@ -216,7 +216,7 @@ export function MemberChatModal({ open, onClose }: MemberChatModalProps) {
           onPointerUp={onHeaderPointerUp}
           onPointerCancel={onHeaderPointerUp}
         >
-          <span className="tw-text-sm tw-font-semibold tw-tracking-[0.01em] tw-text-white">멤버 채팅</span>
+          <span className="tw-text-sm tw-font-semibold tw-tracking-[0.01em] tw-text-white">메신저</span>
           <Button
             type="text"
             size="small"

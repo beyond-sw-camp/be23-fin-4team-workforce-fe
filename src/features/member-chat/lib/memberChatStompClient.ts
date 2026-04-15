@@ -270,7 +270,19 @@ export class MemberChatStompClient {
     if (!this.client?.connected) return;
     this.client.publish({
       destination: `${APP_PREFIX}/room/${roomId}/read`,
-      body: JSON.stringify({ lastMessageId: payload.messageId, deviceId: payload.deviceId ?? 'web' }),
+      // 서버 ChatStompController 는 payload.messageId 를 본다. lastMessageId 키로 보내면 messageId 필수 에러.
+      body: JSON.stringify({ messageId: payload.messageId, deviceId: payload.deviceId ?? 'web' }),
+      headers: authHeaders(),
+    });
+  }
+
+  /** 방 진입 시: 서버가 방의 최신 메시지까지 일괄 ack. 이미 읽은 상태면 no-op. */
+  async sendReadLatest(roomId: number, deviceId: string = 'web'): Promise<void> {
+    await this.connect();
+    if (!this.client?.connected) return;
+    this.client.publish({
+      destination: `${APP_PREFIX}/room/${roomId}/read-latest`,
+      body: JSON.stringify({ deviceId }),
       headers: authHeaders(),
     });
   }

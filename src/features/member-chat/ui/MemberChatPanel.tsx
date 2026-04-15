@@ -1,18 +1,25 @@
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FileImageOutlined, FileOutlined, PaperClipOutlined, SearchOutlined, SendOutlined } from '@ant-design/icons';
-import { Avatar, Button, Input, List, Modal, Tag, Tooltip, Typography, Upload, message } from 'antd';
+import { FileOutlined, PaperClipOutlined, SearchOutlined, SendOutlined } from '@ant-design/icons';
+import { Avatar, Badge, Button, Image, Input, List, Modal, Tag, Tooltip, Typography, Upload, message } from 'antd';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/features/auth/useAuth';
 import { memberChatApi } from '@/features/member-chat/api/memberChatApi';
 import { memberChatStompClient } from '@/features/member-chat/lib/memberChatStompClient';
 import type {
   MemberChatMessage,
-  MemberChatReadEvent,
   MemberChatRoomSummary,
 } from '@/features/member-chat/model/types';
 import { chatSenderInitial, useChatSenderProfiles } from '@/features/member-chat/hooks/useChatSenderProfiles';
+import { useSignedDownloadUrl } from '@/features/member-chat/hooks/useSignedDownloadUrl';
+import {
+  encodeAttachmentPayload,
+  fallbackNameFromKey,
+  formatFileSize,
+  parseAttachmentPayload,
+} from '@/features/member-chat/lib/attachmentPayload';
 import { CreateRoomFromOrgChartModal } from '@/features/member-chat/ui/CreateRoomFromOrgChartModal';
+import { GroupParticipantsDrawer } from '@/features/member-chat/ui/GroupParticipantsDrawer';
 import { AppButton } from '@/shared/ui/AppButton';
 
 function isImageMessage(item: MemberChatMessage) {
@@ -23,16 +30,68 @@ function isFileMessage(item: MemberChatMessage) {
   return item.type === 'FILE';
 }
 
-function ChatImagePreview({ storageKey }: { storageKey: string }) {
-  const src = memberChatApi.buildDownloadUrl(storageKey);
+/**
+ * `<img>` 는 Authorization 헤더를 실어 줄 수 없어 `/files/download` 의 302 응답을 직접 따를 수 없다.
+ * 서버가 발급한 presigned S3 URL(자체 서명)을 JSON 으로 받아 src 에 꽂는다.
+ */
+function ChatImagePreview({ storageKey, alt }: { storageKey: string; alt?: string }) {
+  const { url, isLoading, isError } = useSignedDownloadUrl(storageKey);
+  if (isLoading) {
+    return (
+      <div
+        className="tw-flex tw-h-40 tw-w-60 tw-max-w-full tw-items-center tw-justify-center tw-rounded-lg tw-bg-slate-100 tw-text-[11px] tw-text-slate-400"
+        aria-label="이미지 불러오는 중"
+      >
+        이미지 불러오는 중…
+      </div>
+    );
+  }
+  if (isError || !url) {
+    return (
+      <div className="tw-flex tw-h-20 tw-w-60 tw-max-w-full tw-items-center tw-justify-center tw-rounded-lg tw-border tw-border-dashed tw-border-rose-300 tw-bg-rose-50 tw-text-[11px] tw-text-rose-500">
+        이미지를 불러올 수 없습니다.
+      </div>
+    );
+  }
   return (
-    <img
-      src={src}
-      alt=""
+    <Image
+      src={url}
+      alt={alt ?? ''}
       className="tw-max-h-64 tw-max-w-full tw-rounded-lg tw-object-contain"
-      loading="lazy"
-      referrerPolicy="no-referrer"
+      preview={{
+        mask: '확대',
+        zIndex: MEMBER_CHAT_OVERLAY_Z + 120,
+      }}
+      style={{ maxHeight: '16rem', objectFit: 'contain' }}
     />
+  );
+}
+
+/** 파일 메시지 하단 링크 — signed URL 을 새 탭으로 연다. */
+function ChatFileDownloadLink({ storageKey, fileName }: { storageKey: string; fileName?: string }) {
+  const { url, isLoading, isError } = useSignedDownloadUrl(storageKey);
+  if (isLoading) {
+    return (
+      <span className="tw-text-xs tw-text-slate-400" aria-label="다운로드 URL 준비 중">
+        준비 중…
+      </span>
+    );
+  }
+  if (isError || !url) {
+    return (
+      <span className="tw-text-xs tw-text-rose-500">다운로드 URL 을 받을 수 없습니다.</span>
+    );
+  }
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="tw-text-xs tw-text-blue-600 hover:tw-underline"
+      aria-label={`${fileName ?? '첨부파일'} 새 탭에서 열기`}
+    >
+      새 탭에서 열기
+    </a>
   );
 }
 
@@ -149,6 +208,12 @@ function sameMemberUuid(a?: string | null, b?: string | null): boolean {
 
 /** 플로팅 채팅 패널(z≈1060) 위에 확인 모달이 오도록 */
 const MEMBER_CHAT_OVERLAY_Z = 10_080;
+/**
+ * UX 정책:
+ * - 첫 오픈에서는 기존처럼 첫 방 자동 진입 허용
+ * - 한 번 닫은 뒤 재오픈부터는 자동 진입하지 않음 (사용자가 직접 방 선택)
+ */
+let shouldAutoEnterRoomOnMount = true;
 
 export type MemberChatPanelProps = {
   /** `floating`: 드래그 가능한 플로팅 패널 안에서 높이를 부모에 맞춤 */
@@ -162,9 +227,11 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
   const [activeRoom, setActiveRoom] = useState<MemberChatRoomSummary | null>(null);
   const [draft, setDraft] = useState('');
   const [createRoomOpen, setCreateRoomOpen] = useState(false);
+  const [participantsOpen, setParticipantsOpen] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
   const [editingContent, setEditingContent] = useState('');
-  const [readEvents, setReadEvents] = useState<Record<string, MemberChatReadEvent>>({});
+  /** 방 내 각 멤버의 lastReadMessageId — 초기값은 방 진입 시, 이후 READ 이벤트로 갱신 */
+  const [perMemberLastRead, setPerMemberLastRead] = useState<Record<string, number>>({});
   const [uploading, setUploading] = useState(false);
   const [listQuery, setListQuery] = useState('');
   const [isCompactLayout, setIsCompactLayout] = useState<boolean>(false);
@@ -197,9 +264,13 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
     const last = list[list.length - 1]!;
     if (last.messageId <= lastAckedMessageIdRef.current) return;
     lastAckedMessageIdRef.current = last.messageId;
-    void memberChatStompClient.sendReadAck(roomId, { messageId: last.messageId, deviceId: 'web' });
-    void memberChatApi.ackRead(roomId, { messageId: last.messageId, deviceId: 'web' });
-  }, [activeRoom?.roomId]);
+    // 서버가 "최신까지" 를 결정하는 idempotent API — 중복 호출 안전
+    void memberChatStompClient.sendReadLatest(roomId, 'web');
+    void memberChatApi.ackReadLatest(roomId, 'web').then(() => {
+      // 내 unreadCount 가 0 으로 바뀌므로 방 목록 갱신
+      void queryClient.invalidateQueries({ queryKey: ['member-chat', 'rooms'] });
+    });
+  }, [activeRoom?.roomId, queryClient]);
 
   const onThreadScroll = useCallback(() => {
     const el = threadRef.current;
@@ -242,13 +313,12 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
     const applyCompact = (width: number) => {
       const compact = width < COMPACT_PANEL_WIDTH;
       setIsCompactLayout(compact);
-      if (!compact) {
-        setShowCompactRoomList(true);
-      } else if (activeRoom?.roomId) {
-        setShowCompactRoomList(false);
-      } else {
-        setShowCompactRoomList(true);
-      }
+      setShowCompactRoomList((prev) => {
+        if (!compact) return true;
+        if (!activeRoom?.roomId) return true;
+        // compact 상태에서는 리사이즈만으로 목록/대화 화면을 강제 전환하지 않는다.
+        return prev;
+      });
     };
     applyCompact(el.clientWidth);
     const observer = new ResizeObserver((entries) => {
@@ -267,9 +337,16 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
     }
     setActiveRoom((prev) => {
       if (prev && rooms.some((r) => r.roomId === prev.roomId)) return prev;
+      if (!shouldAutoEnterRoomOnMount) return null;
       return rooms[0] ?? null;
     });
   }, [rooms]);
+
+  useEffect(() => {
+    return () => {
+      shouldAutoEnterRoomOnMount = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!activeRoom?.roomId) return;
@@ -292,11 +369,18 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
           activeRoom.roomId,
           () => {
             void queryClient.invalidateQueries({ queryKey: ['member-chat', 'history', activeRoom.roomId] });
+            void queryClient.invalidateQueries({ queryKey: ['member-chat', 'rooms'] });
             /** 읽음은 스크롤이 하단일 때만 ackLatestIfViewing 에서 일괄 처리 */
           },
         );
         unsubRead = memberChatStompClient.subscribeReadEvents(activeRoom.roomId, (payload) => {
-          setReadEvents((prev) => ({ ...prev, [payload.memberId]: payload }));
+          setPerMemberLastRead((prev) => {
+            const cur = prev[payload.memberId] ?? 0;
+            // lastReadMessageId 가 내려오지 않으면 messageId 로 폴백
+            const next = Math.max(cur, payload.lastReadMessageId ?? payload.messageId ?? 0);
+            if (next === cur) return prev;
+            return { ...prev, [payload.memberId]: next };
+          });
         });
       } catch (e) {
         void message.error((e as Error).message || '채팅 연결에 실패했습니다.');
@@ -356,23 +440,6 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
     },
   });
 
-  const openInNewTabWithPopupSafe = useCallback((key?: string) => {
-    if (!key) return;
-    const downloadUrl = memberChatApi.buildDownloadUrl(key);
-    window.open(downloadUrl, '_blank', 'noopener,noreferrer');
-  }, []);
-
-  const triggerBrowserDownload = useCallback((key?: string) => {
-    if (!key) return;
-    const a = document.createElement('a');
-    a.href = memberChatApi.buildDownloadUrl(key);
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-  }, []);
-
   const orderedMessages = useMemo(() => {
     const items = history?.items ?? [];
     return [...items].sort((a, b) => a.messageId - b.messageId);
@@ -382,17 +449,91 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
 
   const { getRow } = useChatSenderProfiles(orderedMessages, user);
 
-  const latestReadMap = useMemo(() => {
-    const byMessageId: Record<number, string[]> = {};
-    for (const value of Object.values(readEvents)) {
-      const mid = value?.messageId;
-      if (mid == null) continue;
-      if (!byMessageId[mid]) byMessageId[mid] = [];
-      byMessageId[mid].push(value.memberId);
-    }
-    return byMessageId;
-  }, [readEvents]);
+  const isDirectRoom = activeRoom?.roomType === 'DIRECT';
+  const roomParticipantCount = activeRoom?.participantCount ?? 0;
 
+  /**
+   * 1:1 방에서 "상대방" 프로필(이름·직급·소속) 결정 우선순위:
+   *   1) 방 서머리의 otherMember* (백엔드 enriched, 빈 방에도 존재)
+   *   2) 메시지 히스토리 senderInfo (REST 히스토리·STOMP 양쪽에서 채워짐)
+   *   3) 방 title 로 폴백
+   */
+  const directPartner = useMemo(() => {
+    if (!isDirectRoom) return null;
+    const fromRoom = activeRoom?.otherMemberName?.trim();
+    if (fromRoom) {
+      const title =
+        activeRoom?.otherMemberJobTitleName?.trim() ||
+        activeRoom?.otherMemberJobGradeName?.trim() ||
+        '';
+      const org = activeRoom?.otherMemberOrganizationName?.trim() || '';
+      return {
+        name: fromRoom,
+        subtitle: [title, org].filter(Boolean).join(' · '),
+        avatarUrl: activeRoom?.otherMemberProfileUrl ?? null,
+      };
+    }
+    if (!user?.id) return null;
+    const other = orderedMessages.find((m) => !sameMemberUuid(m.senderId, user.id));
+    if (!other) return null;
+    const row = getRow(other);
+    return {
+      name: row.name,
+      subtitle: row.subtitle,
+      avatarUrl: row.avatarUrl ?? null,
+    };
+  }, [
+    isDirectRoom,
+    activeRoom?.otherMemberName,
+    activeRoom?.otherMemberProfileUrl,
+    activeRoom?.otherMemberJobTitleName,
+    activeRoom?.otherMemberJobGradeName,
+    activeRoom?.otherMemberOrganizationName,
+    user?.id,
+    orderedMessages,
+    getRow,
+  ]);
+
+  /**
+   * 각 메시지를 기준으로 "안 읽은 수" 를 계산해 내 메시지 하단에 표기한다.
+   *  - 1:1: 상대 읽음선 ≥ m.id 이면 0, 아니면 1
+   *  - 그룹: (참여자수 - 1) - readers  (readers 는 서버 초기값과 라이브 READ 이벤트의 합 — 단조 증가)
+   */
+  const unreadByMessageId = useMemo(() => {
+    const out: Record<number, number> = {};
+    if (!activeRoom) return out;
+    for (const m of orderedMessages) {
+      // 라이브 lastRead 맵(상대+자기 자신)에서 m.id 이상을 읽은 "다른" 멤버 수
+      let liveReaders = 0;
+      for (const [memberId, lr] of Object.entries(perMemberLastRead)) {
+        if (sameMemberUuid(memberId, m.senderId)) continue; // 보낸 사람 제외
+        if ((lr ?? 0) >= m.messageId) liveReaders++;
+      }
+
+      if (isDirectRoom) {
+        const senderIsMe = sameMemberUuid(m.senderId, user?.id);
+        if (senderIsMe) {
+          const roomOther = activeRoom.otherPartyLastReadMessageId ?? 0;
+          const otherRead = roomOther >= m.messageId || liveReaders > 0;
+          out[m.messageId] = otherRead ? 0 : 1;
+        } else {
+          const myRead =
+            (user?.id ? perMemberLastRead[user.id] : undefined) ??
+            activeRoom.myLastReadMessageId ??
+            0;
+          out[m.messageId] = myRead >= m.messageId ? 0 : 1;
+        }
+      } else {
+        const serverReaders = m.readerCount ?? 0;
+        const readers = Math.max(serverReaders, liveReaders);
+        const audience = Math.max(0, roomParticipantCount - 1);
+        out[m.messageId] = Math.max(0, audience - readers);
+      }
+    }
+    return out;
+  }, [orderedMessages, perMemberLastRead, isDirectRoom, activeRoom, roomParticipantCount, user?.id]);
+
+  /** 방 진입/전환 시 perMemberLastRead 초기화 + 내/상대 읽음선 시드 + 최신까지 자동 ack */
   useEffect(() => {
     const rid = activeRoom?.roomId ?? null;
     const changed = lastRoomIdForScrollRef.current !== rid;
@@ -401,8 +542,26 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
       userScrolledUpRef.current = false;
       lastAckedMessageIdRef.current = 0;
       scrollThreadToBottom(true);
+
+      // 시드
+      const seed: Record<string, number> = {};
+      if (user?.id && activeRoom?.myLastReadMessageId != null) {
+        seed[user.id] = activeRoom.myLastReadMessageId;
+      }
+      setPerMemberLastRead(seed);
+
+      // 방 진입 자동 ack — 목록은 ackLatestIfViewing 에서 invalidate
+      if (rid) {
+        void memberChatStompClient.sendReadLatest(rid, 'web');
+        void memberChatApi.ackReadLatest(rid, 'web').then((lastReadId) => {
+          if (lastReadId != null) {
+            lastAckedMessageIdRef.current = Math.max(lastAckedMessageIdRef.current, lastReadId);
+          }
+          void queryClient.invalidateQueries({ queryKey: ['member-chat', 'rooms'] });
+        });
+      }
     }
-  }, [activeRoom?.roomId, scrollThreadToBottom]);
+  }, [activeRoom?.roomId, activeRoom?.myLastReadMessageId, user?.id, scrollThreadToBottom, queryClient]);
 
   useEffect(() => {
     scrollThreadToBottom(false);
@@ -421,10 +580,18 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
     setUploading(true);
     try {
       const uploaded = await memberChatApi.uploadFile(file);
-      /** 서버가 S3 저장 후 메시지 전송 — REST로 Redis·STOMP fan-out */
+      /** 서버가 S3 저장 후 메시지 전송 — REST로 Redis·STOMP fan-out.
+       *  content 에는 원본 파일명·용량을 포함한 JSON 을 넣어, 수신 측이 예쁘게 표시할 수 있게 한다.
+       *  구버전 클라이언트/히스토리와의 호환은 parseAttachmentPayload 에서 처리. */
+      const encoded = encodeAttachmentPayload({
+        key: uploaded.key,
+        name: uploaded.fileName ?? file.name,
+        mime: uploaded.mimeType,
+        size: uploaded.sizeBytes,
+      });
       await memberChatApi.sendRoomMessage(activeRoom.roomId, {
         type: uploaded.mimeType.startsWith('image/') ? 'IMAGE' : 'FILE',
-        content: uploaded.key,
+        content: encoded,
         clientMessageId: crypto.randomUUID(),
       });
       await queryClient.refetchQueries({ queryKey: ['member-chat', 'history', activeRoom.roomId] });
@@ -455,9 +622,7 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
       <div
         className={
           isCompactLayout
-            ? `tw-absolute tw-inset-y-0 tw-left-0 tw-z-20 tw-flex tw-w-[min(86%,360px)] tw-shrink-0 tw-flex-col tw-border-r tw-border-slate-200 tw-bg-slate-50/95 tw-backdrop-blur-sm tw-transition-transform tw-duration-250 ${
-                showCompactRoomList ? 'tw-translate-x-0' : '-tw-translate-x-full'
-              }`
+            ? `${hideRoomList ? 'tw-hidden' : 'tw-flex'} tw-min-h-0 tw-w-full tw-shrink-0 tw-flex-col tw-bg-slate-50/95`
             : `tw-flex ${
                 isFloating
                   ? 'tw-min-h-0 tw-w-full tw-max-h-[min(42%,280px)] tw-flex-1 tw-shrink-0 tw-flex-col tw-rounded-none tw-border-slate-200 tw-bg-slate-50/80 lg:tw-max-h-none lg:tw-h-full lg:tw-w-[min(100%,360px)] lg:tw-max-w-[40%] lg:tw-border-r'
@@ -498,7 +663,22 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
               locale={{ emptyText: '검색 결과가 없습니다.' }}
               renderItem={(room) => {
                 const selected = activeRoom?.roomId === room.roomId;
-                const initial = (room.title || '?').slice(0, 1);
+                const isDirect = room.roomType === 'DIRECT';
+                // 1:1 방은 상대 이름·프로필을, 그룹은 방 제목을 표시
+                const displayName = isDirect
+                  ? (room.otherMemberName?.trim() || '대화 상대')
+                  : (room.title?.trim() || '제목 없음');
+                const subtitleLine = isDirect
+                  ? [
+                      room.otherMemberJobTitleName?.trim() ||
+                        room.otherMemberJobGradeName?.trim() ||
+                        '',
+                      room.otherMemberOrganizationName?.trim() || '',
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')
+                  : `그룹 · 참여 ${room.participantCount ?? 0}명`;
+                const avatarInitial = displayName.slice(0, 1) || '?';
                 return (
                   <List.Item
                     className={`!tw-cursor-pointer !tw-rounded-lg !tw-border-0 !tw-px-2 !tw-py-2.5 tw-transition-colors ${
@@ -512,28 +692,39 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
                     <List.Item.Meta
                       avatar={
                         <Avatar
+                          src={isDirect ? (room.otherMemberProfileUrl || undefined) : undefined}
                           className={
                             selected ? '!tw-bg-white/20 !tw-text-white' : '!tw-bg-slate-200 !tw-text-slate-700'
                           }
                           size={40}
                         >
-                          {initial}
+                          {avatarInitial}
                         </Avatar>
                       }
                       title={
-                        <span className="tw-line-clamp-1 tw-text-sm tw-font-semibold">
-                          {room.title || '제목 없음'}
+                        <span className="tw-flex tw-min-w-0 tw-items-center tw-gap-1.5">
+                          <span className="tw-truncate tw-text-sm tw-font-semibold">
+                            {displayName}
+                          </span>
+                          {room.unreadCount && room.unreadCount > 0 ? (
+                            <Badge
+                              count={room.unreadCount}
+                              overflowCount={99}
+                              color="#EF4444"
+                              className="!tw-ml-auto tw-flex-shrink-0"
+                            />
+                          ) : null}
                         </span>
                       }
                       description={
-                        <span className="tw-inline-flex tw-items-center tw-gap-1.5 tw-text-xs">
-                          <span>{room.roomType === 'GROUP' ? '그룹' : '1:1'}</span>
-                          <span>·</span>
-                          <span>{`참여 ${room.participantCount ?? 0}명`}</span>
-                          {room.unreadCount && room.unreadCount > 0 ? (
-                            <Tag color={selected ? 'blue' : 'blue'} className="!tw-m-0 !tw-ml-1">
-                              {room.unreadCount}
-                            </Tag>
+                        <span className="tw-flex tw-min-w-0 tw-flex-col tw-gap-0.5 tw-text-xs">
+                          {subtitleLine ? (
+                            <span className="tw-block tw-truncate">{subtitleLine}</span>
+                          ) : null}
+                          {room.lastMessagePreview ? (
+                            <span className="tw-block tw-truncate tw-text-[11px] tw-opacity-80">
+                              {room.lastMessagePreview}
+                            </span>
                           ) : null}
                         </span>
                       }
@@ -546,20 +737,11 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
         </div>
       </div>
 
-      {isCompactLayout && showCompactRoomList ? (
-        <button
-          type="button"
-          aria-label="채팅방 목록 닫기"
-          className="tw-absolute tw-inset-0 tw-z-10 tw-bg-slate-900/15"
-          onClick={() => setShowCompactRoomList(false)}
-        />
-      ) : null}
-
       {/* 우측: 활성 대화 */}
       <div className={`${hideActiveChatPane ? 'tw-hidden' : 'tw-flex'} tw-min-h-0 tw-min-w-0 tw-flex-1 tw-flex-col tw-bg-slate-50/40 tw-transition-all tw-duration-250`}>
         {hasActiveChat ? (
           <>
-            <div className="tw-shrink-0 tw-border-b tw-border-slate-200 tw-bg-white tw-px-4 tw-py-3">
+            <div className="tw-shrink-0 tw-bg-white tw-px-4 tw-py-3">
               <div className="tw-flex tw-items-start tw-gap-2">
                 {isCompactLayout ? (
                   <button
@@ -585,17 +767,61 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
                     </svg>
                   </button>
                 ) : null}
-                <div className="tw-min-w-0">
-                  <Typography.Text strong className="tw-text-base tw-text-slate-900">
-                    {activeRoom!.title || '채팅'}
-                  </Typography.Text>
-                  <div className="tw-mt-0.5 tw-text-xs tw-text-slate-500">
-                    {activeRoom!.roomType === 'GROUP' ? '그룹 채팅' : '1:1 채팅'}
-                    {typeof activeRoom!.participantCount === 'number'
-                      ? ` · 참여 ${activeRoom!.participantCount}명`
-                      : null}
+                {isDirectRoom ? (
+                  <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2.5">
+                    <Avatar
+                      size={36}
+                      src={directPartner?.avatarUrl || undefined}
+                      className="tw-flex-shrink-0 tw-bg-slate-200 tw-text-slate-700"
+                    >
+                      {chatSenderInitial(directPartner?.name || activeRoom!.title || '?')}
+                    </Avatar>
+                    <div className="tw-min-w-0">
+                      <Typography.Text
+                        strong
+                        className="tw-block tw-truncate tw-text-base tw-text-slate-900"
+                      >
+                        {directPartner?.name || activeRoom!.title || '채팅'}
+                      </Typography.Text>
+                      <div className="tw-mt-0.5 tw-truncate tw-text-xs tw-text-slate-500">
+                        {directPartner?.subtitle || '1:1 채팅'}
+                      </div>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="tw-min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => setParticipantsOpen(true)}
+                      className="tw-inline-flex tw-max-w-full tw-appearance-none tw-items-center tw-gap-1 tw-border-0 tw-bg-transparent tw-p-0 tw-text-left tw-text-base tw-font-semibold tw-text-slate-900 tw-shadow-none hover:tw-text-blue-600 focus:tw-outline-none"
+                      aria-label="참여자 목록 열기"
+                      title="참여자 목록 보기"
+                    >
+                      <span className="tw-truncate">{activeRoom!.title || '채팅'}</span>
+                      <svg
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                        className="tw-h-3.5 tw-w-3.5 tw-flex-shrink-0 tw-text-slate-400"
+                        fill="none"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path
+                          d="M9 6l6 6-6 6"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </button>
+                    <div className="tw-mt-0.5 tw-text-xs tw-text-slate-500">
+                      그룹 채팅
+                      {typeof activeRoom!.participantCount === 'number'
+                        ? ` · 참여 ${activeRoom!.participantCount}명`
+                        : null}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
             <div className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-gap-3 tw-p-3">
@@ -618,8 +844,9 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
                     const sender = getRow(item);
                     const isMine = sameMemberUuid(item.senderId, user?.id);
                     const timeLabel = formatChatTime(item.createdAt);
-                    const readCount = latestReadMap[item.messageId]?.length ?? 0;
-                    const showReadBadge = isMine && readCount > 0;
+                    // 카톡식 "안 읽은 수" — 모든 메시지에 표시
+                    const unreadForMessage = unreadByMessageId[item.messageId] ?? 0;
+                    const showUnreadBadge = unreadForMessage > 0;
                     const canEditText =
                       isMine &&
                       !item.deleted &&
@@ -688,37 +915,69 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
                           </div>
                         </div>
                       ) : isImageMessage(item) ? (
-                        <div>
-                          <Tag icon={<FileImageOutlined />} className="!tw-mb-1">
-                            이미지
-                          </Tag>
-                          {item.content ? <ChatImagePreview storageKey={item.content} /> : null}
-                          <div className="tw-mt-1 tw-flex tw-flex-wrap tw-items-center tw-gap-2">
-                            <button
-                              type="button"
-                              className="tw-text-xs tw-text-blue-600 hover:tw-underline"
-                              onClick={() => openInNewTabWithPopupSafe(item.content)}
-                            >
-                              새 탭에서 열기
-                            </button>
-                          </div>
-                        </div>
+                        (() => {
+                          const payload = parseAttachmentPayload(item.content);
+                          const displayName = payload.name || fallbackNameFromKey(payload.key);
+                          if (!payload.key) {
+                            return (
+                              <Typography.Text type="secondary" className="tw-text-sm tw-italic">
+                                이미지 정보를 불러올 수 없습니다.
+                              </Typography.Text>
+                            );
+                          }
+                          return (
+                            <div>
+                              <ChatImagePreview storageKey={payload.key} alt={displayName} />
+                              <div className="tw-mt-1 tw-flex tw-flex-wrap tw-items-center tw-gap-2">
+                                <Typography.Text
+                                  type="secondary"
+                                  className="tw-break-all tw-text-[11px]"
+                                  title={displayName}
+                                >
+                                  {displayName}
+                                  {formatFileSize(payload.size) ? ` · ${formatFileSize(payload.size)}` : ''}
+                                </Typography.Text>
+                              </div>
+                            </div>
+                          );
+                        })()
                       ) : isFileMessage(item) ? (
-                        <div>
-                          <Tag icon={<FileOutlined />} className="!tw-mb-1">
-                            파일
-                          </Tag>
-                          <Typography.Text className="tw-break-all tw-text-sm">{item.content}</Typography.Text>
-                          <div className="tw-mt-1">
-                            <button
-                              type="button"
-                              className="tw-text-xs tw-text-blue-600 hover:tw-underline"
-                              onClick={() => triggerBrowserDownload(item.content)}
-                            >
-                              다운로드
-                            </button>
-                          </div>
-                        </div>
+                        (() => {
+                          const payload = parseAttachmentPayload(item.content);
+                          const displayName = payload.name || fallbackNameFromKey(payload.key);
+                          if (!payload.key) {
+                            return (
+                              <Typography.Text type="secondary" className="tw-text-sm tw-italic">
+                                파일 정보를 불러올 수 없습니다.
+                              </Typography.Text>
+                            );
+                          }
+                          const sizeLabel = formatFileSize(payload.size);
+                          return (
+                            <div>
+                              <Tag icon={<FileOutlined />} className="!tw-mb-1">
+                                파일
+                              </Tag>
+                              <div className="tw-flex tw-min-w-0 tw-flex-col tw-gap-0.5">
+                                <Typography.Text
+                                  strong
+                                  className="tw-break-all tw-text-sm"
+                                  title={displayName}
+                                >
+                                  {displayName}
+                                </Typography.Text>
+                                {sizeLabel ? (
+                                  <Typography.Text type="secondary" className="tw-text-[11px]">
+                                    {sizeLabel}
+                                  </Typography.Text>
+                                ) : null}
+                              </div>
+                              <div className="tw-mt-1">
+                                <ChatFileDownloadLink storageKey={payload.key} fileName={displayName} />
+                              </div>
+                            </div>
+                          );
+                        })()
                       ) : (
                         <ChatLinkifiedText
                           text={item.content ?? ''}
@@ -795,10 +1054,15 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
                                       <span>수정됨</span>
                                     </>
                                   ) : null}
-                                  {showReadBadge ? (
+                                  {showUnreadBadge ? (
                                     <>
                                       {timeLabel || item.edited ? <span className="tw-text-slate-300">·</span> : null}
-                                      <span className="tw-font-medium tw-text-blue-600/90">{`읽음 ${readCount}`}</span>
+                                      <span
+                                        className="tw-font-semibold tw-text-amber-500"
+                                        aria-label={`안 읽은 ${unreadForMessage}명`}
+                                      >
+                                        {unreadForMessage}
+                                      </span>
                                     </>
                                   ) : null}
                                 </span>
@@ -920,6 +1184,13 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
         onCreated={(room) => {
           setActiveRoom(room);
         }}
+      />
+      <GroupParticipantsDrawer
+        open={participantsOpen}
+        onClose={() => setParticipantsOpen(false)}
+        roomId={activeRoom?.roomId ?? null}
+        roomTitle={activeRoom?.title}
+        meId={user?.id}
       />
     </div>
   );
