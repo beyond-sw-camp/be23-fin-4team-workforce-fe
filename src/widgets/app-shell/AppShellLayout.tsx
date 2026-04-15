@@ -103,6 +103,7 @@ const APP_MENU_ICONS: Record<string, ReactNode> = {
   '/app/approvals/department': <FolderOpenOutlined className="tw-text-lg" />,
   '/app/payroll': <DollarOutlined className="tw-text-lg" />,
   '/app/notifications': <BellOutlined className="tw-text-lg" />,
+  '/app/member-chat/admin': <MessageOutlined className="tw-text-lg" />,
   '/app/performance': <LineChartOutlined className="tw-text-lg" />,
   '/app/evaluations': <StarOutlined className="tw-text-lg" />,
   '/app/meetings': <VideoCameraOutlined className="tw-text-lg" />,
@@ -290,13 +291,19 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
     };
     const items = buildAppShellMenuItems(esgPaths, isAdmin, approvalMenuRoot);
     if (!isAdmin) return items;
+    const chatAdmin = {
+      key: '/app/member-chat/admin',
+      icon: <MessageOutlined className="tw-text-lg" />,
+      label: '보안·컴플라이언스 조회',
+      title: '보안·컴플라이언스 조회',
+    };
     const doc = {
       key: '/app/ai-documents',
       icon: <RobotOutlined className="tw-text-lg" />,
       label: 'HR 정책 문서',
       title: 'HR 정책 문서',
     };
-    return [...items, doc];
+    return [...items, chatAdmin, doc];
   }, [esgConfig, isAdmin, approvalOrgChart?.organizations, meMember?.organizationId, meMember?.organizationName]);
 }
 
@@ -805,7 +812,12 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
   if (pathname.startsWith('/app/approvals')) {
     return approvalSiderSelectedMenuKeys(pathname, search);
   }
-  const menuPaths = new Set<string>([...APP_MENU_PATH_ORDER, ...ESG_MENU_PATH_ORDER, '/app/ai-documents']);
+  const menuPaths = new Set<string>([
+    ...APP_MENU_PATH_ORDER,
+    ...ESG_MENU_PATH_ORDER,
+    '/app/member-chat/admin',
+    '/app/ai-documents',
+  ]);
   if (menuPaths.has(pathname)) return [pathname];
   return [];
 }

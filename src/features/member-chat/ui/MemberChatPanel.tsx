@@ -24,22 +24,14 @@ function isFileMessage(item: MemberChatMessage) {
 }
 
 function ChatImagePreview({ storageKey }: { storageKey: string }) {
-  const { data, isPending, isError } = useQuery({
-    queryKey: ['member-chat', 'file-url', storageKey],
-    queryFn: () => memberChatApi.issuePresignedDownload(storageKey),
-    staleTime: 1000 * 60 * 45,
-  });
-  if (isPending) {
-    return <Typography.Text type="secondary">이미지 불러오는 중…</Typography.Text>;
-  }
-  if (isError || !data?.downloadUrl) {
-    return <Typography.Text type="secondary">이미지를 표시할 수 없습니다.</Typography.Text>;
-  }
+  const src = memberChatApi.buildDownloadUrl(storageKey);
   return (
     <img
-      src={data.downloadUrl}
+      src={src}
       alt=""
       className="tw-max-h-64 tw-max-w-full tw-rounded-lg tw-object-contain"
+      loading="lazy"
+      referrerPolicy="no-referrer"
     />
   );
 }
@@ -166,6 +158,7 @@ export type MemberChatPanelProps = {
 export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const panelRootRef = useRef<HTMLDivElement | null>(null);
   const [activeRoom, setActiveRoom] = useState<MemberChatRoomSummary | null>(null);
   const [draft, setDraft] = useState('');
   const [createRoomOpen, setCreateRoomOpen] = useState(false);
@@ -174,6 +167,10 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
   const [readEvents, setReadEvents] = useState<Record<string, MemberChatReadEvent>>({});
   const [uploading, setUploading] = useState(false);
   const [listQuery, setListQuery] = useState('');
+  const [isCompactLayout, setIsCompactLayout] = useState<boolean>(false);
+  const [showCompactRoomList, setShowCompactRoomList] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(max-width: 1023px)').matches : true,
+  );
   const threadRef = useRef<HTMLDivElement | null>(null);
   const userScrolledUpRef = useRef(false);
   const lastRoomIdForScrollRef = useRef<number | null>(null);
@@ -218,6 +215,8 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
   const isFloating = variant === 'floating';
   const splitHeight = isFloating ? 'tw-h-full tw-min-h-0 tw-flex-1' : 'tw-min-h-[640px]';
   const threadH = isFloating ? 'tw-min-h-0 tw-flex-1 tw-overflow-auto' : 'tw-h-[460px] tw-overflow-auto';
+  const prettyScrollbarClass =
+    '[&::-webkit-scrollbar]:tw-h-2 [&::-webkit-scrollbar]:tw-w-2 [&::-webkit-scrollbar-track]:tw-bg-transparent [&::-webkit-scrollbar-thumb]:tw-rounded-full [&::-webkit-scrollbar-thumb]:tw-bg-slate-300/80 hover:[&::-webkit-scrollbar-thumb]:tw-bg-slate-400/80';
 
   const { data: rooms = [], isLoading: loadingRooms } = useQuery({
     queryKey: ['member-chat', 'rooms'],
@@ -235,6 +234,31 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
     queryFn: () => memberChatApi.getRoomHistory(activeRoom!.roomId),
     enabled: Boolean(activeRoom?.roomId),
   });
+
+  useEffect(() => {
+    const el = panelRootRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const COMPACT_PANEL_WIDTH = 980;
+    const applyCompact = (width: number) => {
+      const compact = width < COMPACT_PANEL_WIDTH;
+      setIsCompactLayout(compact);
+      if (!compact) {
+        setShowCompactRoomList(true);
+      } else if (activeRoom?.roomId) {
+        setShowCompactRoomList(false);
+      } else {
+        setShowCompactRoomList(true);
+      }
+    };
+    applyCompact(el.clientWidth);
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      applyCompact(entry.contentRect.width);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [activeRoom?.roomId]);
 
   useEffect(() => {
     if (rooms.length === 0) {
@@ -332,16 +356,22 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
     },
   });
 
-  const downloadMutation = useMutation({
-    mutationFn: async (key: string) => memberChatApi.issuePresignedDownload(key),
-    onSuccess: (res) => {
-      if (res.downloadUrl) {
-        window.open(res.downloadUrl, '_blank', 'noopener,noreferrer');
-      } else {
-        void message.warning('다운로드 URL을 가져오지 못했습니다.');
-      }
-    },
-  });
+  const openInNewTabWithPopupSafe = useCallback((key?: string) => {
+    if (!key) return;
+    const downloadUrl = memberChatApi.buildDownloadUrl(key);
+    window.open(downloadUrl, '_blank', 'noopener,noreferrer');
+  }, []);
+
+  const triggerBrowserDownload = useCallback((key?: string) => {
+    if (!key) return;
+    const a = document.createElement('a');
+    a.href = memberChatApi.buildDownloadUrl(key);
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }, []);
 
   const orderedMessages = useMemo(() => {
     const items = history?.items ?? [];
@@ -409,9 +439,12 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
 
   const showListEmptyOnboarding = !loadingRooms && rooms.length === 0;
   const hasActiveChat = Boolean(activeRoom);
+  const hideRoomList = isCompactLayout && !showCompactRoomList;
+  const hideActiveChatPane = isCompactLayout && showCompactRoomList;
 
   return (
     <div
+      ref={panelRootRef}
       className={`tw-flex tw-w-full tw-min-h-0 tw-flex-col tw-overflow-hidden lg:tw-flex-row ${splitHeight} ${
         isFloating
           ? 'tw-flex-1 tw-rounded-none tw-border-0 tw-bg-transparent tw-shadow-none'
@@ -421,20 +454,22 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
       {/* 좌측: 채팅방 목록 (텔레그램형 사이드바) */}
       <div
         className={
-          isFloating
-            ? 'tw-flex tw-min-h-0 tw-w-full tw-max-h-[min(42%,280px)] tw-flex-1 tw-shrink-0 tw-flex-col tw-rounded-none tw-border-slate-200 tw-bg-slate-50/80 lg:tw-max-h-none lg:tw-h-full lg:tw-w-[min(100%,360px)] lg:tw-max-w-[40%] lg:tw-border-r'
-            : 'tw-flex tw-h-[min(40vh,320px)] tw-w-full tw-shrink-0 tw-flex-col tw-border-slate-200 tw-bg-slate-50/80 lg:tw-h-auto lg:tw-w-[min(100%,360px)] lg:tw-max-w-[40%] lg:tw-border-r'
+          isCompactLayout
+            ? `tw-absolute tw-inset-y-0 tw-left-0 tw-z-20 tw-flex tw-w-[min(86%,360px)] tw-shrink-0 tw-flex-col tw-border-r tw-border-slate-200 tw-bg-slate-50/95 tw-backdrop-blur-sm tw-transition-transform tw-duration-250 ${
+                showCompactRoomList ? 'tw-translate-x-0' : '-tw-translate-x-full'
+              }`
+            : `tw-flex ${
+                isFloating
+                  ? 'tw-min-h-0 tw-w-full tw-max-h-[min(42%,280px)] tw-flex-1 tw-shrink-0 tw-flex-col tw-rounded-none tw-border-slate-200 tw-bg-slate-50/80 lg:tw-max-h-none lg:tw-h-full lg:tw-w-[min(100%,360px)] lg:tw-max-w-[40%] lg:tw-border-r'
+                  : 'tw-h-[min(40vh,320px)] tw-w-full tw-shrink-0 tw-flex-col tw-border-slate-200 tw-bg-slate-50/80 lg:tw-h-auto lg:tw-w-[min(100%,360px)] lg:tw-max-w-[40%] lg:tw-border-r'
+              }`
         }
       >
         <div className="tw-flex tw-shrink-0 tw-items-center tw-justify-between tw-gap-2 tw-border-b tw-border-slate-200 tw-px-3 tw-py-2.5">
           <Typography.Text strong className="tw-text-slate-800">
             채팅
           </Typography.Text>
-          <AppButton
-            type="primary"
-            size="small"
-            onClick={() => setCreateRoomOpen(true)}
-          >
+          <AppButton type="primary" size="small" onClick={() => setCreateRoomOpen(true)}>
             새 대화
           </AppButton>
         </div>
@@ -457,7 +492,7 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
             </div>
           ) : (
             <List
-              className="member-chat-room-list tw-mt-2 tw-min-h-0 tw-flex-1 tw-overflow-y-auto tw-px-1 [&_.ant-list-items]:tw-divide-y [&_.ant-list-items]:tw-divide-slate-100"
+              className={`member-chat-room-list tw-mt-2 tw-min-h-0 tw-flex-1 tw-overflow-y-auto tw-px-1 [&_.ant-list-items]:tw-divide-y [&_.ant-list-items]:tw-divide-slate-100 ${prettyScrollbarClass}`}
               loading={loadingRooms}
               dataSource={filteredRooms}
               locale={{ emptyText: '검색 결과가 없습니다.' }}
@@ -469,7 +504,10 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
                     className={`!tw-cursor-pointer !tw-rounded-lg !tw-border-0 !tw-px-2 !tw-py-2.5 tw-transition-colors ${
                       selected ? '!tw-bg-[#2563EB] [&_.ant-list-item-meta-title]:!tw-text-white [&_.ant-list-item-meta-description]:!tw-text-white/85' : 'hover:!tw-bg-slate-100'
                     }`}
-                    onClick={() => setActiveRoom(room)}
+                    onClick={() => {
+                      setActiveRoom(room);
+                      if (isCompactLayout) setShowCompactRoomList(false);
+                    }}
                   >
                     <List.Item.Meta
                       avatar={
@@ -508,26 +546,63 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
         </div>
       </div>
 
+      {isCompactLayout && showCompactRoomList ? (
+        <button
+          type="button"
+          aria-label="채팅방 목록 닫기"
+          className="tw-absolute tw-inset-0 tw-z-10 tw-bg-slate-900/15"
+          onClick={() => setShowCompactRoomList(false)}
+        />
+      ) : null}
+
       {/* 우측: 활성 대화 */}
-      <div className="tw-flex tw-min-h-0 tw-min-w-0 tw-flex-1 tw-flex-col tw-bg-slate-50/40">
+      <div className={`${hideActiveChatPane ? 'tw-hidden' : 'tw-flex'} tw-min-h-0 tw-min-w-0 tw-flex-1 tw-flex-col tw-bg-slate-50/40 tw-transition-all tw-duration-250`}>
         {hasActiveChat ? (
           <>
             <div className="tw-shrink-0 tw-border-b tw-border-slate-200 tw-bg-white tw-px-4 tw-py-3">
-              <Typography.Text strong className="tw-text-base tw-text-slate-900">
-                {activeRoom!.title || '채팅'}
-              </Typography.Text>
-              <div className="tw-mt-0.5 tw-text-xs tw-text-slate-500">
-                {activeRoom!.roomType === 'GROUP' ? '그룹 채팅' : '1:1 채팅'}
-                {typeof activeRoom!.participantCount === 'number'
-                  ? ` · 참여 ${activeRoom!.participantCount}명`
-                  : null}
+              <div className="tw-flex tw-items-start tw-gap-2">
+                {isCompactLayout ? (
+                  <button
+                    type="button"
+                    className="tw-mt-0.5 tw-inline-flex tw-h-8 tw-appearance-none tw-items-center tw-justify-center tw-border-0 tw-bg-transparent tw-px-1 tw-text-base tw-font-semibold tw-text-slate-600 tw-shadow-none tw-transition-colors hover:tw-text-[#2563EB] focus:tw-outline-none"
+                    onClick={() => setShowCompactRoomList(true)}
+                    aria-label="채팅방 목록 열기"
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      aria-hidden="true"
+                      className="tw-h-4 tw-w-4"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path
+                        d="M14.5 6.5L9 12L14.5 17.5"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </button>
+                ) : null}
+                <div className="tw-min-w-0">
+                  <Typography.Text strong className="tw-text-base tw-text-slate-900">
+                    {activeRoom!.title || '채팅'}
+                  </Typography.Text>
+                  <div className="tw-mt-0.5 tw-text-xs tw-text-slate-500">
+                    {activeRoom!.roomType === 'GROUP' ? '그룹 채팅' : '1:1 채팅'}
+                    {typeof activeRoom!.participantCount === 'number'
+                      ? ` · 참여 ${activeRoom!.participantCount}명`
+                      : null}
+                  </div>
+                </div>
               </div>
             </div>
             <div className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-gap-3 tw-p-3">
               <div
                 ref={threadRef}
                 onScroll={onThreadScroll}
-                className={`tw-rounded-lg tw-border tw-border-slate-200 tw-bg-slate-50 tw-p-3 ${threadH}`}
+                className={`tw-rounded-lg tw-border tw-border-slate-200 tw-bg-slate-50 tw-p-3 ${threadH} ${prettyScrollbarClass}`}
               >
                 <List
                   className="[&_.ant-list-item]:!tw-overflow-visible"
@@ -622,9 +697,7 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
                             <button
                               type="button"
                               className="tw-text-xs tw-text-blue-600 hover:tw-underline"
-                              onClick={() => {
-                                if (item.content) void downloadMutation.mutateAsync(item.content);
-                              }}
+                              onClick={() => openInNewTabWithPopupSafe(item.content)}
                             >
                               새 탭에서 열기
                             </button>
@@ -640,9 +713,7 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
                             <button
                               type="button"
                               className="tw-text-xs tw-text-blue-600 hover:tw-underline"
-                              onClick={() => {
-                                if (item.content) void downloadMutation.mutateAsync(item.content);
-                              }}
+                              onClick={() => triggerBrowserDownload(item.content)}
                             >
                               다운로드
                             </button>

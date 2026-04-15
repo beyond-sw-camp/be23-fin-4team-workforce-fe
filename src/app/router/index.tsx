@@ -29,6 +29,7 @@ import { MembersPage } from '@/pages/app/MembersPage';
 import { MemberDetailPage } from '@/pages/app/MemberDetailPage';
 import { MemberEditPage } from '@/pages/app/MemberEditPage';
 import { NotificationsPage } from '@/pages/app/NotificationsPage';
+import { MemberChatAdminPage } from '@/pages/app/MemberChatAdminPage';
 import EvaluationsPage from '@/pages/app/EvaluationsPage';
 import { EvaluationWritePage } from '@/pages/app/EvaluationWritePage';
 import PerformancePage from '@/pages/app/PerformancePage';
@@ -217,6 +218,16 @@ const notificationsRoute = createRoute({
   path: '/notifications',
   component: NotificationsPage,
 });
+const memberChatAdminRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/member-chat/admin',
+  component: MemberChatAdminPage,
+  beforeLoad: ({ context }) => {
+    if (!context.auth.user?.isSystemAdmin) {
+      throw redirect({ to: '/403' });
+    }
+  },
+});
 
 const performanceRoute = createRoute({
   getParentRoute: () => appBaseRoute,
@@ -369,6 +380,7 @@ const routeTree = rootRoute.addChildren([
       memberDetailRoute,
       memberEditRoute,
       notificationsRoute,
+      memberChatAdminRoute,
       performanceRoute,
       approvalsAdminRoute,
       absenceProxyRoute,

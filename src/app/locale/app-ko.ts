@@ -15,6 +15,7 @@ export const APP_MENU_LABEL: Record<string, string> = {
   '/app/approvals/department': '부서 문서함',
   '/app/payroll': '급여',
   '/app/notifications': '알림',
+  '/app/member-chat/admin': '보안·컴플라이언스 조회',
   '/app/performance': '성과',
   '/app/evaluations': '평가',
   '/app/meetings': '미팅',
@@ -53,23 +54,23 @@ export const ESG_MENU_LABEL: Record<string, string> = {
   '/app/esg/activities': 'ESG 활동',
   '/app/esg/campaigns': 'ESG 캠페인',
   '/app/esg/shop': 'ESG 샵',
-  '/app/esg/admin': 'ESG 관리',
+  '/app/esg/admin': 'ESG 설정',
 };
 
 /** 사이드바 접이식 그룹 — 통일 키워드: 「영역·영역」 */
 
 /** 성과·평가·미팅 묶음 */
-export const APP_MENU_TALENT_HUB_LABEL = '인재·성과';
+export const APP_MENU_TALENT_HUB_LABEL = '성과 관리';
 
 /** 구성원·조직·권한 묶음 */
-export const APP_MENU_ORG_HR_GROUP_LABEL = '인사·조직';
+export const APP_MENU_ORG_HR_GROUP_LABEL = '인사 관리';
 
 /** 사이드바 전용 — 라우트 없음, 조직도 모달 트리거 */
 export const APP_MENU_ORG_CHART_SIDEBAR_KEY = '__wf_org_chart__';
 export const APP_MENU_ORG_CHART_LABEL = '조직도';
 
 /** ESG 하위 화면 묶음 */
-export const APP_MENU_ESG_GROUP_LABEL = '지속·경영';
+export const APP_MENU_ESG_GROUP_LABEL = 'ESG 관리';
 
 /** 상단 헤더 등에 표시하는 현재 화면 제목 */
 export function appHeaderTitleFromPath(
@@ -86,6 +87,7 @@ export function appHeaderTitleFromPath(
   if (/^\/app\/members\/[^/]+$/.test(pathname)) return '구성원 상세';
   if (pathname === '/app/approvals/department') return '부서 문서함';
   if (/^\/app\/meetings\/[^/]+$/.test(pathname)) return '면담 상세';
+  if (pathname === '/app/member-chat/admin') return '보안·컴플라이언스 조회';
   return APP_BRAND_NAME;
 }
 

@@ -83,6 +83,11 @@ function asMessageArray(payload: unknown): Record<string, unknown>[] {
 }
 
 export const memberChatApi = {
+  buildDownloadUrl(key: string): string {
+    const base = env.VITE_API_BASE_URL.replace(/\/+$/, '');
+    return `${base}${MEMBER_CHAT_PREFIX}/files/download?key=${encodeURIComponent(key)}&scanStatus=CLEAN`;
+  },
+
   async listMyRooms(): Promise<MemberChatRoomSummary[]> {
     const response = await httpClient.get(`${MEMBER_CHAT_PREFIX}/rooms`);
     const payload = unwrapApiResponse<unknown>(response.data);
@@ -176,6 +181,12 @@ export const memberChatApi = {
       validateStatus: (status) => status === 302 || status === 200,
     });
     const location = (response.headers.location as string | undefined) ?? '';
-    return { downloadUrl: location };
+    if (location) return { downloadUrl: location };
+    // Browser adapters often follow 302 automatically and expose final URL here.
+    const redirectedUrl =
+      typeof (response.request as { responseURL?: unknown } | undefined)?.responseURL === 'string'
+        ? ((response.request as { responseURL?: string }).responseURL ?? '')
+        : '';
+    return { downloadUrl: redirectedUrl };
   },
 };
