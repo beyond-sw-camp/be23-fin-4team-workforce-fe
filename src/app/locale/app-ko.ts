@@ -4,11 +4,12 @@ export const APP_BRAND_NAME = '워크포스';
 
 export const APP_MENU_LABEL: Record<string, string> = {
   '/app/dashboard': '대시보드',
+  '/app/insights': '인사이트',
   '/app/calendar': '일정',
   '/app/members': '구성원',
   '/app/organization': '조직',
   '/app/roles': '역할·권한',
-  '/app/attendance': '근태',
+  '/app/attendance': '근무',
   '/app/leave': '휴가',
   '/app/approvals': '결재함',
   '/app/approvals/department': '부서 문서함',
@@ -24,14 +25,15 @@ export const APP_MENU_LABEL: Record<string, string> = {
 /** 사이드 메뉴 표시 순서 */
 export const APP_MENU_PATH_ORDER = [
   '/app/dashboard',
+  '/app/insights',
   '/app/calendar',
   '/app/members',
   '/app/organization',
   '/app/roles',
   '/app/attendance',
   '/app/leave',
-  '/app/approvals',
   '/app/payroll',
+  '/app/approvals',
   '/app/performance',
   '/app/evaluations',
   '/app/meetings',
@@ -69,9 +71,6 @@ export const APP_MENU_ORG_CHART_LABEL = '조직도';
 /** ESG 하위 화면 묶음 */
 export const APP_MENU_ESG_GROUP_LABEL = '지속·경영';
 
-/** 근태·휴가 묶음 */
-export const APP_MENU_WORK_LEAVE_GROUP_LABEL = '근무·휴가';
-
 /** 상단 헤더 등에 표시하는 현재 화면 제목 */
 export function appHeaderTitleFromPath(
   pathname: string,
@@ -92,7 +91,7 @@ export function appHeaderTitleFromPath(
 
 export const APP_GENERIC_PAGE_COPY: Record<string, { title: string; description: string }> = {
   '/attendance': {
-    title: '근태',
+    title: '근무',
     description: '출퇴근·근무 현황·근태 통계 기능을 준비 중입니다.',
   },
   '/leave': {

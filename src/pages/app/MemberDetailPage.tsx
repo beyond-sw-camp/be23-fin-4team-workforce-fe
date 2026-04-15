@@ -3,6 +3,8 @@ import { useParams, Link } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ACCOUNT_STATUS_KO, EMPLOYMENT_TYPE_KO, MEMBER_STATUS_KO } from '@/app/locale/app-ko';
 import { memberApi } from '@/features/member/api/memberApi';
+import { PERM } from '@/features/permissions/backend-permissions';
+import { PermissionGuard } from '@/features/permissions/permission-guard';
 import { AppButton } from '@/shared/ui/AppButton';
 
 export function MemberDetailPage() {
@@ -53,6 +55,11 @@ export function MemberDetailPage() {
             {member.name} · {member.email}
           </Typography.Text>
         </div>
+        <PermissionGuard required={PERM.MEMBER_UPDATE}>
+          <Link to="/app/members/$memberId/edit" params={{ memberId }} className="tw-inline-block">
+            <AppButton variant="secondary">인사 정보 수정</AppButton>
+          </Link>
+        </PermissionGuard>
       </div>
       <Card className="tw-border-slate-200/80 tw-shadow-sm">
         <Descriptions bordered column={1} size="small">

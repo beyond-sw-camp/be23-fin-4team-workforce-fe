@@ -50,7 +50,9 @@ export function MembersTable({ rows, loading, total, page, pageSize, onPageChang
                   key: 'edit',
                   label: (
                     <PermissionGuard required={PERM.MEMBER_UPDATE} fallback={<span className="tw-text-slate-400">수정 (권한 없음)</span>}>
-                      <span>수정</span>
+                      <Link to="/app/members/$memberId/edit" params={{ memberId: row.id }}>
+                        수정
+                      </Link>
                     </PermissionGuard>
                   ),
                 },
