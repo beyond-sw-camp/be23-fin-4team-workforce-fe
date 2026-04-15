@@ -224,6 +224,7 @@ const approvalsSearchSchema = z.object({
   myStatus: z.string().optional(),
   compose: z.string().optional(),
   sideNav: z.string().optional(),
+  box: z.string().optional(),
 });
 
 const approvalsAdminRoute = createRoute({

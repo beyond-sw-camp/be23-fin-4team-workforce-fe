@@ -327,7 +327,7 @@ export function ApprovalRequestReadOnlyModal({
       footer={null}
       width={920}
       styles={{ body: { maxHeight: 'min(85vh, 900px)', overflowY: 'auto' } }}
-      destroyOnClose
+      destroyOnHidden
     >
       {detailLoading || !selectedRequestDetail ? (
         <Typography.Text type="secondary">불러오는 중...</Typography.Text>
