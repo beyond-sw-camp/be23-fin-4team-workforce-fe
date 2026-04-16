@@ -226,8 +226,8 @@ export type ApprovalShellSiderEntry = {
   navigate: ReturnType<typeof buildNavigateForGuideBox> | NavigateOptions;
 };
 
-/** 앱 셸 전자결재 하위 메뉴 항목(가이드 전체). */
-export function getApprovalShellSiderEntries(): ApprovalShellSiderEntry[] {
+/** 앱 셸 전자결재 하위 메뉴 항목(가이드 전체). 첫 항목은 항상 결재 작성(compose). */
+export function getApprovalShellSiderEntries(): [ApprovalShellSiderEntry, ...ApprovalShellSiderEntry[]] {
   const compose: ApprovalShellSiderEntry = {
     key: 'ap-compose',
     label: '결재 요청 작성',
