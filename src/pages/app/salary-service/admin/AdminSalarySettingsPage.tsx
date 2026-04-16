@@ -1,7 +1,8 @@
 /** /app/salary/settings — 급여 정책·템플릿·직원 급여·세율 등 (시스템 관리자) */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  Alert,
   App,
   Button,
   Card,
@@ -21,6 +22,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
+import { memberApi } from '@/features/member/api/memberApi';
 import type {
   Salary,
   SalaryPolicy,
@@ -49,8 +51,79 @@ const TAX_TYPE_KO: Record<string, string> = {
 };
 const ITEM_TYPE_KO: Record<string, string> = { EARNING: '지급', DEDUCTION: '공제' };
 
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const id = window.setTimeout(() => setDebounced(value), delayMs);
+    return () => window.clearTimeout(id);
+  }, [value, delayMs]);
+  return debounced;
+}
+
+/**
+ * `GET /member/search`(member-service, QueryDSL) — **호출자와 동일 회사** 사원만.
+ * ES 인덱스(`/search/employees`) 없어도 동작한다.
+ */
+function MemberIdSearchField({ name = 'memberId' }: { name?: string }) {
+  const [searchText, setSearchText] = useState('');
+  const debounced = useDebouncedValue(searchText, 320);
+  const { data: rows = [], isFetching, isError, error } = useQuery({
+    queryKey: ['member', 'search', 'salary-settings', debounced],
+    queryFn: () => memberApi.searchMembersLookup({ keyword: debounced.trim(), page: 0, size: 30 }),
+    enabled: debounced.trim().length >= 1,
+    retry: 1,
+  });
+  const options = useMemo(
+    () =>
+      rows.map((m) => ({
+        value: m.memberId,
+        label: `${m.name ?? '이름 없음'} · ${m.email ?? '—'}`,
+      })),
+    [rows],
+  );
+  const errMsg = isError
+    ? (error && typeof error === 'object' && 'message' in error && typeof (error as { message?: unknown }).message === 'string'
+        ? (error as { message: string }).message
+        : '검색에 실패했습니다.')
+    : null;
+  return (
+    <Form.Item
+      name={name}
+      label="구성원"
+      rules={[{ required: true, message: '검색 후 구성원을 선택하세요' }]}
+    >
+      <Select
+        showSearch
+        allowClear
+        placeholder="이름·이메일·사번으로 검색"
+        filterOption={false}
+        searchValue={searchText}
+        onSearch={setSearchText}
+        onClear={() => setSearchText('')}
+        notFoundContent={
+          debounced.trim().length < 1 ? (
+            <span className="tw-text-slate-500">한 글자 이상 입력하세요</span>
+          ) : isFetching ? (
+            '검색 중…'
+          ) : errMsg ? (
+            <span className="tw-text-red-600">{errMsg}</span>
+          ) : (
+            '검색 결과 없음'
+          )
+        }
+        options={options}
+        loading={isFetching}
+      />
+    </Form.Item>
+  );
+}
+
 /* ======================================================================
- * 1. 기본급 (Salary)
+ * 1. 급여 이력 (Salary) — 연봉 인상 / 직급 변경 이력
+ *    신규 입사 시 기본급은 Kafka 이벤트로 자동 생성되므로,
+ *    이 탭은 "급여 변경 이력"을 쌓는 용도. 실수로 입사 당일과 같은
+ *    effectiveFrom으로 등록하면 auto-create된 Salary가 마감되고
+ *    중복 이력이 쌓이니 주의.
  * ====================================================================== */
 
 type SalaryFormValues = {
@@ -62,6 +135,14 @@ type SalaryFormValues = {
   effectiveRange: [dayjs.Dayjs, dayjs.Dayjs | null];
 };
 
+type BootstrapFormValues = {
+  memberId: string;
+  hireDate: dayjs.Dayjs;
+  baseSalary?: number | null;
+  jobGradeName?: string;
+  jobTitleName?: string;
+};
+
 function SalaryTab() {
   const { message } = App.useApp();
   const qc = useQueryClient();
@@ -69,8 +150,30 @@ function SalaryTab() {
   const [editing, setEditing] = useState<Salary | null>(null);
   const [form] = Form.useForm<SalaryFormValues>();
 
+  /** 입사 누락 복구 모달 (자주 쓰는 기능이 아니므로 기본은 숨김) */
+  const [bootstrapOpen, setBootstrapOpen] = useState(false);
+  const [bootstrapForm] = Form.useForm<BootstrapFormValues>();
+
   const listQ = useQuery({ queryKey: ['salary', 'salaries'], queryFn: () => salaryApi.salary.listByCompany() });
   const policiesQ = useQuery({ queryKey: ['salary', 'salary-policies'], queryFn: () => salaryApi.salaryPolicy.list() });
+
+  const bootstrapM = useMutation({
+    mutationFn: (v: BootstrapFormValues) =>
+      salaryApi.salary.bootstrap({
+        memberId: v.memberId.trim(),
+        hireDate: v.hireDate.format('YYYY-MM-DD'),
+        baseSalary: v.baseSalary ?? null,
+        jobGradeName: v.jobGradeName?.trim() || null,
+        jobTitleName: v.jobTitleName?.trim() || null,
+      }),
+    onSuccess: () => {
+      message.success('복구 요청 완료 — 활성 급여정책이 있어야 실제 Salary가 생성됩니다.');
+      setBootstrapOpen(false);
+      bootstrapForm.resetFields();
+      void qc.invalidateQueries({ queryKey: ['salary', 'salaries'] });
+    },
+    onError: (e: Error) => message.error(e.message || '복구 실패'),
+  });
 
   const createM = useMutation({
     mutationFn: (v: SalaryFormValues) =>
@@ -143,18 +246,66 @@ function SalaryTab() {
 
   return (
     <>
-      <div className="tw-flex tw-justify-end tw-mb-3">
-        <Button type="primary" onClick={() => { setEditing(null); form.resetFields(); form.setFieldsValue({ baseSalary: 0, effectiveRange: [dayjs(), null] }); setOpen(true); }}>기본급 등록</Button>
+      <Alert
+        showIcon
+        type="info"
+        className="tw-mb-3"
+        message="신규 입사자의 초기 기본급은 '인사정보등록' 시 자동으로 반영됩니다."
+        description="이 탭은 연봉 인상 · 직급 변경 등 급여 변경 이력을 새 effectiveFrom으로 등록하는 곳입니다. 같은 날짜로 중복 등록하면 기존 이력이 마감되고 중복이 쌓이니 주의하세요."
+      />
+      <div className="tw-flex tw-flex-wrap tw-justify-between tw-items-center tw-gap-2 tw-mb-3">
+        <Typography.Text type="secondary" className="!tw-text-xs">
+          Kafka 이벤트 누락 등으로 입사자 Salary가 생성되지 않았다면 "입사 누락 복구"로 수동 생성할 수 있습니다.
+        </Typography.Text>
+        <Space>
+          <Button onClick={() => { bootstrapForm.resetFields(); bootstrapForm.setFieldsValue({ hireDate: dayjs() }); setBootstrapOpen(true); }}>
+            입사 누락 복구
+          </Button>
+          <Button type="primary" onClick={() => { setEditing(null); form.resetFields(); form.setFieldsValue({ baseSalary: 0, effectiveRange: [dayjs(), null] }); setOpen(true); }}>
+            급여 이력 등록
+          </Button>
+        </Space>
       </div>
-      <Table<Salary> rowKey={(r) => r.salaryId ?? Math.random().toString()} loading={listQ.isLoading} dataSource={listQ.data ?? []} columns={cols} pagination={{ pageSize: 20 }} locale={{ emptyText: '등록된 기본급이 없습니다.' }} />
-      <Modal open={open} onCancel={() => { setOpen(false); setEditing(null); form.resetFields(); }} onOk={() => form.submit()} confirmLoading={createM.isPending || updateM.isPending} okText={editing ? '수정' : '등록'} cancelText="취소" title={editing ? '기본급 수정' : '기본급 등록'} destroyOnClose width={520}>
+      <Table<Salary> rowKey={(r) => r.salaryId ?? Math.random().toString()} loading={listQ.isLoading} dataSource={listQ.data ?? []} columns={cols} pagination={{ pageSize: 20 }} locale={{ emptyText: '등록된 급여 이력이 없습니다.' }} />
+      <Modal open={open} onCancel={() => { setOpen(false); setEditing(null); form.resetFields(); }} onOk={() => form.submit()} confirmLoading={createM.isPending || updateM.isPending} okText={editing ? '수정' : '등록'} cancelText="취소" title={editing ? '급여 이력 수정' : '급여 이력 등록'} destroyOnClose width={520}>
         <Form<SalaryFormValues> form={form} layout="vertical" onFinish={(v) => editing?.salaryId ? updateM.mutate({ id: editing.salaryId, v }) : createM.mutate(v)}>
-          {!editing && <Form.Item label="멤버 UUID" name="memberId" rules={[{ required: true }]}><Input /></Form.Item>}
+          {!editing && <MemberIdSearchField />}
           <Form.Item label="급여 정책" name="salaryPolicyId" rules={[{ required: true }]}><Select options={policyOptions} placeholder="정책 선택" loading={policiesQ.isLoading} /></Form.Item>
           <Form.Item label="기본급 (원)" name="baseSalary" rules={[{ required: true }]}><InputNumber min={0} step={10000} style={{ width: '100%' }} /></Form.Item>
           <Form.Item label="직급명" name="jobGradeName"><Input maxLength={40} /></Form.Item>
           <Form.Item label="직책명" name="jobTitleName"><Input maxLength={40} /></Form.Item>
-          <Form.Item label="적용 기간" name="effectiveRange" rules={[{ required: true }]}><DatePicker.RangePicker allowEmpty={[false, true]} format="YYYY-MM-DD" style={{ width: '100%' }} /></Form.Item>
+          <Form.Item label="적용 기간 (새 effectiveFrom)" name="effectiveRange" rules={[{ required: true }]}><DatePicker.RangePicker allowEmpty={[false, true]} format="YYYY-MM-DD" style={{ width: '100%' }} /></Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        open={bootstrapOpen}
+        onCancel={() => { setBootstrapOpen(false); bootstrapForm.resetFields(); }}
+        onOk={() => bootstrapForm.submit()}
+        confirmLoading={bootstrapM.isPending}
+        okText="복구 요청"
+        cancelText="취소"
+        title="입사 누락 Salary 복구"
+        destroyOnClose
+        width={520}
+      >
+        <Alert
+          type="warning"
+          showIcon
+          className="tw-mb-3"
+          message="활성 급여정책(SalaryPolicy)이 없으면 백엔드가 조용히 skip 합니다."
+          description="먼저 '급여 정책' 탭에서 입사일 기준 활성 정책을 등록했는지 확인하세요."
+        />
+        <Form<BootstrapFormValues>
+          form={bootstrapForm}
+          layout="vertical"
+          onFinish={(v) => bootstrapM.mutate(v)}
+        >
+          <MemberIdSearchField />
+          <Form.Item label="입사일 (hireDate)" name="hireDate" rules={[{ required: true }]}><DatePicker className="tw-w-full" format="YYYY-MM-DD" /></Form.Item>
+          <Form.Item label="기본급 (원, 생략 시 회사 기본값)" name="baseSalary"><InputNumber min={0} step={10000} style={{ width: '100%' }} /></Form.Item>
+          <Form.Item label="직급명" name="jobGradeName"><Input maxLength={40} /></Form.Item>
+          <Form.Item label="직책명" name="jobTitleName"><Input maxLength={40} /></Form.Item>
         </Form>
       </Modal>
     </>
@@ -289,8 +440,12 @@ function TaxRateTab() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<TaxRate | null>(null);
   const [form] = Form.useForm<TaxFormValues>();
+  const [listYear, setListYear] = useState(() => dayjs().year());
 
-  const listQ = useQuery({ queryKey: ['salary', 'tax-rates'], queryFn: () => salaryApi.taxRate.list() });
+  const listQ = useQuery({
+    queryKey: ['salary', 'tax-rates', listYear],
+    queryFn: () => salaryApi.taxRate.list(listYear),
+  });
 
   const createM = useMutation({
     mutationFn: (v: TaxFormValues) => salaryApi.taxRate.create(v),
@@ -329,9 +484,41 @@ function TaxRateTab() {
     },
   ], [deleteM, form]);
 
+  const yearSelectOptions = useMemo(
+    () =>
+      Array.from({ length: 12 }, (_, i) => {
+        const y = dayjs().year() - 5 + i;
+        return { value: y, label: `${y}년` };
+      }),
+    [],
+  );
+
   return (
     <>
-      <div className="tw-flex tw-justify-end tw-mb-3"><Button type="primary" onClick={() => { setEditing(null); form.resetFields(); form.setFieldsValue({ applyYear: dayjs().year(), rate: 0 }); setOpen(true); }}>세율 등록</Button></div>
+      <div className="tw-flex tw-flex-wrap tw-justify-between tw-items-center tw-gap-2 tw-mb-3">
+        <Space align="center">
+          <Typography.Text type="secondary" className="!tw-text-sm">
+            조회 연도
+          </Typography.Text>
+          <Select
+            className="tw-min-w-[120px]"
+            value={listYear}
+            onChange={(y) => setListYear(y)}
+            options={yearSelectOptions}
+          />
+        </Space>
+        <Button
+          type="primary"
+          onClick={() => {
+            setEditing(null);
+            form.resetFields();
+            form.setFieldsValue({ applyYear: listYear, rate: 0 });
+            setOpen(true);
+          }}
+        >
+          세율 등록
+        </Button>
+      </div>
       <Table<TaxRate> rowKey={(r) => r.taxRateId ?? Math.random().toString()} loading={listQ.isLoading} dataSource={listQ.data ?? []} columns={cols} pagination={{ pageSize: 20 }} locale={{ emptyText: '등록된 세율이 없습니다.' }} />
       <Modal open={open} onCancel={() => { setOpen(false); setEditing(null); form.resetFields(); }} onOk={() => form.submit()} confirmLoading={createM.isPending || updateM.isPending} okText={editing ? '수정' : '등록'} cancelText="취소" title={editing ? '세율 수정' : '세율 등록'} destroyOnClose width={480}>
         <Form<TaxFormValues> form={form} layout="vertical" onFinish={(v) => editing?.taxRateId ? updateM.mutate({ id: editing.taxRateId, v }) : createM.mutate(v)}>
@@ -428,14 +615,14 @@ export function AdminSalarySettingsPage() {
           급여 설정
         </Typography.Title>
         <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-sm">
-          기본급·급여 정책·세율·항목 템플릿을 관리합니다.
+          급여 이력·급여 정책·세율·항목 템플릿을 관리합니다. (신규 입사자의 초기 기본급은 '인사정보등록'에서 처리)
         </Typography.Paragraph>
       </div>
       <Card>
         <Tabs
           defaultActiveKey="salary"
           items={[
-            { key: 'salary', label: '기본급', children: <SalaryTab /> },
+            { key: 'salary', label: '급여 이력', children: <SalaryTab /> },
             { key: 'policy', label: '급여 정책', children: <SalaryPolicyTab /> },
             { key: 'tax', label: '세율', children: <TaxRateTab /> },
             { key: 'template', label: '항목 템플릿', children: <SalaryItemTemplateTab /> },

@@ -179,9 +179,6 @@ export function AdminPayrollPage() {
           <Link to="/app/salary/settings" className="tw-text-sm tw-text-[#2563EB]">
             급여 설정
           </Link>
-          <Link to="/app/payroll" className="tw-text-sm tw-text-[#2563EB]">
-            ← 내 급여
-          </Link>
         </Space>
       </div>
 
