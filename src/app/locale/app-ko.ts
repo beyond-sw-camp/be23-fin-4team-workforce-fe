@@ -15,7 +15,6 @@ export const APP_MENU_LABEL: Record<string, string> = {
   '/app/approvals/department': '부서 문서함',
   '/app/payroll': '급여',
   '/app/notifications': '알림',
-  '/app/member-chat/admin': '보안·컴플라이언스 조회',
   '/app/performance': '성과',
   '/app/evaluations': '평가',
   '/app/meetings': '미팅',
@@ -87,7 +86,6 @@ export function appHeaderTitleFromPath(
   if (/^\/app\/members\/[^/]+$/.test(pathname)) return '구성원 상세';
   if (pathname === '/app/approvals/department') return '부서 문서함';
   if (/^\/app\/meetings\/[^/]+$/.test(pathname)) return '면담 상세';
-  if (pathname === '/app/member-chat/admin') return '보안·컴플라이언스 조회';
   return APP_BRAND_NAME;
 }
 
