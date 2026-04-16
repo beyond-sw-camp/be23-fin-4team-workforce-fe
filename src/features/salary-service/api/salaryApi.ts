@@ -8,6 +8,7 @@ import type {
   PayrollRecalculatePayload,
   PayrollRecalculateResult,
   Salary,
+  SalaryBootstrapPayload,
   SalaryCreatePayload,
   SalaryItemTemplate,
   SalaryItemTemplateCreatePayload,
@@ -205,6 +206,20 @@ export const salaryApi = {
       return unwrapApiResponse<Salary>(data);
     },
 
+    /** 입사 누락 복구 — Kafka 실패/백필 시 수동 트리거.
+     *  - 활성 SalaryPolicy 필수, 없으면 백엔드가 skip */
+    async bootstrap(payload: SalaryBootstrapPayload): Promise<void> {
+      const { data } = await httpClient.post(`${BASE}/salary/salaries/bootstrap`, {
+        memberId: payload.memberId,
+        hireDate: payload.hireDate,
+        baseSalary: payload.baseSalary ?? null,
+        jobGradeId: payload.jobGradeId ?? null,
+        jobGradeName: payload.jobGradeName ?? null,
+        jobTitleName: payload.jobTitleName ?? null,
+      });
+      unwrapMessage(data);
+    },
+
     async update(salaryId: string, payload: SalaryUpdatePayload): Promise<Salary> {
       const { data } = await httpClient.put(
         `${BASE}/salary/salaries/${encodeURIComponent(salaryId)}`,
@@ -254,11 +269,12 @@ export const salaryApi = {
     },
   },
 
-  /** /salary/taxRate — 세율 관리 */
+  /** /salary/taxRate — 세율 관리 (목록 조회 시 applyYear 필수 — 백엔드 @RequestParam) */
   taxRate: {
     async list(applyYear?: number): Promise<TaxRate[]> {
+      const year = applyYear ?? new Date().getFullYear();
       const { data } = await httpClient.get(`${BASE}/salary/taxRate`, {
-        params: applyYear ? { applyYear } : undefined,
+        params: { applyYear: year },
       });
       const unwrapped = unwrapApiResponse<TaxRate[] | null>(data);
       return Array.isArray(unwrapped) ? unwrapped : [];

@@ -511,8 +511,9 @@ export const salaryServiceApi = {
   // /salary/taxRate
   taxRate: {
     async list(applyYear?: number): Promise<TaxRate[]> {
+      const year = applyYear ?? new Date().getFullYear();
       const { data } = await httpClient.get(`${SALARY}/salary/taxRate`, {
-        params: applyYear ? { applyYear } : undefined,
+        params: { applyYear: year },
       });
       const unwrapped = unwrapApiResponse<TaxRate[] | null>(data);
       return Array.isArray(unwrapped) ? unwrapped : [];

@@ -273,6 +273,19 @@ export type SalaryCreatePayload = {
 
 export type SalaryUpdatePayload = Omit<SalaryCreatePayload, 'memberId'>;
 
+/** `POST /salary/salaries/bootstrap` — 입사 누락 복구용
+ *  - 백엔드가 `MemberHiredEvent`를 바디로 받아 `bootstrapSalary()` 호출
+ *  - 활성 급여정책이 이미 있어야 Salary가 생성됨
+ *  - `companyId`는 X-User-CompanyId 헤더로 주입되므로 바디에서 생략 */
+export type SalaryBootstrapPayload = {
+  memberId: string;
+  hireDate: string;
+  baseSalary?: number | null;
+  jobGradeId?: string | null;
+  jobGradeName?: string | null;
+  jobTitleName?: string | null;
+};
+
 /** 급여 정책 (SalaryPolicy) */
 export type PayTypeCode = 'MONTHLY' | 'BONUS' | 'SEVERANCE' | string;
 export type WageSystemTypeCode = 'COMPREHENSIVE' | 'NON_COMPREHENSIVE' | string;
