@@ -15,6 +15,7 @@ import {
   FormOutlined,
   GlobalOutlined,
   LineChartOutlined,
+  PieChartOutlined,
   MoreOutlined,
   KeyOutlined,
   PartitionOutlined,
@@ -38,10 +39,9 @@ import { useContext, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import { useAuth } from '@/features/auth/useAuth';
-import { PERM } from '@/features/permissions/backend-permissions';
-import { usePermissions } from '@/features/permissions/usePermissionsHook';
 import type { EsgConfig } from '@/features/esg/api/esgApi';
 import { esgApi } from '@/features/esg/api/esgApi';
+import { memberChatApi } from '@/features/member-chat/api/memberChatApi';
 import { notificationApi } from '@/features/notification/api/notificationApi';
 import { companyApi } from '@/features/organization/api/companyApi';
 import { searchApi } from '@/features/search/api/searchApi';
@@ -55,7 +55,6 @@ import {
   APP_MENU_ORG_HR_GROUP_LABEL,
   APP_MENU_PATH_ORDER,
   APP_MENU_TALENT_HUB_LABEL,
-  APP_MENU_WORK_LEAVE_GROUP_LABEL,
   ESG_MENU_LABEL,
   ESG_MENU_PATH_ORDER,
 } from '@/app/locale/app-ko';
@@ -72,6 +71,18 @@ import { AppSearchField } from '@/shared/ui/AppSearchField';
 import { AiChatbotFab } from '@/widgets/app-shell/AiChatbotFab';
 import { OrgChartModal } from '@/widgets/organization/OrgChartModal';
 import { HeaderSearchMemberDetailModal } from '@/widgets/app-shell/HeaderSearchMemberDetailModal';
+import { MemberChatModal } from '@/widgets/app-shell/MemberChatModal';
+import {
+  APPROVAL_SIDEBAR_ROOT_KEY,
+  APPROVAL_SUBMENU_DEPT_KEY,
+  APPROVAL_SUBMENU_DO_KEY,
+  APPROVAL_SUBMENU_PERSONAL_KEY,
+  approvalSiderOpenKeys,
+  approvalSiderSelectedMenuKeys,
+  buildApprovalMenuGroupChildren,
+  decodeWfNavKey,
+} from '@/widgets/app-shell/approvalSiderMenu';
+
 /** 왼쪽 날개 패널 + 본문 — 접기·펼치기 동일 아이콘(선형·둥근 테두리). */
 function SiderPanelToggleIcon({ className }: { className?: string }) {
   return (
@@ -92,6 +103,7 @@ function SiderPanelToggleIcon({ className }: { className?: string }) {
 
 const APP_MENU_ICONS: Record<string, ReactNode> = {
   '/app/dashboard': <DashboardOutlined className="tw-text-lg" />,
+  '/app/insights': <PieChartOutlined className="tw-text-lg" />,
   '/app/calendar': <CalendarOutlined className="tw-text-lg" />,
   '/app/members': <TeamOutlined className="tw-text-lg" />,
   '/app/organization': <ApartmentOutlined className="tw-text-lg" />,
@@ -102,6 +114,7 @@ const APP_MENU_ICONS: Record<string, ReactNode> = {
   '/app/approvals/department': <FolderOpenOutlined className="tw-text-lg" />,
   '/app/payroll': <DollarOutlined className="tw-text-lg" />,
   '/app/notifications': <BellOutlined className="tw-text-lg" />,
+  '/app/member-chat/admin': <MessageOutlined className="tw-text-lg" />,
   '/app/performance': <LineChartOutlined className="tw-text-lg" />,
   '/app/evaluations': <StarOutlined className="tw-text-lg" />,
   '/app/meetings': <VideoCameraOutlined className="tw-text-lg" />,
@@ -139,10 +152,6 @@ const TALENT_HUB_PATH_SET = new Set<string>(TALENT_HUB_PATHS);
 const ORG_HR_GROUP_KEY = 'group-org-hr';
 const ORG_HR_PATHS = ['/app/members', '/app/organization', '/app/roles'] as const;
 const ORG_HR_PATH_SET = new Set<string>(ORG_HR_PATHS);
-/** 조직 설정·역할·권한 메뉴는 시스템 관리자만 사이드바에 표시 */
-const ORG_HR_ADMIN_ONLY_PATHS = new Set<string>(['/app/organization', '/app/roles']);
-/** 구성원 메뉴는 MEMBER 조회·생성 권한을 모두 가진 경우에만 표시 */
-const ORG_HR_MEMBERS_PATH = '/app/members';
 
 const ESG_GROUP_KEY = 'group-esg';
 
@@ -217,8 +226,18 @@ function buildAppShellMenuItems(
   let orgInserted = false;
   let workLeaveInserted = false;
   let approvalInserted = false;
+  let orgChartInserted = false;
 
   for (const path of APP_MENU_PATH_ORDER) {
+    if (path === '/app/members' && !orgChartInserted) {
+      orgChartInserted = true;
+      items.push({
+        key: APP_MENU_ORG_CHART_SIDEBAR_KEY,
+        icon: <PartitionOutlined className="tw-text-lg" />,
+        label: APP_MENU_ORG_CHART_LABEL,
+        title: APP_MENU_ORG_CHART_LABEL,
+      });
+    }
     if (TALENT_HUB_PATH_SET.has(path)) {
       if (!hubInserted) {
         hubInserted = true;
@@ -238,6 +257,9 @@ function buildAppShellMenuItems(
       continue;
     }
     if (ORG_HR_PATH_SET.has(path)) {
+      if (!isAdmin) {
+        continue;
+      }
       if (!orgInserted) {
         orgInserted = true;
         items.push({
@@ -245,40 +267,7 @@ function buildAppShellMenuItems(
           label: (
             <SiderGroupedMenuLabel icon={<TeamOutlined className="tw-text-lg" />} text={APP_MENU_ORG_HR_GROUP_LABEL} />
           ),
-          children: [
-            ...ORG_HR_PATHS.filter((p) => {
-              if (p === ORG_HR_MEMBERS_PATH) return memberDirectoryAccess;
-              if (ORG_HR_ADMIN_ONLY_PATHS.has(p)) return isAdmin;
-              return true;
-            }).map((p) => ({
-              key: p,
-              icon: APP_MENU_ICONS[p],
-              label: APP_MENU_LABEL[p],
-              title: APP_MENU_LABEL[p],
-            })),
-            {
-              key: APP_MENU_ORG_CHART_SIDEBAR_KEY,
-              icon: <PartitionOutlined className="tw-text-lg" />,
-              label: APP_MENU_ORG_CHART_LABEL,
-              title: APP_MENU_ORG_CHART_LABEL,
-            },
-          ],
-        });
-      }
-      continue;
-    }
-    if (WORK_LEAVE_PATH_SET.has(path)) {
-      if (!workLeaveInserted) {
-        workLeaveInserted = true;
-        items.push({
-          key: WORK_LEAVE_GROUP_KEY,
-          label: (
-            <SiderGroupedMenuLabel
-              icon={<ClockCircleOutlined className="tw-text-lg" />}
-              text={APP_MENU_WORK_LEAVE_GROUP_LABEL}
-            />
-          ),
-          children: WORK_LEAVE_PATHS.map((p) => ({
+          children: ORG_HR_PATHS.map((p) => ({
             key: p,
             icon: APP_MENU_ICONS[p],
             label: APP_MENU_LABEL[p],
@@ -330,8 +319,7 @@ function buildAppShellMenuItems(
       }
       continue;
     }
-    const leafLabel =
-      path === '/app/dashboard' && isAdmin ? '관리자 대시보드' : APP_MENU_LABEL[path];
+    const leafLabel = APP_MENU_LABEL[path];
     items.push({
       key: path,
       icon: APP_MENU_ICONS[path],
@@ -358,7 +346,6 @@ function buildAppShellMenuItems(
 
 function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
   const { status, user } = useAuth();
-  const { hasPermission } = usePermissions();
   const isAdmin = user?.isSystemAdmin === true;
   const { data: esgConfig } = useQuery({
     queryKey: ['esg', 'config'],
@@ -369,23 +356,38 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
   });
 
   return useMemo(() => {
-    const memberDirectoryAccess =
-      hasPermission(PERM.MEMBER_READ) && hasPermission(PERM.MEMBER_CREATE);
     const esgPaths = ESG_MENU_PATH_ORDER.filter((p) => shouldShowEsgMenuItem(p, esgConfig ?? null, isAdmin));
     const items = buildAppShellMenuItems(esgPaths, isAdmin, memberDirectoryAccess);
+    const approvalMenuRoot = {
+      key: APPROVAL_SIDEBAR_ROOT_KEY,
+      label: (
+        <SiderGroupedMenuLabel icon={<FileDoneOutlined className="tw-text-lg" />} text="전자결재" />
+      ),
+      children: buildApprovalMenuGroupChildren(approvalOrgChart?.organizations ?? [], {
+        myOrganizationId: meMember?.organizationId,
+        myOrganizationName: meMember?.organizationName,
+      }),
+    };
+    const items = buildAppShellMenuItems(esgPaths, isAdmin, approvalMenuRoot);
     if (!isAdmin) return items;
+    const chatAdmin = {
+      key: '/app/member-chat/admin',
+      icon: <MessageOutlined className="tw-text-lg" />,
+      label: '보안·컴플라이언스 조회',
+      title: '보안·컴플라이언스 조회',
+    };
     const doc = {
       key: '/app/ai-documents',
       icon: <RobotOutlined className="tw-text-lg" />,
       label: 'HR 정책 문서',
       title: 'HR 정책 문서',
     };
-    return [...items, doc];
-  }, [esgConfig, isAdmin, hasPermission]);
+    return [...items, chatAdmin, doc];
+  }, [esgConfig, isAdmin, approvalOrgChart?.organizations, meMember?.organizationId, meMember?.organizationName]);
 }
 
 const headerGhostIconClass =
-  'tw-flex tw-size-11 tw-items-center tw-justify-center tw-rounded-full tw-text-slate-500 tw-transition-colors hover:tw-bg-slate-100 hover:tw-text-slate-800 focus-visible:tw-outline focus-visible:tw-outline-2 focus-visible:tw-outline-offset-2 focus-visible:tw-outline-[#2563EB]';
+  'tw-flex tw-size-11 tw-appearance-none tw-items-center tw-justify-center tw-rounded-full tw-border-0 tw-bg-transparent tw-text-slate-500 tw-shadow-none tw-transition-colors hover:tw-bg-slate-100 hover:tw-text-slate-800 focus-visible:tw-outline focus-visible:tw-outline-2 focus-visible:tw-outline-offset-2 focus-visible:tw-outline-[#2563EB]';
 
 function formatSessionCountdown(totalSeconds: number): string {
   const s = Math.max(0, totalSeconds);
@@ -449,7 +451,13 @@ function SessionAccessTimer() {
   );
 }
 
-function SiderBrandHeader({ collapsed }: { collapsed?: boolean }) {
+function SiderBrandHeader({
+  collapsed,
+  onClick,
+}: {
+  collapsed?: boolean;
+  onClick?: () => void;
+}) {
   const { user, status } = useAuth();
   const { data: companyInfo } = useQuery({
     queryKey: ['company', 'info'],
@@ -494,13 +502,25 @@ function SiderBrandHeader({ collapsed }: { collapsed?: boolean }) {
   if (collapsed) {
     return (
       <Tooltip title={companyName} placement="right">
-        <div className="tw-flex tw-w-full tw-justify-center tw-px-1">{avatar}</div>
+        <button
+          type="button"
+          className="tw-flex tw-w-full tw-cursor-pointer tw-justify-center tw-border-0 tw-bg-transparent tw-px-1 tw-py-0"
+          onClick={onClick}
+          aria-label="대시보드로 이동"
+        >
+          {avatar}
+        </button>
       </Tooltip>
     );
   }
 
   return (
-    <div className="tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-2">
+    <button
+      type="button"
+      className="tw-flex tw-min-w-0 tw-flex-1 tw-cursor-pointer tw-items-center tw-gap-2 tw-border-0 tw-bg-transparent tw-p-0 tw-text-left"
+      onClick={onClick}
+      aria-label="대시보드로 이동"
+    >
       {avatar}
       <div className="tw-flex tw-min-w-0 tw-flex-col tw-leading-tight">
         <span className="tw-truncate tw-text-base tw-font-semibold tw-tracking-tight tw-text-slate-900" title={companyName}>
@@ -513,7 +533,7 @@ function SiderBrandHeader({ collapsed }: { collapsed?: boolean }) {
           {domainLine}
         </span>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -750,6 +770,7 @@ function AppShellHeader() {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [headerDetailMemberId, setHeaderDetailMemberId] = useState<string | null>(null);
+  const [memberChatOpen, setMemberChatOpen] = useState(false);
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -774,6 +795,25 @@ function AppShellHeader() {
     enabled: status === 'authenticated',
     staleTime: 10_000,
   });
+
+  /**
+   * 헤더 채팅 아이콘 뱃지 — 내 모든 방의 unreadCount 합.
+   * `MemberChatPanel` 과 동일한 query key 를 공유하므로 캐시/invalidate 가 자동 동기화된다.
+   */
+  const { data: myChatRooms = [] } = useQuery({
+    queryKey: ['member-chat', 'rooms'],
+    queryFn: () => memberChatApi.listMyRooms(),
+    enabled: status === 'authenticated',
+    // 방별 unreadCount 합(헤더 뱃지)과 목록 카운트를 실시간에 가깝게 유지
+    // 현재는 활성 방 외에는 STOMP 직접 구독이 없으므로 짧은 polling으로 동기화한다.
+    staleTime: 0,
+    refetchInterval: 3_000,
+    refetchIntervalInBackground: true,
+  });
+  const chatUnreadTotal = myChatRooms.reduce(
+    (sum, r) => sum + (typeof r.unreadCount === 'number' ? r.unreadCount : 0),
+    0,
+  );
 
   useEffect(() => {
     if (status !== 'authenticated') return;
@@ -857,8 +897,22 @@ function AppShellHeader() {
         onClose={() => setHeaderDetailMemberId(null)}
       />
 
+      <MemberChatModal open={memberChatOpen} onClose={() => setMemberChatOpen(false)} />
+
       <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-2 tw-overflow-visible md:tw-gap-4">
         <SessionAccessTimer />
+        <Tooltip title="멤버 채팅">
+          <Badge count={chatUnreadTotal} color="#EF4444" offset={[-8, 8]} showZero={false} overflowCount={99}>
+            <button
+              type="button"
+              className={headerGhostIconClass}
+              aria-label={`멤버 채팅${chatUnreadTotal > 0 ? ` (안 읽은 메시지 ${chatUnreadTotal}건)` : ''}`}
+              onClick={() => setMemberChatOpen(true)}
+            >
+              <MessageOutlined className="tw-text-[20px]" />
+            </button>
+          </Badge>
+        </Tooltip>
         <Badge count={unreadCount} color="#EF4444" offset={[-2, 4]} showZero={false}>
           <Link to="/app/notifications" className={headerGhostIconClass} aria-label="알림">
             <BellOutlined className="tw-text-[20px]" />
@@ -882,7 +936,12 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
     });
     return leaf ? [leaf] : [];
   }
-  const menuPaths = new Set<string>([...APP_MENU_PATH_ORDER, ...ESG_MENU_PATH_ORDER, '/app/ai-documents']);
+  const menuPaths = new Set<string>([
+    ...APP_MENU_PATH_ORDER,
+    ...ESG_MENU_PATH_ORDER,
+    '/app/member-chat/admin',
+    '/app/ai-documents',
+  ]);
   if (menuPaths.has(pathname)) return [pathname];
   return [];
 }
@@ -894,7 +953,6 @@ function menuOpenKeysForPath(pathname: string, search: Record<string, unknown>):
     keys.push(ORG_HR_GROUP_KEY);
   }
   if (pathname.startsWith('/app/esg')) keys.push(ESG_GROUP_KEY);
-  if (WORK_LEAVE_PATH_SET.has(pathname)) keys.push(WORK_LEAVE_GROUP_KEY);
   if (pathname.startsWith('/app/approvals')) {
     keys.push(APPROVAL_GROUP_KEY);
     const sec = approvalShellSectionOpenKeyFromLocation(pathname, {
@@ -987,7 +1045,12 @@ function AppShellLayout() {
               siderCollapsed ? 'tw-justify-center tw-px-2' : 'tw-px-4'
             }`}
           >
-            <SiderBrandHeader collapsed={siderCollapsed} />
+            <SiderBrandHeader
+              collapsed={siderCollapsed}
+              onClick={() => {
+                window.location.assign('/app/dashboard');
+              }}
+            />
           </div>
           <div className="wf-scrollbar tw-min-h-0 tw-w-full tw-flex-1 tw-overflow-y-auto tw-overflow-x-hidden">
             <Menu

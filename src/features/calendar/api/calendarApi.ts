@@ -36,6 +36,16 @@ export type CalendarEvent = {
   scope?: CalendarEventScope;
 };
 
+export type CalendarHoliday = {
+  holidayDate: string;
+  holidayName: string;
+};
+
+export type CalendarMonthResponse = {
+  events: CalendarEvent[];
+  holidays: CalendarHoliday[];
+};
+
 function pickEventId(raw: Record<string, unknown>): string {
   const v = raw.eventId ?? raw.id ?? raw.calendarEventId ?? raw.event_id;
   return typeof v === 'string' && v.trim() ? v.trim() : '';
@@ -72,6 +82,18 @@ function normalizeEvent(raw: unknown): CalendarEvent | null {
   };
 }
 
+function normalizeHoliday(raw: unknown): CalendarHoliday | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const holidayDate = r.holidayDate ?? r.date;
+  const holidayName = r.holidayName ?? r.name;
+  if (typeof holidayDate !== 'string' || typeof holidayName !== 'string') return null;
+  return {
+    holidayDate,
+    holidayName,
+  };
+}
+
 function normalizeListPayload(raw: unknown, depth = 0): unknown[] {
   if (depth > 8) return [];
   if (Array.isArray(raw)) return raw;
@@ -102,6 +124,33 @@ async function fetchCalendarList(
   return arr.map(normalizeEvent).filter((e): e is CalendarEvent => e != null);
 }
 
+async function fetchCalendarMonth(
+  year: number,
+  month: number,
+  eventType?: CalendarListEventTypeParam,
+): Promise<CalendarMonthResponse> {
+  const response = await httpClient.get('/calendar', {
+    params: {
+      year,
+      month,
+      ...listQueryParams(eventType),
+    },
+  });
+  const unwrapped = unwrapApiResponse<unknown>(response.data);
+
+  const events = normalizeListPayload(unwrapped).map(normalizeEvent).filter((e): e is CalendarEvent => e != null);
+  let holidays: CalendarHoliday[] = [];
+
+  if (unwrapped && typeof unwrapped === 'object') {
+    const holidayRaw = (unwrapped as Record<string, unknown>).holidays;
+    if (Array.isArray(holidayRaw)) {
+      holidays = holidayRaw.map(normalizeHoliday).filter((h): h is CalendarHoliday => h != null);
+    }
+  }
+
+  return { events, holidays };
+}
+
 export const calendarApi = {
   /** GET /calendar/daily?date=YYYY-MM-DD[&eventType=] */
   async listDaily(date: string, eventType?: CalendarListEventTypeParam) {
@@ -121,11 +170,7 @@ export const calendarApi = {
 
   /** GET /calendar?year=&month=[&eventType=] */
   async listMonth(year: number, month: number, eventType?: CalendarListEventTypeParam) {
-    return fetchCalendarList('/calendar', {
-      year,
-      month,
-      ...listQueryParams(eventType),
-    });
+    return fetchCalendarMonth(year, month, eventType);
   },
 
   async detail(eventId: string) {

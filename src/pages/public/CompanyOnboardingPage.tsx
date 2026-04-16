@@ -57,7 +57,6 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
   const [loading, setLoading] = useState(false);
   const [businessChecked, setBusinessChecked] = useState(false);
   const [emailVerified, setEmailVerified] = useState(false);
-  const [onboardingCompleted, setOnboardingCompleted] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [legalModal, setLegalModal] = useState<null | 'terms' | 'privacy'>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
@@ -203,9 +202,10 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
       }
       const baseMsg =
         res.message ?? '회사 온보딩이 완료되었습니다. 로그인 페이지에서 로그인해 주세요.';
-      setSuccess(logoOk ? `${baseMsg.trim()} 회사 로고가 등록되었습니다.` : baseMsg);
-      setOnboardingCompleted(true);
+      const okMsg = logoOk ? `${baseMsg.trim()} 회사 로고가 등록되었습니다.` : baseMsg;
+      message.success(okMsg);
       setLogoFile(null);
+      void navigate({ to: '/login', replace: true });
     } catch (e) {
       setError((e as { message?: string }).message ?? '온보딩 처리에 실패했습니다.');
     } finally {
@@ -570,16 +570,11 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
                 </div>
 
                 <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-end tw-gap-2 tw-pt-2">
-                  {onboardingCompleted ? (
-                    <AppButton size="large" variant="secondary" onClick={() => navigate({ to: '/login' })}>
-                      로그인 페이지로 이동
-                    </AppButton>
-                  ) : null}
                   <AppButton
                     size="large"
                     htmlType="submit"
                     loading={loading}
-                    disabled={onboardingCompleted || !businessChecked || !emailVerified}
+                    disabled={!businessChecked || !emailVerified}
                   >
                     회사 온보딩 완료
                   </AppButton>

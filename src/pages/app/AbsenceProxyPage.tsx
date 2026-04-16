@@ -352,7 +352,7 @@ export function AbsenceProxyPage() {
         confirmLoading={createMut.isPending}
         onOk={() => submitCreate()}
         width={640}
-        destroyOnClose
+        destroyOnHidden
       >
         <Space direction="vertical" size="middle" className="tw-w-full">
           <div>

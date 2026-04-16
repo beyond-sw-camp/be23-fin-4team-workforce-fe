@@ -218,7 +218,7 @@ export function GoalApprovalCenterPanel({
         onCancel={closeDetail}
         footer={null}
         width="min(960px, calc(100vw - 24px))"
-        destroyOnClose
+        destroyOnHidden
         centered
         zIndex={1200}
         classNames={{ content: '!tw-rounded-2xl' }}

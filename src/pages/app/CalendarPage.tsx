@@ -26,6 +26,7 @@ import dayjs, { type Dayjs } from 'dayjs';
 import 'dayjs/locale/ko';
 import { useEffect, useMemo, useState } from 'react';
 import {
+  type CalendarHoliday,
   type CalendarEvent,
   calendarApi,
   type CreatePersonalCalendarPayload,
@@ -74,6 +75,11 @@ function eventOccursOnDay(e: CalendarEvent, day: Dayjs): boolean {
 
 function eventsOnDay(events: CalendarEvent[], day: Dayjs): CalendarEvent[] {
   return events.filter((e) => eventOccursOnDay(e, day));
+}
+
+function holidaysOnDay(holidays: CalendarHoliday[], day: Dayjs): CalendarHoliday[] {
+  const key = day.format('YYYY-MM-DD');
+  return holidays.filter((h) => h.holidayDate === key);
 }
 
 function formatEventTimeRange(e: CalendarEvent): string {
@@ -288,10 +294,15 @@ export function CalendarPage() {
   });
 
   const events = useMemo(() => {
-    if (viewMode === 'month') return monthQuery.data ?? [];
+    if (viewMode === 'month') return monthQuery.data?.events ?? [];
     if (viewMode === 'week') return weekQuery.data ?? [];
     return dayQuery.data ?? [];
   }, [viewMode, monthQuery.data, weekQuery.data, dayQuery.data]);
+
+  const monthHolidays = useMemo(
+    () => (viewMode === 'month' ? monthQuery.data?.holidays ?? [] : []),
+    [viewMode, monthQuery.data],
+  );
 
   const filteredEvents = useMemo(
     () =>
@@ -519,8 +530,14 @@ export function CalendarPage() {
     if (!info) return null;
     if (info.type !== 'date') return info.originNode;
     const list = eventsOnDay(filteredEvents, current);
+    const holidayList = holidaysOnDay(monthHolidays, current);
     return (
       <div className="tw-flex tw-min-h-[112px] tw-flex-col tw-gap-0.5">
+        {holidayList.length > 0 && (
+          <div className="tw-truncate tw-text-[11px] tw-font-medium tw-text-rose-600" title={holidayList[0]?.holidayName}>
+            {holidayList[0]?.holidayName}
+          </div>
+        )}
         <ul className="tw-m-0 tw-list-none tw-space-y-0.5 tw-p-0">
           {list.slice(0, 4).map((e) => (
             <li key={e.eventId}>

@@ -1319,7 +1319,7 @@ function PerformancePage() {
           footer={null}
           width="min(720px, calc(100vw - 24px))"
           centered
-          destroyOnClose
+          destroyOnHidden
           classNames={{ content: '!tw-rounded-2xl !tw-overflow-hidden' }}
           styles={{
             header: {
