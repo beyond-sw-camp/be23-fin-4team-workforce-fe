@@ -306,7 +306,7 @@ function normalizeViewer(raw: unknown): ApprovalViewer | null {
     viewerMemberPositionId: asText(o.viewerMemberPositionId ?? o.viewer_member_position_id),
     viewerType: asText(o.viewerType ?? o.viewer_type),
     viewerReadStatus: asText(o.viewerReadStatus ?? o.viewer_read_status),
-    viewedAt: asNullableText(o.viewedAt ?? o.viewed_at),
+    viewedAt: asNullableText(o.viewedAt ?? o.viewed_at ?? o.readAt ?? o.read_at),
     createdAt: asText(o.createdAt ?? o.created_at),
     updatedAt: asText(o.updatedAt ?? o.updated_at),
     ...(viewerName ? { viewerName } : {}),
@@ -354,6 +354,12 @@ function unwrapSingle(raw: unknown): ApprovalRequestDetail {
   const request = normalizeRequest(raw);
   if (!request) throw new Error('결재 요청 응답을 해석할 수 없습니다.');
   return request;
+}
+
+/** `GET /approval/requests/my` 등 목록의 `requestType`이 공문 계열인지(서버 enum `OFFICIAL` 등). */
+export function isOfficialApprovalRequestType(requestType: string | unknown): boolean {
+  const u = String(requestType ?? '').trim().toUpperCase();
+  return u === 'OFFICIAL';
 }
 
 export const approvalRequestApi = {
@@ -416,6 +422,26 @@ export const approvalRequestApi = {
     return pickArray(unwrapped)
       .map((item) => normalizeRequest(item))
       .filter((item): item is ApprovalRequestDetail => item != null);
+  },
+
+  async listViewerCcRequests(): Promise<ApprovalRequestDetail[]> {
+    const response = await httpClient.get('/approval/viewers/cc');
+    const unwrapped = unwrapApiResponse<unknown>(response.data);
+    return pickArray(unwrapped)
+      .map((item) => normalizeRequest(item))
+      .filter((item): item is ApprovalRequestDetail => item != null);
+  },
+
+  async listViewerCirculationRequests(): Promise<ApprovalRequestDetail[]> {
+    const response = await httpClient.get('/approval/viewers/circulation');
+    const unwrapped = unwrapApiResponse<unknown>(response.data);
+    return pickArray(unwrapped)
+      .map((item) => normalizeRequest(item))
+      .filter((item): item is ApprovalRequestDetail => item != null);
+  },
+
+  async markViewerRead(viewerId: string): Promise<void> {
+    await httpClient.patch(`/approval/viewers/${encodeURIComponent(viewerId)}/read`);
   },
 
   async approve(approvalId: string, comment?: string): Promise<ApprovalRequestDetail> {

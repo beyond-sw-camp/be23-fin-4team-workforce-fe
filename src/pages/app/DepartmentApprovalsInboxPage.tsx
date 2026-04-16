@@ -1,23 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
-import { App, Alert, Card, Select, Space, Table, Tag, Typography } from 'antd';
+import { Alert, Card, Select, Space, Table, Tag, Typography } from 'antd';
 import dayjs from 'dayjs';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router';
-import { approvalRequestApi } from '@/features/approvals/api/approvalRequestApi';
+import { approvalRequestApi, isOfficialApprovalRequestType } from '@/features/approvals/api/approvalRequestApi';
 import { ApprovalRequestReadOnlyModal } from '@/features/approvals/ui/ApprovalRequestReadOnlyModal';
 import { useAuth } from '@/features/auth/useAuth';
 import { memberApi } from '@/features/member/api/memberApi';
 import type { OrgChartOrgNode } from '@/features/organization/api/organizationApi';
 import { organizationApi } from '@/features/organization/api/organizationApi';
-
-function findOrgChartNode(roots: OrgChartOrgNode[], organizationId: string): OrgChartOrgNode | null {
-  for (const n of roots) {
-    if (n.organizationId === organizationId) return n;
-    const found = findOrgChartNode(n.children, organizationId);
-    if (found) return found;
-  }
-  return null;
-}
 
 function findMemberOrganizationId(roots: OrgChartOrgNode[], memberId: string): string | null {
   const id = memberId.trim();
@@ -32,15 +23,6 @@ function findMemberOrganizationId(roots: OrgChartOrgNode[], memberId: string): s
     if (sub) return sub;
   }
   return null;
-}
-
-function flattenOrgOptions(node: OrgChartOrgNode, depth = 0): { value: string; label: string }[] {
-  const prefix = depth > 0 ? `${'— '.repeat(depth)}` : '';
-  const out = [{ value: node.organizationId, label: `${prefix}${node.name}` }];
-  for (const c of node.children) {
-    out.push(...flattenOrgOptions(c, depth + 1));
-  }
-  return out;
 }
 
 function formatDateTime(value?: string | null) {
@@ -72,12 +54,15 @@ function parseDeptView(v: unknown): DeptView {
 }
 
 export function DepartmentApprovalsInboxPage() {
-  const { message } = App.useApp();
   const navigate = useNavigate();
-  const routeSearch = useRouterState({
-    select: (s) =>
-      s.location.search as { organizationId?: string; deptView?: string },
+  const routeLocation = useRouterState({
+    select: (s) => ({
+      pathname: s.location.pathname,
+      search: s.location.search as { organizationId?: string; deptView?: string },
+    }),
   });
+  const routeSearch = routeLocation.search;
+  const onDepartmentRoute = routeLocation.pathname === '/app/approvals/department';
   const deptView = parseDeptView(routeSearch.deptView);
   const urlOrgId = routeSearch.organizationId?.trim() ?? '';
 
@@ -107,27 +92,19 @@ export function DepartmentApprovalsInboxPage() {
   }, [me?.organizationId, authMemberId, orgChart?.organizations]);
 
   const orgSelectOptions = useMemo(() => {
-    if (!myOrgId || !orgChart?.organizations?.length) {
-      if (myOrgId) {
-        return [{ value: myOrgId, label: me?.organizationName?.trim() || '내 부서' }];
-      }
-      return [];
-    }
-    const node = findOrgChartNode(orgChart.organizations, myOrgId);
-    if (!node) {
-      return [{ value: myOrgId, label: me?.organizationName?.trim() || '내 부서' }];
-    }
-    return flattenOrgOptions(node);
-  }, [myOrgId, orgChart?.organizations, me?.organizationName]);
+    if (!myOrgId) return [];
+    return [{ value: myOrgId, label: me?.organizationName?.trim() || '내 부서' }];
+  }, [myOrgId, me?.organizationName]);
 
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
 
   const orgIdInOptions = useMemo(() => {
-    if (!urlOrgId) return false;
-    return orgSelectOptions.some((o) => o.value === urlOrgId);
-  }, [orgSelectOptions, urlOrgId]);
+    if (!urlOrgId || !myOrgId) return false;
+    return urlOrgId === myOrgId;
+  }, [urlOrgId, myOrgId]);
 
   useEffect(() => {
+    if (!onDepartmentRoute) return;
     if (urlOrgId && orgIdInOptions) {
       setSelectedOrgId(urlOrgId);
       return;
@@ -135,9 +112,10 @@ export function DepartmentApprovalsInboxPage() {
     if (myOrgId) {
       setSelectedOrgId((prev) => prev ?? myOrgId);
     }
-  }, [myOrgId, orgIdInOptions, urlOrgId]);
+  }, [myOrgId, onDepartmentRoute, orgIdInOptions, urlOrgId]);
 
   useEffect(() => {
+    if (!onDepartmentRoute) return;
     if (!myOrgId || urlOrgId) return;
     if (orgSelectOptions.length === 0) return;
     navigate({
@@ -145,26 +123,11 @@ export function DepartmentApprovalsInboxPage() {
       search: { organizationId: myOrgId, deptView },
       replace: true,
     });
-  }, [deptView, myOrgId, navigate, orgSelectOptions.length, urlOrgId]);
-
-  const deptHintKeyRef = useRef('');
-  useEffect(() => {
-    if (deptView === 'draft') {
-      deptHintKeyRef.current = '';
-      return;
-    }
-    if (deptHintKeyRef.current === deptView) return;
-    deptHintKeyRef.current = deptView;
-    if (deptView === 'ref') {
-      message.info(
-        '부서 참조 문서는 추후 별도 목록으로 구분될 예정입니다. 현재는 부서 완료 문서와 동일한 목록을 표시합니다.',
-      );
-    } else if (deptView === 'official') {
-      message.info('공문 발송함은 추후 연동 예정입니다.');
-    }
-  }, [deptView, message]);
+  }, [deptView, myOrgId, navigate, onDepartmentRoute, orgSelectOptions.length, urlOrgId]);
 
   const [detailRequestId, setDetailRequestId] = useState<string | null>(null);
+
+  const deptListEnabled = Boolean(selectedOrgId) && deptView !== 'ref';
 
   const {
     data: rows = [],
@@ -172,11 +135,20 @@ export function DepartmentApprovalsInboxPage() {
     error,
     refetch,
   } = useQuery({
-    queryKey: ['approval-user', 'department-requests', selectedOrgId, deptView],
+    queryKey: ['approval-user', 'department-requests', selectedOrgId],
     queryFn: () => approvalRequestApi.listDepartmentRequests(selectedOrgId!),
-    enabled: Boolean(selectedOrgId) && deptView !== 'official',
+    enabled: deptListEnabled,
     retry: (_, err) => !isHttpStatus(err, 403),
   });
+
+  const displayRows = useMemo(() => {
+    if (deptView === 'ref') return [];
+    if (deptView === 'official') {
+      return rows.filter((r) => isOfficialApprovalRequestType(r.requestType));
+    }
+    return rows;
+  }, [deptView, rows]);
+
 
   return (
     <div className="tw-mx-auto tw-max-w-6xl tw-space-y-4">
@@ -188,8 +160,10 @@ export function DepartmentApprovalsInboxPage() {
           </Typography.Title>
           <Typography.Paragraph type="secondary" className="!tw-mb-0 tw-text-sm">
             {deptView === 'official'
-              ? '공문 발송 문서는 추후 이 화면에서 조회할 수 있도록 연동할 예정입니다.'
-              : '본인 부서 및 하위 조직에서 최종 처리된(승인·반려) 결재 문서를 조회합니다. 민감 양식은 서버에서 제외됩니다.'}
+              ? '부서 기안 완료 목록 중 requestType이 OFFICIAL인 문서만 표시합니다.'
+              : deptView === 'ref'
+                ? '부서 단위 참조·공람 전용 API가 없어 목록을 비워 둡니다.'
+                : '본인 소속 부서에서 최종 처리된(승인·반려) 결재 문서를 조회합니다. 민감 양식은 서버에서 제외됩니다.'}
           </Typography.Paragraph>
         </div>
         <Link to="/app/approvals" className="tw-text-sm tw-text-blue-600 hover:tw-underline">
@@ -223,16 +197,16 @@ export function DepartmentApprovalsInboxPage() {
               type="info"
               showIcon
               className="tw-text-sm"
-              message="부서 참조함은 추후 참조·공람 중심으로 목록이 분리될 예정입니다. 지금은 부서 완료 문서 API를 그대로 표시합니다."
+              message="부서 참조함은 전용 API가 없어 비 있는 목록입니다. 서버에 부서 단위 viewers 조회가 생기면 연결할 수 있습니다."
             />
           ) : null}
 
           {deptView === 'official' ? (
             <Alert
-              type="warning"
+              type="info"
               showIcon
               className="tw-text-sm"
-              message="공문 발송함은 아직 연동되지 않았습니다. 일반 기안·결재는 「전자결재」 메뉴의 기안 문서함을 이용해 주세요."
+              message="부서 완료 목록을 불러와 requestType OFFICIAL만 필터링합니다. 서버에서 requestType 쿼리가 지원되면 그에 맞게 바꿀 수 있습니다."
             />
           ) : null}
 
@@ -242,7 +216,7 @@ export function DepartmentApprovalsInboxPage() {
               showIcon
               message={
                 isHttpStatus(error, 403)
-                  ? '선택한 조직에 대한 조회 권한이 없습니다. 본인 부서 또는 하위 조직만 선택할 수 있습니다.'
+                  ? '선택한 조직에 대한 조회 권한이 없습니다. URL의 organizationId가 본인 소속 부서와 일치하는지 확인하세요.'
                   : (error as Error)?.message || '목록을 불러오지 못했습니다.'
               }
               action={
@@ -256,8 +230,8 @@ export function DepartmentApprovalsInboxPage() {
           <Table
             size="small"
             rowKey="requestId"
-            loading={deptView === 'official' ? false : isFetching}
-            dataSource={deptView === 'official' ? [] : rows}
+            loading={deptListEnabled ? isFetching : false}
+            dataSource={displayRows}
             pagination={{ pageSize: 15, showSizeChanger: true }}
             locale={{
               emptyText: selectedOrgId
@@ -280,14 +254,14 @@ export function DepartmentApprovalsInboxPage() {
                 title: '작성자',
                 key: 'requester',
                 width: 120,
-                render: (_: unknown, r: (typeof rows)[number]) =>
+                render: (_: unknown, r: (typeof displayRows)[number]) =>
                   r.requesterName?.trim() || r.memberId || '—',
               },
               {
                 title: '작성자 소속',
                 key: 'requesterOrg',
                 ellipsis: true,
-                render: (_: unknown, r: (typeof rows)[number]) =>
+                render: (_: unknown, r: (typeof displayRows)[number]) =>
                   r.requesterOrganizationName?.trim() || '—',
               },
               {
