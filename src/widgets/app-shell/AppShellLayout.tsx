@@ -1,5 +1,6 @@
 import {
     ApartmentOutlined,
+    BarChartOutlined,
     BellOutlined,
     CalendarOutlined,
     CloseOutlined,
@@ -7,12 +8,14 @@ import {
     ControlOutlined,
     DashboardOutlined,
     DollarOutlined,
+    EnvironmentOutlined,
     EyeOutlined,
     FileDoneOutlined,
     FileTextOutlined,
     FlagOutlined,
     FolderOpenOutlined,
     FormOutlined,
+    GiftOutlined,
     GlobalOutlined,
     LineChartOutlined,
     PieChartOutlined,
@@ -58,6 +61,8 @@ import {
     APP_MENU_ORG_HR_GROUP_LABEL,
     APP_MENU_PATH_ORDER,
     APP_MENU_TALENT_HUB_LABEL,
+    APP_MENU_LEAVE_GROUP_LABEL,
+    APP_MENU_WORK_GROUP_LABEL,
     ESG_MENU_LABEL,
     ESG_MENU_PATH_ORDER,
 } from '@/app/locale/app-ko';
@@ -119,6 +124,7 @@ const APP_MENU_ICONS: Record<string, ReactNode> = {
     '/app/evaluations': <StarOutlined className="tw-text-lg"/>,
     '/app/meetings': <VideoCameraOutlined className="tw-text-lg"/>,
     '/app/settings': <SettingOutlined className="tw-text-lg"/>,
+    '/app/work-trips': <EnvironmentOutlined className="tw-text-lg"/>,
 };
 
 const ESG_MENU_ICONS: Record<string, ReactNode> = {
@@ -155,9 +161,18 @@ const ORG_HR_PATH_SET = new Set<string>(ORG_HR_PATHS);
 
 const ESG_GROUP_KEY = 'group-esg';
 
-const WORK_LEAVE_GROUP_KEY = 'group-work-leave';
-const WORK_LEAVE_PATHS = ['/app/attendance', '/app/leave'] as const;
-const WORK_LEAVE_PATH_SET = new Set<string>(WORK_LEAVE_PATHS);
+/** 급여·근태: 근무(출퇴근·전사·출장) */
+const WORK_GROUP_KEY = 'group-work';
+const WORK_PATHS = ['/app/attendance', '/app/work-trips'] as const;
+const WORK_PATH_SET = new Set<string>(WORK_PATHS);
+
+/** 급여·근태: 휴가 */
+const LEAVE_GROUP_KEY = 'group-leave';
+const LEAVE_PATHS = ['/app/leave'] as const;
+const LEAVE_PATH_SET = new Set<string>(LEAVE_PATHS);
+
+/** 관리자: 급여 하위(내 급여·관리·미사용 수당·설정) */
+const PAYROLL_GROUP_KEY = 'group-payroll';
 
 const APPROVAL_GROUP_KEY = 'group-approvals';
 /** openKeys: 전자결재 하위 구역(ap-section-*). */
@@ -226,6 +241,8 @@ function buildAppShellMenuItems(
     let orgInserted = false;
     let approvalInserted = false;
     let orgChartInserted = false;
+    let workInserted = false;
+    let leaveInserted = false;
 
     for (const path of APP_MENU_PATH_ORDER) {
         if (path === '/app/members' && !orgChartInserted) {
@@ -274,6 +291,110 @@ function buildAppShellMenuItems(
                         label: APP_MENU_LABEL[p],
                         title: APP_MENU_LABEL[p],
                     })),
+                });
+            }
+            continue;
+        }
+        if (WORK_PATH_SET.has(path)) {
+            if (!workInserted) {
+                workInserted = true;
+                const workChildren: NonNullable<MenuProps['items']> = [];
+                if (!isAdmin) {
+                    workChildren.push(
+                        {
+                            key: '/app/attendance',
+                            icon: APP_MENU_ICONS['/app/attendance'],
+                            label: APP_MENU_LABEL['/app/attendance'],
+                            title: APP_MENU_LABEL['/app/attendance'],
+                        },
+                        {
+                            key: '/app/attendance/monthly',
+                            icon: <CalendarOutlined className="tw-text-lg"/>,
+                            label: APP_MENU_LABEL['/app/attendance/monthly'],
+                            title: APP_MENU_LABEL['/app/attendance/monthly'],
+                        },
+                        {
+                            key: '/app/work-trips',
+                            icon: APP_MENU_ICONS['/app/work-trips'],
+                            label: APP_MENU_LABEL['/app/work-trips'],
+                            title: APP_MENU_LABEL['/app/work-trips'],
+                        },
+                    );
+                }
+                if (isAdmin) {
+                    workChildren.push(
+                        {
+                            key: '/app/attendance/company',
+                            icon: <TeamOutlined className="tw-text-lg"/>,
+                            label: APP_MENU_LABEL['/app/attendance/company'],
+                            title: APP_MENU_LABEL['/app/attendance/company'],
+                        },
+                        {
+                            key: '/app/attendance/company/monthly',
+                            icon: <BarChartOutlined className="tw-text-lg"/>,
+                            label: APP_MENU_LABEL['/app/attendance/company/monthly'],
+                            title: APP_MENU_LABEL['/app/attendance/company/monthly'],
+                        },
+                        {
+                            key: '/app/attendance/holidays',
+                            icon: <FlagOutlined className="tw-text-lg"/>,
+                            label: APP_MENU_LABEL['/app/attendance/holidays'],
+                            title: APP_MENU_LABEL['/app/attendance/holidays'],
+                        },
+                        {
+                            key: '/app/attendance/schedules',
+                            icon: <ScheduleOutlined className="tw-text-lg"/>,
+                            label: APP_MENU_LABEL['/app/attendance/schedules'],
+                            title: APP_MENU_LABEL['/app/attendance/schedules'],
+                        },
+                    );
+                }
+                items.push({
+                    key: WORK_GROUP_KEY,
+                    label: (
+                        <SiderGroupedMenuLabel icon={<ClockCircleOutlined className="tw-text-lg"/>}
+                                               text={APP_MENU_WORK_GROUP_LABEL}/>
+                    ),
+                    children: workChildren,
+                });
+            }
+            continue;
+        }
+        if (LEAVE_PATH_SET.has(path)) {
+            if (!leaveInserted) {
+                leaveInserted = true;
+                const leaveChildren: NonNullable<MenuProps['items']> = [];
+                if (!isAdmin) {
+                    leaveChildren.push({
+                        key: '/app/leave',
+                        icon: APP_MENU_ICONS['/app/leave'],
+                        label: APP_MENU_LABEL['/app/leave'],
+                        title: APP_MENU_LABEL['/app/leave'],
+                    });
+                }
+                if (isAdmin) {
+                    leaveChildren.push(
+                        {
+                            key: '/app/leave/grant',
+                            icon: <GiftOutlined className="tw-text-lg"/>,
+                            label: APP_MENU_LABEL['/app/leave/grant'],
+                            title: APP_MENU_LABEL['/app/leave/grant'],
+                        },
+                        {
+                            key: '/app/leave/policies',
+                            icon: <FileTextOutlined className="tw-text-lg"/>,
+                            label: APP_MENU_LABEL['/app/leave/policies'],
+                            title: APP_MENU_LABEL['/app/leave/policies'],
+                        },
+                    );
+                }
+                items.push({
+                    key: LEAVE_GROUP_KEY,
+                    label: (
+                        <SiderGroupedMenuLabel icon={<ScheduleOutlined className="tw-text-lg"/>}
+                                               text={APP_MENU_LEAVE_GROUP_LABEL}/>
+                    ),
+                    children: leaveChildren,
                 });
             }
             continue;
@@ -328,6 +449,52 @@ function buildAppShellMenuItems(
                         ],
                     });
                 }
+            }
+            continue;
+        }
+        if (path === '/app/payroll') {
+            if (isAdmin) {
+                items.push({
+                    key: PAYROLL_GROUP_KEY,
+                    label: (
+                        <SiderGroupedMenuLabel icon={<DollarOutlined className="tw-text-lg"/>}
+                                               text={APP_MENU_LABEL['/app/payroll'] ?? '급여'}/>
+                    ),
+                    children: [
+                        {
+                            key: '/app/payroll',
+                            icon: APP_MENU_ICONS['/app/payroll'],
+                            label: APP_MENU_LABEL['/app/payroll'],
+                            title: APP_MENU_LABEL['/app/payroll'],
+                        },
+                        {
+                            key: '/app/payroll/admin',
+                            icon: <DollarOutlined className="tw-text-lg"/>,
+                            label: APP_MENU_LABEL['/app/payroll/admin'],
+                            title: APP_MENU_LABEL['/app/payroll/admin'],
+                        },
+                        {
+                            key: '/app/salary/unused-leave',
+                            icon: <GiftOutlined className="tw-text-lg"/>,
+                            label: APP_MENU_LABEL['/app/salary/unused-leave'],
+                            title: APP_MENU_LABEL['/app/salary/unused-leave'],
+                        },
+                        {
+                            key: '/app/salary/settings',
+                            icon: <SettingOutlined className="tw-text-lg"/>,
+                            label: APP_MENU_LABEL['/app/salary/settings'],
+                            title: APP_MENU_LABEL['/app/salary/settings'],
+                        },
+                    ],
+                });
+            } else {
+                const leafLabel = APP_MENU_LABEL[path];
+                items.push({
+                    key: path,
+                    icon: APP_MENU_ICONS[path],
+                    label: leafLabel,
+                    title: leafLabel,
+                });
             }
             continue;
         }
@@ -958,6 +1125,20 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
     if (/^\/app\/members\/[^/]+$/.test(pathname)) return ['/app/members'];
     if (/^\/app\/meetings\/[^/]+$/.test(pathname)) return ['/app/meetings'];
     if (/^\/app\/performance\//.test(pathname)) return ['/app/performance'];
+    if (pathname === '/app/attendance/monthly') return ['/app/attendance/monthly'];
+    if (pathname === '/app/attendance/company/monthly') return ['/app/attendance/company/monthly'];
+    if (pathname === '/app/attendance/company') return ['/app/attendance/company'];
+    if (pathname === '/app/attendance/holidays') return ['/app/attendance/holidays'];
+    if (pathname === '/app/attendance/schedules') return ['/app/attendance/schedules'];
+    if (pathname === '/app/attendance') return ['/app/attendance'];
+    if (pathname === '/app/work-trips') return ['/app/work-trips'];
+    if (pathname === '/app/leave/grant') return ['/app/leave/grant'];
+    if (pathname === '/app/leave/policies') return ['/app/leave/policies'];
+    if (pathname === '/app/leave') return ['/app/leave'];
+    if (pathname === '/app/salary/unused-leave') return ['/app/salary/unused-leave'];
+    if (pathname === '/app/salary/settings') return ['/app/salary/settings'];
+    if (pathname.startsWith('/app/payroll/admin')) return ['/app/payroll/admin'];
+    if (pathname === '/app/payroll' || /^\/app\/payroll\/[^/]+$/.test(pathname)) return ['/app/payroll'];
     if (pathname.startsWith('/app/approvals')) {
         const leaf = approvalShellMenuItemKeyFromLocation(pathname, {
             tab: typeof search.tab === 'string' ? search.tab : undefined,
@@ -977,11 +1158,33 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
     return [];
 }
 
-function menuOpenKeysForPath(pathname: string, search: Record<string, unknown>): string[] {
+function menuOpenKeysForPath(
+    pathname: string,
+    search: Record<string, unknown>,
+    opts?: { isSystemAdmin?: boolean },
+): string[] {
     const keys: string[] = [];
+    const isSystemAdmin = opts?.isSystemAdmin === true;
     if (TALENT_HUB_PATH_SET.has(pathname) || /^\/app\/(meetings|performance|evaluations)\//.test(pathname)) keys.push(TALENT_HUB_GROUP_KEY);
     if (ORG_HR_PATH_SET.has(pathname) || /^\/app\/members\/[^/]+$/.test(pathname)) {
         keys.push(ORG_HR_GROUP_KEY);
+    }
+    if (
+        pathname.startsWith('/app/attendance') ||
+        pathname === '/app/work-trips'
+    ) {
+        keys.push(WORK_GROUP_KEY);
+    }
+    if (pathname.startsWith('/app/leave')) {
+        keys.push(LEAVE_GROUP_KEY);
+    }
+    if (
+        isSystemAdmin &&
+        (pathname.startsWith('/app/payroll') ||
+            pathname === '/app/salary/unused-leave' ||
+            pathname === '/app/salary/settings')
+    ) {
+        keys.push(PAYROLL_GROUP_KEY);
     }
     if (pathname.startsWith('/app/esg')) keys.push(ESG_GROUP_KEY);
     if (pathname.startsWith('/app/approvals')) {
@@ -1010,6 +1213,8 @@ function AppShellLayout() {
     const pathname = location.pathname;
     const search = location.search as Record<string, unknown>;
     const navigate = useNavigate();
+    const {user} = useAuth();
+    const isSystemAdmin = user?.isSystemAdmin === true;
     const menuSelectedKey = useMemo(() => menuSelectedKeyFromPath(pathname, search), [pathname, search]);
     const appShellMenuItems = useAppShellSiderMenuItems();
     const [orgChartModalOpen, setOrgChartModalOpen] = useState(false);
@@ -1042,7 +1247,7 @@ function AppShellLayout() {
         } catch {
             /* ignore */
         }
-        return menuOpenKeysForPath(pathname, search);
+        return menuOpenKeysForPath(pathname, search, {isSystemAdmin});
     });
 
     useEffect(() => {
@@ -1051,12 +1256,12 @@ function AppShellLayout() {
             return;
         }
         setMenuOpenKeys((prev) => {
-            const pathKeys = menuOpenKeysForPath(pathname, search);
+            const pathKeys = menuOpenKeysForPath(pathname, search, {isSystemAdmin});
             const merged = new Set(prev);
             for (const k of pathKeys) merged.add(k);
             return [...merged];
         });
-    }, [pathname, search, siderCollapsed]);
+    }, [pathname, search, siderCollapsed, isSystemAdmin]);
 
     return (
         <Layout className="tw-flex tw-h-[100dvh] tw-min-h-0 tw-bg-slate-50">
@@ -1110,9 +1315,13 @@ function AppShellLayout() {
                                             ? '/app/members'
                                             : keyStr === ESG_GROUP_KEY
                                                 ? '/app/esg'
-                                                : keyStr === WORK_LEAVE_GROUP_KEY
+                                                : keyStr === WORK_GROUP_KEY
                                                     ? '/app/attendance'
-                                                    : null;
+                                                    : keyStr === LEAVE_GROUP_KEY
+                                                        ? '/app/leave'
+                                                        : keyStr === PAYROLL_GROUP_KEY
+                                                            ? '/app/payroll'
+                                                            : null;
                                 if (groupDefaultPath) {
                                     void navigate({to: groupDefaultPath});
                                     if (siderCollapsed) setMenuOpenKeys([]);
