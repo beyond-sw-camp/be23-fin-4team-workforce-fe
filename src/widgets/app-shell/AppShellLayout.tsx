@@ -78,6 +78,7 @@ import {MemberChatModal} from '@/widgets/app-shell/MemberChatModal';
 import {
     APPROVAL_SIDEBAR_ROOT_KEY,
     buildApprovalMenuGroupChildren,
+    decodeWfNavKey,
 } from '@/widgets/app-shell/approvalSiderMenu';
 
 /** 왼쪽 날개 패널 + 본문 — 접기·펼치기 동일 아이콘(선형·둥근 테두리). */
@@ -1136,6 +1137,14 @@ function AppShellLayout() {
                                 const apNav = APPROVAL_NAV_BY_KEY.get(String(key));
                                 if (apNav) {
                                     void navigate(apNav as never);
+                                    if (siderCollapsed) {
+                                        setMenuOpenKeys([]);
+                                    }
+                                    return;
+                                }
+                                const wfNav = decodeWfNavKey(keyStr);
+                                if (wfNav) {
+                                    void navigate(wfNav as never);
                                     if (siderCollapsed) {
                                         setMenuOpenKeys([]);
                                     }

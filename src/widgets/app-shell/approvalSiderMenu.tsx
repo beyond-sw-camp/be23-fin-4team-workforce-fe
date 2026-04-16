@@ -37,7 +37,7 @@ function navApprovals(partial: Record<string, string | undefined>): string {
   const search = Object.fromEntries(
     Object.entries(rest).filter(([, v]) => v != null && String(v).trim() !== ''),
   ) as Record<string, string | undefined>;
-  return encodeWfNavKey({ to: `/app/approvals/${tab}`, search });
+  return encodeWfNavKey({ to: '/app/approvals', search: { tab, ...search } });
 }
 
 function navDepartment(search: Record<string, string | undefined>): string {
@@ -59,10 +59,9 @@ export function approvalSiderSelectedMenuKeys(pathname: string, rawSearch: Recor
     }
     return [navDepartment({ deptView })];
   }
-  const mainTabMatch = pathname.match(/^\/app\/approvals\/(compose|my|pending|acted|admin)$/);
-  if (!mainTabMatch) return [];
-
-  const segment = mainTabMatch[1];
+  if (pathname !== '/app/approvals') return [];
+  const tabRaw = typeof rawSearch.tab === 'string' ? rawSearch.tab : 'compose';
+  const segment = APPROVAL_PATH_TABS.has(tabRaw) ? tabRaw : 'compose';
   const myStatus =
     typeof rawSearch.myStatus === 'string' && rawSearch.myStatus ? rawSearch.myStatus : undefined;
   const compose = typeof rawSearch.compose === 'string' && rawSearch.compose ? rawSearch.compose : undefined;
@@ -73,7 +72,7 @@ export function approvalSiderSelectedMenuKeys(pathname: string, rawSearch: Recor
   if (compose) search.compose = compose;
   if (sideNav) search.sideNav = sideNav;
 
-  return [encodeWfNavKey({ to: `/app/approvals/${segment}`, search })];
+  return [encodeWfNavKey({ to: '/app/approvals', search: { tab: segment, ...search } })];
 }
 
 /** Secondary sider: which submenu should stay open for this route (single parent). */
@@ -88,10 +87,9 @@ export function approvalSecondaryOpenParentKey(pathname: string, rawSearch: Reco
   if (pathname === '/app/approvals/absence-proxy') return APPROVAL_SUBMENU_PERSONAL_KEY;
   if (pathname === '/app/approvals/department') return APPROVAL_SUBMENU_DEPT_KEY;
 
-  const mainTabMatch = pathname.match(/^\/app\/approvals\/(compose|my|pending|acted|admin)$/);
-  if (!mainTabMatch) return null;
-
-  const segment = mainTabMatch[1];
+  if (pathname !== '/app/approvals') return null;
+  const tabRaw = typeof rawSearch.tab === 'string' ? rawSearch.tab : 'compose';
+  const segment = APPROVAL_PATH_TABS.has(tabRaw) ? tabRaw : 'compose';
   const myStatus =
     typeof rawSearch.myStatus === 'string' && rawSearch.myStatus.trim() ? rawSearch.myStatus.trim() : undefined;
   const compose =
