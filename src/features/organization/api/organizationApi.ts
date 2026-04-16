@@ -15,18 +15,22 @@ export type UpdateOrganizationPayload = {
 
 export type CreateJobGradePayload = {
   name: string;
+  displayOrder: number;
 };
 
 export type UpdateJobGradePayload = {
   name: string;
+  displayOrder: number;
 };
 
 export type CreateJobTitlePayload = {
   name: string;
+  displayOrder: number;
 };
 
 export type UpdateJobTitlePayload = {
   name: string;
+  displayOrder: number;
 };
 
 /** GET /organization/org-chart 응답 `data` */

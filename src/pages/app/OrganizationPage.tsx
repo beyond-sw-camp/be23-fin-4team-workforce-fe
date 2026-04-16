@@ -1,6 +1,6 @@
 import { DeleteOutlined, EditOutlined, PlusOutlined, RightOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Card, Divider, Form, Input, Modal, Popconfirm, Space, Table, Tree, Typography } from 'antd';
+import { App, Button, Card, Divider, Form, Input, InputNumber, Modal, Popconfirm, Space, Table, Tree, Typography } from 'antd';
 import type { DataNode } from 'antd/es/tree';
 import { useMemo, useState, type Key } from 'react';
 import { type OrganizationTreeNode, organizationApi } from '@/features/organization/api/organizationApi';
@@ -84,8 +84,8 @@ export function OrganizationPage() {
   const [gradeModal, setGradeModal] = useState<null | { mode: 'create' } | { mode: 'edit'; id: string; name: string }>(null);
   const [titleModal, setTitleModal] = useState<null | { mode: 'create' } | { mode: 'edit'; id: string; name: string }>(null);
   const [orgForm] = Form.useForm<{ name: string }>();
-  const [gradeForm] = Form.useForm<{ name: string }>();
-  const [titleForm] = Form.useForm<{ name: string }>();
+  const [gradeForm] = Form.useForm<{ name: string; displayOrder: number }>();
+  const [titleForm] = Form.useForm<{ name: string; displayOrder: number }>();
 
   const { data: orgList = [], isFetching: orgLoading, refetch: refetchOrgList } = useQuery({
     queryKey: ['organization', 'list'],
@@ -150,7 +150,8 @@ export function OrganizationPage() {
   });
 
   const updateGradeM = useMutation({
-    mutationFn: ({ id, name }: { id: string; name: string }) => organizationApi.updateJobGrade(id, { name }),
+    mutationFn: ({ id, name, displayOrder }: { id: string; name: string; displayOrder: number }) =>
+      organizationApi.updateJobGrade(id, { name, displayOrder }),
     onSuccess: () => {
       message.success('직급이 수정되었습니다.');
       setGradeModal(null);
@@ -179,7 +180,8 @@ export function OrganizationPage() {
   });
 
   const updateTitleM = useMutation({
-    mutationFn: ({ id, name }: { id: string; name: string }) => organizationApi.updateJobTitle(id, { name }),
+    mutationFn: ({ id, name, displayOrder }: { id: string; name: string; displayOrder: number }) =>
+      organizationApi.updateJobTitle(id, { name, displayOrder }),
     onSuccess: () => {
       message.success('직책이 수정되었습니다.');
       setTitleModal(null);
@@ -241,12 +243,31 @@ export function OrganizationPage() {
         typeof row.name === 'string' ? row.name : String(row.name ?? ''),
     },
     {
+      title: '직급 순서',
+      dataIndex: 'displayOrder',
+      key: 'displayOrder',
+      width: 120,
+      render: (_: unknown, row: Record<string, unknown>) => {
+        const v = row.displayOrder ?? row.display_order;
+        if (typeof v === 'number') return v;
+        if (typeof v === 'string' && v.trim() !== '' && !Number.isNaN(Number(v))) return Number(v);
+        return '—';
+      },
+    },
+    {
       title: '관리',
       key: 'actions',
       width: 160,
       render: (_: unknown, row: Record<string, unknown>) => {
         const id = pickRowId(row, ['id', 'jobGradeId', 'job_grade_id']);
         const name = typeof row.name === 'string' ? row.name : '';
+        const orderRaw = row.displayOrder ?? row.display_order;
+        const displayOrder =
+          typeof orderRaw === 'number'
+            ? orderRaw
+            : typeof orderRaw === 'string' && orderRaw.trim() !== '' && !Number.isNaN(Number(orderRaw))
+              ? Number(orderRaw)
+              : 1;
         return (
           <Space size="small">
             <AppButton
@@ -255,7 +276,7 @@ export function OrganizationPage() {
               size="small"
               icon={<EditOutlined />}
               onClick={() => {
-                gradeForm.setFieldsValue({ name });
+                gradeForm.setFieldsValue({ name, displayOrder });
                 setGradeModal({ mode: 'edit', id, name });
               }}
             >
@@ -281,12 +302,31 @@ export function OrganizationPage() {
         typeof row.name === 'string' ? row.name : String(row.name ?? ''),
     },
     {
+      title: '직책 순서',
+      dataIndex: 'displayOrder',
+      key: 'displayOrder',
+      width: 120,
+      render: (_: unknown, row: Record<string, unknown>) => {
+        const v = row.displayOrder ?? row.display_order;
+        if (typeof v === 'number') return v;
+        if (typeof v === 'string' && v.trim() !== '' && !Number.isNaN(Number(v))) return Number(v);
+        return '—';
+      },
+    },
+    {
       title: '관리',
       key: 'actions',
       width: 160,
       render: (_: unknown, row: Record<string, unknown>) => {
         const id = pickRowId(row, ['id', 'jobTitleId', 'job_title_id']);
         const name = typeof row.name === 'string' ? row.name : '';
+        const orderRaw = row.displayOrder ?? row.display_order;
+        const displayOrder =
+          typeof orderRaw === 'number'
+            ? orderRaw
+            : typeof orderRaw === 'string' && orderRaw.trim() !== '' && !Number.isNaN(Number(orderRaw))
+              ? Number(orderRaw)
+              : 1;
         return (
           <Space size="small">
             <AppButton
@@ -295,7 +335,7 @@ export function OrganizationPage() {
               size="small"
               icon={<EditOutlined />}
               onClick={() => {
-                titleForm.setFieldsValue({ name });
+                titleForm.setFieldsValue({ name, displayOrder });
                 setTitleModal({ mode: 'edit', id, name });
               }}
             >
@@ -404,7 +444,7 @@ export function OrganizationPage() {
                 size="small"
                 icon={<PlusOutlined />}
                 onClick={() => {
-                  gradeForm.resetFields();
+                  gradeForm.setFieldsValue({ name: '', displayOrder: 1 });
                   setGradeModal({ mode: 'create' });
                 }}
                 className={addRowBtn}
@@ -435,7 +475,7 @@ export function OrganizationPage() {
                 size="small"
                 icon={<PlusOutlined />}
                 onClick={() => {
-                  titleForm.resetFields();
+                  titleForm.setFieldsValue({ name: '', displayOrder: 1 });
                   setTitleModal({ mode: 'create' });
                 }}
                 className={addRowBtn}
@@ -483,9 +523,9 @@ export function OrganizationPage() {
           const v = await gradeForm.validateFields();
           if (!gradeModal) return;
           if (gradeModal.mode === 'create') {
-            createGradeM.mutate({ name: v.name.trim() });
+            createGradeM.mutate({ name: v.name.trim(), displayOrder: Number(v.displayOrder) });
           } else {
-            updateGradeM.mutate({ id: gradeModal.id, name: v.name.trim() });
+            updateGradeM.mutate({ id: gradeModal.id, name: v.name.trim(), displayOrder: Number(v.displayOrder) });
           }
         }}
         confirmLoading={createGradeM.isPending || updateGradeM.isPending}
@@ -495,6 +535,14 @@ export function OrganizationPage() {
         <Form form={gradeForm} layout="vertical" className="tw-mt-2">
           <Form.Item name="name" label="직급명" rules={[{ required: true, message: '직급명을 입력해 주세요.' }]}>
             <Input placeholder="예: 대리, 과장" />
+          </Form.Item>
+          <Form.Item
+            name="displayOrder"
+            label="직급 순서"
+            initialValue={1}
+            rules={[{ required: true, message: '직급 순서를 입력해 주세요.' }]}
+          >
+            <InputNumber min={1} precision={0} className="tw-w-full" placeholder="예: 1" />
           </Form.Item>
         </Form>
       </Modal>
@@ -507,9 +555,9 @@ export function OrganizationPage() {
           const v = await titleForm.validateFields();
           if (!titleModal) return;
           if (titleModal.mode === 'create') {
-            createTitleM.mutate({ name: v.name.trim() });
+            createTitleM.mutate({ name: v.name.trim(), displayOrder: Number(v.displayOrder) });
           } else {
-            updateTitleM.mutate({ id: titleModal.id, name: v.name.trim() });
+            updateTitleM.mutate({ id: titleModal.id, name: v.name.trim(), displayOrder: Number(v.displayOrder) });
           }
         }}
         confirmLoading={createTitleM.isPending || updateTitleM.isPending}
@@ -519,6 +567,14 @@ export function OrganizationPage() {
         <Form form={titleForm} layout="vertical" className="tw-mt-2">
           <Form.Item name="name" label="직책명" rules={[{ required: true, message: '직책명을 입력해 주세요.' }]}>
             <Input placeholder="예: 팀장, 담당" />
+          </Form.Item>
+          <Form.Item
+            name="displayOrder"
+            label="직책 순서"
+            initialValue={1}
+            rules={[{ required: true, message: '직책 순서를 입력해 주세요.' }]}
+          >
+            <InputNumber min={1} precision={0} className="tw-w-full" placeholder="예: 1" />
           </Form.Item>
         </Form>
       </Modal>
