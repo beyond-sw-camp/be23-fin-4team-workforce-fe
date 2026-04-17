@@ -117,6 +117,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
         setStatus('unauthenticated');
       },
       refreshAuth: async () => {
+        if (!authClient.refreshSession) {
+          setUser(null);
+          setStatus('unauthenticated');
+          return false;
+        }
         const session = await authClient.refreshSession();
         if (session) {
           setUser(session.user);

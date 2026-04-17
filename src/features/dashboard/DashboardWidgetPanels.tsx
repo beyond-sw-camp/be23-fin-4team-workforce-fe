@@ -438,8 +438,9 @@ export function DashboardLeaveBlock() {
 export function DashboardNotificationsBlock() {
   const title = DASHBOARD_WIDGET_LABELS.notifications;
   const grouped = DUMMY_NOTIFICATIONS.reduce<Record<string, typeof DUMMY_NOTIFICATIONS>>((acc, n) => {
-    acc[n.day] = acc[n.day] ?? [];
-    acc[n.day].push(n);
+    const bucket = acc[n.day] ?? [];
+    bucket.push(n);
+    acc[n.day] = bucket;
     return acc;
   }, {});
   const days = Object.keys(grouped).sort((a, b) => b.localeCompare(a));

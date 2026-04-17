@@ -25,7 +25,6 @@ export type MemberChatRoomSummary = {
   otherMemberJobTitleName?: string;
   otherMemberJobGradeName?: string;
   otherMemberOrganizationName?: string;
-  legalHold?: boolean;
 };
 
 export type MemberChatMessage = {

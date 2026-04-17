@@ -232,6 +232,7 @@ export function OrgChartPanel({
                   const parts = key.split(KS);
                   if (parts.length !== 3 || parts[0] !== 'm') return;
                   const memberId = parts[2];
+                  if (!memberId) return;
                   const meta = memberMetaByKey.get(key);
                   onMemberSelect(memberId, { chartMemberStatus: meta?.chartMemberStatus });
                 }}

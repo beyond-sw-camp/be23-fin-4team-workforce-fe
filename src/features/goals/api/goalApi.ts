@@ -477,7 +477,11 @@ export const goalApi = {
   async getKpiTemplate(kpiTemplateId: string): Promise<KpiTemplate> {
     const response = await httpClient.get(`/goal/kpi-template/${kpiTemplateId}`);
     const raw = unwrapApiResponse<unknown>(response.data);
-    return mapKpiTemplateFromApi(raw);
+    const mapped = mapKpiTemplateFromApi(raw);
+    if (!mapped) {
+      throw new Error('KPI 템플릿 응답을 해석할 수 없습니다.');
+    }
+    return mapped;
   },
 
   async deactivateKpiTemplate(kpiTemplateId: string): Promise<void> {
