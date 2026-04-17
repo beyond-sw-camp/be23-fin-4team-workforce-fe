@@ -12,6 +12,7 @@ import {
   pickRowId,
   pickRowName,
 } from '@/features/members/lib/memberFormShared';
+import { membersCtaButtonClass } from '@/features/members/ui/membersCtaButtonClass';
 import { membersKeys } from '@/features/members/queries';
 
 type FormValues = {
@@ -121,12 +122,13 @@ export function MemberCreateModal({ open, onClose }: Props) {
 
   return (
     <Modal
-      title="직원 등록"
+      title="직원 계정 생성"
       open={open}
       onCancel={onClose}
       onOk={() => void handleOk()}
-      okText="등록"
+      okText="생성"
       cancelText="취소"
+      okButtonProps={{ className: membersCtaButtonClass }}
       width={560}
       destroyOnHidden
       confirmLoading={createM.isPending}

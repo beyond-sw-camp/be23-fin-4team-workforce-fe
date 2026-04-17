@@ -755,7 +755,7 @@ function SortableApprovalTableRow({ children, style, className, ...rest }: Sorta
 type OrgPickerMemberRow = {
   memberId: string;
   name: string;
-  jobTitleName: string;
+  jobGradeName: string;
   organizationName: string;
 };
 
@@ -773,17 +773,15 @@ function collectOrgMemberRowsUnderNode(node: OrgChartOrgNode): OrgPickerMemberRo
   const rows: OrgPickerMemberRow[] = [];
   const seen = new Set<string>();
   const walk = (n: OrgChartOrgNode) => {
-    for (const g of n.jobGrades) {
-      for (const m of g.members) {
-        if (seen.has(m.memberId)) continue;
-        seen.add(m.memberId);
-        rows.push({
-          memberId: m.memberId,
-          name: m.name,
-          jobTitleName: m.jobTitleName,
-          organizationName: n.name,
-        });
-      }
+    for (const m of n.members) {
+      if (seen.has(m.memberId)) continue;
+      seen.add(m.memberId);
+      rows.push({
+        memberId: m.memberId,
+        name: m.name,
+        jobGradeName: m.jobGradeName,
+        organizationName: n.name,
+      });
     }
     n.children.forEach(walk);
   };
@@ -794,15 +792,13 @@ function collectOrgMemberRowsUnderNode(node: OrgChartOrgNode): OrgPickerMemberRo
 /** 해당 조직 노드에 직접 매달린 멤버만 (하위 부서 제외) */
 function collectDirectMembersOfNode(node: OrgChartOrgNode): OrgPickerMemberRow[] {
   const rows: OrgPickerMemberRow[] = [];
-  for (const g of node.jobGrades) {
-    for (const m of g.members) {
-      rows.push({
-        memberId: m.memberId,
-        name: m.name,
-        jobTitleName: m.jobTitleName,
-        organizationName: node.name,
-      });
-    }
+  for (const m of node.members) {
+    rows.push({
+      memberId: m.memberId,
+      name: m.name,
+      jobGradeName: m.jobGradeName,
+      organizationName: node.name,
+    });
   }
   return rows;
 }
@@ -828,14 +824,12 @@ function buildOrgTreeWithMemberLeaves(nodes: OrgChartOrgNode[]): DataNode[] {
   const mapNode = (node: OrgChartOrgNode): DataNode => {
     const childOrgs = node.children.map(mapNode);
     const memberLeaves: DataNode[] = [];
-    for (const g of node.jobGrades) {
-      for (const m of g.members) {
-        memberLeaves.push({
-          key: `member:${node.organizationId}:${m.memberId}`,
-          title: `${m.name}${m.jobTitleName ? ` (${m.jobTitleName})` : ''}`,
-          isLeaf: true,
-        });
-      }
+    for (const m of node.members) {
+      memberLeaves.push({
+        key: `member:${node.organizationId}:${m.memberId}`,
+        title: `${m.name}${m.jobGradeName ? ` (${m.jobGradeName})` : ''}`,
+        isLeaf: true,
+      });
     }
     return {
       key: node.organizationId,
@@ -1350,7 +1344,7 @@ export function ApprovalsPage() {
     const q = memberKeyword.trim().toLowerCase();
     if (!q) return [];
     return orgPickerSearchMembers.filter((m) =>
-      `${m.name} ${m.jobTitleName} ${m.organizationName}`.toLowerCase().includes(q),
+      `${m.name} ${m.jobGradeName} ${m.organizationName}`.toLowerCase().includes(q),
     );
   }, [memberKeyword, orgPickerSearchMembers]);
 
@@ -1931,7 +1925,7 @@ export function ApprovalsPage() {
                 className="tw-flex tw-cursor-grab tw-select-none tw-items-center tw-rounded-lg tw-bg-slate-50/70 tw-px-2 tw-py-1.5 tw-transition-colors hover:tw-bg-slate-100/80"
               >
                 <span className="tw-truncate tw-pr-2 tw-text-sm">
-                  {m.name} {m.jobTitleName ? `(${m.jobTitleName})` : ''}
+                  {m.name} {m.jobGradeName ? `(${m.jobGradeName})` : ''}
                   <span className="tw-text-slate-500"> · {m.organizationName}</span>
                 </span>
               </div>

@@ -2,12 +2,14 @@ import { useQuery } from '@tanstack/react-query';
 import { Modal } from 'antd';
 import { useEffect, useState } from 'react';
 import { organizationApi } from '@/features/organization/api/organizationApi';
+import { useMemberChatOpener } from '@/widgets/app-shell/MemberChatOpener';
 import { OrgChartMemberSidePanel } from '@/widgets/organization/OrgChartMemberSidePanel';
 import { OrgChartPanel } from '@/widgets/organization/OrgChartPanel';
 
 type MemberSelection = { id: string; chartMemberStatus?: string };
 
 export function OrgChartModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { openMemberChat } = useMemberChatOpener();
   const [memberSelection, setMemberSelection] = useState<MemberSelection | null>(null);
 
   useEffect(() => {
@@ -46,6 +48,7 @@ export function OrgChartModal({ open, onClose }: { open: boolean; onClose: () =>
           <OrgChartMemberSidePanel
             memberId={memberSelection?.id ?? null}
             chartMemberStatus={memberSelection?.chartMemberStatus}
+            onOpenMessenger={(targetMemberId) => openMemberChat({ directMemberId: targetMemberId })}
           />
         </aside>
       </div>

@@ -1,6 +1,8 @@
+import { MessageOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { Avatar, Descriptions, Spin, Tag, Typography } from 'antd';
+import { Avatar, Button, Descriptions, Spin, Tag, Typography } from 'antd';
 import { EMPLOYMENT_TYPE_KO, MEMBER_STATUS_KO } from '@/app/locale/app-ko';
+import { useAuth } from '@/features/auth/useAuth';
 import { memberApi } from '@/features/member/api/memberApi';
 
 function memberStatusTagColor(status: string | undefined): 'green' | 'gold' | 'volcano' | 'default' {
@@ -19,11 +21,15 @@ function memberStatusLabel(status: string | undefined): string {
 export function OrgChartMemberSidePanel({
   memberId,
   chartMemberStatus,
+  onOpenMessenger,
 }: {
   memberId: string | null;
   /** 상세 API에 memberStatus가 없을 때 조직도 응답 값으로 보완 */
   chartMemberStatus?: string;
+  /** 메신저(1:1) 플로팅 창을 열고 해당 멤버와 대화로 진입 */
+  onOpenMessenger?: (targetMemberId: string) => void;
 }) {
+  const { user } = useAuth();
   const { data: member, isLoading, isError } = useQuery({
     queryKey: ['member', 'detail', memberId],
     queryFn: () => memberApi.detail(memberId!),
@@ -60,10 +66,25 @@ export function OrgChartMemberSidePanel({
   }
 
   const employmentStatus = member.memberStatus ?? chartMemberStatus;
+  const isSelf = user?.id && member.memberId && user.id === member.memberId;
+  const canMessenger = Boolean(onOpenMessenger && member.memberId && !isSelf);
 
   return (
     <div className="tw-flex tw-flex-col tw-gap-4">
-      <div className="tw-text-sm tw-font-semibold tw-text-slate-800">상세 조회</div>
+      <div className="tw-flex tw-items-center tw-justify-between tw-gap-2">
+        <div className="tw-text-sm tw-font-semibold tw-text-slate-800">상세 조회</div>
+        {canMessenger ? (
+          <Button
+            type="primary"
+            size="small"
+            icon={<MessageOutlined />}
+            className="!tw-rounded-xl !tw-border-0 !tw-bg-[#1e3a5f] !tw-font-semibold hover:!tw-bg-[#152a45]"
+            onClick={() => onOpenMessenger?.(member.memberId)}
+          >
+            메신저
+          </Button>
+        ) : null}
+      </div>
       <div className="tw-flex tw-flex-col tw-items-center tw-gap-2 tw-rounded-lg tw-border tw-border-slate-200 tw-bg-white tw-px-3 tw-py-4">
         <Avatar
           src={member.profileUrl || undefined}

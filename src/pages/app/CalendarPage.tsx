@@ -34,7 +34,6 @@ import {
 } from '@/features/calendar/api/calendarApi';
 import type { OrganizationTreeNode } from '@/features/organization/api/organizationApi';
 import { organizationApi } from '@/features/organization/api/organizationApi';
-import { AppButton } from '@/shared/ui/AppButton';
 
 dayjs.locale('ko');
 
@@ -568,9 +567,14 @@ export function CalendarPage() {
       <div className="tw-grid tw-min-h-0 tw-flex-1 tw-gap-4 lg:tw-grid-cols-[280px_1fr]">
         <Card className="tw-h-fit tw-border-slate-200/80 tw-shadow-sm" styles={{ body: { padding: 12 } }}>
           <div className="tw-space-y-3">
-            <AppButton type="primary" block icon={<PlusOutlined />} onClick={() => openCreate()}>
+            <Button
+              type="primary"
+              block
+              onClick={() => openCreate()}
+              className="!tw-h-10 !tw-w-full !tw-rounded-xl !tw-border-0 !tw-bg-[#1e3a5f] !tw-font-semibold hover:!tw-bg-[#152a45]"
+            >
               일정등록
-            </AppButton>
+            </Button>
 
             <div className="tw-rounded-lg tw-border tw-border-slate-200 tw-bg-white tw-p-3">
               <Typography.Text className="tw-text-xs tw-font-semibold tw-text-slate-700">내 캘린더 표시</Typography.Text>
@@ -859,6 +863,7 @@ export function CalendarPage() {
             type="primary"
             loading={createM.isPending || updateM.isPending}
             onClick={() => void submitForm()}
+            className="!tw-h-10 !tw-rounded-xl !tw-border-0 !tw-bg-[#1e3a5f] !tw-font-semibold hover:!tw-bg-[#152a45]"
           >
             {editing ? '저장' : '등록'}
           </Button>,

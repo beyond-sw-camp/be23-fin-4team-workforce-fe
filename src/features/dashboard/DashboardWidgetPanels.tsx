@@ -10,7 +10,7 @@ import { Avatar, Button, Card, List, Progress, Spin, Tabs, Tag, Typography } fro
 import clsx from 'clsx';
 import dayjs, { type Dayjs } from 'dayjs';
 import 'dayjs/locale/ko';
-import { useMemo, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
 import type { Me } from '@/features/auth/types';
 import {
@@ -206,11 +206,15 @@ function DashboardMiniCalendar({
   events,
   holidays,
   loading,
+  selectedDay,
+  onSelectDay,
 }: {
   monthStart: Dayjs;
   events: CalendarEvent[];
   holidays: CalendarHoliday[];
   loading: boolean;
+  selectedDay: Dayjs | null;
+  onSelectDay: (day: Dayjs) => void;
 }) {
   const daysInMonth = monthStart.daysInMonth();
   const pad = monthStart.day();
@@ -226,27 +230,36 @@ function DashboardMiniCalendar({
           </Typography.Text>
           <CalendarOutlined className="tw-text-slate-400" />
         </div>
-        <div className="tw-grid tw-grid-cols-7 tw-gap-1 tw-text-center tw-text-[11px] tw-text-slate-500">
-          {WEEKDAY_KO.map((d) => (
-            <div key={d} className="tw-py-1 tw-font-medium">
-              {d}
+        <div className="tw-grid tw-grid-cols-7 tw-gap-1 tw-text-center tw-text-[11px]">
+          {WEEKDAY_KO.map((label, wi) => (
+            <div key={`cal-wd-${wi}`} className="tw-py-1 tw-font-medium tw-text-slate-500">
+              {label}
             </div>
           ))}
           {cells.map((d, i) => {
-            if (!d) return <div key={`e-${i}`} className="tw-aspect-square" />;
+            if (!d) return <div key={`cal-pad-${i}`} className="tw-aspect-square" />;
             const isToday = d.isSame(today, 'day');
             const dotEvent = eventsOnDay(events, d).length > 0;
             const dotHoliday = holidaysOnDay(holidays, d).length > 0;
+            const isSelected = selectedDay !== null && d.isSame(selectedDay, 'day');
             return (
-              <div
-                key={d.format('D')}
+              <button
+                type="button"
+                key={d.format('YYYY-MM-DD')}
+                onClick={() => onSelectDay(d)}
                 className={clsx(
-                  'tw-flex tw-aspect-square tw-flex-col tw-items-center tw-justify-center tw-rounded-lg tw-text-xs',
-                  isToday && 'tw-bg-slate-900 tw-font-semibold tw-text-white',
-                  !isToday && 'tw-text-slate-700',
+                  'tw-flex tw-aspect-square tw-flex-col tw-items-center tw-justify-center tw-rounded-lg tw-text-xs tw-transition-colors',
+                  'tw-cursor-pointer tw-border-0 tw-p-0 tw-outline-none focus-visible:tw-ring-2 focus-visible:tw-ring-blue-400',
+                  isToday
+                    ? 'tw-bg-slate-900 tw-font-semibold tw-text-white'
+                    : 'tw-bg-transparent tw-text-slate-700',
+                  isSelected &&
+                    !isToday &&
+                    'tw-ring-2 tw-ring-blue-500 tw-ring-offset-1',
+                  isSelected && isToday && 'tw-ring-2 tw-ring-white tw-ring-offset-1 tw-ring-offset-slate-900',
                 )}
               >
-                {d.date()}
+                <span className="tw-leading-none tw-tabular-nums">{d.date()}</span>
                 {(dotEvent || dotHoliday) && (
                   <span className="tw-mt-0.5 tw-flex tw-items-center tw-justify-center tw-gap-0.5">
                     {dotHoliday ? (
@@ -267,7 +280,7 @@ function DashboardMiniCalendar({
                     ) : null}
                   </span>
                 )}
-              </div>
+              </button>
             );
           })}
         </div>
@@ -295,6 +308,14 @@ export function DashboardCalendarBlock() {
     [events],
   );
 
+  const [calendarSelectedDay, setCalendarSelectedDay] = useState<Dayjs | null>(null);
+  const selectedDayEvents = useMemo(() => {
+    if (!calendarSelectedDay) return [];
+    return eventsOnDay(events, calendarSelectedDay).sort(
+      (a, b) => dayjs(a.startAt).valueOf() - dayjs(b.startAt).valueOf(),
+    );
+  }, [events, calendarSelectedDay]);
+
   const title = DASHBOARD_WIDGET_LABELS.calendar;
 
   return cardShell(
@@ -307,7 +328,7 @@ export function DashboardCalendarBlock() {
       items={[
         {
           key: 'schedule',
-          label: '일정',
+          label: '오늘 일정',
           children: (
             <Spin spinning={monthQuery.isLoading}>
               {sortedEvents.length === 0 && !monthQuery.isLoading ? (
@@ -337,12 +358,36 @@ export function DashboardCalendarBlock() {
           key: 'grid',
           label: '달력',
           children: (
-            <DashboardMiniCalendar
-              monthStart={monthStart}
-              events={events}
-              holidays={holidays}
-              loading={monthQuery.isLoading}
-            />
+            <div className="tw-space-y-3">
+              <DashboardMiniCalendar
+                monthStart={monthStart}
+                events={events}
+                holidays={holidays}
+                loading={monthQuery.isLoading}
+                selectedDay={calendarSelectedDay}
+                onSelectDay={setCalendarSelectedDay}
+              />
+              {calendarSelectedDay && (
+                <div className="tw-rounded-lg tw-border tw-border-slate-100 tw-bg-slate-50/80 tw-px-3 tw-py-2">
+                  <Typography.Text type="secondary" className="tw-mb-1.5 tw-block tw-text-[11px]">
+                    {calendarSelectedDay.format('M월 D일 (ddd)')}
+                  </Typography.Text>
+                  {selectedDayEvents.length === 0 ? (
+                    <Typography.Text type="secondary" className="tw-text-xs">
+                      일정이 없습니다.
+                    </Typography.Text>
+                  ) : (
+                    <ul className="tw-m-0 tw-list-none tw-space-y-1 tw-p-0">
+                      {selectedDayEvents.map((e) => (
+                        <li key={e.eventId} className="tw-truncate tw-text-sm tw-text-slate-800">
+                          {e.title}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
           ),
         },
       ]}

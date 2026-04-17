@@ -1,6 +1,6 @@
-import { Form, Input } from 'antd';
+import { Button, Form, Input } from 'antd';
 import type { MembersSearch } from '@/features/members/model/types';
-import { AppButton } from '@/shared/ui/AppButton';
+import { membersCtaButtonClass } from '@/features/members/ui/membersCtaButtonClass';
 
 type Props = {
   initialKeyword?: string;
@@ -19,9 +19,9 @@ export function MemberSearchForm({ initialKeyword, onSearch }: Props) {
         <Input allowClear placeholder="이름·이메일·부서로 검색" />
       </Form.Item>
       <Form.Item className="!tw-mb-0">
-        <AppButton htmlType="submit" variant="primary">
+        <Button type="primary" htmlType="submit" className={membersCtaButtonClass}>
           검색
-        </AppButton>
+        </Button>
       </Form.Item>
     </Form>
   );

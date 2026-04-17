@@ -44,16 +44,14 @@ export function MemberDetailPage() {
         <div>
           <Link
             to="/app/members"
-            className="tw-mb-2 tw-inline-block tw-text-sm tw-text-[#2563EB] tw-no-underline hover:tw-underline"
+            className="tw-mb-2 tw-inline-block tw-text-sm tw-text-slate-400 tw-no-underline hover:tw-text-slate-500 hover:tw-underline"
           >
-            ← 구성원 목록
+            ← 뒤로가기
           </Link>
           <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
             구성원 상세
           </Typography.Title>
-          <Typography.Text type="secondary" className="tw-text-sm">
-            {member.name} · {member.email}
-          </Typography.Text>
+         
         </div>
         <PermissionGuard required={PERM.MEMBER_UPDATE}>
           <Link to="/app/members/$memberId/edit" params={{ memberId }} className="tw-inline-block">

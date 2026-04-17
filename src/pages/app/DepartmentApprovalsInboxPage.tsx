@@ -14,10 +14,8 @@ function findMemberOrganizationId(roots: OrgChartOrgNode[], memberId: string): s
   const id = memberId.trim();
   if (!id) return null;
   for (const node of roots) {
-    for (const g of node.jobGrades) {
-      for (const m of g.members) {
-        if (m.memberId === id) return node.organizationId;
-      }
+    for (const m of node.members) {
+      if (m.memberId === id) return node.organizationId;
     }
     const sub = findMemberOrganizationId(node.children, memberId);
     if (sub) return sub;
