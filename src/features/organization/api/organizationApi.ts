@@ -15,40 +15,40 @@ export type UpdateOrganizationPayload = {
 
 export type CreateJobGradePayload = {
   name: string;
+  displayOrder: number;
 };
 
 export type UpdateJobGradePayload = {
   name: string;
+  displayOrder: number;
 };
 
 export type CreateJobTitlePayload = {
   name: string;
+  displayOrder: number;
 };
 
 export type UpdateJobTitlePayload = {
   name: string;
+  displayOrder: number;
 };
 
-/** GET /organization/org-chart 응답 `data` */
+/** 조직도 UI 트리에 직원 노드로 노출하지 않는 직급명(시스템 관리자 등) */
+export const ORG_CHART_HIDDEN_JOB_GRADE = '관리자';
+
+/** GET /organization/org-chart — 조직 직속 멤버(백엔드에서 직급 displayOrder 순으로 정렬) */
 export type OrgChartMember = {
   memberId: string;
   name: string;
-  jobTitleName: string;
+  jobGradeName: string;
   /** 있으면 재직만 보기 필터에 사용 */
   memberStatus?: string;
-};
-
-export type OrgChartJobGrade = {
-  jobGradeName: string;
-  /** 직급 표시 순서 (오름차순) */
-  displayOrder?: number;
-  members: OrgChartMember[];
 };
 
 export type OrgChartOrgNode = {
   organizationId: string;
   name: string;
-  jobGrades: OrgChartJobGrade[];
+  members: OrgChartMember[];
   children: OrgChartOrgNode[];
 };
 
@@ -70,37 +70,14 @@ function normalizeOrgChartMember(raw: unknown): OrgChartMember | null {
   const o = raw as Record<string, unknown>;
   const memberId = pickStr(o, ['memberId', 'member_id']);
   const name = pickStr(o, ['name']);
-  const jobTitleName = pickStr(o, ['jobTitleName', 'job_title_name']) || '—';
+  const jobGradeName = pickStr(o, ['jobGradeName', 'job_grade_name']) || '—';
   const memberStatus = pickStr(o, ['memberStatus', 'member_status']);
   if (!memberId || !name) return null;
   return {
     memberId,
     name,
-    jobTitleName,
-    ...(memberStatus ? { memberStatus } : {}),
-  };
-}
-
-function normalizeOrgChartJobGrade(raw: unknown): OrgChartJobGrade | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const o = raw as Record<string, unknown>;
-  const jobGradeName = pickStr(o, ['jobGradeName', 'job_grade_name']);
-  if (!jobGradeName) return null;
-  const displayOrderRaw = o.displayOrder ?? o.display_order;
-  const displayOrder =
-    typeof displayOrderRaw === 'number'
-      ? displayOrderRaw
-      : typeof displayOrderRaw === 'string' && displayOrderRaw.trim() !== ''
-        ? Number(displayOrderRaw)
-        : undefined;
-  const membersRaw = o.members;
-  const members = Array.isArray(membersRaw)
-    ? membersRaw.map(normalizeOrgChartMember).filter((m): m is OrgChartMember => m != null)
-    : [];
-  return {
     jobGradeName,
-    ...(displayOrder !== undefined && !Number.isNaN(displayOrder) ? { displayOrder } : {}),
-    members,
+    ...(memberStatus ? { memberStatus } : {}),
   };
 }
 
@@ -110,24 +87,15 @@ function normalizeOrgChartNode(raw: unknown): OrgChartOrgNode | null {
   const organizationId = pickStr(o, ['organizationId', 'organization_id']);
   const name = pickStr(o, ['name']);
   if (!organizationId || !name) return null;
-  const jobGradesRaw = o.jobGrades ?? o.job_grades;
-  const jobGrades = Array.isArray(jobGradesRaw)
-    ? jobGradesRaw.map(normalizeOrgChartJobGrade).filter((g): g is OrgChartJobGrade => g != null)
+  const membersRaw = o.members;
+  const members = Array.isArray(membersRaw)
+    ? membersRaw.map(normalizeOrgChartMember).filter((m): m is OrgChartMember => m != null)
     : [];
   const childrenRaw = o.children;
   const children = Array.isArray(childrenRaw)
     ? childrenRaw.map(normalizeOrgChartNode).filter((c): c is OrgChartOrgNode => c != null)
     : [];
-  return { organizationId, name, jobGrades, children };
-}
-
-function sortOrgChartJobGrades(grades: OrgChartJobGrade[]): OrgChartJobGrade[] {
-  return [...grades].sort((a, b) => {
-    const ao = a.displayOrder ?? 999_999;
-    const bo = b.displayOrder ?? 999_999;
-    if (ao !== bo) return ao - bo;
-    return a.jobGradeName.localeCompare(b.jobGradeName, 'ko');
-  });
+  return { organizationId, name, members, children };
 }
 
 function normalizeOrgChartDataPayload(raw: unknown): OrgChartData {
@@ -146,10 +114,7 @@ function normalizeOrgChartDataPayload(raw: unknown): OrgChartData {
 function mapOrgChartTree(node: OrgChartOrgNode): OrgChartOrgNode {
   return {
     ...node,
-    jobGrades: sortOrgChartJobGrades(node.jobGrades).map((g) => ({
-      ...g,
-      members: [...g.members],
-    })),
+    members: [...node.members],
     children: node.children.map(mapOrgChartTree),
   };
 }

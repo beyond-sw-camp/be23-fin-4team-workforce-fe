@@ -1,16 +1,16 @@
 import { PlusOutlined } from '@ant-design/icons';
 import { useSuspenseQuery } from '@tanstack/react-query';
-import { Card, Space, Typography } from 'antd';
+import { Button, Card, Space, Typography } from 'antd';
 import { useState } from 'react';
 import { MemberSearchForm } from '@/features/members/ui/MemberSearchForm';
 import { MemberCreateModal } from '@/features/members/ui/MemberCreateModal';
 import { MembersTable } from '@/features/members/ui/MembersTable';
+import { membersCtaButtonClass } from '@/features/members/ui/membersCtaButtonClass';
 import { membersListQueryOptions } from '@/features/members/queries';
 import { PERM } from '@/features/permissions/backend-permissions';
 import { PermissionGuard } from '@/features/permissions/permission-guard';
 import { useTableParams } from '@/shared/hooks/useTableParams';
 import type { MembersSearch } from '@/features/members/model/types';
-import { AppButton } from '@/shared/ui/AppButton';
 
 export function MembersPage() {
   const [createOpen, setCreateOpen] = useState(false);
@@ -37,9 +37,13 @@ export function MembersPage() {
           </Typography.Paragraph>
         </div>
         <PermissionGuard required={PERM.MEMBER_CREATE}>
-          <AppButton icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
-            직원 등록
-          </AppButton>
+          <Button
+            type="primary"
+            className={membersCtaButtonClass}
+            onClick={() => setCreateOpen(true)}
+          >
+            직원 계정 생성
+          </Button>
         </PermissionGuard>
       </div>
       <MemberCreateModal open={createOpen} onClose={() => setCreateOpen(false)} />

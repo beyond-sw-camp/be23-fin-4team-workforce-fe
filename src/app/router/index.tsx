@@ -29,6 +29,7 @@ import { MembersPage } from '@/pages/app/MembersPage';
 import { MemberDetailPage } from '@/pages/app/MemberDetailPage';
 import { MemberEditPage } from '@/pages/app/MemberEditPage';
 import { NotificationsPage } from '@/pages/app/NotificationsPage';
+import { MemberChatAdminPage } from '@/pages/app/MemberChatAdminPage';
 import EvaluationsPage from '@/pages/app/EvaluationsPage';
 import { EvaluationWritePage } from '@/pages/app/EvaluationWritePage';
 import PerformancePage from '@/pages/app/PerformancePage';
@@ -56,7 +57,6 @@ import { MyPayrollPage } from '@/pages/app/salary-service/my/MyPayrollPage';
 import { MyWorkTripsPage } from '@/pages/app/salary-service/my/MyWorkTripsPage';
 import { PayrollDetailPage } from '@/pages/app/salary-service/my/PayrollDetailPage';
 import { OrganizationPage } from '@/pages/app/OrganizationPage';
-import { RolesPage } from '@/pages/app/RolesPage';
 import { MyProfilePage } from '@/pages/app/MyProfilePage';
 import { MyProfileEditPage } from '@/pages/app/MyProfileEditPage';
 import MeetingsPage from '@/pages/app/MeetingsPage';
@@ -233,6 +233,17 @@ const notificationsRoute = createRoute({
   path: '/notifications',
   component: NotificationsPage,
 });
+const memberChatAdminRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/member-chat/admin',
+  component: MemberChatAdminPage,
+  beforeLoad: ({ context }) => {
+    if (!context.auth.user?.isSystemAdmin) {
+      throw redirect({ to: '/403' });
+    }
+  },
+});
+
 const performanceRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/performance',
@@ -296,9 +307,14 @@ const evaluationWriteRoute = createRoute({
   component: EvaluationWritePage,
 });
 
+const organizationSearchSchema = z.object({
+  tab: z.enum(['structure', 'grades', 'titles', 'roles']).optional(),
+});
+
 const organizationRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/organization',
+  validateSearch: organizationSearchSchema,
   component: OrganizationPage,
   beforeLoad: ({ context }) => {
     if (!context.auth.user?.isSystemAdmin) {
@@ -307,14 +323,15 @@ const organizationRoute = createRoute({
   },
 });
 
+/** 이전 `/app/roles` 경로 — 조직 설정의 역할·권한 탭으로 통합 */
 const rolesRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/roles',
-  component: RolesPage,
   beforeLoad: ({ context }) => {
     if (!context.auth.user?.isSystemAdmin) {
       throw redirect({ to: '/403' });
     }
+    throw redirect({ to: '/app/organization', search: { tab: 'roles' } });
   },
 });
 
@@ -525,6 +542,7 @@ const routeTree = rootRoute.addChildren([
       memberDetailRoute,
       memberEditRoute,
       notificationsRoute,
+      memberChatAdminRoute,
       performanceRoute,
       approvalsAdminRoute,
       absenceProxyRoute,

@@ -218,9 +218,16 @@ let shouldAutoEnterRoomOnMount = true;
 export type MemberChatPanelProps = {
   /** `floating`: 드래그 가능한 플로팅 패널 안에서 높이를 부모에 맞춤 */
   variant?: 'page' | 'floating';
+  /** 플로팅 모드에서 설정 시 해당 멤버와 1:1 방 생성·진입 */
+  initialDirectMemberId?: string | null;
+  onInitialDirectConsumed?: () => void;
 };
 
-export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
+export function MemberChatPanel({
+  variant = 'page',
+  initialDirectMemberId = null,
+  onInitialDirectConsumed,
+}: MemberChatPanelProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const panelRootRef = useRef<HTMLDivElement | null>(null);
@@ -299,6 +306,28 @@ export function MemberChatPanel({ variant = 'page' }: MemberChatPanelProps) {
     if (!q) return rooms;
     return rooms.filter((r) => (r.title || '').toLowerCase().includes(q));
   }, [rooms, listQuery]);
+
+  useEffect(() => {
+    if (variant !== 'floating') return;
+    const raw = initialDirectMemberId?.trim();
+    if (!raw) return;
+    let cancelled = false;
+    void memberChatApi
+      .createDirectRoom(raw)
+      .then((room) => {
+        if (cancelled) return;
+        setActiveRoom(room);
+        void queryClient.invalidateQueries({ queryKey: ['member-chat', 'rooms'] });
+        onInitialDirectConsumed?.();
+      })
+      .catch(() => {
+        message.error('1:1 채팅방을 열 수 없습니다.');
+        onInitialDirectConsumed?.();
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [variant, initialDirectMemberId, queryClient, onInitialDirectConsumed]);
 
   const { data: history, isLoading: loadingMessages } = useQuery({
     queryKey: ['member-chat', 'history', activeRoom?.roomId],

@@ -7,6 +7,10 @@ import { MemberChatPanel } from '@/features/member-chat/ui/MemberChatPanel';
 type MemberChatModalProps = {
   open: boolean;
   onClose: () => void;
+  /** 열릴 때 해당 멤버와 1:1 방을 만들거나 불러와 대화로 진입 */
+  initialDirectMemberId?: string | null;
+  /** 1:1 진입 시도 완료 후(성공·실패) 부모가 intent 초기화 */
+  onDirectIntentConsumed?: () => void;
 };
 
 const STORAGE_KEY = 'wf-member-chat-pip';
@@ -74,7 +78,12 @@ function clampRectToViewport(r: Rect): Rect {
  * 멤버 채팅 — antd Modal 없이 PIP처럼 드래그·리사이즈 가능한 플로팅 패널.
  * 본문은 채팅 영역 + 상단 제목줄(드래그) + 닫기만 포함.
  */
-export function MemberChatModal({ open, onClose }: MemberChatModalProps) {
+export function MemberChatModal({
+  open,
+  onClose,
+  initialDirectMemberId = null,
+  onDirectIntentConsumed,
+}: MemberChatModalProps) {
   const [rect, setRect] = useState<Rect>(() => loadRect() ?? defaultRect());
   const dragRef = useRef<{ dx: number; dy: number } | null>(null);
   const resizeRef = useRef<{ ox: number; oy: number; ow: number; oh: number } | null>(null);
@@ -230,7 +239,11 @@ export function MemberChatModal({ open, onClose }: MemberChatModalProps) {
           />
         </div>
         <div className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-hidden">
-          <MemberChatPanel variant="floating" />
+          <MemberChatPanel
+            variant="floating"
+            initialDirectMemberId={initialDirectMemberId}
+            onInitialDirectConsumed={onDirectIntentConsumed}
+          />
         </div>
         {/* SE 리사이즈 핸들 — 넓은 히트 영역 + 툴팁 */}
         <Tooltip title="창 크기 조절" placement="left">

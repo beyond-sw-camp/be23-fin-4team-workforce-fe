@@ -21,7 +21,6 @@ import {
     PieChartOutlined,
     MoreOutlined,
     MessageOutlined,
-    KeyOutlined,
     PartitionOutlined,
     PoweroffOutlined,
     ProjectOutlined,
@@ -77,9 +76,9 @@ import {
 } from '@/features/approvals/lib/approvalGuideNav';
 import {AppSearchField} from '@/shared/ui/AppSearchField';
 import {AiChatbotFab} from '@/widgets/app-shell/AiChatbotFab';
+import {MemberChatProvider, useMemberChatOpener} from '@/widgets/app-shell/MemberChatOpener';
 import {OrgChartModal} from '@/widgets/organization/OrgChartModal';
 import {HeaderSearchMemberDetailModal} from '@/widgets/app-shell/HeaderSearchMemberDetailModal';
-import {MemberChatModal} from '@/widgets/app-shell/MemberChatModal';
 import {
     APPROVAL_SIDEBAR_ROOT_KEY,
     buildApprovalMenuGroupChildren,
@@ -112,13 +111,13 @@ const APP_MENU_ICONS: Record<string, ReactNode> = {
     '/app/calendar': <CalendarOutlined className="tw-text-lg"/>,
     '/app/members': <TeamOutlined className="tw-text-lg"/>,
     '/app/organization': <ApartmentOutlined className="tw-text-lg"/>,
-    '/app/roles': <KeyOutlined className="tw-text-lg"/>,
     '/app/attendance': <ClockCircleOutlined className="tw-text-lg"/>,
     '/app/leave': <ScheduleOutlined className="tw-text-lg"/>,
     '/app/approvals': <FileDoneOutlined className="tw-text-lg"/>,
     '/app/approvals/department': <FolderOpenOutlined className="tw-text-lg"/>,
     '/app/payroll': <DollarOutlined className="tw-text-lg"/>,
     '/app/notifications': <BellOutlined className="tw-text-lg"/>,
+    '/app/member-chat/admin': <MessageOutlined className="tw-text-lg"/>,
     '/app/performance': <LineChartOutlined className="tw-text-lg"/>,
     '/app/evaluations': <StarOutlined className="tw-text-lg"/>,
     '/app/meetings': <VideoCameraOutlined className="tw-text-lg"/>,
@@ -155,7 +154,7 @@ const TALENT_HUB_PATHS = ['/app/performance', '/app/evaluations', '/app/meetings
 const TALENT_HUB_PATH_SET = new Set<string>(TALENT_HUB_PATHS);
 
 const ORG_HR_GROUP_KEY = 'group-org-hr';
-const ORG_HR_PATHS = ['/app/members', '/app/organization', '/app/roles'] as const;
+const ORG_HR_PATHS = ['/app/members', '/app/organization'] as const;
 const ORG_HR_PATH_SET = new Set<string>(ORG_HR_PATHS);
 
 const ESG_GROUP_KEY = 'group-esg';
@@ -559,13 +558,19 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
         const items = buildAppShellMenuItems(esgPaths, isAdmin, approvalMenuChildren);
 
         if (!isAdmin) return items;
+        const chatAdmin = {
+            key: '/app/member-chat/admin',
+            icon: <MessageOutlined className="tw-text-lg"/>,
+            label: '보안·컴플라이언스 조회',
+            title: '보안·컴플라이언스 조회',
+        };
         const doc = {
             key: '/app/ai-documents',
             icon: <RobotOutlined className="tw-text-lg"/>,
             label: 'HR 정책 문서',
             title: 'HR 정책 문서',
         };
-        return [...items, doc];
+        return [...items, chatAdmin, doc];
     }, [esgConfig, isAdmin, approvalOrgChart, meMember, status]);
 }
 
@@ -955,10 +960,10 @@ function SiderUserFooter({collapsed}: { collapsed?: boolean }) {
 function AppShellHeader() {
     const {status} = useAuth();
     const queryClient = useQueryClient();
+    const {openMemberChat} = useMemberChatOpener();
     const [search, setSearch] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
     const [headerDetailMemberId, setHeaderDetailMemberId] = useState<string | null>(null);
-    const [memberChatOpen, setMemberChatOpen] = useState(false);
 
     useEffect(() => {
         const t = window.setTimeout(() => {
@@ -1088,8 +1093,6 @@ function AppShellHeader() {
                 onClose={() => setHeaderDetailMemberId(null)}
             />
 
-            <MemberChatModal open={memberChatOpen} onClose={() => setMemberChatOpen(false)}/>
-
             <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-2 tw-overflow-visible md:tw-gap-4">
                 <SessionAccessTimer/>
                 <Tooltip title="멤버 채팅">
@@ -1098,7 +1101,7 @@ function AppShellHeader() {
                             type="button"
                             className={headerGhostIconClass}
                             aria-label={`멤버 채팅${chatUnreadTotal > 0 ? ` (안 읽은 메시지 ${chatUnreadTotal}건)` : ''}`}
-                            onClick={() => setMemberChatOpen(true)}
+                            onClick={() => openMemberChat()}
                         >
                             <MessageOutlined className="tw-text-[20px]"/>
                         </button>
@@ -1144,6 +1147,7 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
     const menuPaths = new Set<string>([
         ...APP_MENU_PATH_ORDER,
         ...ESG_MENU_PATH_ORDER,
+        '/app/member-chat/admin',
         '/app/ai-documents',
     ]);
     if (menuPaths.has(pathname)) return [pathname];
@@ -1256,6 +1260,7 @@ function AppShellLayout() {
     }, [pathname, search, siderCollapsed, isSystemAdmin]);
 
     return (
+        <MemberChatProvider>
         <Layout className="tw-flex tw-h-[100dvh] tw-min-h-0 tw-bg-slate-50">
             <Layout.Sider
                 theme="light"
@@ -1399,6 +1404,7 @@ function AppShellLayout() {
             <AiChatbotFab/>
             <OrgChartModal open={orgChartModalOpen} onClose={() => setOrgChartModalOpen(false)}/>
         </Layout>
+        </MemberChatProvider>
     );
 }
 

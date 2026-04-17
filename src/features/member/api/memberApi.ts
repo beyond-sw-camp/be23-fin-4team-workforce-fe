@@ -164,11 +164,15 @@ export type UpdateMemberHrPayload = {
   sabun: string;
   joinDate: string;
   employmentType: EmploymentType;
-  extensionNumber: string;
-  telNumber: string;
+  memberStatus: MemberStatus;
   organizationId: string;
   jobGradeId: string;
   jobTitleId: string;
+  roleId: string;
+  /** null 허용 — 미전송 시 백엔드 기본 처리 */
+  isPromotion?: boolean | null;
+  /** 선택 */
+  changeReason?: string;
 };
 
 /** POST /member/create */
@@ -215,6 +219,8 @@ export type MemberDetail = {
   jobGradeName?: string;
   jobTitleName?: string;
   roleName?: string;
+  /** GET 응답에 있을 때 — 인사 수정 PUT 시 roleId 로 전달 */
+  roleId?: string;
   isSystemAdminYn?: YnFlag;
   phonePublicYn?: YnFlag;
   addressPublicYn?: YnFlag;
@@ -297,6 +303,7 @@ function normalizeMemberDetailResponse(raw: unknown): MemberDetail {
   const organizationId = asTextMemberField(r.organizationId ?? r.organization_id);
   const jobGradeId = asTextMemberField(r.jobGradeId ?? r.job_grade_id);
   const jobTitleId = asTextMemberField(r.jobTitleId ?? r.job_title_id);
+  const roleId = asTextMemberField(r.roleId ?? r.role_id);
   return {
     ...base,
     ...(memberStatus ? { memberStatus: memberStatus as MemberDetail['memberStatus'] } : {}),
@@ -307,6 +314,7 @@ function normalizeMemberDetailResponse(raw: unknown): MemberDetail {
     ...(organizationId ? { organizationId } : {}),
     ...(jobGradeId ? { jobGradeId } : {}),
     ...(jobTitleId ? { jobTitleId } : {}),
+    ...(roleId ? { roleId } : {}),
   };
 }
 

@@ -3,8 +3,6 @@ import type { ColumnsType } from 'antd/es/table';
 import { Link } from '@tanstack/react-router';
 import { MEMBER_STATUS_KO } from '@/app/locale/app-ko';
 import { AppDataTable } from '@/shared/ui/AppDataTable';
-import { PERM } from '@/features/permissions/backend-permissions';
-import { PermissionGuard } from '@/features/permissions/permission-guard';
 import type { Member } from '@/features/members/model/types';
 
 type Props = {
@@ -44,16 +42,6 @@ export function MembersTable({ rows, loading, total, page, pageSize, onPageChang
                     <Link to="/app/members/$memberId" params={{ memberId: row.id }}>
                       상세 보기
                     </Link>
-                  ),
-                },
-                {
-                  key: 'edit',
-                  label: (
-                    <PermissionGuard required={PERM.MEMBER_UPDATE} fallback={<span className="tw-text-slate-400">수정 (권한 없음)</span>}>
-                      <Link to="/app/members/$memberId/edit" params={{ memberId: row.id }}>
-                        수정
-                      </Link>
-                    </PermissionGuard>
                   ),
                 },
               ],

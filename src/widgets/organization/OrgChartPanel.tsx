@@ -6,14 +6,12 @@ import { useMemo, useState } from 'react';
 import { PERFORMANCE_PAGE_KO } from '@/app/locale/app-ko';
 import {
   type OrgChartData,
+  type OrgChartMember,
   type OrgChartOrgNode,
-  type OrgChartJobGrade,
+  ORG_CHART_HIDDEN_JOB_GRADE,
 } from '@/features/organization/api/organizationApi';
 
 const KS = '\x1f';
-
-/** 직급이 이 값이면 트리에서 직급 행을 생략하고 구성원만 조직 아래에 둡니다(관리자 1명 케이스). */
-const FLATTEN_GRADE_LABEL = '관리자';
 
 /** antd Tree `show-line` 인덴트·리프 연결선 — slate-200 톤으로 통일 */
 const ORG_CHART_TREE_LINE_CLASS =
@@ -25,10 +23,14 @@ function orgSubtreeMatchesQuery(node: OrgChartOrgNode, q: string): boolean {
   if (!q) return true;
   const low = q.toLowerCase();
   if (node.name.toLowerCase().includes(low)) return true;
-  for (const g of node.jobGrades) {
-    if (g.jobGradeName.toLowerCase().includes(low)) return true;
-    for (const m of g.members) {
-      if (m.name.toLowerCase().includes(low) || m.jobTitleName.toLowerCase().includes(low)) return true;
+  for (const m of node.members) {
+    if (m.jobGradeName.trim() === ORG_CHART_HIDDEN_JOB_GRADE) continue;
+    if (
+      m.name.toLowerCase().includes(low) ||
+      m.jobGradeName.toLowerCase().includes(low) ||
+      (m.memberStatus ?? '').toLowerCase().includes(low)
+    ) {
+      return true;
     }
   }
   return node.children.some((c) => orgSubtreeMatchesQuery(c, q));
@@ -60,12 +62,13 @@ function collectMemberTreeKey(nodes: DataNode[] | undefined, memberId: string): 
 
 function memberLeafNodes(
   org: OrgChartOrgNode,
-  members: OrgChartJobGrade['members'],
+  members: OrgChartMember[],
   onMemberSelect: ((memberId: string, opts?: { chartMemberStatus?: string }) => void) | undefined,
   memberMetaByKey: Map<string, { chartMemberStatus?: string }>,
-  showJobTitle = true,
+  showJobGrade = true,
 ): DataNode[] {
-  return members.map((m) => {
+  const visible = members.filter((m) => m.jobGradeName.trim() !== ORG_CHART_HIDDEN_JOB_GRADE);
+  return visible.map((m) => {
     const mKey = `m${KS}${org.organizationId}${KS}${m.memberId}`;
     memberMetaByKey.set(mKey, { chartMemberStatus: m.memberStatus });
     return {
@@ -73,8 +76,8 @@ function memberLeafNodes(
       title: onMemberSelect ? (
         <span className="tw-inline-flex tw-min-w-0 tw-items-baseline tw-gap-1">
           <span className="tw-font-medium tw-text-[#1e3a5f]">{m.name}</span>
-          {showJobTitle ? (
-            <span className="tw-text-[13px] tw-text-slate-600">{m.jobTitleName}</span>
+          {showJobGrade ? (
+            <span className="tw-text-[13px] tw-text-slate-600">{m.jobGradeName}</span>
           ) : null}
         </span>
       ) : (
@@ -85,8 +88,8 @@ function memberLeafNodes(
           onClick={(e) => e.stopPropagation()}
         >
           <span>{m.name}</span>
-          {showJobTitle ? (
-            <span className="tw-text-[13px] tw-font-normal tw-text-slate-600">{m.jobTitleName}</span>
+          {showJobGrade ? (
+            <span className="tw-text-[13px] tw-font-normal tw-text-slate-600">{m.jobGradeName}</span>
           ) : null}
         </Link>
       ),
@@ -106,27 +109,9 @@ function orgNodesToTreeData(
   const { onMemberSelect, memberMetaByKey } = opts;
 
   return orgs.map((org) => {
-    const flattenedAdminMembers: DataNode[] = [];
-    const gradeNodes: DataNode[] = [];
-
-    for (const g of org.jobGrades) {
-      if (g.members.length === 0) continue;
-      if (g.jobGradeName.trim() === FLATTEN_GRADE_LABEL) {
-        flattenedAdminMembers.push(
-          ...memberLeafNodes(org, g.members, onMemberSelect, memberMetaByKey, false),
-        );
-      } else {
-        gradeNodes.push({
-          key: `g${KS}${org.organizationId}${KS}${g.jobGradeName}`,
-          title: <span className="tw-text-xs tw-font-medium tw-text-slate-600">{g.jobGradeName}</span>,
-          selectable: false,
-          children: memberLeafNodes(org, g.members, onMemberSelect, memberMetaByKey),
-        });
-      }
-    }
-
+    const memberNodes = memberLeafNodes(org, org.members, onMemberSelect, memberMetaByKey);
     const childOrgNodes = orgNodesToTreeData(org.children, opts);
-    const children = [...flattenedAdminMembers, ...gradeNodes, ...childOrgNodes];
+    const children = [...memberNodes, ...childOrgNodes];
 
     return {
       key: `o${KS}${org.organizationId}`,
@@ -168,18 +153,7 @@ export function OrgChartPanel({
       onMemberSelect,
       memberMetaByKey,
     });
-    const wrapped: DataNode[] = [
-      {
-        key: 'root-company',
-        title: (
-          <span className="tw-text-sm tw-font-semibold tw-text-[#1e3a5f]">{display.companyName}</span>
-        ),
-        selectable: false,
-        children: roots.length > 0 ? roots : undefined,
-        isLeaf: roots.length === 0,
-      },
-    ];
-    return { treeData: wrapped, memberMetaByKey };
+    return { treeData: roots, memberMetaByKey };
   }, [display, filteredRoots, onMemberSelect]);
 
   const treeSelectedKeys = useMemo(() => {
@@ -204,9 +178,6 @@ export function OrgChartPanel({
               placeholder={PERFORMANCE_PAGE_KO.orgSearchPlaceholder}
               className="!tw-mb-3 [&_.ant-input]:tw-rounded-lg"
             />
-            <div className="tw-mb-1 tw-text-xs tw-font-semibold tw-text-slate-500">
-              {PERFORMANCE_PAGE_KO.orgPanelTitle}
-            </div>
             {filteredRoots.length === 0 ? (
               <Typography.Text type="secondary" className="tw-text-sm">
                 {display.organizations.length === 0
@@ -216,6 +187,7 @@ export function OrgChartPanel({
             ) : (
               <Tree
                 blockNode
+                expandAction="click"
                 showLine={{ showLeafIcon: false }}
                 defaultExpandAll
                 selectedKeys={treeSelectedKeys}

@@ -1,10 +1,11 @@
-import { App, Alert, Card, DatePicker, Form, Input, Select, Space, Typography } from 'antd';
+import { App, Alert, Button, Card, DatePicker, Form, Input, Select, Space, Typography } from 'antd';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import { useEffect, useMemo } from 'react';
-import type { EmploymentType, UpdateMemberHrPayload } from '@/features/member/api/memberApi';
+import { MEMBER_STATUS_KO } from '@/app/locale/app-ko';
+import type { EmploymentType, MemberStatus, UpdateMemberHrPayload } from '@/features/member/api/memberApi';
 import { memberApi } from '@/features/member/api/memberApi';
 import {
   buildOrgOptions,
@@ -12,21 +13,31 @@ import {
   pickRowId,
   pickRowName,
 } from '@/features/members/lib/memberFormShared';
+import { membersCtaButtonClass } from '@/features/members/ui/membersCtaButtonClass';
 import { membersKeys } from '@/features/members/queries';
 import { organizationApi } from '@/features/organization/api/organizationApi';
 import { useAuth } from '@/features/auth/useAuth';
-import { AppButton } from '@/shared/ui/AppButton';
+
+const MEMBER_FORM_STATUS_OPTIONS = (['ACTIVE', 'DORMANT', 'LEAVE'] as const).map((v) => ({
+  value: v,
+  label: MEMBER_STATUS_KO[v],
+}));
+
+/** 폼 전용 — 제출 시 isPromotion 으로 변환 */
+type PromotionFormValue = 'omit' | 'true' | 'false';
 
 type FormValues = {
   name: string;
   sabun: string;
   joinDate: Dayjs;
   employmentType: EmploymentType;
-  extensionNumber: string;
-  telNumber: string;
+  memberStatus: MemberStatus;
   organizationId: string;
   jobGradeId: string;
   jobTitleId: string;
+  roleId: string;
+  isPromotion: PromotionFormValue;
+  changeReason: string;
 };
 
 function toPayloadEmploymentType(t: EmploymentType | 'CONTRACTOR'): EmploymentType {
@@ -67,6 +78,12 @@ export function MemberEditPage() {
     enabled: !isSelf,
   });
 
+  const { data: roles = [] } = useQuery({
+    queryKey: ['member', 'roles', 'list'],
+    queryFn: () => memberApi.getRoles(),
+    enabled: !isSelf,
+  });
+
   useEffect(() => {
     if (!member) return;
     form.setFieldsValue({
@@ -74,11 +91,13 @@ export function MemberEditPage() {
       sabun: member.sabun,
       joinDate: dayjs(member.joinDate),
       employmentType: toPayloadEmploymentType(member.employmentType),
-      extensionNumber: member.extensionNumber ?? '',
-      telNumber: member.telNumber ?? '',
+      memberStatus: member.memberStatus,
       organizationId: member.organizationId ?? '',
       jobGradeId: member.jobGradeId ?? '',
       jobTitleId: member.jobTitleId ?? '',
+      roleId: member.roleId ?? '',
+      isPromotion: 'omit',
+      changeReason: '',
     });
   }, [member, form]);
 
@@ -111,6 +130,10 @@ export function MemberEditPage() {
     })
     .filter((x): x is { value: string; label: string } => x !== null);
 
+  const roleOptions = roles
+    .filter((r) => r.id)
+    .map((r) => ({ value: r.id, label: r.name }));
+
   const onFinish = async () => {
     try {
       const v = await form.validateFields();
@@ -119,12 +142,23 @@ export function MemberEditPage() {
         sabun: v.sabun.trim(),
         joinDate: v.joinDate.format('YYYY-MM-DD'),
         employmentType: v.employmentType,
-        extensionNumber: v.extensionNumber.trim(),
-        telNumber: v.telNumber.trim(),
+        memberStatus: v.memberStatus,
         organizationId: v.organizationId,
         jobGradeId: v.jobGradeId,
         jobTitleId: v.jobTitleId,
+        roleId: v.roleId,
       };
+      if (v.isPromotion === 'true') {
+        payload.isPromotion = true;
+      } else if (v.isPromotion === 'false') {
+        payload.isPromotion = false;
+      } else {
+        payload.isPromotion = null;
+      }
+      const reason = v.changeReason?.trim();
+      if (reason) {
+        payload.changeReason = reason;
+      }
       await updateM.mutateAsync(payload);
     } catch {
       /* validation */
@@ -137,7 +171,7 @@ export function MemberEditPage() {
         <Link
           to="/app/members/$memberId"
           params={{ memberId }}
-          className="tw-inline-block tw-text-sm tw-text-[#2563EB] tw-no-underline hover:tw-underline"
+          className="tw-inline-block tw-text-sm tw-text-slate-400 tw-no-underline hover:tw-text-slate-500 hover:tw-underline"
         >
           ← 구성원 상세
         </Link>
@@ -169,22 +203,18 @@ export function MemberEditPage() {
         <Link
           to="/app/members/$memberId"
           params={{ memberId }}
-          className="tw-mb-2 tw-inline-block tw-text-sm tw-text-[#2563EB] tw-no-underline hover:tw-underline"
+          className="tw-mb-2 tw-inline-block tw-text-sm tw-text-slate-400 tw-no-underline hover:tw-text-slate-500 hover:tw-underline"
         >
-          ← 구성원 상세
+          ← 뒤로가기
         </Link>
         <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
-          직원 정보 수정 (인사)
+          직원 정보 수정
         </Typography.Title>
-        <Typography.Text type="secondary" className="tw-text-sm">
-          {member.name} · {member.email}
-        </Typography.Text>
+     
       </div>
 
       <Card className="tw-border-slate-200/80 tw-shadow-sm">
-        <Typography.Paragraph type="secondary" className="!tw-mb-4 !tw-text-sm">
-          MEMBER:UPDATE 권한이 있는 경우에만 저장할 수 있습니다. Authorization, X-User-UUID, X-User-MemberPositionId는 클라이언트에서 설정됩니다.
-        </Typography.Paragraph>
+        
         <Form<FormValues> form={form} layout="vertical" requiredMark={false} className="tw-max-w-[560px]">
           <Form.Item name="name" label="이름" rules={[{ required: true, message: '이름을 입력하세요.' }]}>
             <Input maxLength={80} />
@@ -198,11 +228,8 @@ export function MemberEditPage() {
           <Form.Item name="employmentType" label="고용 형태" rules={[{ required: true }]}>
             <Select options={MEMBER_FORM_EMPLOYMENT_OPTIONS} placeholder="선택" />
           </Form.Item>
-          <Form.Item name="extensionNumber" label="내선번호">
-            <Input maxLength={20} placeholder="예: 1234" />
-          </Form.Item>
-          <Form.Item name="telNumber" label="유선 전화">
-            <Input maxLength={40} placeholder="예: 02-1234-5678" />
+          <Form.Item name="memberStatus" label="재직 상태" rules={[{ required: true, message: '재직 상태를 선택하세요.' }]}>
+            <Select options={MEMBER_FORM_STATUS_OPTIONS} placeholder="선택" />
           </Form.Item>
           <Form.Item name="organizationId" label="조직" rules={[{ required: true, message: '조직을 선택하세요.' }]}>
             <Select showSearch optionFilterProp="label" options={orgOptions} placeholder="조직 선택" />
@@ -213,9 +240,32 @@ export function MemberEditPage() {
           <Form.Item name="jobTitleId" label="직책" rules={[{ required: true, message: '직책을 선택하세요.' }]}>
             <Select showSearch optionFilterProp="label" options={titleOptions} placeholder="직책 선택" />
           </Form.Item>
-          <AppButton type="primary" loading={updateM.isPending} onClick={() => void onFinish()}>
+          <Form.Item name="roleId" label="역할" rules={[{ required: true, message: '역할을 선택하세요.' }]}>
+            <Select showSearch optionFilterProp="label" options={roleOptions} placeholder="역할 선택" />
+          </Form.Item>
+          <Form.Item
+            name="isPromotion"
+            label="변경 유형"
+          >
+            <Select
+              options={[
+                { value: 'omit', label: '미입력' },
+                { value: 'false', label: '일반 변경' },
+                { value: 'true', label: '승진 및 부서이동' },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item name="changeReason" label="변경 사유">
+            <Input.TextArea rows={2} maxLength={500} showCount placeholder="선택 (예: 부서 이동)" />
+          </Form.Item>
+          <Button
+            type="primary"
+            loading={updateM.isPending}
+            className={membersCtaButtonClass}
+            onClick={() => void onFinish()}
+          >
             저장
-          </AppButton>
+          </Button>
         </Form>
       </Card>
     </Space>
