@@ -77,6 +77,8 @@ import {HeaderSearchMemberDetailModal} from '@/widgets/app-shell/HeaderSearchMem
 import {MemberChatModal} from '@/widgets/app-shell/MemberChatModal';
 import {
     APPROVAL_SIDEBAR_ROOT_KEY,
+    approvalSecondaryPanelOpenKeys,
+    approvalSiderSelectedMenuKeys,
     buildApprovalMenuGroupChildren,
     decodeWfNavKey,
 } from '@/widgets/app-shell/approvalSiderMenu';
@@ -179,20 +181,15 @@ function approvalSectionIcon(section: (typeof APPROVAL_GUIDE_SECTION_ORDER)[numb
 
 function approvalLeafIcon(box: string) {
     if (box === 'do-pending') return <ClockCircleOutlined className="tw-text-lg"/>;
-    if (box === 'do-received') return <FileDoneOutlined className="tw-text-lg"/>;
-    if (box === 'do-cc-wait') return <EyeOutlined className="tw-text-lg"/>;
+    if (box === 'do-acted') return <FileDoneOutlined className="tw-text-lg"/>;
     if (box === 'do-upcoming') return <CalendarOutlined className="tw-text-lg"/>;
-    if (box === 'per-compose-all') return <FormOutlined className="tw-text-lg"/>;
+    if (box === 'per-all') return <FormOutlined className="tw-text-lg"/>;
     if (box === 'per-draft') return <FolderOpenOutlined className="tw-text-lg"/>;
-    if (box === 'per-acted-as-approver') return <FileDoneOutlined className="tw-text-lg"/>;
-    if (box === 'per-viewers-all') return <EyeOutlined className="tw-text-lg"/>;
-    if (box === 'per-inbox-combined') return <BellOutlined className="tw-text-lg"/>;
-    if (box === 'per-sent') return <ProjectOutlined className="tw-text-lg"/>;
+    if (box === 'per-viewers') return <EyeOutlined className="tw-text-lg"/>;
     if (box === 'per-absence') return <TeamOutlined className="tw-text-lg"/>;
     if (box === 'per-official') return <SafetyCertificateOutlined className="tw-text-lg"/>;
-    if (box === 'dept-draft') return <FormOutlined className="tw-text-lg"/>;
-    if (box === 'dept-ref') return <EyeOutlined className="tw-text-lg"/>;
-    if (box === 'dept-official') return <SafetyCertificateOutlined className="tw-text-lg"/>;
+    if (box === 'dept-all') return <FormOutlined className="tw-text-lg"/>;
+    if (box === 'dept-received') return <SafetyCertificateOutlined className="tw-text-lg"/>;
     return <FileTextOutlined className="tw-text-lg"/>;
 }
 
@@ -959,6 +956,8 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
     if (/^\/app\/meetings\/[^/]+$/.test(pathname)) return ['/app/meetings'];
     if (/^\/app\/performance\//.test(pathname)) return ['/app/performance'];
     if (pathname.startsWith('/app/approvals')) {
+        const wfKeys = approvalSiderSelectedMenuKeys(pathname, search);
+        if (wfKeys.length > 0) return wfKeys;
         const leaf = approvalShellMenuItemKeyFromLocation(pathname, {
             tab: typeof search.tab === 'string' ? search.tab : undefined,
             box: typeof search.box === 'string' ? search.box : undefined,
@@ -985,14 +984,17 @@ function menuOpenKeysForPath(pathname: string, search: Record<string, unknown>):
     }
     if (pathname.startsWith('/app/esg')) keys.push(ESG_GROUP_KEY);
     if (pathname.startsWith('/app/approvals')) {
+        keys.push(APPROVAL_SIDEBAR_ROOT_KEY);
         keys.push(APPROVAL_GROUP_KEY);
-        const sec = approvalShellSectionOpenKeyFromLocation(pathname, {
-            tab: typeof search.tab === 'string' ? search.tab : undefined,
-            box: typeof search.box === 'string' ? search.box : undefined,
-            myStatus: typeof search.myStatus === 'string' ? search.myStatus : undefined,
-            deptView: typeof search.deptView === 'string' ? search.deptView : undefined,
-        });
-        if (sec) keys.push(sec);
+        keys.push(
+            ...approvalSecondaryPanelOpenKeys(pathname, {
+                tab: typeof search.tab === 'string' ? search.tab : undefined,
+                myStatus: typeof search.myStatus === 'string' ? search.myStatus : undefined,
+                compose: typeof search.compose === 'string' ? search.compose : undefined,
+                sideNav: typeof search.sideNav === 'string' ? search.sideNav : undefined,
+                deptView: typeof search.deptView === 'string' ? search.deptView : undefined,
+            }),
+        );
     }
     return keys;
 }

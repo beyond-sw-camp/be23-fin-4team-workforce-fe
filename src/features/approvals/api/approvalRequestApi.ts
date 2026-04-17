@@ -368,9 +368,12 @@ export const approvalRequestApi = {
     return unwrapSingle(unwrapApiResponse<unknown>(response.data));
   },
 
-  async listMyRequests(status?: ApprovalRequestStatus): Promise<ApprovalRequestDetail[]> {
+  async listMyRequests(status?: ApprovalRequestStatus, requestType?: string): Promise<ApprovalRequestDetail[]> {
     const response = await httpClient.get('/approval/requests/my', {
-      params: status ? { status } : undefined,
+      params: {
+        ...(status ? { status } : {}),
+        ...(requestType ? { requestType } : {}),
+      },
     });
     const unwrapped = unwrapApiResponse<unknown>(response.data);
     return pickArray(unwrapped)
@@ -379,13 +382,13 @@ export const approvalRequestApi = {
   },
 
   /** 부서·하위 조직의 최종 처리(승인/반려) 문서 — 민감 양식은 서버에서 제외 */
-  async listDepartmentRequests(organizationId: string): Promise<ApprovalRequestDetail[]> {
+  async listDepartmentRequests(organizationId: string, requestType?: string): Promise<ApprovalRequestDetail[]> {
     const id = organizationId?.trim();
     if (!id) {
       throw new Error('조직 ID가 없습니다.');
     }
     const response = await httpClient.get('/approval/requests/department', {
-      params: { organizationId: id },
+      params: { organizationId: id, ...(requestType ? { requestType } : {}) },
     });
     const unwrapped = unwrapApiResponse<unknown>(response.data);
     return pickArray(unwrapped)
@@ -434,6 +437,14 @@ export const approvalRequestApi = {
 
   async listViewerCirculationRequests(): Promise<ApprovalRequestDetail[]> {
     const response = await httpClient.get('/approval/viewers/circulation');
+    const unwrapped = unwrapApiResponse<unknown>(response.data);
+    return pickArray(unwrapped)
+      .map((item) => normalizeRequest(item))
+      .filter((item): item is ApprovalRequestDetail => item != null);
+  },
+
+  async listOfficialReceivedRequests(): Promise<ApprovalRequestDetail[]> {
+    const response = await httpClient.get('/approval/requests/official/received');
     const unwrapped = unwrapApiResponse<unknown>(response.data);
     return pickArray(unwrapped)
       .map((item) => normalizeRequest(item))

@@ -3,20 +3,15 @@ import type { ApprovalTabParam } from '@/app/router/approvalTabRoute';
 
 export const APPROVAL_GUIDE_BOXES = [
   'do-pending',
-  'do-received',
-  'do-cc-wait',
+  'do-acted',
   'do-upcoming',
-  'per-compose-all',
+  'per-all',
   'per-draft',
-  'per-acted-as-approver',
-  'per-viewers-all',
-  'per-inbox-combined',
-  'per-sent',
+  'per-viewers',
   'per-official',
   'per-absence',
-  'dept-draft',
-  'dept-ref',
-  'dept-official',
+  'dept-all',
+  'dept-received',
 ] as const;
 
 export type ApprovalGuideBox = (typeof APPROVAL_GUIDE_BOXES)[number];
@@ -29,20 +24,15 @@ export function isApprovalGuideBox(v: string | undefined): v is ApprovalGuideBox
 
 export const APPROVAL_GUIDE_BOX_LABEL: Record<ApprovalGuideBox, string> = {
   'do-pending': '결재 대기 문서',
-  'do-received': '결재 수신 문서',
-  'do-cc-wait': '참조/열람 대기 문서',
+  'do-acted': '결재 완료 문서',
   'do-upcoming': '결재 예정 문서',
-  'per-compose-all': '기안 문서함',
+  'per-all': '내 기안 문서',
   'per-draft': '임시 저장함',
-  'per-acted-as-approver': '결재 문서함',
-  'per-viewers-all': '참조/열람 문서함',
-  'per-inbox-combined': '수신 문서함',
-  'per-sent': '발송 문서함',
+  'per-viewers': '참조/공람 문서',
   'per-official': '공문 문서함',
   'per-absence': '부재 위임(대결)',
-  'dept-draft': '기안 완료함',
-  'dept-ref': '부서 참조함',
-  'dept-official': '공문 발송함',
+  'dept-all': '부서 문서함',
+  'dept-received': '공문 수신함',
 };
 
 export type ApprovalGuideSection = 'do' | 'personal' | 'dept';
@@ -60,26 +50,23 @@ export function sectionOfBox(box: ApprovalGuideBox): ApprovalGuideSection {
 }
 
 export const APPROVAL_GUIDE_SECTION_ITEMS: Record<ApprovalGuideSection, readonly ApprovalGuideBox[]> = {
-  do: ['do-pending', 'do-received', 'do-cc-wait', 'do-upcoming'],
+  do: ['do-pending', 'do-acted', 'do-upcoming'],
   personal: [
-    'per-compose-all',
+    'per-all',
     'per-draft',
-    'per-acted-as-approver',
-    'per-viewers-all',
-    'per-inbox-combined',
-    'per-sent',
+    'per-viewers',
     'per-absence',
     'per-official',
   ],
-  dept: ['dept-draft', 'dept-ref', 'dept-official'],
+  dept: ['dept-all', 'dept-received'],
 };
 
 export const APPROVAL_GUIDE_SECTION_ORDER: readonly ApprovalGuideSection[] = ['do', 'personal', 'dept'];
 
 export function defaultBoxForTab(tab: string): ApprovalGuideBox | undefined {
   if (tab === 'pending') return 'do-pending';
-  if (tab === 'my') return 'per-compose-all';
-  if (tab === 'acted') return 'per-acted-as-approver';
+  if (tab === 'my') return 'per-all';
+  if (tab === 'acted') return 'do-acted';
   return undefined;
 }
 
@@ -104,19 +91,15 @@ export function guideBoxToTabSearch(box: ApprovalGuideBox): {
 } {
   switch (box) {
     case 'do-pending':
-    case 'do-received':
-    case 'do-cc-wait':
     case 'do-upcoming':
       return { tab: 'pending', search: {} };
-    case 'per-compose-all':
+    case 'do-acted':
+      return { tab: 'acted', search: {} };
+    case 'per-all':
       return { tab: 'my', search: {} };
     case 'per-draft':
       return { tab: 'my', search: { myStatus: 'DRAFT' } };
-    case 'per-acted-as-approver':
-      return { tab: 'acted', search: {} };
-    case 'per-viewers-all':
-    case 'per-inbox-combined':
-    case 'per-sent':
+    case 'per-viewers':
     case 'per-official':
       return { tab: 'my', search: {} };
     default:
@@ -199,18 +182,15 @@ export function buildNavigateForGuideBox(
 ):
   | NavigateOptions
   | { to: '/app/approvals/absence-proxy'; replace?: boolean }
-  | { to: '/app/approvals/department'; search: { deptView: 'draft' | 'ref' | 'official' }; replace?: boolean } {
+  | { to: '/app/approvals/department'; search: { deptView: 'draft' | 'received' }; replace?: boolean } {
   if (box === 'per-absence') {
     return { to: '/app/approvals/absence-proxy', replace: true };
   }
-  if (box === 'dept-draft') {
+  if (box === 'dept-all') {
     return { to: '/app/approvals/department', search: { deptView: 'draft' }, replace: true };
   }
-  if (box === 'dept-ref') {
-    return { to: '/app/approvals/department', search: { deptView: 'ref' }, replace: true };
-  }
-  if (box === 'dept-official') {
-    return { to: '/app/approvals/department', search: { deptView: 'official' }, replace: true };
+  if (box === 'dept-received') {
+    return { to: '/app/approvals/department', search: { deptView: 'received' }, replace: true };
   }
   const nextSearch = approvalsSearchForGuideBox(box);
   return {
@@ -263,9 +243,8 @@ export function approvalShellMenuItemKeyFromLocation(
   if (pathname === '/app/approvals/absence-proxy') return 'ap-per-absence';
   if (pathname === '/app/approvals/department') {
     const dv = search.deptView;
-    if (dv === 'ref') return 'ap-dept-ref';
-    if (dv === 'official') return 'ap-dept-official';
-    return 'ap-dept-draft';
+    if (dv === 'received') return 'ap-dept-received';
+    return 'ap-dept-all';
   }
   if (pathname !== '/app/approvals') return '';
   const tab = search.tab ?? 'compose';
@@ -277,12 +256,12 @@ export function approvalShellMenuItemKeyFromLocation(
     return 'ap-do-pending';
   }
   if (tab === 'acted') {
-    return 'ap-per-acted-as-approver';
+    return 'ap-do-acted';
   }
   if (tab === 'my') {
     if (box && isApprovalGuideBox(box) && mainTabForGuideBox(box) === 'my') return `ap-${box}`;
     if (String(search.myStatus).toUpperCase() === 'DRAFT') return 'ap-per-draft';
-    return 'ap-per-compose-all';
+    return 'ap-per-all';
   }
   return 'ap-compose';
 }

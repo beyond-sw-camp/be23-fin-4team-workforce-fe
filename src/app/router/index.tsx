@@ -264,7 +264,7 @@ const approvalsAdminRoute = createRoute({
 
 const departmentApprovalsSearchSchema = z.object({
   organizationId: z.string().optional(),
-  deptView: z.enum(['draft', 'ref', 'official']).optional(),
+  deptView: z.enum(['draft', 'received']).optional(),
 });
 
 const departmentApprovalsInboxRoute = createRoute({

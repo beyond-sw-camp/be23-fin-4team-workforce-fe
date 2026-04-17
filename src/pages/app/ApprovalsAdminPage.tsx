@@ -162,6 +162,11 @@ export function ApprovalsAdminPage() {
     [documents, selectedDocumentId],
   );
   const isAutoApproveDocument = selectedDocument?.autoApproveYn === 'Y';
+  const { data: policyLineCandidates = [], isFetching: candidatesLoading } = useQuery({
+    queryKey: ['approval', 'policy-lines', 'candidates', selectedDocumentId],
+    queryFn: () => approvalApi.getPolicyLineCandidates(selectedDocumentId),
+    enabled: selectedDocumentId.length > 0 && !isAutoApproveDocument,
+  });
 
   useEffect(() => {
     if (!selectedDocumentId && documents.length > 0) {
@@ -676,6 +681,77 @@ export function ApprovalsAdminPage() {
                       ]}
                       locale={{ emptyText: selectedDocumentId ? '정책라인이 없습니다.' : '양식을 먼저 선택하세요.' }}
                     />
+                    {!isAutoApproveDocument ? (
+                      <Card
+                        size="small"
+                        title="후보 결재자 미리보기"
+                        extra={
+                          <Button
+                            size="small"
+                            icon={<ReloadOutlined />}
+                            loading={candidatesLoading}
+                            onClick={() =>
+                              void qc.invalidateQueries({
+                                queryKey: ['approval', 'policy-lines', 'candidates', selectedDocumentId],
+                              })
+                            }
+                          >
+                            새로고침
+                          </Button>
+                        }
+                      >
+                        <Table
+                          rowKey={(row) => row.policyLineId}
+                          size="small"
+                          loading={candidatesLoading}
+                          pagination={false}
+                          dataSource={policyLineCandidates}
+                          locale={{
+                            emptyText: selectedDocumentId
+                              ? '후보 결재자가 없습니다. 직책/조직 설정 또는 사용자 배치를 확인하세요.'
+                              : '양식을 먼저 선택하세요.',
+                          }}
+                          columns={[
+                            {
+                              title: '순서',
+                              dataIndex: 'stepOrder',
+                              key: 'stepOrder',
+                              width: 90,
+                            },
+                            {
+                              title: '직책 ID',
+                              dataIndex: 'jobTitleId',
+                              key: 'jobTitleId',
+                              width: 220,
+                              ellipsis: true,
+                            },
+                            {
+                              title: '조직 제한',
+                              dataIndex: 'organizationId',
+                              key: 'organizationId',
+                              width: 220,
+                              render: (v: string | null) => v ?? '없음',
+                            },
+                            {
+                              title: '후보',
+                              key: 'candidates',
+                              render: (_: unknown, row: (typeof policyLineCandidates)[number]) =>
+                                row.candidates.length === 0 ? (
+                                  <Typography.Text type="secondary">없음</Typography.Text>
+                                ) : (
+                                  <Space wrap size={[6, 6]}>
+                                    {row.candidates.map((c) => (
+                                      <Tag key={`${row.policyLineId}-${c.memberPositionId}`}>
+                                        {c.memberName} ({c.organizationName || '-'} / {c.jobTitleName || '-'})
+                                      </Tag>
+                                    ))}
+                                  </Space>
+                                ),
+                            },
+                          ]}
+                        />
+                      </Card>
+                    ) : null}
 
                   </Space>
                 </Card>
