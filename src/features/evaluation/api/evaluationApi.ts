@@ -3,6 +3,7 @@ import type {
   EvaluationGroup,
   EvaluationDesign,
   EvaluationResponse,
+  GoalSummaryCard,
   CreateSeasonPayload,
   UpdateSeasonPayload,
   CreateGroupPayload,
@@ -82,6 +83,17 @@ function mapResponse(raw: any): EvaluationResponse {
     calibration: safeJsonParse(raw.calibrationJson, undefined),
     normalizedScore: raw.normalizedScore ?? undefined,
     targetGoalIds: safeJsonParse(raw.targetGoalIdsJson, undefined),
+    goalSnapshot: safeJsonParse(raw.goalSnapshotJson, undefined),
+  };
+}
+
+function mapGoalSummaryCard(raw: any): GoalSummaryCard {
+  return {
+    goalId: raw.goalId,
+    snapshot: raw.snapshot ?? undefined,
+    current: raw.current ?? undefined,
+    changedSinceSnapshot: raw.changedSinceSnapshot ?? false,
+    changeSummary: raw.changeSummary ?? [],
   };
 }
 
@@ -235,6 +247,12 @@ export const evaluationApi = {
   async reopenResponse(responseId: string): Promise<EvaluationResponse> {
     const res = await httpClient.post(`/evaluation/evaluation-responses/${responseId}/reopen`);
     return mapResponse(unwrapApiResponse<any>(res.data));
+  },
+
+  /** 평가 응답에 포함된 목표 스냅샷 vs 현재 값 비교 요약 카드 */
+  async getGoalSummaries(responseId: string): Promise<GoalSummaryCard[]> {
+    const res = await httpClient.get(`/evaluation/evaluation-responses/${responseId}/goal-summaries`);
+    return normalizeArray(unwrapApiResponse<unknown>(res.data), mapGoalSummaryCard);
   },
 
   // ── Reminders ──

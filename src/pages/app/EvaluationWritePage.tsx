@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Button, Card, Form, Input, Progress, Radio, Space, Tag, Typography, message, Spin, Divider,
+  Button, Card, Form, Input, Progress, Radio, Space, Tag, Typography, message, Spin, Divider, Badge,
 } from 'antd';
 import {
-  ArrowLeftOutlined, SaveOutlined, SendOutlined, InfoCircleOutlined,
+  ArrowLeftOutlined, SaveOutlined, SendOutlined, InfoCircleOutlined, AimOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -11,7 +11,7 @@ import { EVALUATION_PAGE_KO as L } from '@/app/locale/app-ko';
 import { evaluationApi } from '@/features/evaluation/api/evaluationApi';
 import { normalizeEvaluationDesign } from '@/features/evaluation/lib/normalizeEvaluationDesign';
 import type {
-  Answer, DesignSection, DesignQuestion, EvaluationDesign,
+  Answer, DesignSection, DesignQuestion, EvaluationDesign, GoalSummaryCard,
 } from '@/features/evaluation/model/types';
 import { AppButton } from '@/shared/ui/AppButton';
 
@@ -33,6 +33,13 @@ export function EvaluationWritePage() {
     queryKey: ['eval-design', response?.designId],
     queryFn: () => evaluationApi.getDesign(response!.designId!),
     enabled: !!response?.designId,
+  });
+
+  // 목표 스냅샷 vs 현재 비교 요약 카드
+  const { data: goalSummaries } = useQuery({
+    queryKey: ['eval-goal-summaries', responseId],
+    queryFn: () => evaluationApi.getGoalSummaries(responseId),
+    enabled: !!response,
   });
 
   const design: EvaluationDesign | undefined = useMemo(
@@ -359,10 +366,120 @@ export function EvaluationWritePage() {
                 <Divider className="tw-my-2" />
                 <div className="tw-flex tw-justify-between tw-text-sm tw-font-semibold">
                   <Text>합계</Text>
-                  <Text type={sections.reduce((s, sec) => s + sec.weight, 0) === 100 ? 'success' : 'danger'}>
-                    {sections.reduce((s, sec) => s + sec.weight, 0)}%
-                  </Text>
+                  <Text>{sections.reduce((s, sec) => s + sec.weight, 0)}%</Text>
                 </div>
+              </div>
+            </Card>
+          )}
+
+          {/* ── 목표 현황 카드 — 평가 시즌 시작 시점 스냅샷 vs 현재 ── */}
+          {goalSummaries && goalSummaries.length > 0 && (
+            <Card
+              title={
+                <div className="tw-flex tw-items-center tw-gap-2">
+                  <AimOutlined />
+                  <span>목표 현황</span>
+                  <Tag color="blue" className="tw-text-xs">{goalSummaries.length}건</Tag>
+                  {goalSummaries.some((c: GoalSummaryCard) => c.changedSinceSnapshot) && (
+                    <Tag color="orange" className="tw-text-xs">
+                      {goalSummaries.filter((c: GoalSummaryCard) => c.changedSinceSnapshot).length}건 변경
+                    </Tag>
+                  )}
+                </div>
+              }
+              size="small"
+              className="tw-mt-4"
+            >
+              <div className="tw-space-y-3">
+                {goalSummaries.map((card: GoalSummaryCard) => {
+                  const snapshotPct = card.snapshot?.achievementPctAtSnapshot ?? null;
+                  const currentPct = card.current?.achievementPct ?? null;
+                  const delta = snapshotPct != null && currentPct != null ? currentPct - snapshotPct : null;
+                  const deltaColor = delta != null ? (delta > 0 ? 'tw-text-emerald-600' : delta < 0 ? 'tw-text-rose-600' : 'tw-text-slate-400') : '';
+                  const deltaSign = delta != null ? (delta > 0 ? '+' : '') : '';
+
+                  return (
+                    <div
+                      key={card.goalId}
+                      className={`tw-p-3 tw-rounded-xl tw-border ${
+                        card.changedSinceSnapshot ? 'tw-border-orange-200 tw-bg-orange-50/60' : 'tw-border-slate-100 tw-bg-slate-50/60'
+                      }`}
+                    >
+                      {/* 제목 + 변경 뱃지 */}
+                      <div className="tw-flex tw-items-start tw-justify-between tw-gap-2 tw-mb-2">
+                        <Text strong className="tw-text-sm tw-leading-tight">
+                          {card.snapshot?.title ?? card.current?.title ?? '(삭제됨)'}
+                        </Text>
+                        {card.changedSinceSnapshot && (
+                          <Badge
+                            count="변경됨"
+                            style={{ backgroundColor: '#fa8c16', fontSize: '10px' }}
+                          />
+                        )}
+                      </div>
+
+                      {/* 달성률 비교 — 시각적 바 + 수치 */}
+                      <div className="tw-flex tw-items-center tw-gap-3 tw-text-xs">
+                        <div className="tw-flex tw-flex-col tw-items-center tw-gap-0.5">
+                          <span className="tw-text-[10px] tw-text-slate-400">시작 시점</span>
+                          <span className="tw-text-lg tw-font-bold tw-tabular-nums tw-text-slate-600">
+                            {snapshotPct != null ? `${Math.round(snapshotPct)}%` : '-'}
+                          </span>
+                        </div>
+                        <div className="tw-flex tw-flex-1 tw-flex-col tw-gap-1">
+                          <div className="tw-flex tw-items-center tw-gap-1">
+                            <div className="tw-h-1.5 tw-flex-1 tw-rounded-full tw-bg-slate-200">
+                              <div
+                                className="tw-h-full tw-rounded-full tw-bg-slate-400 tw-transition-[width]"
+                                style={{ width: `${Math.min(100, snapshotPct ?? 0)}%` }}
+                              />
+                            </div>
+                          </div>
+                          <div className="tw-flex tw-items-center tw-gap-1">
+                            <div className="tw-h-1.5 tw-flex-1 tw-rounded-full tw-bg-slate-200">
+                              <div
+                                className="tw-h-full tw-rounded-full tw-bg-blue-500 tw-transition-[width]"
+                                style={{ width: `${Math.min(100, currentPct ?? 0)}%` }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                        <div className="tw-flex tw-flex-col tw-items-center tw-gap-0.5">
+                          <span className="tw-text-[10px] tw-text-slate-400">현재</span>
+                          <span className="tw-text-lg tw-font-bold tw-tabular-nums tw-text-[#1e3a5f]">
+                            {currentPct != null ? `${Math.round(currentPct)}%` : '-'}
+                          </span>
+                        </div>
+                        {delta != null && (
+                          <div className="tw-flex tw-flex-col tw-items-center tw-gap-0.5">
+                            <span className="tw-text-[10px] tw-text-slate-400">변동</span>
+                            <span className={`tw-text-sm tw-font-bold tw-tabular-nums ${deltaColor}`}>
+                              {deltaSign}{Math.round(delta)}%p
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 변경점 태그 */}
+                      {card.changeSummary.length > 0 && (
+                        <div className="tw-flex tw-flex-wrap tw-gap-1 tw-mt-2">
+                          {card.changeSummary.map((c: string) => (
+                            <Tag key={c} color="orange" className="!tw-text-[10px] !tw-m-0 !tw-rounded-md">
+                              {{
+                                TITLE: '제목 변경',
+                                TARGET_VALUE: '목표치 변경',
+                                STATUS: '상태 변경',
+                                PERIOD: '기간 변경',
+                                PROGRESS: '진행률 변동',
+                                DELETED_OR_HIDDEN: '삭제/비공개',
+                              }[c] ?? c}
+                            </Tag>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </Card>
           )}

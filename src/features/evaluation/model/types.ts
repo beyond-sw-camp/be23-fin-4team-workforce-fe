@@ -159,6 +159,51 @@ export type EvaluationResponse = {
   calibration?: Calibration;
   normalizedScore?: number;
   targetGoalIds?: string[];
+  /** 평가 시즌 시작 시점에 캡처된 타깃 목표 스냅샷 (JSON 배열). */
+  goalSnapshot?: GoalSnapshotItem[];
+};
+
+// ── Goal Snapshot (평가 시점 목표 캡처) ──
+export type GoalSnapshotItem = {
+  goalId: string;
+  title: string;
+  description?: string;
+  goalKind?: string;
+  statusAtSnapshot?: string;
+  cycle?: string;
+  measureType?: string;
+  unitType?: string;
+  unitLabel?: string;
+  baseline?: number;
+  targetValue?: number;
+  actualValueAtSnapshot?: number;
+  achievementPctAtSnapshot?: number;
+  rolledAchievementPctAtSnapshot?: number;
+  weightPct?: number;
+  contributionPct?: number;
+  startDate?: string;
+  endDate?: string;
+  ownerId?: string;
+  kpiTemplateId?: string;
+  snapshotTakenAt?: string;
+};
+
+// ── Goal Summary Card (스냅샷 vs 현재 비교) ──
+export type GoalSummaryCard = {
+  goalId: string;
+  snapshot?: GoalSnapshotItem;
+  current?: {
+    title: string;
+    status: string;
+    targetValue?: number;
+    actualValue?: number;
+    achievementPct?: number;
+    rolledAchievementPct?: number;
+    weightPct?: number;
+    unitLabel?: string;
+  };
+  changedSinceSnapshot: boolean;
+  changeSummary: string[];
 };
 
 export type SaveResponsePayload = {

@@ -1,5 +1,7 @@
 import type {
   AddGoalProgressUpdatePayload,
+  BundleApprovalKind,
+  GoalApprovalPolicy,
   GoalCompletionSubmitPayload,
   CreateGoalCommentPayload,
   CreateGoalPayload,
@@ -102,6 +104,11 @@ function mapKpiTemplateFromApi(raw: unknown): KpiTemplate | null {
         ? r.require_approval
         : undefined;
   const kpisJson = r.kpisJson != null ? String(r.kpisJson) : r.kpis_json != null ? String(r.kpis_json) : null;
+  const goalApprovalPolicyRaw = r.goalApprovalPolicy ?? r.goal_approval_policy;
+  const goalApprovalPolicy: GoalApprovalPolicy | undefined =
+    goalApprovalPolicyRaw != null && String(goalApprovalPolicyRaw).trim() !== ''
+      ? (String(goalApprovalPolicyRaw).trim() as GoalApprovalPolicy)
+      : undefined;
   return {
     id,
     companyId,
@@ -115,6 +122,7 @@ function mapKpiTemplateFromApi(raw: unknown): KpiTemplate | null {
     specCycleType: specCycleType != null ? String(specCycleType) : undefined,
     targetTeamId: targetTeamId != null && String(targetTeamId).trim() !== '' ? String(targetTeamId) : null,
     requireApproval,
+    goalApprovalPolicy,
     kpisJson,
   };
 }
@@ -374,10 +382,14 @@ function mapGoalApprovalSummaryFromApi(raw: unknown): GoalApprovalSummary | null
         })
         .filter((x): x is { memberId: string } => x !== null)
     : undefined;
+  const approvalKindRaw = r.approvalKind ?? r.approval_kind;
   return {
     goalId,
     requestId: requestIdRaw != null && String(requestIdRaw).trim() !== '' ? String(requestIdRaw).trim() : undefined,
     approvalStatus,
+    approvalKind: approvalKindRaw != null && String(approvalKindRaw).trim() !== ''
+      ? (String(approvalKindRaw).trim() as BundleApprovalKind)
+      : undefined,
     approverId: approverIdRaw != null && String(approverIdRaw).trim() !== '' ? String(approverIdRaw).trim() : undefined,
     decision: decisionRaw != null && String(decisionRaw).trim() !== '' ? String(decisionRaw).trim() : undefined,
     decidedAt: decidedAtRaw != null && String(decidedAtRaw).trim() !== '' ? String(decidedAtRaw).trim() : null,
@@ -761,9 +773,13 @@ function mapApprovalBundleSummaryFromApi(raw: unknown): GoalApprovalBundleSummar
   const id = r.requestId ?? r.request_id ?? r.bundleId ?? r.bundle_id;
   if (id == null || String(id).trim() === '') return null;
   const goalCount = typeof r.goalCount === 'number' ? r.goalCount : Number(r.goal_count) || 0;
+  const akRaw = r.approvalKind ?? r.approval_kind;
   return {
     requestId: String(id).trim(),
     status: String(r.status ?? 'pending'),
+    approvalKind: akRaw != null && String(akRaw).trim() !== ''
+      ? (String(akRaw).trim() as BundleApprovalKind)
+      : undefined,
     goalCount,
     requestedAt:
       r.requestedAt != null ? String(r.requestedAt) : r.requested_at != null ? String(r.requested_at) : undefined,
@@ -807,9 +823,13 @@ function mapApprovalBundleDetailFromApi(raw: unknown): GoalApprovalBundleDetail 
         })
         .filter((x): x is { memberId: string } => x !== null)
     : undefined;
+  const detailAkRaw = r.approvalKind ?? r.approval_kind;
   return {
     requestId: String(rid).trim(),
     status: String(r.status ?? ''),
+    approvalKind: detailAkRaw != null && String(detailAkRaw).trim() !== ''
+      ? (String(detailAkRaw).trim() as BundleApprovalKind)
+      : undefined,
     rejectionReason: r.rejectionReason != null ? String(r.rejectionReason) : null,
     goals,
     approverId: approverIdRaw != null && String(approverIdRaw).trim() !== '' ? String(approverIdRaw).trim() : undefined,

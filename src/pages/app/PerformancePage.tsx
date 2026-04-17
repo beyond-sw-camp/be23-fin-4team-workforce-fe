@@ -28,6 +28,7 @@ import {
   Input,
   InputNumber,
   Modal,
+  Popconfirm,
   Popover,
   Progress,
   Row,
@@ -57,8 +58,10 @@ import type {
   CreateGoalPayload,
   CreateKpiTemplatePayload,
   Goal,
+  GoalApprovalPolicy,
   RollupPolicy,
   KpiCycle,
+  KpiTemplate,
   MeasureType,
   OwnerType,
   UpdateGoalPayload,
@@ -76,6 +79,8 @@ import { flattenOrganizationsWithMeta } from '@/features/organization/lib/flatte
 import { defaultGoalListFilters, filterGoals, type GoalCycleKey, type GoalListFilters } from '@/features/goals/lib/filterGoals';
 import { sortGoals, type GoalListSortKey } from '@/features/goals/lib/sortGoals';
 import { GoalApprovalCenterPanel } from '@/features/goals/ui/GoalApprovalCenterPanel';
+import { GoalWorkflowSteps } from '@/features/goals/ui/GoalWorkflowSteps';
+import { GoalActionBar } from '@/features/goals/ui/GoalActionBar';
 import { computeGoalProgressPercent } from '@/features/goals/ui/goalProgressDisplay';
 import { buildGoalDisplayProgressMap } from '@/features/goals/ui/goalProgressRollup';
 import { GoalsListCards } from '@/features/goals/ui/GoalsListCards';
@@ -481,6 +486,30 @@ function parseCommentReactions(v: string | null | undefined): Array<{ emoji: str
   }
 }
 
+/**
+ * 목표에 연결된 KpiTemplate의 승인 정책을 조회한다.
+ * goalApprovalPolicy가 있으면 그대로, 없으면 requireApproval fallback.
+ */
+function resolveGoalApprovalPolicy(
+  goal: Goal,
+  templates: KpiTemplate[],
+): GoalApprovalPolicy {
+  if (!goal.kpiTemplateId) return 'NONE';
+  const tpl = templates.find((t) => t.id === goal.kpiTemplateId);
+  if (!tpl) return 'NONE';
+  if (tpl.goalApprovalPolicy) return tpl.goalApprovalPolicy;
+  // legacy fallback
+  return tpl.requireApproval ? 'BOTH' : 'NONE';
+}
+
+function policyRequiresActivation(p: GoalApprovalPolicy): boolean {
+  return p === 'ACTIVATION_ONLY' || p === 'BOTH';
+}
+
+function policyRequiresCompletion(p: GoalApprovalPolicy): boolean {
+  return p === 'COMPLETION_ONLY' || p === 'BOTH';
+}
+
 function PerformancePage() {
   const { user } = useAuth();
   const { hasPermission } = usePermissions();
@@ -502,6 +531,7 @@ function PerformancePage() {
   const [goalModalOpen, setGoalModalOpen] = useState(false);
   const [goalEditModalOpen, setGoalEditModalOpen] = useState(false);
   const [completionSubmitModalOpen, setCompletionSubmitModalOpen] = useState(false);
+  const [activationApprovalModalOpen, setActivationApprovalModalOpen] = useState(false);
   const [completionDraftMap, setCompletionDraftMap] = useState<Record<string, { summary?: string; evidenceFiles?: string; savedAt: string }>>({});
   const [detailGoal, setDetailGoal] = useState<Goal | null>(null);
   const [activitiesExpanded, setActivitiesExpanded] = useState(false);
@@ -518,8 +548,11 @@ function PerformancePage() {
     }
   >();
   const tplUnitType = Form.useWatch('unitType', tplForm);
+  const tplApprovalPolicy = Form.useWatch('goalApprovalPolicy', tplForm) as GoalApprovalPolicy | undefined;
   const goalUnitType = Form.useWatch('unitType', goalForm);
   const goalOwnerType = Form.useWatch('ownerType', goalForm);
+  const goalSelectedTplId = Form.useWatch('kpiTemplateId', goalForm);
+  const [activationApprovalForm] = Form.useForm<{ approverId: string }>();
 
   useEffect(() => {
     if (!templateModalOpen || tplUnitType == null) return;
@@ -669,6 +702,7 @@ function PerformancePage() {
 
   const invalidateGoals = () => {
     void queryClient.invalidateQueries({ queryKey: ['goals', 'list'] });
+    void queryClient.invalidateQueries({ queryKey: ['goal-approvals'] });
   };
   const invalidateTemplates = () => {
     void queryClient.invalidateQueries({ queryKey: ['goals', 'kpi-templates'] });
@@ -707,12 +741,39 @@ function PerformancePage() {
 
   const activateMutation = useMutation({
     mutationFn: (goalId: string) => goalApi.activateGoal(goalId),
-    onSuccess: (updatedGoal) => {
+    onSuccess: (updatedGoal, goalId) => {
       message.success('진행이 시작되었습니다. 이제 업데이트로 진행 상황을 반영할 수 있어요.');
       invalidateGoals();
+      void queryClient.invalidateQueries({ queryKey: ['goals', goalId, 'approval'] });
       setDetailGoal((prev) => prev && updatedGoal ? { ...prev, ...updatedGoal } : prev);
     },
     onError: (e: Error) => message.error(e.message),
+  });
+
+  /** 활성화 승인 요청 — approval bundle 생성 */
+  const activationApprovalMutation = useMutation({
+    mutationFn: (vars: { goalId: string; approverId: string }) =>
+      goalApi.requestApproval(vars.goalId, { approverId: vars.approverId }),
+    onSuccess: (_data, vars) => {
+      message.success('활성화 승인 요청이 전송되었습니다. 승인 후 목표가 활성화됩니다.');
+      setActivationApprovalModalOpen(false);
+      activationApprovalForm.resetFields();
+      invalidateGoals();
+      void queryClient.invalidateQueries({ queryKey: ['goals', vars.goalId, 'approval'] });
+    },
+    onError: (e: Error) => message.error(e.message || '활성화 승인 요청에 실패했습니다.'),
+  });
+
+  /** 승인 불필요 시 직접 완료 처리 */
+  const directCompleteMutation = useMutation({
+    mutationFn: (goalId: string) => goalApi.completeGoal(goalId),
+    onSuccess: (updatedGoal, goalId) => {
+      message.success('목표가 완료 처리되었습니다.');
+      invalidateGoals();
+      void queryClient.invalidateQueries({ queryKey: ['goals', goalId, 'approval'] });
+      setDetailGoal((prev) => prev && updatedGoal ? { ...prev, ...updatedGoal } : prev);
+    },
+    onError: (e: Error) => message.error(e.message || '목표 완료 처리에 실패했습니다.'),
   });
 
   const cancelMutation = useMutation({
@@ -845,6 +906,17 @@ function PerformancePage() {
       })),
     [organizationRowsFlat],
   );
+
+  /** 목표 생성 폼에서 선택된 템플릿의 승인 정책 */
+  const goalFormPolicy: GoalApprovalPolicy = useMemo(() => {
+    if (!goalSelectedTplId) return 'NONE';
+    const tpl = templates.find((t) => String(t.id) === String(goalSelectedTplId));
+    if (!tpl) return 'NONE';
+    if (tpl.goalApprovalPolicy) return tpl.goalApprovalPolicy;
+    return tpl.requireApproval ? 'BOTH' : 'NONE';
+  }, [goalSelectedTplId, templates]);
+  const goalFormNeedsActivationApprover = policyRequiresActivation(goalFormPolicy);
+  const goalFormNeedsCompletionApprover = policyRequiresCompletion(goalFormPolicy);
 
   const orgLabelById = useMemo(() => {
     const m = new Map<string, string>();
@@ -1259,43 +1331,61 @@ function PerformancePage() {
               </Text>
             </div>
 
-            <div className="tw-mt-5 tw-flex tw-flex-col tw-gap-2 tw-rounded-xl tw-border tw-border-slate-200/80 tw-bg-white tw-px-3 tw-py-2.5 tw-shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:tw-flex-row sm:tw-flex-wrap sm:tw-items-center sm:tw-justify-between sm:tw-gap-3 sm:tw-px-4 sm:tw-py-3">
-              <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
-                <FileDoneOutlined className="tw-shrink-0 tw-text-[15px] tw-text-slate-400" />
-                <Text className="tw-text-xs tw-font-semibold tw-text-slate-600 sm:tw-text-sm">
-                  {PERFORMANCE_PAGE_KO.approvalStripTitle}
-                </Text>
-              </div>
-              <div className="tw-flex tw-min-w-0 tw-flex-wrap tw-items-center tw-gap-2 sm:tw-gap-3">
-                <div className="tw-flex tw-min-w-[7rem] tw-items-baseline tw-gap-1.5 tw-rounded-lg tw-border tw-border-slate-200/90 tw-bg-slate-50/80 tw-px-2.5 tw-py-1 sm:tw-px-3 sm:tw-py-1.5">
-                  <span className="tw-text-[11px] tw-text-slate-500 sm:tw-text-xs">
-                    {PERFORMANCE_PAGE_KO.approvalStripPendingShort}
-                  </span>
-                  <span className="tw-text-base tw-font-semibold tw-tabular-nums tw-text-[#1e3a5f] sm:tw-text-lg">
-                    {pendingApprovalsQuery.isPending
-                      ? '…'
-                      : pendingApprovalsQuery.data?.length ?? 0}
-                  </span>
+            {/* ── 승인 현황 배너 ── */}
+            {(() => {
+              const pendingCount = pendingApprovalsQuery.data?.length ?? 0;
+              const myCount = approvalHistoryQuery.data?.length ?? 0;
+              const hasPending = pendingCount > 0;
+              return (
+                <div className={`tw-mt-5 tw-flex tw-flex-col tw-gap-2 tw-rounded-xl tw-border tw-px-3 tw-py-2.5 tw-shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:tw-flex-row sm:tw-flex-wrap sm:tw-items-center sm:tw-justify-between sm:tw-gap-3 sm:tw-px-4 sm:tw-py-3 ${
+                  hasPending
+                    ? 'tw-border-amber-300/80 tw-bg-amber-50/70'
+                    : 'tw-border-slate-200/80 tw-bg-white'
+                }`}>
+                  <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
+                    {hasPending ? (
+                      <span className="tw-flex tw-h-7 tw-w-7 tw-items-center tw-justify-center tw-rounded-lg tw-bg-amber-400 tw-text-white tw-text-xs tw-font-bold">
+                        {pendingCount}
+                      </span>
+                    ) : (
+                      <FileDoneOutlined className="tw-shrink-0 tw-text-[15px] tw-text-slate-400" />
+                    )}
+                    <div>
+                      <Text className="tw-text-xs tw-font-semibold sm:tw-text-sm" style={{ color: hasPending ? '#92400e' : '#475569' }}>
+                        {hasPending ? `승인 대기 ${pendingCount}건` : PERFORMANCE_PAGE_KO.approvalStripTitle}
+                      </Text>
+                      {hasPending ? (
+                        <div className="tw-text-[11px] tw-text-amber-700/70">내가 승인해야 할 목표가 있습니다.</div>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="tw-flex tw-min-w-0 tw-flex-wrap tw-items-center tw-gap-2 sm:tw-gap-3">
+                    {!hasPending ? (
+                      <div className="tw-flex tw-min-w-[7rem] tw-items-baseline tw-gap-1.5 tw-rounded-lg tw-border tw-border-slate-200/90 tw-bg-slate-50/80 tw-px-2.5 tw-py-1 sm:tw-px-3 sm:tw-py-1.5">
+                        <span className="tw-text-[11px] tw-text-slate-500 sm:tw-text-xs">{PERFORMANCE_PAGE_KO.approvalStripPendingShort}</span>
+                        <span className="tw-text-base tw-font-semibold tw-tabular-nums tw-text-[#1e3a5f] sm:tw-text-lg">0</span>
+                      </div>
+                    ) : null}
+                    <div className="tw-flex tw-min-w-[7rem] tw-items-baseline tw-gap-1.5 tw-rounded-lg tw-border tw-border-slate-200/90 tw-bg-white tw-px-2.5 tw-py-1 sm:tw-px-3 sm:tw-py-1.5">
+                      <span className="tw-text-[11px] tw-text-slate-500 sm:tw-text-xs">{PERFORMANCE_PAGE_KO.approvalStripMineShort}</span>
+                      <span className="tw-text-base tw-font-semibold tw-tabular-nums tw-text-[#1e3a5f] sm:tw-text-lg">
+                        {approvalHistoryQuery.isPending ? '…' : myCount}
+                      </span>
+                    </div>
+                    <Button
+                      type={hasPending ? 'primary' : 'default'}
+                      size="small"
+                      onClick={() => setApprovalHubOpen(true)}
+                      className={hasPending
+                        ? '!tw-rounded-lg !tw-bg-amber-500 hover:!tw-bg-amber-600 !tw-font-semibold !tw-border-amber-500'
+                        : '!tw-rounded-lg !tw-font-semibold'}
+                    >
+                      {hasPending ? '지금 확인하기' : `${PERFORMANCE_PAGE_KO.approvalStripCenter} →`}
+                    </Button>
+                  </div>
                 </div>
-                <div className="tw-flex tw-min-w-[7rem] tw-items-baseline tw-gap-1.5 tw-rounded-lg tw-border tw-border-slate-200/90 tw-bg-white tw-px-2.5 tw-py-1 sm:tw-px-3 sm:tw-py-1.5">
-                  <span className="tw-text-[11px] tw-text-slate-500 sm:tw-text-xs">
-                    {PERFORMANCE_PAGE_KO.approvalStripMineShort}
-                  </span>
-                  <span className="tw-text-base tw-font-semibold tw-tabular-nums tw-text-[#1e3a5f] sm:tw-text-lg">
-                    {approvalHistoryQuery.isPending
-                      ? '…'
-                      : approvalHistoryQuery.data?.length ?? 0}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  className="tw-ml-auto tw-shrink-0 tw-border-0 tw-bg-transparent tw-p-0 tw-text-xs tw-font-semibold tw-text-[#1e3a5f] hover:tw-underline sm:tw-text-sm"
-                  onClick={() => setApprovalHubOpen(true)}
-                >
-                  {PERFORMANCE_PAGE_KO.approvalStripCenter} →
-                </button>
-              </div>
-            </div>
+              );
+            })()}
           </div>
         </section>
         <Modal
@@ -1489,8 +1579,20 @@ function PerformancePage() {
                       emptyTitle={PERFORMANCE_PAGE_KO.emptyGoalsTitle}
                       emptyHint={PERFORMANCE_PAGE_KO.emptyGoalsHint}
                       onOpenDetail={setDetailGoal}
-                      onActivate={(id) => activateMutation.mutate(id)}
+                      onActivate={(id) => {
+                        const goal = goalsList.find((g) => g.id === id);
+                        if (goal) {
+                          const policy = resolveGoalApprovalPolicy(goal, templates);
+                          if (policyRequiresActivation(policy)) {
+                            // 승인이 필요한 경우 상세 모달을 열어 승인 요청 흐름으로 유도
+                            setDetailGoal(goal);
+                            return;
+                          }
+                        }
+                        activateMutation.mutate(id);
+                      }}
                       activatingGoalId={activatingGoalId}
+                      templates={templates}
                     />
                     <aside className="tw-rounded-xl tw-border tw-border-slate-200 tw-bg-white tw-p-3">
                       <Input
@@ -1631,6 +1733,7 @@ function PerformancePage() {
             unitLabel: '%',
             cycle: 'QUARTERLY',
             capPct: 120,
+            goalApprovalPolicy: 'NONE',
           }}
         >
           <div className="tw-flex tw-justify-end tw-mb-2">
@@ -1726,6 +1829,36 @@ function PerformancePage() {
           <Form.Item name="capPct" label="최대 인정 상한(%)" rules={[{ required: true }]}>
             <InputNumber min={0} max={200} className="tw-w-full" />
           </Form.Item>
+          <Form.Item
+            name="goalApprovalPolicy"
+            label="승인 정책"
+            tooltip="목표를 활성화하거나 종료할 때 상위자 승인을 요구할 단계를 설정합니다."
+            rules={[{ required: true, message: '승인 정책을 선택하세요.' }]}
+          >
+            <Select
+              options={[
+                { value: 'NONE', label: '없음 — 자유 진행' },
+                { value: 'ACTIVATION_ONLY', label: '활성화 시에만 승인' },
+                { value: 'COMPLETION_ONLY', label: '종료 시에만 승인' },
+                { value: 'BOTH', label: '활성화 + 종료 모두 승인' },
+              ]}
+            />
+          </Form.Item>
+          {tplApprovalPolicy && tplApprovalPolicy !== 'NONE' && (
+            <Alert
+              type="info"
+              showIcon
+              className="!tw-mb-4 !tw-rounded-lg"
+              message={
+                tplApprovalPolicy === 'ACTIVATION_ONLY'
+                  ? '이 템플릿으로 생성한 목표는 진행 시작(활성화) 시 승인자 지정이 필요합니다.'
+                  : tplApprovalPolicy === 'COMPLETION_ONLY'
+                    ? '이 템플릿으로 생성한 목표는 종료(완료) 시 승인자 지정이 필요합니다.'
+                    : '이 템플릿으로 생성한 목표는 활성화·종료 모두 승인자 지정이 필요합니다.'
+              }
+              description="승인자는 목표 생성 시 지정합니다."
+            />
+          )}
           <AppButton type="primary" htmlType="submit" className="tw-w-full" loading={createTplMutation.isPending}>
             저장
           </AppButton>
@@ -1812,6 +1945,10 @@ function PerformancePage() {
                 ? String(values.parentGoalId).trim()
                 : '';
             if (parentTrim) payload.parentGoalId = parentTrim;
+            const approverIdTrim = String(values.approverId ?? '').trim();
+            if (approverIdTrim) payload.approverId = approverIdTrim;
+            // 승인 정책이 있으면 activateImmediately 보내지 않음
+            if (goalFormPolicy !== 'NONE') payload.requireApproval = true;
             createGoalMutation.mutate(payload);
           }}
         >
@@ -1862,6 +1999,7 @@ function PerformancePage() {
                     unitType: ut,
                     capPct: cap,
                     unitLabel: ul,
+                    approverId: undefined,
                   });
                 }
               }}
@@ -2072,6 +2210,38 @@ function PerformancePage() {
           <Form.Item name="visibility" label="공개 범위" rules={[{ required: true }]}>
             <Select options={VISIBILITY_OPTIONS} />
           </Form.Item>
+
+          {/* ── 승인 정책 안내 + 승인자 지정 ── */}
+          {goalFormPolicy !== 'NONE' && (
+            <div className="tw-rounded-xl tw-border tw-border-blue-200 tw-bg-blue-50/60 tw-p-3 tw-mb-4">
+              <div className="tw-mb-2 tw-text-xs tw-font-semibold tw-text-blue-700">
+                승인 정책: {goalFormPolicy === 'ACTIVATION_ONLY' ? '활성화 시 승인' : goalFormPolicy === 'COMPLETION_ONLY' ? '종료 시 승인' : '활성화 + 종료 모두 승인'}
+              </div>
+              <div className="tw-text-xs tw-text-slate-600 tw-mb-3">
+                선택한 KPI 템플릿에 승인 정책이 설정되어 있습니다. 승인자를 미리 지정하면 이후 승인 요청 시 자동으로 할당됩니다.
+              </div>
+              <Form.Item
+                name="approverId"
+                label={
+                  goalFormNeedsActivationApprover && goalFormNeedsCompletionApprover
+                    ? '승인자 (활성화 + 종료 공통)'
+                    : goalFormNeedsActivationApprover
+                      ? '활성화 승인자'
+                      : '종료 승인자'
+                }
+                rules={[{ required: true, message: '승인자를 지정해 주세요.' }]}
+                className="!tw-mb-0"
+              >
+                <MemberRemoteSelect
+                  placeholder="승인자를 검색하세요"
+                  getPopupContainer={(triggerNode) =>
+                    (triggerNode.closest('.ant-modal-content') as HTMLElement | null) ?? document.body
+                  }
+                />
+              </Form.Item>
+            </div>
+          )}
+
           <Row gutter={12}>
             <Col span={12}>
               <Form.Item
@@ -2264,8 +2434,76 @@ function PerformancePage() {
         ) : null}
       </AppModal>
 
+      {/* ── 활성화 승인 요청 모달 ── */}
       <AppModal
-        title="목표 완료 제출"
+        title="활성화 승인 요청"
+        open={activationApprovalModalOpen && detailGoal != null}
+        onCancel={() => setActivationApprovalModalOpen(false)}
+        footer={null}
+        destroyOnHidden
+        width={480}
+      >
+        {detailGoal ? (
+          <Form
+            form={activationApprovalForm}
+            layout="vertical"
+            onFinish={(values) => {
+              const approverId = String(values.approverId ?? '').trim();
+              if (!approverId) {
+                message.warning('승인자를 선택해 주세요.');
+                return;
+              }
+              if (approverId === memberId) {
+                message.warning('활성화 승인자는 본인으로 지정할 수 없습니다.');
+                return;
+              }
+              activationApprovalMutation.mutate({
+                goalId: detailGoal.id,
+                approverId,
+              });
+            }}
+          >
+            <div className="tw-mb-4 tw-rounded-xl tw-border tw-border-blue-200/80 tw-bg-blue-50/60 tw-px-4 tw-py-3">
+              <div className="tw-text-sm tw-font-semibold tw-text-[#1e3a5f]">{detailGoal.title}</div>
+              <div className="tw-mt-2 tw-text-xs tw-text-slate-600">
+                이 목표는 <Tag color="blue" className="!tw-m-0 !tw-text-[10px]">활성화 승인</Tag> 이 필요합니다.
+                승인자가 승인하면 목표가 「진행 중(ACTIVE)」 상태로 전환됩니다.
+              </div>
+              <div className="tw-mt-2 tw-grid tw-grid-cols-2 tw-gap-2 tw-text-xs tw-text-slate-600">
+                <div>기간: {detailGoal.startDate} ~ {detailGoal.endDate}</div>
+                <div>목표값: {Math.round(detailGoal.targetValue ?? 0).toLocaleString()}</div>
+              </div>
+            </div>
+
+            <Form.Item
+              name="approverId"
+              label="활성화 승인자"
+              rules={[{ required: true, message: '승인자를 선택해 주세요.' }]}
+              extra="본인 외 멤버를 지정해 주세요. 승인자에게 알림이 전송됩니다."
+            >
+              <MemberRemoteSelect placeholder="검색하여 승인자를 선택" />
+            </Form.Item>
+
+            <div className="tw-grid tw-grid-cols-2 tw-gap-2">
+              <Button onClick={() => setActivationApprovalModalOpen(false)} className="!tw-rounded-lg">
+                취소
+              </Button>
+              <Button
+                type="primary"
+                htmlType="submit"
+                loading={activationApprovalMutation.isPending}
+                className="!tw-rounded-lg !tw-bg-[#1e3a5f] hover:!tw-bg-[#152a45]"
+              >
+                활성화 승인 요청
+              </Button>
+            </div>
+          </Form>
+        ) : null}
+      </AppModal>
+
+      {/* ── 완료 제출 모달 ── */}
+      <AppModal
+        title={detailGoal && policyRequiresCompletion(resolveGoalApprovalPolicy(detailGoal, templates)) ? '목표 완료 승인 제출' : '목표 완료 제출'}
         open={completionSubmitModalOpen && detailGoal != null}
         onCancel={() => setCompletionSubmitModalOpen(false)}
         footer={null}
@@ -2273,6 +2511,10 @@ function PerformancePage() {
         width={680}
       >
         {detailGoal ? (
+          (() => {
+            const modalPolicy = resolveGoalApprovalPolicy(detailGoal, templates);
+            const modalNeedsApproval = policyRequiresCompletion(modalPolicy);
+            return (
           <Form
             form={completionSubmitForm}
             layout="vertical"
@@ -2282,11 +2524,11 @@ function PerformancePage() {
                 return;
               }
               const approverId = String(values.approverId ?? '').trim();
-              if (!approverId) {
+              if (modalNeedsApproval && !approverId) {
                 message.warning('승인자를 선택해 주세요.');
                 return;
               }
-              if (approverId === memberId) {
+              if (modalNeedsApproval && approverId === memberId) {
                 message.warning('완료 승인자는 본인으로 지정할 수 없습니다.');
                 return;
               }
@@ -2310,7 +2552,7 @@ function PerformancePage() {
                 }
               }
               const hasEvidence = Boolean(evidenceFilesSerialized);
-              if (!hasSummary && !hasEvidence) {
+              if (modalNeedsApproval && !hasSummary && !hasEvidence) {
                 const ok = window.confirm(
                   '완료 근거(요약/첨부)가 비어 있습니다.\n반려될 가능성이 높을 수 있어요. 그래도 완료 승인 요청을 진행할까요?',
                 );
@@ -2320,7 +2562,7 @@ function PerformancePage() {
                 await completionSubmitMutation.mutateAsync({
                   goalId: detailGoal.id,
                   body: {
-                    approverId,
+                    approverId: modalNeedsApproval ? approverId : undefined,
                     summary: String(values.summary ?? '').trim() || undefined,
                     evidenceFiles: evidenceFilesSerialized,
                   },
@@ -2340,14 +2582,16 @@ function PerformancePage() {
               </div>
             </div>
 
-            <Form.Item
-              name="approverId"
-              label="완료 승인자"
-              rules={[{ required: true, message: '승인자를 선택해 주세요.' }]}
-              extra="완료 승인자는 본인 외 멤버로 지정해 주세요."
-            >
-              <MemberRemoteSelect placeholder="검색하여 승인자를 선택" />
-            </Form.Item>
+            {modalNeedsApproval ? (
+              <Form.Item
+                name="approverId"
+                label="완료 승인자"
+                rules={[{ required: true, message: '승인자를 선택해 주세요.' }]}
+                extra="완료 승인자는 본인 외 멤버로 지정해 주세요."
+              >
+                <MemberRemoteSelect placeholder="검색하여 승인자를 선택" />
+              </Form.Item>
+            ) : null}
             <Form.Item name="summary" label="완료 보고 요약">
               <Input.TextArea rows={3} placeholder="완료 판단 근거를 간단히 요약해 주세요." />
             </Form.Item>
@@ -2400,10 +2644,12 @@ function PerformancePage() {
                 loading={completionSubmitMutation.isPending}
                 className="!tw-rounded-lg !tw-bg-[#1e3a5f] hover:!tw-bg-[#152a45]"
               >
-                완료 승인 요청
+                {modalNeedsApproval ? '완료 승인 요청' : '완료 제출'}
               </Button>
             </div>
           </Form>
+            );
+          })()
         ) : null}
       </AppModal>
 
@@ -2509,11 +2755,65 @@ function PerformancePage() {
             // 취소: COMPLETED·CANCELLED 상태에서는 불가 (취소는 DRAFT·ACTIVE만)
             const canDetailCancel = canUpdate && (detailGoalStatus === 'DRAFT' || detailGoalStatus === 'ACTIVE');
             const canSubmitCompletion = (isDetailOwner || canUpdate) && detailGoalStatus === 'ACTIVE';
+            const detailPolicy = resolveGoalApprovalPolicy(detailGoal, templates);
+            const needsActivationApproval = policyRequiresActivation(detailPolicy);
+            const needsCompletionApproval = policyRequiresCompletion(detailPolicy);
             const completionDraft = completionDraftMap[detailGoal.id];
             const isDelayed = detailGoalStatus === 'ACTIVE' && dayjs().startOf('day').isAfter(dayjs(detailGoal.endDate), 'day');
             return (
           <div className="tw-grid tw-grid-cols-1 tw-gap-5 lg:tw-grid-cols-[minmax(0,1.45fr)_minmax(320px,0.95fr)]">
             <div className="tw-flex tw-flex-col tw-gap-4">
+
+            {/* ── 워크플로우 스텝 인디케이터 ── */}
+            <div className="tw-rounded-xl tw-border tw-border-slate-200/80 tw-bg-white tw-px-4">
+              <GoalWorkflowSteps
+                goalStatus={detailGoalStatus}
+                approvalFlowStatus={approvalFlowStatus}
+                approvalPolicy={detailPolicy}
+              />
+            </div>
+
+            {/* ── 다음 액션 바 ── */}
+            <GoalActionBar
+              goalStatus={detailGoalStatus}
+              approvalFlowStatus={approvalFlowStatus}
+              approvalPolicy={detailPolicy}
+              isOwner={isDetailOwner}
+              canUpdate={canUpdate}
+              onActivate={() => activateMutation.mutate(detailGoal.id)}
+              onRequestActivationApproval={() => {
+                activationApprovalForm.resetFields();
+                // 이미 지정된 승인자가 있으면 프리필
+                const existingApprover = detailApprovalQuery.data?.approverId?.trim();
+                if (existingApprover) {
+                  activationApprovalForm.setFieldsValue({ approverId: existingApprover });
+                }
+                setActivationApprovalModalOpen(true);
+              }}
+              onRequestCompletionApproval={() => {
+                const d = completionDraftMap[detailGoal.id];
+                const draftFiles = deserializeCompletionEvidence(d?.evidenceFiles ?? null);
+                const submittedFiles = deserializeCompletionEvidence(detailApprovalQuery.data?.completionEvidenceFiles ?? null);
+                const existingApprover = detailApprovalQuery.data?.approverId?.trim();
+                completionSubmitForm.setFieldsValue({
+                  approverId: existingApprover || undefined,
+                  summary: d?.summary ?? '',
+                  evidenceFileList: draftFiles.length > 0 ? draftFiles : submittedFiles,
+                  checked1: false,
+                  checked2: false,
+                  checked3: false,
+                });
+                setCompletionSubmitModalOpen(true);
+              }}
+              onDirectComplete={() => directCompleteMutation.mutate(detailGoal.id)}
+              onCancel={() => cancelMutation.mutate(detailGoal.id)}
+              activateLoading={activateMutation.isPending && activatingGoalId === detailGoal.id}
+              activationApprovalLoading={activationApprovalMutation.isPending}
+              completionApprovalLoading={completionSubmitMutation.isPending}
+              directCompleteLoading={directCompleteMutation.isPending}
+              cancelLoading={cancelMutation.isPending}
+            />
+
             {isDelayed ? (
               <Alert
                 type="warning"
@@ -2523,20 +2823,6 @@ function PerformancePage() {
                 description={`종료 예정일(${detailGoal.endDate})이 이미 지났습니다. 목표를 완료 처리하거나 기간을 연장해 주세요.`}
                 className="!tw-rounded-xl"
               />
-            ) : null}
-            {canDetailActivate ? (
-              <div className="tw-flex tw-flex-wrap tw-gap-2">
-                {canDetailActivate ? (
-                  <Button
-                    type="primary"
-                    loading={activateMutation.isPending && activatingGoalId === detailGoal.id}
-                    onClick={() => activateMutation.mutate(detailGoal.id)}
-                    className="!tw-rounded-lg !tw-bg-[#1e3a5f] hover:!tw-bg-[#152a45]"
-                  >
-                    진행 시작
-                  </Button>
-                ) : null}
-              </div>
             ) : null}
             {detailGoal.description ? (
               <div className="tw-rounded-2xl tw-border tw-border-slate-200/90 tw-bg-white tw-py-4">
@@ -2625,52 +2911,7 @@ function PerformancePage() {
               </div>
             </div>
 
-            {detailGoalStatus === 'ACTIVE' ? (
-              <div className="tw-rounded-2xl tw-border tw-border-slate-200/90 tw-bg-white tw-py-4">
-                <div className="tw-flex tw-items-center tw-justify-between tw-gap-3">
-                  <div>
-                    <div className="tw-text-xs tw-font-semibold tw-text-slate-500">완료 제출</div>
-                    <div className="tw-mt-1 tw-text-sm tw-font-medium tw-text-slate-800">
-                      {approvalFlowStatus === 'PENDING'
-                        ? '완료 제출이 접수되어 승인 대기 중입니다.'
-                        : approvalFlowStatus === 'REJECTED'
-                          ? '반려되었습니다. 보완 후 재제출해 주세요.'
-                          : approvalFlowStatus === 'APPROVED'
-                            ? '완료 제출 승인이 완료되었습니다.'
-                            : completionDraft
-                              ? '임시저장된 완료 제출 초안이 있습니다.'
-                              : '첨부/보고서를 작성해 완료 승인 요청을 보낼 수 있습니다.'}
-                    </div>
-                    {completionDraft ? (
-                      <div className="tw-mt-1 tw-text-xs tw-text-slate-500">
-                        임시저장 시각: {completionDraft.savedAt}
-                      </div>
-                    ) : null}
-                  </div>
-                  <Button
-                    type="primary"
-                    disabled={!canSubmitCompletion || approvalFlowStatus === 'PENDING' || approvalFlowStatus === 'APPROVED'}
-                    className="!tw-rounded-lg !tw-bg-[#1e3a5f] hover:!tw-bg-[#152a45]"
-                    onClick={() => {
-                      const d = completionDraftMap[detailGoal.id];
-                      const draftFiles = deserializeCompletionEvidence(d?.evidenceFiles ?? null);
-                      const submittedFiles = deserializeCompletionEvidence(detailApprovalQuery.data?.completionEvidenceFiles ?? null);
-                      completionSubmitForm.setFieldsValue({
-                        approverId: undefined,
-                        summary: d?.summary ?? '',
-                        evidenceFileList: draftFiles.length > 0 ? draftFiles : submittedFiles,
-                        checked1: false,
-                        checked2: false,
-                        checked3: false,
-                      });
-                      setCompletionSubmitModalOpen(true);
-                    }}
-                  >
-                    {approvalFlowStatus === 'REJECTED' ? '보완 재제출' : approvalFlowStatus === 'PENDING' ? '제출 완료' : approvalFlowStatus === 'APPROVED' ? '승인 완료' : '완료 제출'}
-                  </Button>
-                </div>
-              </div>
-            ) : null}
+            {/* 완료 제출 / 직접 완료 액션은 상단 GoalActionBar가 대체 */}
 
             {detailApprovalQuery.data?.requestId ? (
               <div className="tw-rounded-2xl tw-border tw-border-slate-200/90 tw-bg-white tw-py-4">
