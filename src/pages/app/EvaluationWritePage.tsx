@@ -142,10 +142,11 @@ export function EvaluationWritePage() {
       if (q.type === 'gap') return a.scaleValue == null;
       return false;
     });
-    if (unanswered.length > 0) {
+    const first = unanswered[0];
+    if (first) {
       message.warning(`필수 문항 ${unanswered.length}개가 미작성입니다.`);
       // Scroll to first unanswered
-      const el = document.getElementById(`q-${unanswered[0].id}`);
+      const el = document.getElementById(`q-${first.id}`);
       el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
@@ -182,7 +183,7 @@ export function EvaluationWritePage() {
 
   // ── Question Renderer ──
   const renderQuestion = (q: DesignQuestion) => {
-    const a = answers[q.id] ?? {};
+    const a: Partial<Answer> = answers[q.id] ?? {};
     return (
       <div id={`q-${q.id}`} key={q.id} className="tw-py-4 tw-border-b tw-border-gray-100 last:tw-border-0">
         <div className="tw-flex tw-items-start tw-gap-2 tw-mb-2">
