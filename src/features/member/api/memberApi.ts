@@ -502,6 +502,51 @@ export const memberApi = {
         (r.email?.toLowerCase().includes(kw) ?? false),
     );
   },
+
+  /**
+   * GET /member/search — QueryDSL 페이징, **호출자 소속 회사만** 검색 (백엔드 강제).
+   * ES(`/search/employees`) 없이도 동작해 급여 설정 등에서 권장.
+   */
+  async searchMembersLookup(params: { keyword: string; page?: number; size?: number }): Promise<
+    {
+      memberId: string;
+      name?: string;
+      email?: string;
+      organizationName?: string;
+      jobTitleName?: string;
+    }[]
+  > {
+    const kw = params.keyword?.trim() ?? '';
+    if (!kw) return [];
+    const response = await httpClient.get('/member/search', {
+      params: { keyword: kw, page: params.page ?? 0, size: params.size ?? 30 },
+    });
+    const raw = unwrapApiResponse<unknown>(response.data);
+    if (!raw || typeof raw !== 'object') return [];
+    const pageObj = raw as Record<string, unknown>;
+    const content = Array.isArray(pageObj.content) ? pageObj.content : [];
+    const out: {
+      memberId: string;
+      name?: string;
+      email?: string;
+      organizationName?: string;
+      jobTitleName?: string;
+    }[] = [];
+    for (const row of content) {
+      if (!row || typeof row !== 'object') continue;
+      const o = row as Record<string, unknown>;
+      const memberId = asTextMemberField(o.memberId ?? o.member_id);
+      if (!memberId) continue;
+      out.push({
+        memberId,
+        name: asTextMemberField(o.name) || undefined,
+        email: asTextMemberField(o.email) || undefined,
+        organizationName: asTextMemberField(o.organizationName ?? o.organization_name) || undefined,
+        jobTitleName: asTextMemberField(o.jobTitleName ?? o.job_title_name) || undefined,
+      });
+    }
+    return out;
+  },
   async detail(memberId: string) {
     const id = memberId?.trim();
     if (!id) {

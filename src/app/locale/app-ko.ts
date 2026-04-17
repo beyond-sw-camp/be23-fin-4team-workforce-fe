@@ -20,6 +20,17 @@ export const APP_MENU_LABEL: Record<string, string> = {
   '/app/meetings': '미팅',
   '/app/settings': '설정',
   '/app/ai-documents': 'HR 정책 문서',
+  '/app/work-trips': '출장·외근',
+  '/app/attendance/monthly': '내 근태(월별)',
+  '/app/attendance/company': '전사 근태(일별)',
+  '/app/attendance/company/monthly': '전사 근태(월별)',
+  '/app/attendance/holidays': '회사 공휴일',
+  '/app/attendance/schedules': '근무 스케줄',
+  '/app/leave/grant': '휴가 부여',
+  '/app/leave/policies': '연차 정책',
+  '/app/payroll/admin': '급여 관리',
+  '/app/salary/unused-leave': '미사용 연차수당',
+  '/app/salary/settings': '급여 설정',
 };
 
 /** 사이드 메뉴 표시 순서 */
@@ -32,8 +43,9 @@ export const APP_MENU_PATH_ORDER = [
   '/app/roles',
   '/app/attendance',
   '/app/leave',
-  '/app/payroll',
+  '/app/work-trips',
   '/app/approvals',
+  '/app/payroll',
   '/app/performance',
   '/app/evaluations',
   '/app/meetings',
@@ -71,6 +83,12 @@ export const APP_MENU_ORG_CHART_LABEL = '조직도';
 /** ESG 하위 화면 묶음 */
 export const APP_MENU_ESG_GROUP_LABEL = 'ESG 관리';
 
+/** 근무 묶음 */
+export const APP_MENU_WORK_GROUP_LABEL = '근무';
+
+/** 휴가 묶음 */
+export const APP_MENU_LEAVE_GROUP_LABEL = '휴가';
+
 /** 상단 헤더 등에 표시하는 현재 화면 제목 */
 export function appHeaderTitleFromPath(
   pathname: string,
@@ -83,6 +101,19 @@ export function appHeaderTitleFromPath(
   if (exact) return exact;
   if (pathname === '/app/me') return '마이페이지';
   if (pathname === '/app/me/edit') return '내 정보 수정';
+  if (pathname === '/app/attendance/monthly') return '내 근태(월별)';
+  if (pathname === '/app/attendance/company/monthly') return '전사 근태(월별)';
+  if (pathname === '/app/attendance/company') return '전사 근태(일별)';
+  if (pathname === '/app/leave/grant') return '휴가 부여';
+  if (pathname === '/app/leave/policies') return '연차 정책 관리';
+  if (pathname === '/app/attendance/holidays') return '회사 공휴일 관리';
+  if (pathname === '/app/attendance/schedules') return '근무 스케줄 관리';
+  if (pathname === '/app/work-trips') return '출장·외근';
+  if (pathname === '/app/salary/settings') return '급여 설정';
+  if (pathname === '/app/payroll') return '급여';
+  if (pathname === '/app/payroll/admin') return '급여 관리';
+  if (/^\/app\/payroll\/admin\/[^/]+$/.test(pathname)) return '급여대장 편집';
+  if (/^\/app\/payroll\/[^/]+$/.test(pathname)) return '급여 명세';
   if (/^\/app\/members\/[^/]+$/.test(pathname)) return '구성원 상세';
   if (pathname === '/app/approvals/department') return '부서 문서함';
   if (/^\/app\/meetings\/[^/]+$/.test(pathname)) return '면담 상세';
@@ -90,21 +121,13 @@ export function appHeaderTitleFromPath(
 }
 
 export const APP_GENERIC_PAGE_COPY: Record<string, { title: string; description: string }> = {
-  '/attendance': {
-    title: '근무',
-    description: '출퇴근·근무 현황·근태 통계 기능을 준비 중입니다.',
-  },
-  '/leave': {
-    title: '휴가',
-    description: '휴가 신청·승인·잔여 일수 관리 기능을 준비 중입니다.',
-  },
   '/approvals': {
     title: '결재',
     description: '전자결재·결재함 기능을 준비 중입니다.',
   },
-  '/payroll': {
-    title: '급여',
-    description: '급여 명세·정산 기능을 준비 중입니다.',
+  '/mail': {
+    title: '메일',
+    description: '내부 메일·알림 연동 기능을 준비 중입니다.',
   },
   '/meetings': {
     title: '미팅',
