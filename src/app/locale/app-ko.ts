@@ -53,16 +53,12 @@ export const APP_MENU_PATH_ORDER = [
 /** ESG 메뉴(설정 ON 시 사이드바에 삽입) — 경로·라벨 */
 export const ESG_MENU_PATH_ORDER = [
   '/app/esg',
-  '/app/esg/activities',
-  '/app/esg/campaigns',
   '/app/esg/shop',
   '/app/esg/admin',
 ] as const;
 
 export const ESG_MENU_LABEL: Record<string, string> = {
   '/app/esg': 'ESG',
-  '/app/esg/activities': 'ESG 활동',
-  '/app/esg/campaigns': 'ESG 캠페인',
   '/app/esg/shop': 'ESG 샵',
   '/app/esg/admin': 'ESG 설정',
 };
