@@ -71,9 +71,11 @@ function cardShell(title: string, extra: ReactNode | undefined, children: ReactN
 }
 
 export function DashboardProfileBlock({ user }: { user: Me | null }) {
+  const memberId = user?.id?.trim() ?? '';
   const profileQuery = useQuery({
-    queryKey: ['member', 'dashboard-profile'],
+    queryKey: ['member', 'dashboard-profile', memberId],
     queryFn: () => memberApi.dashboardProfile(),
+    enabled: Boolean(memberId),
     staleTime: 60_000,
   });
   const p = profileQuery.data;

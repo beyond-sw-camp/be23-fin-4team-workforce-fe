@@ -1,4 +1,10 @@
 import type { AuthClient, AuthSession, LoginInput, Me } from '@/features/auth/types';
+import { memberApi } from '@/features/member/api/memberApi';
+import {
+  normalizePermissionList,
+  normalizePermissionSources,
+} from '@/features/permissions/normalize-permission-codes';
+import { mergePermissionStrings, rolePermissionItemsToCodes } from '@/features/permissions/role-permission-codes';
 import { httpClient } from '@/shared/api/httpClient';
 import { unwrapApiResponse } from '@/shared/api/response';
 import { decodeJwtPayload, getTenantHeadersFromJwtPayload } from '@/shared/auth/jwtTenantClaims';
@@ -16,7 +22,12 @@ type LoginResponse = {
   tenantId?: string;
   name?: string;
   email?: string;
-  permissions?: string[];
+  /**
+   * `POST /member/login` `data.permissions` — `RESOURCE:ACTION:RANGE` 문자열 배열
+   * (예: MEMBER:CREATE:COMPANY). `Me.permissions`에 병합 후 Auth 전역 상태에 저장.
+   * 객체 배열이면 문자열로 정규화.
+   */
+  permissions?: unknown;
   isSystemAdminYn?: 'Y' | 'N';
   isFirstLoginYn?: 'Y' | 'N' | 'YES' | 'NO';
   isEmailVerifiedYn?: 'Y' | 'N' | 'YES' | 'NO';
@@ -43,6 +54,8 @@ type LoginResponse = {
   photoUrl?: string;
   headImgUrl?: string;
   headImageUrl?: string;
+  roleId?: string;
+  role_id?: string;
 };
 
 let currentSession: AuthSession | null = null;
@@ -126,6 +139,19 @@ function pickProfileImageUrl(payload: Partial<LoginResponse> & Partial<Me>): str
   return u;
 }
 
+function pickRoleIdFromPayload(payload: Partial<LoginResponse> & Partial<Me>): string | undefined {
+  const raw = payload.roleId ?? payload.role_id;
+  if (typeof raw !== 'string' || !raw.trim()) return undefined;
+  return raw.trim();
+}
+
+function pickIsSystemAdminYn(payload: Partial<LoginResponse> & Partial<Me>): 'YES' | 'NO' | undefined {
+  if (payload.isSystemAdminYn === undefined) return undefined;
+  const b = parseIsSystemAdmin(payload.isSystemAdminYn);
+  if (b === undefined) return undefined;
+  return b ? 'YES' : 'NO';
+}
+
 function mapMe(payload: Partial<LoginResponse> & Partial<Me>): Me {
   const emailVerificationRequired =
     payload.isEmailVerifiedYn === undefined ? undefined : !isYnYes(payload.isEmailVerifiedYn);
@@ -139,8 +165,14 @@ function mapMe(payload: Partial<LoginResponse> & Partial<Me>): Me {
     companyId: pickCompanyId(payload),
     name: payload.name ?? '',
     email: payload.email ?? '',
-    permissions: payload.permissions ?? [],
+    permissions: normalizePermissionList(payload.permissions),
+    roleId: pickRoleIdFromPayload(payload),
+    memberPositionId:
+      typeof payload.memberPositionId === 'string' && payload.memberPositionId.trim()
+        ? payload.memberPositionId.trim()
+        : undefined,
     isSystemAdmin: fromPayload,
+    isSystemAdminYn: pickIsSystemAdminYn(payload),
     jobTitle: pickJobTitle(payload),
     departmentName: pickDepartmentName(payload),
     companyName: pickCompanyName(payload),
@@ -159,9 +191,42 @@ function hasFallbackUserPayload(payload: Partial<LoginResponse> & Partial<Me>) {
   return Boolean(payload.id ?? payload.memberId);
 }
 
-async function getMeOrThrow() {
-  // Backend doesn't currently expose a "current user" GET endpoint like `/member/me`.
-  // Reconstruct `Me` from the access token claims so auth/permission routing can work.
+/** 로그인 응답이 `data.permissions` 뿐 아니라 `data.member.permissions` 등에 권한을 둘 때 수집 */
+function extractLoginPermissions(payload: unknown): string[] {
+  if (!payload || typeof payload !== 'object') return [];
+  const p = payload as Record<string, unknown>;
+  const memberPerms =
+    p.member && typeof p.member === 'object'
+      ? (p.member as Record<string, unknown>).permissions
+      : undefined;
+  const rolePerms =
+    p.role && typeof p.role === 'object' && !Array.isArray(p.role)
+      ? (p.role as Record<string, unknown>).permissions
+      : undefined;
+  return normalizePermissionSources(p.permissions, memberPerms, rolePerms);
+}
+
+async function mergeRolePermissionsIntoMe(me: Me): Promise<Me> {
+  const rid = me.roleId?.trim();
+  if (!rid) {
+    return me;
+  }
+  try {
+    const role = await memberApi.getRole(rid);
+    const codes = rolePermissionItemsToCodes(role.permissions);
+    return {
+      ...me,
+      permissions: mergePermissionStrings(me.permissions, codes),
+    };
+  } catch {
+    return me;
+  }
+}
+
+/**
+ * JWT만으로 `Me` 구성(네트워크 없음). `mergeRolePermissionsIntoMe`는 호출하지 않음 — 로그인 오버레이 후 한 번만 호출하기 위함.
+ */
+function decodeMeFromAccessToken(): Me {
   const token = getAccessToken();
   if (!token) {
     throw new Error('Missing access token');
@@ -180,25 +245,18 @@ async function getMeOrThrow() {
     jwtPayload.authorities ??
     jwtPayload.roles;
 
-  let permissions: string[] = [];
-  if (typeof permissionsRaw === 'string' && permissionsRaw.trim()) {
-    permissions = permissionsRaw
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
-  } else if (Array.isArray(permissionsRaw)) {
-    permissions = permissionsRaw
-      .map((x) => {
-        if (typeof x === 'string') return x;
-        if (x && typeof x === 'object') {
-          const obj = x as Record<string, unknown>;
-          const code = obj.code ?? obj.permission ?? obj.name ?? obj.value;
-          return typeof code === 'string' ? code : undefined;
-        }
-        return undefined;
-      })
-      .filter((x): x is string => typeof x === 'string');
-  }
+  const memberNested =
+    jwtPayload.member && typeof jwtPayload.member === 'object'
+      ? (jwtPayload.member as Record<string, unknown>).permissions
+      : undefined;
+
+  const permissions = normalizePermissionSources(
+    permissionsRaw,
+    jwtPayload.permissionList,
+    jwtPayload.memberPermissions,
+    jwtPayload.rolePermissions,
+    memberNested,
+  );
 
   const isSystemAdminFromJwt = (() => {
     const a = parseIsSystemAdmin(jwtPayload.isSystemAdmin);
@@ -270,13 +328,34 @@ async function getMeOrThrow() {
     throw new Error('JWT payload missing identity');
   }
 
+  let roleIdJwt =
+    (typeof jwtPayload.roleId === 'string' && jwtPayload.roleId.trim()) ||
+    (typeof jwtPayload.role_id === 'string' && jwtPayload.role_id.trim()) ||
+    undefined;
+  if (!roleIdJwt && jwtPayload.role && typeof jwtPayload.role === 'object' && !Array.isArray(jwtPayload.role)) {
+    const r = jwtPayload.role as Record<string, unknown>;
+    const nested = r.roleId ?? r.id ?? r.role_id;
+    if (typeof nested === 'string' && nested.trim()) {
+      roleIdJwt = nested.trim();
+    }
+  }
+  const memberPositionIdJwt =
+    (typeof jwtPayload.memberPositionId === 'string' && jwtPayload.memberPositionId.trim()) ||
+    (typeof jwtPayload.member_position_id === 'string' && jwtPayload.member_position_id.trim()) ||
+    undefined;
+
   return mapMe({
     id,
     companyId,
     name,
     email,
     permissions,
+    roleId: roleIdJwt,
+    memberPositionId: memberPositionIdJwt,
     isSystemAdmin: isSystemAdminFromJwt,
+    isSystemAdminYn: pickIsSystemAdminYn({
+      isSystemAdminYn: jwtPayload.isSystemAdminYn ?? jwtPayload.is_system_admin_yn,
+    } as LoginResponse),
     jobTitle: typeof jobTitleRaw === 'string' ? jobTitleRaw : undefined,
     departmentName: typeof departmentRaw === 'string' ? departmentRaw : undefined,
     companyName: typeof companyNameRaw === 'string' ? companyNameRaw.trim() || undefined : undefined,
@@ -299,6 +378,11 @@ async function getMeOrThrow() {
   });
 }
 
+async function getMeOrThrow(): Promise<Me> {
+  const me = decodeMeFromAccessToken();
+  return mergeRolePermissionsIntoMe(me);
+}
+
 export const authClient: AuthClient = {
   async login(input: LoginInput) {
     const response = await httpClient.post('/member/login', input);
@@ -319,13 +403,36 @@ export const authClient: AuthClient = {
 
     let me: Me;
     try {
-      me = await getMeOrThrow();
+      me = decodeMeFromAccessToken();
     } catch (error) {
       if (!hasFallbackUserPayload(payload)) {
         throw error;
       }
       me = mapMe({ ...payload, email: typeof payload.email === 'string' ? payload.email : input.email });
     }
+
+    const loginOverlay = mapMe(payload);
+    me = {
+      ...me,
+      permissions: mergePermissionStrings(me.permissions, loginOverlay.permissions, extractLoginPermissions(payload)),
+      roleId: me.roleId ?? loginOverlay.roleId,
+      memberPositionId: me.memberPositionId ?? loginOverlay.memberPositionId,
+      isSystemAdmin:
+        loginOverlay.isSystemAdmin !== undefined ? loginOverlay.isSystemAdmin : me.isSystemAdmin,
+      isSystemAdminYn: loginOverlay.isSystemAdminYn ?? me.isSystemAdminYn,
+    };
+    if (!me.name?.trim() && loginOverlay.name) {
+      me = { ...me, name: loginOverlay.name };
+    }
+    if (!me.email?.trim() && loginOverlay.email) {
+      me = { ...me, email: loginOverlay.email };
+    }
+    if (!me.companyId && loginOverlay.companyId) {
+      me = { ...me, companyId: loginOverlay.companyId };
+    }
+
+    me = await mergeRolePermissionsIntoMe(me);
+
     /** 로그인 응답의 isFirstLoginYn 은 JWT에 없을 수 있어, 최초 로그인 시 비밀번호 변경 플래그를 여기서 확정 */
     if (payload.isFirstLoginYn !== undefined) {
       me = {
@@ -346,6 +453,7 @@ export const authClient: AuthClient = {
     } finally {
       clearAccessToken();
       clearRefreshIdentity();
+      /** 세션의 user·permissions 제거 — UI는 AuthProvider `logout()`에서 `user` null 로 초기화 */
       currentSession = null;
     }
   },
@@ -384,7 +492,14 @@ export const authClient: AuthClient = {
         setRefreshIdentity(mid, pid || null);
       }
 
-      const me = await getMeOrThrow();
+      let me = await getMeOrThrow();
+      const fromRefresh = extractLoginPermissions(payload);
+      if (fromRefresh.length > 0) {
+        me = {
+          ...me,
+          permissions: mergePermissionStrings(me.permissions, fromRefresh),
+        };
+      }
       currentSession = { user: me };
       return currentSession;
     } catch {

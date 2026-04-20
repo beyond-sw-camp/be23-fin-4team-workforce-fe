@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PropsWithChildren } from 'react';
 import { message } from 'antd';
+import { queryClient } from '@/app/config/queryClient';
 import { authClient } from '@/features/auth/auth-client';
 import { AuthContext } from '@/features/auth/auth-context';
 import type { AuthContextValue, AuthSession, LoginInput, Me } from '@/features/auth/types';
@@ -36,6 +37,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       sessionExpiryLogoutStarted.current = true;
       void (async () => {
         await authClient.logout();
+        queryClient.clear();
         setUser(null);
         setStatus('unauthenticated');
         void message.warning('세션이 만료되어 로그아웃되었습니다.');
@@ -72,6 +74,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       idleTimer = setTimeout(() => {
         void (async () => {
           await authClient.logout();
+          queryClient.clear();
           setUser(null);
           setStatus('unauthenticated');
           void message.warning('30분 동안 활동이 없어 자동 로그아웃되었습니다.');
@@ -113,6 +116,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
       },
       logout: async () => {
         await authClient.logout();
+        /** 이전 계정 React Query 캐시(대시보드 프로필 등) 제거 */
+        queryClient.clear();
+        /** `Me` 제거로 `permissions` 등 인증 전역 상태 초기화 */
         setUser(null);
         setStatus('unauthenticated');
       },

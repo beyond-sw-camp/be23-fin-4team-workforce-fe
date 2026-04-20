@@ -133,9 +133,7 @@ export function MemberCreateModal({ open, onClose }: Props) {
       destroyOnHidden
       confirmLoading={createM.isPending}
     >
-      <Typography.Paragraph type="secondary" className="!tw-mb-4 !tw-text-sm">
-        신규 구성원을 등록합니다. (POST /member/create)
-      </Typography.Paragraph>
+      
       <Form<FormValues> form={form} layout="vertical" className="tw-pt-1">
         <Form.Item name="name" label="이름" rules={[{ required: true, message: '이름을 입력하세요.' }]}>
           <Input placeholder="홍길동" maxLength={80} />
