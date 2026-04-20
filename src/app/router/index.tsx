@@ -39,10 +39,13 @@ import { DepartmentApprovalsInboxPage } from '@/pages/app/DepartmentApprovalsInb
 import { GenericPage } from '@/pages/app/GenericPage';
 import { AiDocumentsAdminPage } from '@/pages/app/AiDocumentsAdminPage';
 import { AdminAttendanceDailyPage } from '@/pages/app/salary-service/admin/AdminAttendanceDailyPage';
+import { AdminAllowanceRequestsPage } from '@/pages/app/salary-service/admin/AdminAllowanceRequestsPage';
 import { AdminAttendanceMonthlyPage } from '@/pages/app/salary-service/admin/AdminAttendanceMonthlyPage';
 import { AdminCompanyHolidaysPage } from '@/pages/app/salary-service/admin/AdminCompanyHolidaysPage';
+import { AdminFlexibleSlotsPage } from '@/pages/app/salary-service/admin/AdminFlexibleSlotsPage';
 import { AdminLeaveGrantPage } from '@/pages/app/salary-service/admin/AdminLeaveGrantPage';
 import { AdminLeavePoliciesPage } from '@/pages/app/salary-service/admin/AdminLeavePoliciesPage';
+import { AdminOvertimePoliciesPage } from '@/pages/app/salary-service/admin/AdminOvertimePoliciesPage';
 import { AdminPayrollManagePage } from '@/pages/app/salary-service/admin/AdminPayrollManagePage';
 import { AdminPayrollPage } from '@/pages/app/salary-service/admin/AdminPayrollPage';
 import { AdminSalarySettingsPage } from '@/pages/app/salary-service/admin/AdminSalarySettingsPage';
@@ -51,8 +54,11 @@ import { AdminWorkSchedulesPage } from '@/pages/app/salary-service/admin/AdminWo
 import { MyAttendanceMonthlyPage } from '@/pages/app/salary-service/my/MyAttendanceMonthlyPage';
 import { MyAttendancePage } from '@/pages/app/salary-service/my/MyAttendancePage';
 import { MyLeavePage } from '@/pages/app/salary-service/my/MyLeavePage';
+import { MyOvertimeRequestsPage } from '@/pages/app/salary-service/my/MyOvertimeRequestsPage';
 import { MyPayrollPage } from '@/pages/app/salary-service/my/MyPayrollPage';
+import { MyScheduleSelectionsPage } from '@/pages/app/salary-service/my/MyScheduleSelectionsPage';
 import { MyWorkTripsPage } from '@/pages/app/salary-service/my/MyWorkTripsPage';
+import { MyAllowancesPage } from '@/pages/app/salary-service/my/MyAllowancesPage';
 import { PayrollDetailPage } from '@/pages/app/salary-service/my/PayrollDetailPage';
 import { OrganizationPage } from '@/pages/app/OrganizationPage';
 import { MyProfilePage } from '@/pages/app/MyProfilePage';
@@ -373,6 +379,17 @@ const myAttendanceMonthlyRoute = createRoute({
   path: '/attendance/monthly',
   component: MyAttendanceMonthlyPage,
 });
+const myScheduleSelectionsRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/attendance/schedules/my',
+  component: MyScheduleSelectionsPage,
+});
+
+const myOvertimeRequestsRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/attendance/overtime',
+  component: MyOvertimeRequestsPage,
+});
 
 const adminAttendanceMonthlyRoute = createRoute({
   getParentRoute: () => appBaseRoute,
@@ -411,6 +428,28 @@ const adminWorkSchedulesRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/attendance/schedules',
   component: AdminWorkSchedulesPage,
+  beforeLoad: ({ context }) => {
+    if (!context.auth.user?.isSystemAdmin) {
+      throw redirect({ to: '/app/attendance' });
+    }
+  },
+});
+
+const adminOvertimePoliciesRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/attendance/overtime-policies',
+  component: AdminOvertimePoliciesPage,
+  beforeLoad: ({ context }) => {
+    if (!context.auth.user?.isSystemAdmin) {
+      throw redirect({ to: '/app/attendance' });
+    }
+  },
+});
+
+const adminFlexibleSlotsRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/attendance/flexible-slots',
+  component: AdminFlexibleSlotsPage,
   beforeLoad: ({ context }) => {
     if (!context.auth.user?.isSystemAdmin) {
       throw redirect({ to: '/app/attendance' });
@@ -484,6 +523,23 @@ const myPayrollRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/payroll',
   component: MyPayrollPage,
+});
+
+const myAllowancesRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/payroll/allowances',
+  component: MyAllowancesPage,
+});
+
+const adminAllowanceRequestsRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/payroll/allowances/admin',
+  component: AdminAllowanceRequestsPage,
+  beforeLoad: ({ context }) => {
+    if (!context.auth.user?.isSystemAdmin) {
+      throw redirect({ to: '/app/payroll' });
+    }
+  },
 });
 
 const adminSalarySettingsRoute = createRoute({
@@ -560,10 +616,14 @@ const routeTree = rootRoute.addChildren([
       aiDocumentsAdminRoute,
       myAttendanceRoute,
       myAttendanceMonthlyRoute,
+      myScheduleSelectionsRoute,
+      myOvertimeRequestsRoute,
       adminAttendanceMonthlyRoute,
       adminAttendanceDailyRoute,
       adminCompanyHolidaysRoute,
       adminWorkSchedulesRoute,
+      adminOvertimePoliciesRoute,
+      adminFlexibleSlotsRoute,
       myLeaveRoute,
       adminLeaveGrantRoute,
       adminLeavePoliciesRoute,
@@ -572,6 +632,8 @@ const routeTree = rootRoute.addChildren([
       payrollAdminRoute,
       payrollDetailRoute,
       myPayrollRoute,
+      myAllowancesRoute,
+      adminAllowanceRequestsRoute,
       adminSalarySettingsRoute,
       adminUnusedLeavePayoutRoute,
       ...genericRoutes,

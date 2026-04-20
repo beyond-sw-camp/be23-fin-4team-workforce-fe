@@ -119,10 +119,16 @@ const APP_MENU_ICONS: Record<string, ReactNode> = {
     '/app/members': <TeamOutlined className="tw-text-lg"/>,
     '/app/organization': <ApartmentOutlined className="tw-text-lg"/>,
     '/app/attendance': <ClockCircleOutlined className="tw-text-lg"/>,
+    '/app/attendance/overtime': <ClockCircleOutlined className="tw-text-lg"/>,
+    '/app/attendance/schedules/my': <ScheduleOutlined className="tw-text-lg"/>,
+    '/app/attendance/overtime-policies': <ControlOutlined className="tw-text-lg"/>,
+    '/app/attendance/flexible-slots': <ScheduleOutlined className="tw-text-lg"/>,
     '/app/leave': <ScheduleOutlined className="tw-text-lg"/>,
     '/app/approvals': <FileDoneOutlined className="tw-text-lg"/>,
     '/app/approvals/department': <FolderOpenOutlined className="tw-text-lg"/>,
     '/app/payroll': <DollarOutlined className="tw-text-lg"/>,
+    '/app/payroll/allowances': <GiftOutlined className="tw-text-lg"/>,
+    '/app/payroll/allowances/admin': <GiftOutlined className="tw-text-lg"/>,
     '/app/notifications': <BellOutlined className="tw-text-lg"/>,
     '/app/member-chat/admin': <MessageOutlined className="tw-text-lg"/>,
     '/app/performance': <LineChartOutlined className="tw-text-lg"/>,
@@ -306,6 +312,18 @@ function buildAppShellMenuItems(
                             title: APP_MENU_LABEL['/app/attendance/monthly'],
                         },
                         {
+                            key: '/app/attendance/schedules/my',
+                            icon: APP_MENU_ICONS['/app/attendance/schedules/my'],
+                            label: APP_MENU_LABEL['/app/attendance/schedules/my'],
+                            title: APP_MENU_LABEL['/app/attendance/schedules/my'],
+                        },
+                        {
+                            key: '/app/attendance/overtime',
+                            icon: APP_MENU_ICONS['/app/attendance/overtime'],
+                            label: APP_MENU_LABEL['/app/attendance/overtime'],
+                            title: APP_MENU_LABEL['/app/attendance/overtime'],
+                        },
+                        {
                             key: '/app/work-trips',
                             icon: APP_MENU_ICONS['/app/work-trips'],
                             label: APP_MENU_LABEL['/app/work-trips'],
@@ -338,6 +356,18 @@ function buildAppShellMenuItems(
                             icon: <ScheduleOutlined className="tw-text-lg"/>,
                             label: APP_MENU_LABEL['/app/attendance/schedules'],
                             title: APP_MENU_LABEL['/app/attendance/schedules'],
+                        },
+                        {
+                            key: '/app/attendance/overtime-policies',
+                            icon: APP_MENU_ICONS['/app/attendance/overtime-policies'],
+                            label: APP_MENU_LABEL['/app/attendance/overtime-policies'],
+                            title: APP_MENU_LABEL['/app/attendance/overtime-policies'],
+                        },
+                        {
+                            key: '/app/attendance/flexible-slots',
+                            icon: APP_MENU_ICONS['/app/attendance/flexible-slots'],
+                            label: APP_MENU_LABEL['/app/attendance/flexible-slots'],
+                            title: APP_MENU_LABEL['/app/attendance/flexible-slots'],
                         },
                     );
                 }
@@ -446,7 +476,7 @@ function buildAppShellMenuItems(
                     key: PAYROLL_GROUP_KEY,
                     label: (
                         <SiderGroupedMenuLabel icon={<DollarOutlined className="tw-text-lg"/>}
-                                               text={APP_MENU_LABEL['/app/payroll'] ?? '급여'}/>
+                                               text="급여"/>
                     ),
                     children: [
                         {
@@ -473,15 +503,35 @@ function buildAppShellMenuItems(
                             label: APP_MENU_LABEL['/app/salary/settings'],
                             title: APP_MENU_LABEL['/app/salary/settings'],
                         },
+                        {
+                            key: '/app/payroll/allowances/admin',
+                            icon: APP_MENU_ICONS['/app/payroll/allowances/admin'],
+                            label: APP_MENU_LABEL['/app/payroll/allowances/admin'],
+                            title: APP_MENU_LABEL['/app/payroll/allowances/admin'],
+                        },
                     ],
                 });
             } else {
-                const leafLabel = APP_MENU_LABEL[path];
                 items.push({
-                    key: path,
-                    icon: APP_MENU_ICONS[path],
-                    label: leafLabel,
-                    title: leafLabel,
+                    key: PAYROLL_GROUP_KEY,
+                    label: (
+                        <SiderGroupedMenuLabel icon={<DollarOutlined className="tw-text-lg"/>}
+                                               text="급여"/>
+                    ),
+                    children: [
+                        {
+                            key: '/app/payroll',
+                            icon: APP_MENU_ICONS['/app/payroll'],
+                            label: APP_MENU_LABEL['/app/payroll'],
+                            title: APP_MENU_LABEL['/app/payroll'],
+                        },
+                        {
+                            key: '/app/payroll/allowances',
+                            icon: APP_MENU_ICONS['/app/payroll/allowances'],
+                            label: APP_MENU_LABEL['/app/payroll/allowances'],
+                            title: APP_MENU_LABEL['/app/payroll/allowances'],
+                        },
+                    ],
                 });
             }
             continue;
@@ -1109,10 +1159,14 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
     if (/^\/app\/meetings\/[^/]+$/.test(pathname)) return ['/app/meetings'];
     if (/^\/app\/performance\//.test(pathname)) return ['/app/performance'];
     if (pathname === '/app/attendance/monthly') return ['/app/attendance/monthly'];
+    if (pathname === '/app/attendance/schedules/my') return ['/app/attendance/schedules/my'];
+    if (pathname === '/app/attendance/overtime') return ['/app/attendance/overtime'];
     if (pathname === '/app/attendance/company/monthly') return ['/app/attendance/company/monthly'];
     if (pathname === '/app/attendance/company') return ['/app/attendance/company'];
     if (pathname === '/app/attendance/holidays') return ['/app/attendance/holidays'];
     if (pathname === '/app/attendance/schedules') return ['/app/attendance/schedules'];
+    if (pathname === '/app/attendance/overtime-policies') return ['/app/attendance/overtime-policies'];
+    if (pathname === '/app/attendance/flexible-slots') return ['/app/attendance/flexible-slots'];
     if (pathname === '/app/attendance') return ['/app/attendance'];
     if (pathname === '/app/work-trips') return ['/app/work-trips'];
     if (pathname === '/app/leave/grant') return ['/app/leave/grant'];
@@ -1120,6 +1174,8 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
     if (pathname === '/app/leave') return ['/app/leave'];
     if (pathname === '/app/salary/unused-leave') return ['/app/salary/unused-leave'];
     if (pathname === '/app/salary/settings') return ['/app/salary/settings'];
+    if (pathname === '/app/payroll/allowances') return ['/app/payroll/allowances'];
+    if (pathname === '/app/payroll/allowances/admin') return ['/app/payroll/allowances/admin'];
     if (pathname.startsWith('/app/payroll/admin')) return ['/app/payroll/admin'];
     if (pathname === '/app/payroll' || /^\/app\/payroll\/[^/]+$/.test(pathname)) return ['/app/payroll'];
     if (pathname.startsWith('/app/approvals')) {
@@ -1169,6 +1225,9 @@ function menuOpenKeysForPath(
             pathname === '/app/salary/unused-leave' ||
             pathname === '/app/salary/settings')
     ) {
+        keys.push(PAYROLL_GROUP_KEY);
+    }
+    if (!isSystemAdmin && (pathname === '/app/payroll' || pathname === '/app/payroll/allowances')) {
         keys.push(PAYROLL_GROUP_KEY);
     }
     if (pathname.startsWith('/app/esg')) keys.push(ESG_GROUP_KEY);

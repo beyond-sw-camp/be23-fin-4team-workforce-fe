@@ -1,5 +1,7 @@
 /** 급여·정책·템플릿·세율만 쪼개 둔 API (salaryServiceApi랑 경로 동일) */
 import type {
+  MemberAllowance,
+  MemberAllowanceCreatePayload,
   Payroll,
   PayrollCreatePayload,
   PayrollItem,
@@ -304,6 +306,63 @@ export const salaryApi = {
 
     async delete(id: string): Promise<void> {
       await httpClient.delete(`${BASE}/salary/taxRate/${encodeURIComponent(id)}`);
+    },
+  },
+
+  /** /api/salary/me/allowances — 개인 수당 신청(사원) */
+  memberAllowance: {
+    async createMy(payload: MemberAllowanceCreatePayload): Promise<MemberAllowance> {
+      const { data } = await httpClient.post(`${BASE}/api/salary/me/allowances`, payload);
+      unwrapMessage(data);
+      return unwrapApiResponse<MemberAllowance>(data);
+    },
+
+    async listMy(): Promise<MemberAllowance[]> {
+      const { data } = await httpClient.get(`${BASE}/api/salary/me/allowances`);
+      const unwrapped = unwrapApiResponse<MemberAllowance[] | null>(data);
+      return Array.isArray(unwrapped) ? unwrapped : [];
+    },
+
+    async updateApprovalLink(memberAllowanceId: string, approvalRequestId: string): Promise<void> {
+      await httpClient.patch(
+        `${BASE}/api/salary/me/allowances/${encodeURIComponent(memberAllowanceId)}/approval-link`,
+        null,
+        { params: { approvalRequestId } },
+      );
+    },
+
+    async cancelMy(memberAllowanceId: string): Promise<void> {
+      await httpClient.delete(`${BASE}/api/salary/me/allowances/${encodeURIComponent(memberAllowanceId)}`);
+    },
+  },
+
+  /** /api/salary/admin/allowances — 수당 관리자 조회/자동등록 */
+  memberAllowanceAdmin: {
+    async autoGrant(payload: {
+      memberId: string;
+      salaryItemTemplateId: string;
+      amount: number;
+      effectiveFrom: string;
+    }): Promise<void> {
+      const { data } = await httpClient.post(`${BASE}/api/salary/admin/allowances/auto-grant`, payload);
+      unwrapMessage(data);
+    },
+
+    async listByStatus(status?: string): Promise<MemberAllowance[]> {
+      const { data } = await httpClient.get(`${BASE}/api/salary/admin/allowances`, {
+        params: status ? { status } : undefined,
+      });
+      const unwrapped = unwrapApiResponse<MemberAllowance[] | null>(data);
+      return Array.isArray(unwrapped) ? unwrapped : [];
+    },
+
+    async listActiveByMember(memberId: string, date: string): Promise<MemberAllowance[]> {
+      const { data } = await httpClient.get(
+        `${BASE}/api/salary/admin/allowances/members/${encodeURIComponent(memberId)}/active`,
+        { params: { date } },
+      );
+      const unwrapped = unwrapApiResponse<MemberAllowance[] | null>(data);
+      return Array.isArray(unwrapped) ? unwrapped : [];
     },
   },
 };
