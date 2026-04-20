@@ -1,0 +1,22 @@
+/** ESG 메뉴·페이지 공통 네이비 (액션·강조) */
+export const esgIconAccentClass = 'tw-text-[#1e3a5f]';
+
+/** 카드 extra 등 작은 링크형 버튼 */
+export const esgCardLinkButtonClass =
+  '!tw-h-auto !tw-px-1 !tw-py-0 !tw-text-xs !tw-text-[#1e3a5f] hover:!tw-text-[#162f4d]';
+
+/** antd primary 버튼을 네이비 톤으로 */
+export const esgPrimaryButtonClass =
+  '!tw-bg-[#1e3a5f] !tw-border-[#1e3a5f] hover:!tw-bg-[#162f4d] hover:!tw-border-[#162f4d]';
+
+/** 기본(default) 버튼에 네이비 테두리·글자 */
+export const esgOutlinedAccentClass =
+  '!tw-border-[#1e3a5f] !tw-text-[#1e3a5f] hover:!tw-border-[#162f4d] hover:!tw-text-[#162f4d]';
+
+export const esgAccentTextClass = 'tw-text-[#1e3a5f]';
+
+/** 본문 링크·테이블 액션 링크 */
+export const esgLinkTextClass = 'tw-text-[#1e3a5f] hover:!tw-text-[#162f4d]';
+
+/** 테이블 제목 클릭 등 (antd Link 색 덮어쓰기) */
+export const esgTableLinkClass = '!tw-text-[#1e3a5f] hover:!tw-text-[#162f4d]';

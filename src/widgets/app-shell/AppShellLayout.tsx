@@ -21,7 +21,6 @@ import {
     PieChartOutlined,
     MoreOutlined,
     MessageOutlined,
-    KeyOutlined,
     PartitionOutlined,
     PoweroffOutlined,
     ProjectOutlined,
@@ -43,6 +42,7 @@ import {useContext, useEffect, useMemo, useState} from 'react';
 import {useQuery, useQueryClient} from '@tanstack/react-query';
 import {Link, Outlet, useNavigate, useRouterState} from '@tanstack/react-router';
 import {useAuth} from '@/features/auth/useAuth';
+import {PERM} from '@/features/permissions/backend-permissions';
 import {usePermissions} from '@/features/permissions/usePermissionsHook';
 import type {EsgConfig} from '@/features/esg/api/esgApi';
 import {esgApi} from '@/features/esg/api/esgApi';
@@ -52,6 +52,10 @@ import {companyApi} from '@/features/organization/api/companyApi';
 import {searchApi} from '@/features/search/api/searchApi';
 import {organizationApi} from '@/features/organization/api/organizationApi';
 import {memberApi} from '@/features/member/api/memberApi';
+import {
+    canAccessMemberDirectory,
+    canAccessMemberDirectoryFromPermissionStrings,
+} from '@/features/permissions/member-directory-access';
 import {
     APP_BRAND_NAME,
     APP_MENU_ESG_GROUP_LABEL,
@@ -77,13 +81,15 @@ import {
 } from '@/features/approvals/lib/approvalGuideNav';
 import {AppSearchField} from '@/shared/ui/AppSearchField';
 import {AiChatbotFab} from '@/widgets/app-shell/AiChatbotFab';
+import {MemberChatProvider, useMemberChatOpener} from '@/widgets/app-shell/MemberChatOpener';
 import {OrgChartModal} from '@/widgets/organization/OrgChartModal';
 import {HeaderSearchMemberDetailModal} from '@/widgets/app-shell/HeaderSearchMemberDetailModal';
-import {MemberChatModal} from '@/widgets/app-shell/MemberChatModal';
 import {
-    APPROVAL_SIDEBAR_ROOT_KEY,
+    approvalSecondaryPanelOpenKeys,
+    approvalSiderSelectedMenuKeys,
     buildApprovalMenuGroupChildren,
     decodeWfNavKey,
+    encodeWfNavKey,
 } from '@/widgets/app-shell/approvalSiderMenu';
 
 /** 왼쪽 날개 패널 + 본문 — 접기·펼치기 동일 아이콘(선형·둥근 테두리). */
@@ -112,7 +118,6 @@ const APP_MENU_ICONS: Record<string, ReactNode> = {
     '/app/calendar': <CalendarOutlined className="tw-text-lg"/>,
     '/app/members': <TeamOutlined className="tw-text-lg"/>,
     '/app/organization': <ApartmentOutlined className="tw-text-lg"/>,
-    '/app/roles': <KeyOutlined className="tw-text-lg"/>,
     '/app/attendance': <ClockCircleOutlined className="tw-text-lg"/>,
     '/app/attendance/overtime': <ClockCircleOutlined className="tw-text-lg"/>,
     '/app/attendance/schedules/my': <ScheduleOutlined className="tw-text-lg"/>,
@@ -135,8 +140,6 @@ const APP_MENU_ICONS: Record<string, ReactNode> = {
 
 const ESG_MENU_ICONS: Record<string, ReactNode> = {
     '/app/esg': <GlobalOutlined className="tw-text-lg"/>,
-    '/app/esg/activities': <FormOutlined className="tw-text-lg"/>,
-    '/app/esg/campaigns': <FlagOutlined className="tw-text-lg"/>,
     '/app/esg/shop': <ShoppingOutlined className="tw-text-lg"/>,
     '/app/esg/admin': <ControlOutlined className="tw-text-lg"/>,
 };
@@ -148,12 +151,6 @@ function shouldShowEsgMenuItem(path: string, cfg: EsgConfig | null | undefined, 
     if (!cfg || cfg.esgEnabledYn !== 'YES') {
         return false;
     }
-    if (path === '/app/esg/campaigns') {
-        return cfg.campaignEnabledYn !== 'NO';
-    }
-    if (path === '/app/esg/shop') {
-        return cfg.shopEnabledYn !== 'NO';
-    }
     return true;
 }
 
@@ -162,7 +159,7 @@ const TALENT_HUB_PATHS = ['/app/performance', '/app/evaluations', '/app/meetings
 const TALENT_HUB_PATH_SET = new Set<string>(TALENT_HUB_PATHS);
 
 const ORG_HR_GROUP_KEY = 'group-org-hr';
-const ORG_HR_PATHS = ['/app/members', '/app/organization', '/app/roles'] as const;
+const ORG_HR_PATHS = ['/app/members', '/app/organization'] as const;
 const ORG_HR_PATH_SET = new Set<string>(ORG_HR_PATHS);
 
 const ESG_GROUP_KEY = 'group-esg';
@@ -200,20 +197,15 @@ function approvalSectionIcon(section: (typeof APPROVAL_GUIDE_SECTION_ORDER)[numb
 
 function approvalLeafIcon(box: string) {
     if (box === 'do-pending') return <ClockCircleOutlined className="tw-text-lg"/>;
-    if (box === 'do-received') return <FileDoneOutlined className="tw-text-lg"/>;
-    if (box === 'do-cc-wait') return <EyeOutlined className="tw-text-lg"/>;
+    if (box === 'do-acted') return <FileDoneOutlined className="tw-text-lg"/>;
     if (box === 'do-upcoming') return <CalendarOutlined className="tw-text-lg"/>;
-    if (box === 'per-compose-all') return <FormOutlined className="tw-text-lg"/>;
+    if (box === 'per-all') return <FormOutlined className="tw-text-lg"/>;
     if (box === 'per-draft') return <FolderOpenOutlined className="tw-text-lg"/>;
-    if (box === 'per-acted-as-approver') return <FileDoneOutlined className="tw-text-lg"/>;
-    if (box === 'per-viewers-all') return <EyeOutlined className="tw-text-lg"/>;
-    if (box === 'per-inbox-combined') return <BellOutlined className="tw-text-lg"/>;
-    if (box === 'per-sent') return <ProjectOutlined className="tw-text-lg"/>;
+    if (box === 'per-viewers') return <EyeOutlined className="tw-text-lg"/>;
     if (box === 'per-absence') return <TeamOutlined className="tw-text-lg"/>;
     if (box === 'per-official') return <SafetyCertificateOutlined className="tw-text-lg"/>;
-    if (box === 'dept-draft') return <FormOutlined className="tw-text-lg"/>;
-    if (box === 'dept-ref') return <EyeOutlined className="tw-text-lg"/>;
-    if (box === 'dept-official') return <SafetyCertificateOutlined className="tw-text-lg"/>;
+    if (box === 'dept-all') return <FormOutlined className="tw-text-lg"/>;
+    if (box === 'dept-received') return <SafetyCertificateOutlined className="tw-text-lg"/>;
     return <FileTextOutlined className="tw-text-lg"/>;
 }
 
@@ -238,9 +230,9 @@ function SiderGroupedMenuLabel({icon, text}: { icon: ReactNode; text: string }) 
 }
 
 function buildAppShellMenuItems(
-    esgPaths: readonly string[],
     isAdmin: boolean,
-    approvalMenuChildren?: NonNullable<MenuProps['items']>,
+    approvalMenuChildren: NonNullable<MenuProps['items']> | undefined,
+    canAccessMemberDirectory: boolean,
 ): NonNullable<MenuProps['items']> {
     const items: NonNullable<MenuProps['items']> = [];
     let hubInserted = false;
@@ -280,7 +272,7 @@ function buildAppShellMenuItems(
             continue;
         }
         if (ORG_HR_PATH_SET.has(path)) {
-            if (!isAdmin) {
+            if (!canAccessMemberDirectory) {
                 continue;
             }
             if (!orgInserted) {
@@ -433,13 +425,9 @@ function buildAppShellMenuItems(
             if (!approvalInserted) {
                 approvalInserted = true;
                 if (approvalMenuChildren && approvalMenuChildren.length > 0) {
-                    items.push({
-                        key: APPROVAL_SIDEBAR_ROOT_KEY,
-                        label: (
-                            <SiderGroupedMenuLabel icon={<FileDoneOutlined className="tw-text-lg"/>} text="전자결재"/>
-                        ),
-                        children: approvalMenuChildren,
-                    });
+                    for (const entry of approvalMenuChildren) {
+                        items.push(entry);
+                    }
                 } else {
                     const composeEntry = APPROVAL_SHELL_MENU_ENTRIES[0];
                     const guideLeaves = APPROVAL_SHELL_MENU_ENTRIES.slice(1);
@@ -555,21 +543,6 @@ function buildAppShellMenuItems(
             label: leafLabel,
             title: leafLabel,
         });
-        if (path === '/app/calendar' && esgPaths.length > 0) {
-            items.push({
-                key: ESG_GROUP_KEY,
-                label: (
-                    <SiderGroupedMenuLabel icon={<GlobalOutlined className="tw-text-lg"/>}
-                                           text={APP_MENU_ESG_GROUP_LABEL}/>
-                ),
-                children: esgPaths.map((p) => ({
-                    key: p,
-                    icon: ESG_MENU_ICONS[p],
-                    label: ESG_MENU_LABEL[p],
-                    title: ESG_MENU_LABEL[p],
-                })),
-            });
-        }
     }
     return items;
 }
@@ -578,6 +551,7 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
     const {status, user} = useAuth();
     const isAdmin = user?.isSystemAdmin === true;
     const {hasPermission} = usePermissions();
+    const showApprovalFormSettings = hasPermission(PERM.APPROVAL_AD_READ);
 
     const {data: esgConfig} = useQuery({
         queryKey: ['esg', 'config'],
@@ -607,9 +581,46 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
             myOrganizationId: meMember?.organizationId,
             myOrganizationName: meMember?.organizationName,
         });
-        const items = buildAppShellMenuItems(esgPaths, isAdmin, approvalMenuChildren);
+        const showMemberDirectoryMenu =
+            isAdmin ||
+            canAccessMemberDirectory(hasPermission) ||
+            canAccessMemberDirectoryFromPermissionStrings(user?.permissions);
+        const items = buildAppShellMenuItems(isAdmin, approvalMenuChildren, showMemberDirectoryMenu);
 
-        if (!isAdmin) return items;
+        const approvalFormSettingsItem = showApprovalFormSettings
+            ? {
+                  key: encodeWfNavKey({to: '/app/approvals', search: {tab: 'admin'}}),
+                  icon: <SettingOutlined className="tw-text-lg"/>,
+                  label: '결재 양식 설정',
+                  title: '결재 양식 설정',
+              }
+            : null;
+
+        const withApprovalSettings = approvalFormSettingsItem ? [...items, approvalFormSettingsItem] : items;
+
+        if (!isAdmin) return withApprovalSettings;
+        const esgMenuItem =
+            esgPaths.length > 0
+                ? {
+                      key: ESG_GROUP_KEY,
+                      label: (
+                          <SiderGroupedMenuLabel icon={<GlobalOutlined className="tw-text-lg"/>} text={APP_MENU_ESG_GROUP_LABEL}/>
+                      ),
+                      children: esgPaths.map((p) => ({
+                          key: p,
+                          icon: ESG_MENU_ICONS[p],
+                          label: ESG_MENU_LABEL[p],
+                          title: ESG_MENU_LABEL[p],
+                      })),
+                  }
+                : null;
+
+        /** 직원: ESG를 메뉴 최하단에 배치 */
+        if (!isAdmin) {
+            return esgMenuItem ? [...items, esgMenuItem] : items;
+        }
+
+        /** 시스템 관리자: 보안 조회 다음 · HR 정책 문서 바로 위에 ESG */
         const chatAdmin = {
             key: '/app/member-chat/admin',
             icon: <MessageOutlined className="tw-text-lg"/>,
@@ -622,8 +633,12 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
             label: 'HR 정책 문서',
             title: 'HR 정책 문서',
         };
+
+        if (esgMenuItem) {
+            return [...items, chatAdmin, esgMenuItem, doc];
+        }
         return [...items, chatAdmin, doc];
-    }, [esgConfig, isAdmin, approvalOrgChart, meMember, status]);
+    }, [esgConfig, isAdmin, approvalOrgChart, meMember, status, user?.permissions]);
 }
 
 const headerGhostIconClass =
@@ -879,7 +894,8 @@ function SiderAccountPopoverContent({
     );
 }
 
-function SiderUserFooter({collapsed}: { collapsed?: boolean }) {
+/** 헤더 우측(알림 옆) — 프로필·마이페이지·설정·로그아웃 (기존 사이드바 하단 계정 영역 이동) */
+function AppShellAccountMenu() {
     const {user, logout} = useAuth();
     const navigate = useNavigate();
     const [accountPopoverOpen, setAccountPopoverOpen] = useState(false);
@@ -913,11 +929,9 @@ function SiderUserFooter({collapsed}: { collapsed?: boolean }) {
         <Avatar
             src={profileSrc || undefined}
             alt=""
-            icon={!profileSrc ? <UserOutlined className="tw-text-lg tw-text-slate-500"/> : undefined}
-            className={
-                profileSrc ? '[&_img]:tw-object-cover' : 'tw-bg-slate-100'
-            }
-            size={40}
+            icon={!profileSrc ? <UserOutlined className="tw-text-base tw-text-slate-500"/> : undefined}
+            className={profileSrc ? '[&_img]:tw-object-cover' : 'tw-bg-slate-100'}
+            size={36}
         />
     );
 
@@ -948,38 +962,10 @@ function SiderUserFooter({collapsed}: { collapsed?: boolean }) {
         content: popoverContent,
     };
 
-    if (collapsed) {
-        return (
-            <Popover {...popoverCommon} placement="rightTop">
-                <div
-                    className="tw-flex tw-w-full tw-shrink-0 tw-cursor-pointer tw-flex-col tw-items-center tw-rounded-lg tw-border-t tw-border-slate-100 tw-px-2 tw-py-3 tw-outline-none hover:tw-bg-slate-50/80 focus-visible:tw-ring-2 focus-visible:tw-ring-blue-500/30"
-                    role="button"
-                    tabIndex={0}
-                    aria-label="계정 정보"
-                    aria-expanded={accountPopoverOpen}
-                    aria-haspopup="dialog"
-                    onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            setAccountPopoverOpen((o) => !o);
-                        }
-                    }}
-                >
-                    {avatar}
-                </div>
-            </Popover>
-        );
-    }
-
     return (
-        <Popover
-            {...popoverCommon}
-            placement="top"
-            /** 트리거(사이드 ~248px)보다 패널(~288px)이 넓어 `topRight`면 왼쪽으로 크게 밀림 → 가운데 정렬 + 살짝 위로 */
-            align={{offset: [0, -8]}}
-        >
+        <Popover {...popoverCommon} placement="bottomRight" align={{offset: [0, 6]}}>
             <div
-                className="tw-flex tw-w-full tw-shrink-0 tw-cursor-pointer tw-items-center tw-gap-2 tw-px-3 tw-py-3 tw-outline-none hover:tw-bg-slate-50/80 focus-visible:tw-ring-2 focus-visible:tw-ring-blue-500/30"
+                className="tw-flex tw-min-w-0 tw-max-w-[min(100vw-96px,280px)] tw-shrink-0 tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-lg tw-py-1 tw-pl-1 tw-pr-1.5 tw-outline-none hover:tw-bg-slate-100/90 focus-visible:tw-ring-2 focus-visible:tw-ring-blue-500/30 md:tw-gap-2.5 md:tw-px-2"
                 role="button"
                 tabIndex={0}
                 aria-label="계정 정보"
@@ -992,15 +978,13 @@ function SiderUserFooter({collapsed}: { collapsed?: boolean }) {
                     }
                 }}
             >
-                <div className="tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-3">
-                    {avatar}
-                    <div className="tw-min-w-0 tw-flex-1">
-                        <div className="tw-truncate tw-text-sm tw-font-semibold tw-text-slate-900" title={name}>
-                            {name}
-                        </div>
-                        <div className="tw-truncate tw-text-xs tw-text-slate-500" title={orgLine}>
-                            {orgLine}
-                        </div>
+                {avatar}
+                <div className="tw-hidden tw-min-w-0 tw-flex-1 md:tw-block">
+                    <div className="tw-truncate tw-text-left tw-text-sm tw-font-semibold tw-text-slate-900" title={name}>
+                        {name}
+                    </div>
+                    <div className="tw-truncate tw-text-left tw-text-xs tw-text-slate-500" title={orgLine}>
+                        {orgLine}
                     </div>
                 </div>
                 <MoreOutlined className="tw-shrink-0 tw-text-base tw-text-slate-500"/>
@@ -1012,10 +996,10 @@ function SiderUserFooter({collapsed}: { collapsed?: boolean }) {
 function AppShellHeader() {
     const {status} = useAuth();
     const queryClient = useQueryClient();
+    const {openMemberChat} = useMemberChatOpener();
     const [search, setSearch] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
     const [headerDetailMemberId, setHeaderDetailMemberId] = useState<string | null>(null);
-    const [memberChatOpen, setMemberChatOpen] = useState(false);
 
     useEffect(() => {
         const t = window.setTimeout(() => {
@@ -1145,8 +1129,6 @@ function AppShellHeader() {
                 onClose={() => setHeaderDetailMemberId(null)}
             />
 
-            <MemberChatModal open={memberChatOpen} onClose={() => setMemberChatOpen(false)}/>
-
             <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-2 tw-overflow-visible md:tw-gap-4">
                 <SessionAccessTimer/>
                 <Tooltip title="멤버 채팅">
@@ -1155,7 +1137,7 @@ function AppShellHeader() {
                             type="button"
                             className={headerGhostIconClass}
                             aria-label={`멤버 채팅${chatUnreadTotal > 0 ? ` (안 읽은 메시지 ${chatUnreadTotal}건)` : ''}`}
-                            onClick={() => setMemberChatOpen(true)}
+                            onClick={() => openMemberChat()}
                         >
                             <MessageOutlined className="tw-text-[20px]"/>
                         </button>
@@ -1166,6 +1148,7 @@ function AppShellHeader() {
                         <BellOutlined className="tw-text-[20px]"/>
                     </Link>
                 </Badge>
+                <AppShellAccountMenu/>
             </div>
         </Layout.Header>
     );
@@ -1196,6 +1179,8 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
     if (pathname.startsWith('/app/payroll/admin')) return ['/app/payroll/admin'];
     if (pathname === '/app/payroll' || /^\/app\/payroll\/[^/]+$/.test(pathname)) return ['/app/payroll'];
     if (pathname.startsWith('/app/approvals')) {
+        const wfKeys = approvalSiderSelectedMenuKeys(pathname, search);
+        if (wfKeys.length > 0) return wfKeys;
         const leaf = approvalShellMenuItemKeyFromLocation(pathname, {
             tab: typeof search.tab === 'string' ? search.tab : undefined,
             box: typeof search.box === 'string' ? search.box : undefined,
@@ -1247,14 +1232,15 @@ function menuOpenKeysForPath(
     }
     if (pathname.startsWith('/app/esg')) keys.push(ESG_GROUP_KEY);
     if (pathname.startsWith('/app/approvals')) {
-        keys.push(APPROVAL_GROUP_KEY);
-        const sec = approvalShellSectionOpenKeyFromLocation(pathname, {
-            tab: typeof search.tab === 'string' ? search.tab : undefined,
-            box: typeof search.box === 'string' ? search.box : undefined,
-            myStatus: typeof search.myStatus === 'string' ? search.myStatus : undefined,
-            deptView: typeof search.deptView === 'string' ? search.deptView : undefined,
-        });
-        if (sec) keys.push(sec);
+        keys.push(
+            ...approvalSecondaryPanelOpenKeys(pathname, {
+                tab: typeof search.tab === 'string' ? search.tab : undefined,
+                myStatus: typeof search.myStatus === 'string' ? search.myStatus : undefined,
+                compose: typeof search.compose === 'string' ? search.compose : undefined,
+                sideNav: typeof search.sideNav === 'string' ? search.sideNav : undefined,
+                deptView: typeof search.deptView === 'string' ? search.deptView : undefined,
+            }),
+        );
     }
     return keys;
 }
@@ -1296,8 +1282,7 @@ function AppShellLayout() {
     }, [siderCollapsed]);
 
     /**
-     * TanStack Router location 변경 시: `menuOpenKeysForPath`로 현재 경로에 필요한 부모 키만 openKeys에 추가(이미 열린 전자결재 섹션은 닫지 않음).
-     * 전자결재 화면을 벗어나면 group-approvals / ap-section-*만 정리.
+     * TanStack Router location 변경 시: `menuOpenKeysForPath`로 현재 경로에 필요한 부모 키만 openKeys에 추가.
      */
     const [menuOpenKeys, setMenuOpenKeys] = useState<string[]>(() => {
         if (typeof window === 'undefined') return [];
@@ -1322,7 +1307,21 @@ function AppShellLayout() {
         });
     }, [pathname, search, siderCollapsed, isSystemAdmin]);
 
+    /** 작성 허브「전체」모달 iframe — 사이드·헤더 없이 본문만(실제 라우트 화면과 동일). */
+    const embedComposeModal =
+        typeof search?.embed === 'string' && search.embed === 'compose-modal' && isApprovalsShellPathname(pathname);
+    if (embedComposeModal) {
+        return (
+            <Layout className="tw-flex tw-h-[100dvh] tw-min-h-0 tw-bg-slate-50">
+                <Layout.Content className="wf-scrollbar tw-min-h-0 tw-flex-1 tw-overflow-y-auto tw-bg-transparent tw-p-4">
+                    <Outlet />
+                </Layout.Content>
+            </Layout>
+        );
+    }
+
     return (
+        <MemberChatProvider>
         <Layout className="tw-flex tw-h-[100dvh] tw-min-h-0 tw-bg-slate-50">
             <Layout.Sider
                 theme="light"
@@ -1453,7 +1452,6 @@ function AppShellLayout() {
                             </Button>
                         </Tooltip>
                     </div>
-                    <SiderUserFooter collapsed={siderCollapsed}/>
                 </div>
             </Layout.Sider>
             <Layout className="tw-flex tw-min-h-0 tw-min-w-0 tw-flex-1 tw-flex-col tw-bg-slate-50">
@@ -1466,6 +1464,7 @@ function AppShellLayout() {
             <AiChatbotFab/>
             <OrgChartModal open={orgChartModalOpen} onClose={() => setOrgChartModalOpen(false)}/>
         </Layout>
+        </MemberChatProvider>
     );
 }
 

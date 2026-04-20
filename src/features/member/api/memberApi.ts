@@ -164,11 +164,15 @@ export type UpdateMemberHrPayload = {
   sabun: string;
   joinDate: string;
   employmentType: EmploymentType;
-  extensionNumber: string;
-  telNumber: string;
+  memberStatus: MemberStatus;
   organizationId: string;
   jobGradeId: string;
   jobTitleId: string;
+  roleId: string;
+  /** null 허용 — 미전송 시 백엔드 기본 처리 */
+  isPromotion?: boolean | null;
+  /** 선택 */
+  changeReason?: string;
 };
 
 /** POST /member/create */
@@ -183,6 +187,63 @@ export type CreateMemberPayload = {
   jobTitleId: string;
   roleId: string;
 };
+
+/** GET /member/{targetMemberId}/history — 직원 인사 이력 (MEMBER:READ, 인사팀) */
+export type MemberChangeType =
+  | 'PROMOTION'
+  | 'GRADE_CHANGE'
+  | 'ORG_CHANGE'
+  | 'TITLE_CHANGE'
+  | 'EMPLOYMENT_CHANGE'
+  | 'JOIN'
+  | 'DORMANT'
+  | 'RETURN'
+  | string;
+
+export type MemberHistoryItem = {
+  historyId: string;
+  memberId: string;
+  memberName: string;
+  jobGradeName: string;
+  organizationName: string;
+  changerName: string;
+  employmentType: string;
+  changeType: MemberChangeType;
+  changeReason: string;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  promotionDate: string | null;
+  changedAt: string;
+};
+
+function nullableDateString(v: unknown): string | null {
+  if (v === null || v === undefined) return null;
+  if (typeof v === 'string' && !v.trim()) return null;
+  return String(v).trim();
+}
+
+function normalizeMemberHistoryRow(raw: unknown): MemberHistoryItem {
+  if (!raw || typeof raw !== 'object') {
+    throw new Error('이력 행 형식이 올바르지 않습니다.');
+  }
+  const r = raw as Record<string, unknown>;
+
+  return {
+    historyId: String(r.historyId ?? r.history_id ?? '').trim(),
+    memberId: String(r.memberId ?? r.member_id ?? '').trim(),
+    memberName: String(r.memberName ?? r.member_name ?? '').trim() || '—',
+    jobGradeName: String(r.jobGradeName ?? r.job_grade_name ?? '').trim() || '—',
+    organizationName: String(r.organizationName ?? r.organization_name ?? '').trim() || '—',
+    changerName: String(r.changerName ?? r.changer_name ?? r.changedBy ?? r.changed_by ?? '').trim() || '—',
+    employmentType: String(r.employmentType ?? r.employment_type ?? '').trim() || '—',
+    changeType: String(r.changeType ?? r.change_type ?? '').trim() || 'UNKNOWN',
+    changeReason: String(r.changeReason ?? r.change_reason ?? '').trim() || '—',
+    effectiveFrom: String(r.effectiveFrom ?? r.effective_from ?? '').trim() || '—',
+    effectiveTo: nullableDateString(r.effectiveTo ?? r.effective_to),
+    promotionDate: nullableDateString(r.promotionDate ?? r.promotion_date),
+    changedAt: String(r.changedAt ?? r.changed_at ?? '').trim() || '—',
+  };
+}
 
 /** GET /member/detail/{memberId} — 본인 조회 시 민감 필드 포함, 타인은 공개 설정에 따라 일부 null */
 export type MemberDetail = {
@@ -215,6 +276,8 @@ export type MemberDetail = {
   jobGradeName?: string;
   jobTitleName?: string;
   roleName?: string;
+  /** GET 응답에 있을 때 — 인사 수정 PUT 시 roleId 로 전달 */
+  roleId?: string;
   isSystemAdminYn?: YnFlag;
   phonePublicYn?: YnFlag;
   addressPublicYn?: YnFlag;
@@ -297,6 +360,7 @@ function normalizeMemberDetailResponse(raw: unknown): MemberDetail {
   const organizationId = asTextMemberField(r.organizationId ?? r.organization_id);
   const jobGradeId = asTextMemberField(r.jobGradeId ?? r.job_grade_id);
   const jobTitleId = asTextMemberField(r.jobTitleId ?? r.job_title_id);
+  const roleId = asTextMemberField(r.roleId ?? r.role_id);
   return {
     ...base,
     ...(memberStatus ? { memberStatus: memberStatus as MemberDetail['memberStatus'] } : {}),
@@ -307,6 +371,7 @@ function normalizeMemberDetailResponse(raw: unknown): MemberDetail {
     ...(organizationId ? { organizationId } : {}),
     ...(jobGradeId ? { jobGradeId } : {}),
     ...(jobTitleId ? { jobTitleId } : {}),
+    ...(roleId ? { roleId } : {}),
   };
 }
 
@@ -455,18 +520,33 @@ export const memberApi = {
     const response = await httpClient.post('/member/logout');
     return unwrapApiResponse<null>(response.data);
   },
+  /**
+   * 비밀번호 찾기 1단계 — 개인 이메일로 6자리 인증 코드 발송 (유효 5분, Redis).
+   * `POST /member/reset-password/send-code?personalEmail=` — 인증 토큰 불필요.
+   * 404: 해당 이메일로 가입된 계정 없음.
+   */
   async sendResetPasswordCode(personalEmail: string) {
     const response = await httpClient.post('/member/reset-password/send-code', undefined, {
       params: { personalEmail },
     });
     return unwrapApiResponse<null>(response.data);
   },
+  /**
+   * 비밀번호 찾기 2단계 — 인증 코드 확인 (Redis에 인증 완료 30분).
+   * `POST /member/reset-password/verify-code?personalEmail=&code=` — 인증 토큰 불필요.
+   * 400: 코드 불일치 또는 만료.
+   */
   async verifyResetPasswordCode(personalEmail: string, code: string) {
     const response = await httpClient.post('/member/reset-password/verify-code', undefined, {
       params: { personalEmail, code },
     });
     return unwrapApiResponse<null>(response.data);
   },
+  /**
+   * 비밀번호 찾기 3단계 — 새 비밀번호 설정 (2단계 완료 후).
+   * `POST /member/reset-password` Body: personalEmail, newPassword, newPasswordCheck — 인증 토큰 불필요.
+   * 400: 인증 미완료, 새 비밀번호 불일치, 비밀번호 정책 미충족(영문+숫자+특수 8~20자 등).
+   */
   async resetPassword(payload: {
     personalEmail: string;
     newPassword: string;
@@ -669,9 +749,19 @@ export const memberApi = {
     const response = await httpClient.put(`/member/update/${payload.memberId}/role`, { roleId: payload.roleId });
     return unwrapApiResponse<null>(response.data);
   },
-  async history(memberId: string) {
-    const response = await httpClient.get(`/member/${memberId}/history`);
-    return unwrapApiResponse<Array<Record<string, unknown>>>(response.data);
+  /**
+   * GET /member/{targetMemberId}/history — 직원 이력 (최신순).
+   * `Authorization`, `X-User-UUID`, `X-User-MemberPositionId` 는 httpClient 인터셉터에서 설정.
+   */
+  async getMemberHistory(targetMemberId: string): Promise<MemberHistoryItem[]> {
+    const id = targetMemberId?.trim();
+    if (!id) {
+      throw new Error('구성원 ID가 없습니다.');
+    }
+    const response = await httpClient.get(`/member/${encodeURIComponent(id)}/history`);
+    const unwrapped = unwrapApiResponse<unknown>(response.data);
+    const arr = Array.isArray(unwrapped) ? unwrapped : [];
+    return arr.map(normalizeMemberHistoryRow);
   },
 
   // Profile & verification
@@ -691,6 +781,32 @@ export const memberApi = {
   },
   async deleteProfileImage() {
     const response = await httpClient.delete('/member/profile-image');
+    return unwrapApiResponse<null>(response.data);
+  },
+
+  /** GET /member/signature — 등록된 서명 이미지 URL, 미등록 시 null */
+  async getSignatureImageUrl(): Promise<string | null> {
+    const response = await httpClient.get('/member/signature');
+    const payload = response.data;
+    if (payload && typeof payload === 'object' && 'data' in payload) {
+      const d = (payload as { data: unknown }).data;
+      if (d === null || d === undefined) return null;
+      if (typeof d === 'string' && d.trim()) return d.trim();
+      return null;
+    }
+    if (typeof payload === 'string' && payload.trim()) return payload.trim();
+    return null;
+  },
+  /** PATCH /member/signature — PNG 서명 등록·교체 (multipart `signatureImage`) */
+  async uploadSignatureImage(file: File) {
+    const formData = new FormData();
+    formData.append('signatureImage', file);
+    const response = await httpClient.patch('/member/signature', formData);
+    return unwrapApiResponse<null>(response.data);
+  },
+  /** DELETE /member/signature */
+  async deleteSignatureImage() {
+    const response = await httpClient.delete('/member/signature');
     return unwrapApiResponse<null>(response.data);
   },
 };

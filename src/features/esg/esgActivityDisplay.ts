@@ -122,6 +122,18 @@ export function formatActivityDateTime(value: unknown): string {
   return d.format('YYYY-MM-DD HH:mm');
 }
 
+/** 제출 시각 — BaseTimeEntity `createdAt` (또는 API 스네이크 케이스 `created_at`) */
+export function resolveActivityCreatedAt(row: EsgActivity): unknown {
+  const r = flattenActivityRow(row);
+  return r.createdAt ?? r.created_at;
+}
+
+/** 승인 시각 — `approve()` 반영 `approvedAt` (또는 `approved_at`). 제출 시각과 필드 분리 */
+export function resolveActivityApprovedAt(row: EsgActivity): unknown {
+  const r = flattenActivityRow(row);
+  return r.approvedAt ?? r.approved_at;
+}
+
 export function resolveVerificationContent(row: EsgActivity): string {
   const r = row as Record<string, unknown>;
   const v = r.verificationContent ?? r.verification_content;

@@ -47,7 +47,6 @@ export const APP_MENU_PATH_ORDER = [
   '/app/calendar',
   '/app/members',
   '/app/organization',
-  '/app/roles',
   '/app/attendance',
   '/app/leave',
   '/app/work-trips',
@@ -61,16 +60,12 @@ export const APP_MENU_PATH_ORDER = [
 /** ESG 메뉴(설정 ON 시 사이드바에 삽입) — 경로·라벨 */
 export const ESG_MENU_PATH_ORDER = [
   '/app/esg',
-  '/app/esg/activities',
-  '/app/esg/campaigns',
   '/app/esg/shop',
   '/app/esg/admin',
 ] as const;
 
 export const ESG_MENU_LABEL: Record<string, string> = {
-  '/app/esg': 'ESG',
-  '/app/esg/activities': 'ESG 활동',
-  '/app/esg/campaigns': 'ESG 캠페인',
+  '/app/esg': 'My ESG',
   '/app/esg/shop': 'ESG 샵',
   '/app/esg/admin': 'ESG 설정',
 };
@@ -88,7 +83,7 @@ export const APP_MENU_ORG_CHART_SIDEBAR_KEY = '__wf_org_chart__';
 export const APP_MENU_ORG_CHART_LABEL = '조직도';
 
 /** ESG 하위 화면 묶음 */
-export const APP_MENU_ESG_GROUP_LABEL = 'ESG 관리';
+export const APP_MENU_ESG_GROUP_LABEL = 'ESG';
 
 /** 근무 묶음 */
 export const APP_MENU_WORK_GROUP_LABEL = '근태';
@@ -174,8 +169,22 @@ export const EMPLOYMENT_TYPE_KO: Record<string, string> = {
   PART_TIME: '파트타임',
   CONTRACT: '계약직',
   INTERN: '인턴',
+  INITIAL: '수습',
   /** 구 API 호환 */
   CONTRACTOR: '계약직',
+};
+
+/** GET /member/{id}/history changeType */
+export const MEMBER_HISTORY_CHANGE_TYPE_KO: Record<string, string> = {
+  PROMOTION: '승진',
+  GRADE_CHANGE: '직급 변경',
+  ORG_CHANGE: '부서 이동',
+  TITLE_CHANGE: '직책 변경',
+  EMPLOYMENT_CHANGE: '고용형태 변경',
+  JOIN: '입사',
+  DORMANT: '휴직',
+  RETURN: '복직',
+  INITIAL: '최초 반영',
 };
 
 /** 성과(/app/performance) 화면 카피 */

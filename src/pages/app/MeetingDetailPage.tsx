@@ -19,6 +19,8 @@ import {
   Badge,
   Progress,
   DatePicker,
+  Row,
+  Col,
 } from 'antd';
 import {
   ArrowLeftOutlined,
@@ -345,7 +347,7 @@ export default function MeetingDetailPage() {
           </Space>
         }
       >
-        <Descriptions column={{ xs: 1, sm: 2 }} size="small" labelStyle={{ fontWeight: 500 }}>
+        <Descriptions column={{ xs: 1, sm: 2 }} size="small" styles={{ label: { fontWeight: 500 } }}>
           <Descriptions.Item label={KO.labelMember}>
             <Space>
               <UserOutlined />

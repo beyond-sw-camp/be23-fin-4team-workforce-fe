@@ -68,7 +68,6 @@ function toRoomSummary(raw: Record<string, unknown>): MemberChatRoomSummary {
       'otherMemberOrganizationName',
       'other_member_organization_name',
     ),
-    legalHold: Boolean(raw.legalHold),
   };
 }
 

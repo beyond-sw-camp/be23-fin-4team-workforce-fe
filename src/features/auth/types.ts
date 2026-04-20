@@ -12,9 +12,16 @@ export type Me = {
   companyId?: string;
   name: string;
   email: string;
+  /** 로그인 `data.permissions` + JWT + GET /member/role/{roleId} 병합 — 로그아웃 시 user 제거로 함께 초기화 */
   permissions: string[];
+  /** JWT / 로그인 응답 — GET /member/role/{roleId} 로 권한 보강 */
+  roleId?: string;
+  /** 로그인 응답 `memberPositionId` — 헤더·표시용 */
+  memberPositionId?: string;
   /** JWT `isSystemAdmin` / 응답 `isSystemAdminYn === 'YES'` — 백엔드 AOP 에서 Redis 없이 전 권한 통과 */
   isSystemAdmin?: boolean;
+  /** JWT·로그인 `isSystemAdminYn` 원문 — 가이드 분기(YES/NO) */
+  isSystemAdminYn?: 'YES' | 'NO';
   /** 직급·직책 (예: 대리) — JWT 또는 로그인 응답에 있을 때만 채워짐 */
   jobTitle?: string;
   /** 부서·조직명 — JWT 또는 로그인 응답에 있을 때만 채워짐 */

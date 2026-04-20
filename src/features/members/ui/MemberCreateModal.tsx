@@ -12,6 +12,7 @@ import {
   pickRowId,
   pickRowName,
 } from '@/features/members/lib/memberFormShared';
+import { membersCtaButtonClass } from '@/features/members/ui/membersCtaButtonClass';
 import { membersKeys } from '@/features/members/queries';
 
 type FormValues = {
@@ -121,19 +122,18 @@ export function MemberCreateModal({ open, onClose }: Props) {
 
   return (
     <Modal
-      title="직원 등록"
+      title="직원 계정 생성"
       open={open}
       onCancel={onClose}
       onOk={() => void handleOk()}
-      okText="등록"
+      okText="생성"
       cancelText="취소"
+      okButtonProps={{ className: membersCtaButtonClass }}
       width={560}
       destroyOnHidden
       confirmLoading={createM.isPending}
     >
-      <Typography.Paragraph type="secondary" className="!tw-mb-4 !tw-text-sm">
-        신규 구성원을 등록합니다. (POST /member/create)
-      </Typography.Paragraph>
+      
       <Form<FormValues> form={form} layout="vertical" className="tw-pt-1">
         <Form.Item name="name" label="이름" rules={[{ required: true, message: '이름을 입력하세요.' }]}>
           <Input placeholder="홍길동" maxLength={80} />

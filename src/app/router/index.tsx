@@ -7,7 +7,7 @@ import {
 } from '@tanstack/react-router';
 import { z } from 'zod';
 import type { AppRouterContext } from '@/app/router/types';
-import { requireAuth, requirePermissions } from '@/app/router/guards';
+import { requireAuth, requireMemberDirectoryAccess, requirePermissions } from '@/app/router/guards';
 import { PERM } from '@/features/permissions/backend-permissions';
 import { HomePublicLayout } from '@/pages/public/HomePublicLayout';
 import { LandingHomePage } from '@/pages/public/LandingHomePage';
@@ -20,9 +20,7 @@ import { CompanyOnboardingPage } from '@/pages/public/CompanyOnboardingPage';
 import { CalendarPage } from '@/pages/app/CalendarPage';
 import { DashboardPage } from '@/pages/app/DashboardPage';
 import { HrInsightsPage } from '@/pages/app/HrInsightsPage';
-import { EsgActivitiesPage } from '@/pages/app/esg/EsgActivitiesPage';
 import { EsgAdminPage } from '@/pages/app/esg/EsgAdminPage';
-import { EsgCampaignsPage } from '@/pages/app/esg/EsgCampaignsPage';
 import { EsgHomePage } from '@/pages/app/esg/EsgHomePage';
 import { EsgShopPage } from '@/pages/app/esg/EsgShopPage';
 import { MembersPage } from '@/pages/app/MembersPage';
@@ -63,7 +61,6 @@ import { MyWorkTripsPage } from '@/pages/app/salary-service/my/MyWorkTripsPage';
 import { MyAllowancesPage } from '@/pages/app/salary-service/my/MyAllowancesPage';
 import { PayrollDetailPage } from '@/pages/app/salary-service/my/PayrollDetailPage';
 import { OrganizationPage } from '@/pages/app/OrganizationPage';
-import { RolesPage } from '@/pages/app/RolesPage';
 import { MyProfilePage } from '@/pages/app/MyProfilePage';
 import { MyProfileEditPage } from '@/pages/app/MyProfileEditPage';
 import MeetingsPage from '@/pages/app/MeetingsPage';
@@ -129,7 +126,11 @@ const changePasswordRoute = createRoute({
 const resetPasswordRoute = createRoute({
   getParentRoute: () => publicLayoutRoute,
   path: '/reset-password',
-  validateSearch: z.object({ forced: z.boolean().optional() }),
+  validateSearch: z.object({
+    email: z.string().optional(),
+    from: z.string().optional(),
+    forced: z.boolean().optional(),
+  }),
   component: ResetPasswordPage,
 });
 const verifyEmailRoute = createRoute({ getParentRoute: () => publicLayoutRoute, path: '/verify-email', component: VerifyEmailPage });
@@ -163,16 +164,6 @@ const esgHomeRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/esg',
   component: EsgHomePage,
-});
-const esgActivitiesRoute = createRoute({
-  getParentRoute: () => appBaseRoute,
-  path: '/esg/activities',
-  component: EsgActivitiesPage,
-});
-const esgCampaignsRoute = createRoute({
-  getParentRoute: () => appBaseRoute,
-  path: '/esg/campaigns',
-  component: EsgCampaignsPage,
 });
 const esgShopRoute = createRoute({
   getParentRoute: () => appBaseRoute,
@@ -214,7 +205,7 @@ const membersRoute = createRoute({
   }),
   component: MembersPage,
   beforeLoad: ({ context }) => {
-    requirePermissions(context, [PERM.MEMBER_READ, PERM.MEMBER_CREATE]);
+    requireMemberDirectoryAccess(context);
   },
 });
 
@@ -223,7 +214,7 @@ const memberDetailRoute = createRoute({
   path: '/members/$memberId',
   component: MemberDetailPage,
   beforeLoad: ({ context }) => {
-    requirePermissions(context, [PERM.MEMBER_READ, PERM.MEMBER_CREATE]);
+    requireMemberDirectoryAccess(context);
   },
 });
 
@@ -275,6 +266,11 @@ const approvalsSearchSchema = z.object({
   compose: z.string().optional(),
   sideNav: z.string().optional(),
   box: z.string().optional(),
+  /** 참조/공람 문서함: `cc` 참조만, `circ` 공람만, 없으면 참조 탭 */
+  viewerSub: z.string().optional(),
+  fromHome: z.string().optional(),
+  /** 작성 허브 모달 iframe에서 앱 셸 없이 본문만 표시 */
+  embed: z.string().optional(),
 });
 
 const approvalsAdminRoute = createRoute({
@@ -286,7 +282,9 @@ const approvalsAdminRoute = createRoute({
 
 const departmentApprovalsSearchSchema = z.object({
   organizationId: z.string().optional(),
-  deptView: z.enum(['draft', 'ref', 'official']).optional(),
+  deptView: z.enum(['draft', 'sent', 'received']).optional(),
+  fromHome: z.string().optional(),
+  embed: z.string().optional(),
 });
 
 const departmentApprovalsInboxRoute = createRoute({
@@ -296,9 +294,14 @@ const departmentApprovalsInboxRoute = createRoute({
   component: DepartmentApprovalsInboxPage,
 });
 
+const absenceProxySearchSchema = z.object({
+  embed: z.string().optional(),
+});
+
 const absenceProxyRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/approvals/absence-proxy',
+  validateSearch: absenceProxySearchSchema,
   component: AbsenceProxyPage,
 });
 
@@ -314,9 +317,14 @@ const evaluationWriteRoute = createRoute({
   component: EvaluationWritePage,
 });
 
+const organizationSearchSchema = z.object({
+  tab: z.enum(['structure', 'grades', 'titles', 'roles']).optional(),
+});
+
 const organizationRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/organization',
+  validateSearch: organizationSearchSchema,
   component: OrganizationPage,
   beforeLoad: ({ context }) => {
     if (!context.auth.user?.isSystemAdmin) {
@@ -325,14 +333,15 @@ const organizationRoute = createRoute({
   },
 });
 
+/** 이전 `/app/roles` 경로 — 조직 설정의 역할·권한 탭으로 통합 */
 const rolesRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/roles',
-  component: RolesPage,
   beforeLoad: ({ context }) => {
     if (!context.auth.user?.isSystemAdmin) {
       throw redirect({ to: '/403' });
     }
+    throw redirect({ to: '/app/organization', search: { tab: 'roles' } });
   },
 });
 
@@ -583,8 +592,6 @@ const routeTree = rootRoute.addChildren([
       hrInsightsRoute,
       calendarRoute,
       esgHomeRoute,
-      esgActivitiesRoute,
-      esgCampaignsRoute,
       esgShopRoute,
       esgAdminRoute,
       myProfileEditRoute,

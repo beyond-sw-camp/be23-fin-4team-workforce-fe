@@ -46,7 +46,7 @@ export function useChatSenderProfiles(messages: readonly MemberChatMessage[], me
     queryFn: async (): Promise<Map<string, ChatSenderRow>> => {
       const map = new Map<string, ChatSenderRow>();
       const selfId = me?.id?.trim();
-      if (selfId && sortedUnique.includes(selfId)) {
+      if (me && selfId && sortedUnique.includes(selfId)) {
         const title = me.jobTitle?.trim() || '';
         const org = me.departmentName?.trim() || '';
         const subtitle = [title, org].filter(Boolean).join(' · ');

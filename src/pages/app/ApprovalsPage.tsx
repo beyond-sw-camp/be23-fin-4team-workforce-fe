@@ -2,8 +2,9 @@ import {
   ApartmentOutlined,
   ArrowLeftOutlined,
   CalendarOutlined,
+  CheckCircleFilled,
   ClockCircleOutlined,
-  CloseOutlined,
+  CloseCircleOutlined,
   DeleteOutlined,
   DollarOutlined,
   EyeOutlined,
@@ -11,13 +12,13 @@ import {
   FileTextOutlined,
   FolderOpenOutlined,
   FormOutlined,
-  InfoCircleOutlined,
-  MenuOutlined,
+  MinusOutlined,
   MoreOutlined,
   PaperClipOutlined,
   SafetyCertificateOutlined,
   SaveOutlined,
   SearchOutlined,
+  SendOutlined,
 } from '@ant-design/icons';
 import {
   DndContext,
@@ -30,7 +31,7 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
   App,
@@ -43,13 +44,16 @@ import {
   Form,
   Input,
   Modal,
+  Progress,
   Select,
   Space,
   Spin,
+  Switch,
   Steps,
   Table,
   Tabs,
   Tag,
+  Tooltip,
   Tree,
   Typography,
 } from 'antd';
@@ -61,6 +65,7 @@ import {
   useCallback,
   useContext,
   useMemo,
+  Fragment,
   useRef,
   useState,
   type ComponentType,
@@ -74,8 +79,10 @@ import {
   APPROVAL_REQUEST_TYPES,
   approvalApi,
   type ApprovalDocument,
+  type ApprovalPolicyLineCandidateMember,
   type ApprovalRequestType,
 } from '@/features/approvals/api/approvalApi';
+import { absenceProxyApi, type AbsenceProxyRecord } from '@/features/approvals/api/absenceProxyApi';
 import {
   ApprovalFormPaperFieldRow,
   ApprovalFormPaperLayout,
@@ -84,10 +91,16 @@ import {
 import { useAuth } from '@/features/auth/useAuth';
 import clsx from 'clsx';
 import {
+  approvalAttachmentsApi,
+  APPROVAL_ATTACHMENT_ALLOWED_EXT,
+  APPROVAL_ATTACHMENT_MAX_COUNT,
+  formatApprovalAttachmentBytes,
+  validateApprovalAttachmentCandidate,
+} from '@/features/approvals/api/approvalAttachmentsApi';
+import {
   APPROVAL_REQUEST_STATUS,
   type ApprovalRequestStatus,
   approvalRequestApi,
-  isOfficialApprovalRequestType,
   isPendingApprovalLineForProxyActor,
   requestIncludesMyProxyAct,
   type ApprovalLine,
@@ -97,26 +110,240 @@ import {
   type ViewerType,
 } from '@/features/approvals/api/approvalRequestApi';
 import { memberApi } from '@/features/member/api/memberApi';
+import {
+  buildOrgTreeWithMemberLeaves,
+  flattenDirectMembersDeduped,
+  type OrgPickerMemberRow,
+} from '@/features/approvals/lib/approvalOrgTree';
+import { APPROVAL_ORG_DRAG_MIME, ApprovalOrgDropZone } from '@/features/approvals/ui/ApprovalOrgDropZone';
 import { organizationApi, type OrgChartOrgNode } from '@/features/organization/api/organizationApi';
+import { findMemberOrganizationId } from '@/features/organization/lib/findMemberOrganizationInOrgChart';
 import { PERM } from '@/features/permissions/backend-permissions';
 import { usePermissions } from '@/features/permissions/usePermissionsHook';
 import { ApprovalsAdminPage } from '@/pages/app/ApprovalsAdminPage';
-import { parseDetailContentJson, parseFormSchema } from '@/features/approvals/lib/approvalFormSchema';
+import {
+  getApprovalRequestSubjectLine,
+  parseDetailContentJson,
+  parseFormSchema,
+} from '@/features/approvals/lib/approvalFormSchema';
 import { syncApprovalQueryCachesAfterAct } from '@/features/approvals/lib/syncApprovalQueryCaches';
 import {
   APPROVAL_GUIDE_BOX_LABEL,
-  mergeInboxCombinedRequests,
   mergeRequestsByRequestId,
   resolveGuideBox,
   type ApprovalGuideBox,
 } from '@/features/approvals/lib/approvalGuideNav';
+import { ApprovalFormSelectModal } from '@/features/approvals/ui/ApprovalFormSelectModal';
 import { ApprovalRequestReadOnlyModal } from '@/features/approvals/ui/ApprovalRequestReadOnlyModal';
+import { PendingApprovalInboxModalContent } from '@/features/approvals/ui/PendingApprovalInboxModal';
 import { getRefreshIdentityHeaders } from '@/shared/stores/authRefreshIdentityStore';
+
+async function maybeUploadApprovalAttachments(
+  requestId: string,
+  requestStatus: string,
+  files?: File[],
+): Promise<void> {
+  const list = files?.filter((f) => f != null) ?? [];
+  if (!list.length) return;
+  const st = String(requestStatus).toUpperCase();
+  if (st !== 'DRAFT' && st !== 'WAIT') return;
+  await approvalAttachmentsApi.uploadAttachments(requestId, list);
+}
+
+async function createApprovalRequestWithAttachments(
+  payload: CreateApprovalRequestPayload,
+  attachmentFiles?: File[],
+): Promise<ApprovalRequestDetail> {
+  const res = await approvalRequestApi.createRequest(payload);
+  await maybeUploadApprovalAttachments(res.requestId, String(res.requestStatus), attachmentFiles);
+  return res;
+}
+
+async function updateApprovalRequestWithAttachments(
+  requestId: string,
+  payload: CreateApprovalRequestPayload,
+  attachmentFiles?: File[],
+): Promise<ApprovalRequestDetail> {
+  const res = await approvalRequestApi.updateDraft(requestId, payload);
+  await maybeUploadApprovalAttachments(res.requestId, String(res.requestStatus), attachmentFiles);
+  return res;
+}
 
 /** 결재 작성 보조 영역: 카드 테두리·회색 헤더 최소화 */
 const APPROVAL_COMPOSE_CARD_CLASS = 'tw-shadow-none tw-bg-transparent';
 const APPROVAL_COMPOSE_TABLE_CLASS =
   '[&_.ant-table-thead_.ant-table-cell]:!tw-bg-white [&_.ant-table-thead_.ant-table-cell]:!tw-text-slate-600 [&_.ant-table-thead_.ant-table-cell]:!tw-font-semibold';
+
+/** 작성 허브 카드 본문 목록 — 고정 높이 내 스크롤(부재 위임 등) */
+const APPROVAL_HOME_CARD_SCROLL =
+  'tw-max-h-[min(280px,45vh)] tw-min-h-0 tw-overflow-y-auto wf-scrollbar tw-pr-1';
+
+/** 작성 허브 결재 대기 목록 — 약 2행만 보이고 나머지는 스크롤(결재선 카드 높이 반영) */
+const APPROVAL_HOME_PENDING_LIST_SCROLL =
+  'tw-max-h-[min(11rem,44vh)] tw-min-h-0 tw-overflow-y-auto wf-scrollbar tw-pr-1';
+
+/** 작성 허브 상단(결재 대기 ↔ 결재 양식) — 스크롤 박스 높이 동일, 본문은 약 2행(2건) 분량 */
+const APPROVAL_HOME_TOP_ROW_MATCH_SCROLL =
+  'tw-h-[min(8.5rem,32vh)] tw-min-h-0 tw-shrink-0 tw-overflow-y-auto wf-scrollbar tw-pr-1 [scrollbar-gutter:stable]';
+
+/** 작성 허브 문서함 카드(내 기안·참조·부서·공문·임시저장) — 약 3행만 보이고 나머지는 스크롤 */
+const APPROVAL_HOME_DOC_LIST_SCROLL =
+  'tw-max-h-[min(11.25rem,36vh)] tw-min-h-0 tw-overflow-y-auto wf-scrollbar tw-pr-1';
+
+/** 작성 허브 하단 그리드 카드(문서함·부재 위임) — 빈 상태여도 부서 문서함과 동일 최소 높이 */
+const APPROVAL_HOME_GRID_DOC_CARD_CLASS =
+  'tw-rounded-2xl tw-border tw-border-slate-200/90 tw-shadow-sm tw-shadow-slate-900/5 md:tw-min-h-[230px]';
+
+/** 작성 허브 상단 오른쪽 결재 양식 카드 — 하단 문서함과 달리 min-height 없음 */
+const APPROVAL_HOME_COMPOSE_FORMS_CARD_CLASS =
+  'tw-rounded-2xl tw-border tw-border-slate-200/90 tw-shadow-sm tw-shadow-slate-900/5';
+
+const APPROVAL_EMBED_QUERY = 'compose-modal';
+
+/** 공문 문서함 — 상태 필터 탭(URL `myStatus`와 동기화) */
+const OFFICIAL_INBOX_FILTER_TABS: { key: 'ALL' | ApprovalRequestStatus; label: string }[] = [
+  { key: 'ALL', label: '전체' },
+  { key: 'DRAFT', label: '임시저장' },
+  { key: 'WAIT', label: '제출 대기' },
+  { key: 'PENDING', label: '진행 중' },
+  { key: 'APPROVED', label: '완료(발송)' },
+  { key: 'REJECTED', label: '반려' },
+  { key: 'CANCELED', label: '취소' },
+];
+
+/** 작성 허브「전체」모달 iframe용 — `embed=compose-modal`이면 AppShell이 본문만 표시 */
+function buildApprovalEmbedUrl(pathname: string, search: Record<string, string | undefined>): string {
+  const u = new URL(pathname, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
+  u.searchParams.set('embed', APPROVAL_EMBED_QUERY);
+  for (const [k, v] of Object.entries(search)) {
+    if (v !== undefined && v !== '') u.searchParams.set(k, v);
+  }
+  return u.toString();
+}
+
+/** 작성 허브「전체」모달 iframe — 카드별로 열리는 문서함 구역 */
+type ComposeHomeEmbedPanel = 'my-all' | 'viewers' | 'department' | 'official' | 'draft' | 'absence';
+
+function composeHomeEmbedPanelUrl(panel: ComposeHomeEmbedPanel): string {
+  switch (panel) {
+    case 'my-all':
+      return buildApprovalEmbedUrl('/app/approvals', { tab: 'my', box: 'per-all' });
+    case 'viewers':
+      return buildApprovalEmbedUrl('/app/approvals', { tab: 'my', box: 'per-viewers' });
+    case 'department':
+      return buildApprovalEmbedUrl('/app/approvals/department', { deptView: 'draft' });
+    case 'official':
+      return buildApprovalEmbedUrl('/app/approvals', { tab: 'my', box: 'per-official' });
+    case 'draft':
+      return buildApprovalEmbedUrl('/app/approvals', { tab: 'my', box: 'per-draft' });
+    case 'absence':
+      return buildApprovalEmbedUrl('/app/approvals/absence-proxy', {});
+    default:
+      return buildApprovalEmbedUrl('/app/approvals', { tab: 'my', box: 'per-all' });
+  }
+}
+
+function pendingHomeLineStatusLabel(status: string): string {
+  const s = String(status).toUpperCase();
+  if (s === 'APPROVED') return '승인';
+  if (s === 'REJECTED') return '반려';
+  if (s === 'PENDING') return '검토 중';
+  if (s === 'CANCELED') return '취소';
+  return '대기';
+}
+
+function pendingHomeLineCardShellClass(status: string): string {
+  const s = String(status).toUpperCase();
+  if (s === 'APPROVED') return 'tw-border-blue-200 tw-bg-blue-50/95';
+  if (s === 'REJECTED') return 'tw-border-rose-200 tw-bg-rose-50/95';
+  if (s === 'PENDING') return 'tw-border-amber-200 tw-bg-amber-50/95';
+  if (s === 'CANCELED') return 'tw-border-slate-200 tw-bg-slate-100/90';
+  return 'tw-border-slate-200 tw-bg-slate-50/95';
+}
+
+function pendingHomeLineTextClass(status: string): string {
+  const s = String(status).toUpperCase();
+  if (s === 'APPROVED') return 'tw-text-blue-700';
+  if (s === 'REJECTED') return 'tw-text-rose-700';
+  if (s === 'PENDING') return 'tw-text-amber-900';
+  if (s === 'CANCELED') return 'tw-text-slate-600';
+  return 'tw-text-slate-500';
+}
+
+function PendingHomeApprovalLineStepIcon({ status }: { status: string }) {
+  const s = String(status).toUpperCase();
+  if (s === 'APPROVED') return <CheckCircleFilled className="!tw-text-lg tw-text-blue-500" />;
+  if (s === 'REJECTED') return <CloseCircleOutlined className="!tw-text-lg tw-text-rose-500" />;
+  if (s === 'PENDING') return <ClockCircleOutlined className="!tw-text-lg tw-text-amber-500" />;
+  if (s === 'CANCELED') return <MinusOutlined className="!tw-text-lg tw-text-slate-400" />;
+  return <MinusOutlined className="!tw-text-lg tw-text-slate-400" />;
+}
+
+function PendingHomeApprovalLineStrip({ lines }: { lines: ApprovalLine[] }) {
+  const sorted = [...lines].sort((a, b) => a.stepOrder - b.stepOrder);
+  if (sorted.length === 0) {
+    return (
+      <Typography.Text type="secondary" className="!tw-text-xs">
+        —
+      </Typography.Text>
+    );
+  }
+  return (
+    <div className="tw-min-w-0 tw-overflow-x-auto wf-scrollbar tw-pr-0.5" aria-label="결재선">
+      <div className="tw-inline-flex tw-min-w-max tw-items-stretch tw-gap-1">
+        {sorted.map((line, i) => {
+          const name =
+            line.approverName?.trim() ||
+            line.approverJobTitleName?.trim() ||
+            `결재 ${line.stepOrder}차`;
+          const st = String(line.approvalStatus);
+          const title = `${name} (${st})`;
+          return (
+            <Fragment key={line.approvalId}>
+              {i > 0 ? (
+                <span
+                  className="tw-flex tw-shrink-0 tw-items-center tw-px-0.5 tw-text-sm tw-font-light tw-text-slate-300"
+                  aria-hidden
+                >
+                  -
+                </span>
+              ) : null}
+              <div
+                title={title}
+                className={clsx(
+                  'tw-flex tw-h-full tw-min-w-[5.25rem] tw-max-w-[6.5rem] tw-shrink-0 tw-items-center tw-gap-1.5 tw-rounded-lg tw-border tw-px-2 tw-py-1',
+                  pendingHomeLineCardShellClass(st),
+                )}
+              >
+                <span className="tw-flex tw-flex-shrink-0 tw-items-center tw-leading-none">
+                  <PendingHomeApprovalLineStepIcon status={st} />
+                </span>
+                <div className="tw-min-w-0 tw-flex-1">
+                  <div
+                    className={clsx(
+                      'tw-truncate tw-text-[11px] tw-font-semibold tw-leading-tight',
+                      pendingHomeLineTextClass(st),
+                    )}
+                  >
+                    {name}
+                  </div>
+                  <div
+                    className={clsx(
+                      'tw-truncate tw-text-[10px] tw-font-medium tw-leading-tight tw-opacity-95',
+                      pendingHomeLineTextClass(st),
+                    )}
+                  >
+                    {pendingHomeLineStatusLabel(st)}
+                  </div>
+                </div>
+              </div>
+            </Fragment>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 type ApprovalLineMemberDraft = {
   kind: 'member';
@@ -128,6 +355,10 @@ type ApprovalLineMemberDraft = {
   jobTitleName: string;
   organizationName: string;
   source: 'policy' | 'manual';
+  /** 정책 라인 기본 로드 시 — 삭제 불가 */
+  policyLineId?: string;
+  /** 정책 후보가 2명 이상일 때 선택 UI */
+  policyCandidates?: ApprovalPolicyLineCandidateMember[];
 };
 
 type ApprovalLineOrgMember = {
@@ -305,6 +536,7 @@ const REQUEST_TYPE_LABEL: Record<ApprovalRequestType, string> = {
   GENERAL: '일반기안',
   CONTRACT: '전자계약',
   CERTIFICATE: '문서발급',
+  OFFICIAL: '공문',
 };
 
 /** RequestType enum 주석과 맞춘 카테고리 설명 */
@@ -316,6 +548,7 @@ const REQUEST_TYPE_DESC: Record<ApprovalRequestType, string> = {
   GENERAL: '일반 기안',
   CONTRACT: '전자계약',
   CERTIFICATE: '문서 발급',
+  OFFICIAL: '대외 공문',
 };
 
 const REQUEST_TYPE_ICON: Record<ApprovalRequestType, ComponentType<{ className?: string }>> = {
@@ -326,9 +559,11 @@ const REQUEST_TYPE_ICON: Record<ApprovalRequestType, ComponentType<{ className?:
   GENERAL: FileTextOutlined,
   CONTRACT: FileProtectOutlined,
   CERTIFICATE: SafetyCertificateOutlined,
+  OFFICIAL: SendOutlined,
 };
 
 const APPROVAL_RECENT_FORMS_KEY = 'workforce.approval.recentForms';
+const APPROVAL_HOME_BOOKMARKS_KEY = 'workforce.approval.homeBookmarks';
 
 type RecentFormEntry = { documentId: string; documentName: string; requestType: string };
 
@@ -365,6 +600,15 @@ function normalizeApprovalRequestType(raw: string | undefined): ApprovalRequestT
   return 'GENERAL';
 }
 
+function pushRecentApprovalForm(doc: ApprovalDocument) {
+  const t = normalizeApprovalRequestType(doc.requestType);
+  const next = [
+    { documentId: doc.documentId, documentName: doc.documentName, requestType: t },
+    ...loadRecentForms().filter((x) => x.documentId !== doc.documentId),
+  ].slice(0, 5);
+  saveRecentForms(next);
+}
+
 /** 카테고리별 카드에서 처음에 보여 줄 양식 갯수(나머지는 펼치기) */
 const FORM_PICKER_CATEGORY_INITIAL = 3;
 
@@ -375,10 +619,6 @@ type DocumentFormPickerProps = {
   onAfterPick?: (documentId: string, doc?: ApprovalDocument) => void;
   documents: ApprovalDocument[];
   loading?: boolean;
-  myPendingApprovalCount?: number;
-  mySubmittedInProgressCount?: number;
-  onOpenPendingTab?: () => void;
-  onOpenMyTab?: () => void;
 };
 
 function DocumentFormPicker({
@@ -387,10 +627,6 @@ function DocumentFormPicker({
   onAfterPick,
   documents,
   loading,
-  myPendingApprovalCount = 0,
-  mySubmittedInProgressCount = 0,
-  onOpenPendingTab,
-  onOpenMyTab,
 }: DocumentFormPickerProps) {
   const byType = useMemo(() => {
     const map = Object.fromEntries(APPROVAL_REQUEST_TYPES.map((t) => [t, [] as ApprovalDocument[]])) as Record<
@@ -431,18 +667,18 @@ function DocumentFormPicker({
 
   if (loading) {
     return (
-      <Spin spinning tip="양식 목록 불러오는 중...">
-        <div className="tw-min-h-[160px] tw-rounded-xl tw-border tw-border-dashed tw-border-slate-200 tw-bg-slate-50/60" />
-      </Spin>
+      <div className="tw-flex tw-min-h-[160px] tw-flex-col tw-items-center tw-justify-center tw-gap-3 tw-rounded-xl tw-border tw-border-dashed tw-border-slate-200 tw-bg-slate-50/60 tw-py-8">
+        <Spin size="large" />
+        <Typography.Text type="secondary" className="tw-text-sm">
+          양식 목록 불러오는 중...
+        </Typography.Text>
+      </div>
     );
   }
 
   if (!documents.length) {
     return <Empty description="사용 가능한 활성 양식이 없습니다." />;
   }
-
-  const totalPending = myPendingApprovalCount;
-  const inProgress = mySubmittedInProgressCount;
 
   return (
     <div className="tw-flex tw-flex-col tw-gap-5 lg:tw-flex-row lg:tw-items-start">
@@ -484,35 +720,6 @@ function DocumentFormPicker({
             </ul>
           )}
         </Card>
-        <Card
-          size="small"
-          className="tw-border-0 tw-bg-gradient-to-br tw-from-slate-800 tw-to-slate-900 tw-text-white tw-shadow-md"
-          styles={{ body: { padding: 14 } }}
-        >
-          <Typography.Text className="!tw-mb-1 !tw-block !tw-text-xs !tw-text-slate-300">결재 요약</Typography.Text>
-          <Typography.Title level={5} className="!tw-mb-3 !tw-mt-0 !tw-text-white">
-            대기 {totalPending}건
-          </Typography.Title>
-          <Space direction="vertical" size={6} className="tw-w-full">
-            <div className="tw-flex tw-gap-2">
-              <Button
-                size="small"
-                className="tw-flex-1 !tw-border-white/25 !tw-bg-white/10 !tw-text-white hover:!tw-bg-white/20"
-                onClick={onOpenMyTab}
-              >
-                진행 중 {inProgress}
-              </Button>
-              <Button
-                size="small"
-                type="primary"
-                className="tw-flex-1 !tw-bg-blue-500 hover:!tw-bg-blue-400"
-                onClick={onOpenPendingTab}
-              >
-                결재 대기 {totalPending}
-              </Button>
-            </div>
-          </Space>
-        </Card>
       </aside>
 
       <div className="tw-min-w-0 tw-flex-1">
@@ -521,7 +728,10 @@ function DocumentFormPicker({
         </Typography.Title>
         <div className="tw-grid tw-grid-cols-1 tw-gap-4 md:tw-grid-cols-2 xl:tw-grid-cols-3">
           {APPROVAL_REQUEST_TYPES.map((t) => {
-            const list = byType[t];
+            const list = byType[t].filter((doc) => {
+              const name = String(doc.documentName ?? '').replace(/\s+/g, '');
+              return name !== '연차신청서';
+            });
             const Icon = REQUEST_TYPE_ICON[t];
             const expanded = categoryExpanded[t] ?? false;
             const hasOverflow = list.length > FORM_PICKER_CATEGORY_INITIAL;
@@ -574,12 +784,9 @@ function DocumentFormPicker({
                                 )}
                               />
                               <span className="tw-min-w-0 tw-flex-1">
-                                <span className="tw-block tw-font-medium tw-text-slate-800">{doc.documentName}</span>
-                                {doc.autoApproveYn === 'Y' ? (
-                                  <Tag bordered={false} color="processing" className="!tw-mt-1 !tw-text-[10px]">
-                                    자동승인
-                                  </Tag>
-                                ) : null}
+                                <span className="tw-block tw-font-medium tw-text-slate-800">
+                                  {formatApprovalDocumentName(doc.documentName)}
+                                </span>
                               </span>
                             </button>
                           </li>
@@ -621,10 +828,23 @@ const REQUEST_STATUS_LABEL: Record<ApprovalRequestStatus, string> = {
   CANCELED: '취소',
 };
 
+/** 내 기안 문서함 — 상태 필터 탭(URL `myStatus`와 동기화) */
+const MY_INBOX_FILTER_TABS: { key: 'ALL' | ApprovalRequestStatus; label: string }[] = [
+  { key: 'ALL', label: '전체 상태' },
+  ...APPROVAL_REQUEST_STATUS.map((v) => ({ key: v, label: REQUEST_STATUS_LABEL[v] })),
+];
+
 function formatDateTime(value?: string | null) {
   if (!value) return '—';
   const d = dayjs(value);
   return d.isValid() ? d.format('YYYY-MM-DD HH:mm') : value;
+}
+
+function formatApprovalDocumentName(name?: string | null): string {
+  const raw = String(name ?? '').trim();
+  const compact = raw.replace(/\s+/g, '');
+  if (compact === '휴가신청') return '연차신청서';
+  return raw || '—';
 }
 
 function statusTag(status: string) {
@@ -635,6 +855,32 @@ function statusTag(status: string) {
   if (u === 'PENDING') return <Tag color="processing">결재중</Tag>;
   if (u === 'WAIT') return <Tag color="processing">제출됨</Tag>;
   return <Tag>{REQUEST_STATUS_LABEL[u as ApprovalRequestStatus] ?? status}</Tag>;
+}
+
+function formatAbsenceProxyRange(start: string, end: string) {
+  const a = dayjs(start);
+  const b = dayjs(end);
+  if (!a.isValid() || !b.isValid()) return `${start} ~ ${end}`;
+  return `${a.format('YYYY-MM-DD HH:mm')} ~ ${b.format('YYYY-MM-DD HH:mm')}`;
+}
+
+function absenceProxyDashboardTag(row: AbsenceProxyRecord) {
+  if (row.isActiveYn !== 'Y') {
+    return <Tag>취소됨</Tag>;
+  }
+  const now = dayjs();
+  const start = dayjs(row.startDate);
+  const end = dayjs(row.endDate);
+  if (!start.isValid() || !end.isValid()) {
+    return <Tag color="processing">활성</Tag>;
+  }
+  if (now.isBefore(start)) {
+    return <Tag color="blue">예약</Tag>;
+  }
+  if (now.isAfter(end)) {
+    return <Tag color="default">기간 종료</Tag>;
+  }
+  return <Tag color="success">진행 중</Tag>;
 }
 
 function memberKeyEq(a: string | undefined, b: string | undefined): boolean {
@@ -652,28 +898,6 @@ function unreadViewerForMember(row: ApprovalRequestDetail, myMemberId?: string):
   return mine.some(
     (x) => !x.viewedAt?.trim() || String(x.viewerReadStatus).toUpperCase() === 'UNREAD',
   );
-}
-
-/** 참조/열람 대기: 목록 항목에 viewers가 없으면 읽음 여부를 판별할 수 없어 행을 그대로 둡니다. */
-function rowMatchesViewerUnreadWait(row: ApprovalRequestDetail, myMemberId?: string): boolean {
-  const mid = myMemberId?.trim();
-  if (!mid) return true;
-  const mine = row.viewers?.filter((x) => memberKeyEq(x.viewerMemberId, mid));
-  if (!mine?.length) return true;
-  return mine.some(
-    (x) => !x.viewedAt?.trim() || String(x.viewerReadStatus).toUpperCase() === 'UNREAD',
-  );
-}
-
-function myViewerChannelLabel(row: ApprovalRequestDetail, myMemberId?: string): string {
-  const mid = myMemberId?.trim();
-  if (!mid) return '—';
-  const v = row.viewers?.find((x) => memberKeyEq(x.viewerMemberId, mid));
-  if (!v) return '—';
-  const t = String(v.viewerType).toUpperCase();
-  if (t === 'CC') return '참조';
-  if (t === 'CIRCULATION') return '공람';
-  return t;
 }
 
 /** 결재 예정함: 아직 내가 결재할 차례가 아닌 요청 (PENDING 단계 결재자가 본인이 아님). */
@@ -752,13 +976,6 @@ function SortableApprovalTableRow({ children, style, className, ...rest }: Sorta
   );
 }
 
-type OrgPickerMemberRow = {
-  memberId: string;
-  name: string;
-  jobTitleName: string;
-  organizationName: string;
-};
-
 function findOrgChartNode(roots: OrgChartOrgNode[], organizationId: string): OrgChartOrgNode | null {
   for (const n of roots) {
     if (n.organizationId === organizationId) return n;
@@ -768,142 +985,41 @@ function findOrgChartNode(roots: OrgChartOrgNode[], organizationId: string): Org
   return null;
 }
 
+function flattenOrgChartOrganizations(roots: OrgChartOrgNode[]): { value: string; label: string }[] {
+  const out: { value: string; label: string }[] = [];
+  const walk = (n: OrgChartOrgNode) => {
+    out.push({ value: n.organizationId, label: n.name?.trim() || n.organizationId });
+    for (const c of n.children ?? []) walk(c);
+  };
+  for (const r of roots) walk(r);
+  return out;
+}
+
+function formatOfficialRecipientsSummary(row: ApprovalRequestDetail): string {
+  const list = row.recipients ?? [];
+  if (!list.length) return '—';
+  return list.map((r) => r.recipientOrganizationName?.trim() || r.recipientOrganizationId).join(', ');
+}
+
 /** 선택 노드 및 모든 하위 조직 소속 멤버(중복 제거) */
 function collectOrgMemberRowsUnderNode(node: OrgChartOrgNode): OrgPickerMemberRow[] {
   const rows: OrgPickerMemberRow[] = [];
   const seen = new Set<string>();
   const walk = (n: OrgChartOrgNode) => {
-    for (const g of n.jobGrades) {
-      for (const m of g.members) {
-        if (seen.has(m.memberId)) continue;
-        seen.add(m.memberId);
-        rows.push({
-          memberId: m.memberId,
-          name: m.name,
-          jobTitleName: m.jobTitleName,
-          organizationName: n.name,
-        });
-      }
+    for (const m of n.members) {
+      if (seen.has(m.memberId)) continue;
+      seen.add(m.memberId);
+      rows.push({
+        memberId: m.memberId,
+        name: m.name,
+        jobTitleName: m.jobGradeName,
+        organizationName: n.name,
+      });
     }
     n.children.forEach(walk);
   };
   walk(node);
   return rows;
-}
-
-/** 해당 조직 노드에 직접 매달린 멤버만 (하위 부서 제외) */
-function collectDirectMembersOfNode(node: OrgChartOrgNode): OrgPickerMemberRow[] {
-  const rows: OrgPickerMemberRow[] = [];
-  for (const g of node.jobGrades) {
-    for (const m of g.members) {
-      rows.push({
-        memberId: m.memberId,
-        name: m.name,
-        jobTitleName: m.jobTitleName,
-        organizationName: node.name,
-      });
-    }
-  }
-  return rows;
-}
-
-/** 전체 조직도에서 직접 소속 멤버만 모아 memberId 기준 중복 제거 (검색용) */
-function flattenDirectMembersDeduped(roots: OrgChartOrgNode[]): OrgPickerMemberRow[] {
-  const seen = new Set<string>();
-  const out: OrgPickerMemberRow[] = [];
-  const walk = (n: OrgChartOrgNode) => {
-    for (const r of collectDirectMembersOfNode(n)) {
-      if (seen.has(r.memberId)) continue;
-      seen.add(r.memberId);
-      out.push(r);
-    }
-    n.children.forEach(walk);
-  };
-  roots.forEach(walk);
-  return out;
-}
-
-/** 조직 트리 + 각 조직 아래 소속 멤버를 자식 노드로 표시 */
-function buildOrgTreeWithMemberLeaves(nodes: OrgChartOrgNode[]): DataNode[] {
-  const mapNode = (node: OrgChartOrgNode): DataNode => {
-    const childOrgs = node.children.map(mapNode);
-    const memberLeaves: DataNode[] = [];
-    for (const g of node.jobGrades) {
-      for (const m of g.members) {
-        memberLeaves.push({
-          key: `member:${node.organizationId}:${m.memberId}`,
-          title: `${m.name}${m.jobTitleName ? ` (${m.jobTitleName})` : ''}`,
-          isLeaf: true,
-        });
-      }
-    }
-    return {
-      key: node.organizationId,
-      title: node.name,
-      children: [...childOrgs, ...memberLeaves],
-    };
-  };
-  return nodes.map(mapNode);
-}
-
-const APPROVAL_ORG_DRAG_MIME = 'application/x-approval-org-picker';
-
-function parseApprovalOrgDrag(e: React.DragEvent): { kind: 'member'; memberId: string } | { kind: 'org'; organizationId: string } | null {
-  try {
-    const raw = e.dataTransfer.getData(APPROVAL_ORG_DRAG_MIME);
-    if (!raw) return null;
-    const o = JSON.parse(raw) as { kind?: string; memberId?: string; organizationId?: string };
-    if (o.kind === 'member' && o.memberId) return { kind: 'member', memberId: o.memberId };
-    if (o.kind === 'org' && o.organizationId) return { kind: 'org', organizationId: o.organizationId };
-  } catch {
-    /* ignore */
-  }
-  return null;
-}
-
-function ApprovalOrgDropZone(props: {
-  children: React.ReactNode;
-  onDropMember: (memberId: string) => void;
-  onDropOrg: (organizationId: string) => void;
-}) {
-  const [over, setOver] = useState(false);
-  const depthRef = useRef(0);
-  return (
-    <div
-      className={clsx(
-        'tw-min-h-0 tw-min-w-0 tw-flex-1 tw-rounded-lg tw-transition-colors',
-        over && 'tw-bg-blue-50/50 tw-ring-2 tw-ring-blue-200',
-      )}
-      onDragEnter={(e) => {
-        e.preventDefault();
-        depthRef.current += 1;
-        setOver(true);
-      }}
-      onDragLeave={(e) => {
-        e.preventDefault();
-        depthRef.current -= 1;
-        if (depthRef.current <= 0) {
-          depthRef.current = 0;
-          setOver(false);
-        }
-      }}
-      onDragOver={(e) => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'copy';
-      }}
-      onDrop={(e) => {
-        e.preventDefault();
-        depthRef.current = 0;
-        setOver(false);
-        const parsed = parseApprovalOrgDrag(e);
-        if (!parsed) return;
-        if (parsed.kind === 'member') props.onDropMember(parsed.memberId);
-        else props.onDropOrg(parsed.organizationId);
-      }}
-    >
-      {props.children}
-    </div>
-  );
 }
 
 export function ApprovalsPage() {
@@ -918,8 +1034,15 @@ export function ApprovalsPage() {
         compose?: string;
         sideNav?: string;
         box?: string;
+        viewerSub?: string;
+        embed?: string;
       },
   });
+  const isEmbedComposeModal = routeSearch.embed === APPROVAL_EMBED_QUERY;
+  const embedSearchSuffix = useMemo(
+    () => (isEmbedComposeModal ? ({ embed: APPROVAL_EMBED_QUERY } as const) : {}),
+    [isEmbedComposeModal],
+  );
   const { hasPermission } = usePermissions();
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
   const [cancelTarget, setCancelTarget] = useState<ApprovalRequestDetail | null>(null);
@@ -931,16 +1054,42 @@ export function ApprovalsPage() {
   const [lineInfoTab, setLineInfoTab] = useState<'approval' | 'cc' | 'circulation'>('approval');
   const [composeApprovalInfoModalOpen, setComposeApprovalInfoModalOpen] = useState(false);
   const [composePreviewOpen, setComposePreviewOpen] = useState(false);
+  const [composeHomeMoreModal, setComposeHomeMoreModal] = useState<
+    | { kind: 'iframe'; panel: ComposeHomeEmbedPanel }
+    | { kind: 'pending-inbox'; title: string }
+    | null
+  >(null);
+  const [composeFormSelectModalOpen, setComposeFormSelectModalOpen] = useState(false);
+  const [composeFormSelectInitialId, setComposeFormSelectInitialId] = useState<string | undefined>(undefined);
+  /** 저장 시 업로드할 로컬 파일 — 임시저장/제출 직후 POST /approval/attachments */
+  const [composeAttachmentFiles, setComposeAttachmentFiles] = useState<File[]>([]);
+  const composeAttachmentInputRef = useRef<HTMLInputElement | null>(null);
   const [composeSidebarTab, setComposeSidebarTab] = useState<'line' | 'doc'>('line');
   const [composeAutosaveMode, setComposeAutosaveMode] = useState<'off' | '1m'>('off');
   const [memberKeyword, setMemberKeyword] = useState('');
   const [ccViewers, setCcViewers] = useState<ViewerDraft[]>([]);
   const [circulationViewers, setCirculationViewers] = useState<ViewerDraft[]>([]);
+  /** 공문 수신 부서 — POST/PATCH 시 recipients 로 전송 */
+  const [officialRecipients, setOfficialRecipients] = useState<
+    { recipientOrganizationId: string; recipientOrganizationName: string }[]
+  >([]);
+  const [bookmarkedRequestIds, setBookmarkedRequestIds] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem(APPROVAL_HOME_BOOKMARKS_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw) as unknown;
+      return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : [];
+    } catch {
+      return [];
+    }
+  });
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | undefined>(undefined);
   /** 결재 작성: 1) 양식 선택 → 2) 공문 입력·결재선·참조 */
   const [composePhase, setComposePhase] = useState<'select' | 'fill'>('select');
   /** 임시저장(DRAFT) 수정 중이면 PATCH, 없으면 POST */
   const [composeEditingRequestId, setComposeEditingRequestId] = useState<string | null>(null);
+  /** 부서 문서함 목록 공개 여부 — POST/PATCH `isDeptVisibleYn`, 공문은 Y 고정 */
+  const [composeDeptVisibleYn, setComposeDeptVisibleYn] = useState<'Y' | 'N'>('Y');
   const composeDraftHydratingRef = useRef(false);
   const [form] = Form.useForm();
 
@@ -956,18 +1105,17 @@ export function ApprovalsPage() {
     const rawTab = routeSearch.tab;
     return typeof rawTab === 'string' && allowedTabs.includes(rawTab) ? rawTab : 'compose';
   }, [routeSearch.tab, allowedTabs]);
+  const onComposeHub = tab === 'compose' && routeSearch.sideNav === 'request-compose';
 
   const requestStatusFilter = useMemo<ApprovalRequestStatus | 'ALL'>(() => {
     if (tab !== 'my') return 'ALL';
     const box = typeof routeSearch.box === 'string' ? routeSearch.box : undefined;
     if (box === 'per-draft' || String(routeSearch.myStatus).toUpperCase() === 'DRAFT') return 'DRAFT';
-    if (box && ['per-viewers-all', 'per-inbox-combined', 'per-sent', 'per-official'].includes(box)) return 'ALL';
+    if (box === 'per-viewers') return 'ALL';
     const ms = routeSearch.myStatus;
-    if (
-      ms === 'ALL' ||
-      (typeof ms === 'string' && (APPROVAL_REQUEST_STATUS as readonly string[]).includes(ms))
-    ) {
-      return ms as ApprovalRequestStatus | 'ALL';
+    if (ms === 'ALL' || ms === undefined || ms === '') return 'ALL';
+    if (typeof ms === 'string' && (APPROVAL_REQUEST_STATUS as readonly string[]).includes(ms)) {
+      return ms as ApprovalRequestStatus;
     }
     return 'ALL';
   }, [tab, routeSearch.box, routeSearch.myStatus]);
@@ -989,12 +1137,24 @@ export function ApprovalsPage() {
     queryFn: () => approvalApi.listActiveDocuments(),
   });
 
+  /** 작성 허브 카드·양식 선택 모달과 동일하게 숨김(연차신청서 등) */
+  const composeHubVisibleDocuments = useMemo(
+    () => activeDocuments.filter((d) => String(d.documentName ?? '').replace(/\s+/g, '') !== '연차신청서'),
+    [activeDocuments],
+  );
+
   const selectedDocument = useMemo(
     () => activeDocuments.find((d) => d.documentId === selectedDocumentId) ?? null,
     [activeDocuments, selectedDocumentId],
   );
   const selectedSchema = useMemo(
     () => (selectedDocument ? parseFormSchema(selectedDocument.formSchema) : { fields: [] }),
+    [selectedDocument],
+  );
+  const composeSelectedOfficial = useMemo(
+    () =>
+      selectedDocument != null &&
+      normalizeApprovalRequestType(selectedDocument.requestType) === 'OFFICIAL',
     [selectedDocument],
   );
 
@@ -1004,30 +1164,32 @@ export function ApprovalsPage() {
     staleTime: 60_000,
   });
 
+  const officialOrgSelectOptions = useMemo(
+    () => flattenOrgChartOrganizations(orgChart?.organizations ?? []),
+    [orgChart?.organizations],
+  );
+
   const guideBox = activeGuideBox;
   const onPendingTab = tab === 'pending';
   const onMyTab = tab === 'my';
   const onActedTab = tab === 'acted';
 
-  const pendingQueryEnabled = onPendingTab || (onMyTab && guideBox === 'per-inbox-combined');
-  const actedQueryEnabled =
-    onActedTab ||
-    (onPendingTab && guideBox === 'do-received') ||
-    (onMyTab && guideBox === 'per-inbox-combined');
-  const viewerCcEnabled =
-    (onPendingTab && guideBox === 'do-cc-wait') ||
-    (onMyTab && (guideBox === 'per-viewers-all' || guideBox === 'per-inbox-combined'));
-  const needsMyRequestList =
-    onMyTab &&
-    guideBox !== 'per-viewers-all' &&
-    guideBox !== 'per-inbox-combined';
+  const pendingQueryEnabled = onPendingTab || onComposeHub;
+  const actedQueryEnabled = onActedTab;
+  const viewerCcEnabled = (onMyTab && guideBox === 'per-viewers') || onComposeHub;
+  const needsMyRequestList = (onMyTab && guideBox !== 'per-viewers') || onComposeHub;
 
   const { data: myRequests = [], isFetching: myLoading } = useQuery({
-    queryKey: ['approval-user', 'my-requests', requestStatusFilter],
-    queryFn: () =>
-      requestStatusFilter === 'ALL'
+    queryKey: ['approval-user', 'my-requests', requestStatusFilter, guideBox],
+    queryFn: () => {
+      if (guideBox === 'per-official') {
+        const st = requestStatusFilter === 'ALL' ? undefined : requestStatusFilter;
+        return approvalRequestApi.listMyRequests(st, 'OFFICIAL');
+      }
+      return requestStatusFilter === 'ALL'
         ? approvalRequestApi.listMyRequests()
-        : approvalRequestApi.listMyRequests(requestStatusFilter),
+        : approvalRequestApi.listMyRequests(requestStatusFilter);
+    },
     enabled: needsMyRequestList,
   });
 
@@ -1062,6 +1224,19 @@ export function ApprovalsPage() {
     staleTime: 30_000,
   });
 
+  const composeAttachmentsListEnabled =
+    Boolean(composeEditingRequestId) &&
+    tab === 'compose' &&
+    composePhase === 'fill' &&
+    routeSearch.sideNav !== 'request-compose';
+
+  const { data: composeRemoteAttachments = [], isFetching: composeRemoteAttachmentsLoading } = useQuery({
+    queryKey: ['approval', 'attachments', composeEditingRequestId],
+    queryFn: () => approvalAttachmentsApi.listAttachments(composeEditingRequestId!),
+    enabled: composeAttachmentsListEnabled,
+    staleTime: 30_000,
+  });
+
   const mySubmittedInProgressCount = useMemo(
     () =>
       myRequestsAllForSummary.filter((r) => {
@@ -1070,11 +1245,77 @@ export function ApprovalsPage() {
       }).length,
     [myRequestsAllForSummary],
   );
+  const myRejectedCount = useMemo(
+    () => myRequestsAllForSummary.filter((r) => String(r.requestStatus).toUpperCase() === 'REJECTED').length,
+    [myRequestsAllForSummary],
+  );
+  const unreadViewerCount = useMemo(
+    () =>
+      [...viewerCcRequests, ...viewerCirculationRequests].filter((row) => {
+        const mine = row.viewers?.filter((v) => memberKeyEq(v.viewerMemberId, authMemberId));
+        if (!mine?.length) return false;
+        return mine.some((v) => String(v.viewerReadStatus).toUpperCase() !== 'READ' || !v.viewedAt?.trim());
+      }).length,
+    [authMemberId, viewerCcRequests, viewerCirculationRequests],
+  );
+  const recentSubmittedRows = useMemo(
+    () => myRequestsAllForSummary.slice(0, 6),
+    [myRequestsAllForSummary],
+  );
+  const importantRows = useMemo(() => {
+    const idSet = new Set(bookmarkedRequestIds);
+    return myRequestsAllForSummary.filter((r) => idSet.has(r.requestId)).slice(0, 10);
+  }, [bookmarkedRequestIds, myRequestsAllForSummary]);
 
   const { data: actedRequests = [], isFetching: actedLoading } = useQuery({
     queryKey: ['approval-user', 'acted-approvals'],
     queryFn: () => approvalRequestApi.listActedApprovals(),
     enabled: actedQueryEnabled,
+  });
+  const { data: myAbsenceProxies = [] } = useQuery({
+    queryKey: ['approval', 'absence-proxy', 'my'],
+    queryFn: () => absenceProxyApi.listMine(),
+    enabled: onComposeHub,
+    staleTime: 60_000,
+  });
+  const homeAbsencePreviewRows = useMemo(() => myAbsenceProxies.slice(0, 20), [myAbsenceProxies]);
+  const homeAbsenceSubstituteDetailQueries = useQueries({
+    queries: homeAbsencePreviewRows.map((row) => {
+      const sid = row.substituteId?.trim() ?? '';
+      return {
+        queryKey: ['member', 'detail', 'compose-home-absence-proxy', sid],
+        queryFn: () => memberApi.detail(sid),
+        enabled: onComposeHub && Boolean(sid),
+        staleTime: 60_000,
+      };
+    }),
+  });
+  const { data: officialReceivedRequests = [] } = useQuery({
+    queryKey: ['approval-user', 'official-received'],
+    queryFn: () => approvalRequestApi.listOfficialReceivedRequests(),
+    enabled: onComposeHub,
+    staleTime: 60_000,
+  });
+  const { data: homeOfficialSentRequests = [] } = useQuery({
+    queryKey: ['approval-user', 'my-requests', 'OFFICIAL'],
+    queryFn: () => approvalRequestApi.listMyRequests(undefined, 'OFFICIAL'),
+    enabled: onComposeHub,
+    staleTime: 60_000,
+  });
+  const myOrganizationIdForDept = useMemo(() => {
+    const fromDetail = (drafterProfile as { organizationId?: string } | undefined)?.organizationId?.trim();
+    if (fromDetail) return fromDetail;
+    if (authMemberId && orgChart?.organizations?.length) {
+      return findMemberOrganizationId(orgChart.organizations, authMemberId) ?? '';
+    }
+    return '';
+  }, [drafterProfile?.organizationId, authMemberId, orgChart?.organizations]);
+
+  const { data: homeDepartmentRequests = [] } = useQuery({
+    queryKey: ['approval-user', 'department-requests', 'home', myOrganizationIdForDept],
+    queryFn: () => approvalRequestApi.listDepartmentRequests(myOrganizationIdForDept),
+    enabled: onComposeHub && myOrganizationIdForDept.length > 0,
+    staleTime: 60_000,
   });
 
   const pendingInboxRows = useMemo(() => {
@@ -1082,12 +1323,6 @@ export function ApprovalsPage() {
     switch (guideBox) {
       case 'do-pending':
         return pendingRequests;
-      case 'do-received':
-        return mergeRequestsByRequestId([pendingRequests, actedRequests]);
-      case 'do-cc-wait': {
-        const merged = mergeRequestsByRequestId([viewerCcRequests, viewerCirculationRequests]);
-        return merged.filter((row) => rowMatchesViewerUnreadWait(row, authMemberId));
-      }
       case 'do-upcoming':
         return pendingRequests.filter((row) => rowIsUpcomingForApprover(row, authMemberId));
       default:
@@ -1106,22 +1341,13 @@ export function ApprovalsPage() {
   const myInboxRows = useMemo(() => {
     if (!onMyTab || !guideBox) return myRequests;
     switch (guideBox) {
-      case 'per-compose-all':
+      case 'per-all':
       case 'per-draft':
         return myRequests;
-      case 'per-viewers-all':
+      case 'per-viewers':
         return mergeRequestsByRequestId([viewerCcRequests, viewerCirculationRequests]);
-      case 'per-inbox-combined':
-        return mergeInboxCombinedRequests(
-          pendingRequests,
-          actedRequests,
-          viewerCcRequests,
-          viewerCirculationRequests,
-        );
-      case 'per-sent':
-        return myRequests.filter((r) => String(r.requestStatus).toUpperCase() !== 'DRAFT');
       case 'per-official':
-        return myRequests.filter((r) => isOfficialApprovalRequestType(r.requestType));
+        return myRequests;
       default:
         return myRequests;
     }
@@ -1131,8 +1357,6 @@ export function ApprovalsPage() {
     myRequests,
     viewerCcRequests,
     viewerCirculationRequests,
-    pendingRequests,
-    actedRequests,
   ]);
 
   const pendingTableLoading =
@@ -1140,19 +1364,13 @@ export function ApprovalsPage() {
       ? false
       : guideBox === 'do-pending' || guideBox === 'do-upcoming'
         ? pendingLoading
-        : guideBox === 'do-received'
-          ? pendingLoading || actedLoading
-          : guideBox === 'do-cc-wait'
-            ? viewerCcLoading || viewerCirculationLoading
-            : pendingLoading;
+        : pendingLoading;
 
   const myTableLoading =
     !onMyTab || !guideBox
       ? false
-      : guideBox === 'per-viewers-all' || guideBox === 'per-inbox-combined'
-        ? viewerCcLoading ||
-          viewerCirculationLoading ||
-          (guideBox === 'per-inbox-combined' && (pendingLoading || actedLoading))
+      : guideBox === 'per-viewers'
+        ? viewerCcLoading || viewerCirculationLoading
         : myLoading;
 
   const refreshUserQueries = async () => {
@@ -1161,8 +1379,11 @@ export function ApprovalsPage() {
   };
 
   const createRequestM = useMutation({
-    mutationFn: approvalRequestApi.createRequest,
+    mutationFn: (vars: { payload: CreateApprovalRequestPayload; attachmentFiles?: File[] }) =>
+      createApprovalRequestWithAttachments(vars.payload, vars.attachmentFiles),
     onSuccess: async (res) => {
+      setComposeAttachmentFiles([]);
+      await qc.invalidateQueries({ queryKey: ['approval', 'attachments'] });
       if (res.requestStatus === 'DRAFT') {
         message.success('임시저장되었습니다.');
         setComposeEditingRequestId(res.requestId);
@@ -1178,21 +1399,28 @@ export function ApprovalsPage() {
       setApprovalLineDrafts([]);
       setCcViewers([]);
       setCirculationViewers([]);
+      setOfficialRecipients([]);
+      setComposeDeptVisibleYn('Y');
       setComposePhase('select');
       setLineInfoTab('approval');
       queueMicrotask(() => {
         composeDraftHydratingRef.current = false;
       });
       await refreshUserQueries();
-      navigate({ to: '/app/approvals', search: { tab: 'my', box: 'per-compose-all' }, replace: true });
+      navigate({ to: '/app/approvals', search: { tab: 'my', box: 'per-all', ...embedSearchSuffix }, replace: true });
     },
     onError: (e: Error) => message.error(e.message || '결재 요청 처리에 실패했습니다.'),
   });
 
   const updateRequestM = useMutation({
-    mutationFn: ({ requestId, payload }: { requestId: string; payload: CreateApprovalRequestPayload }) =>
-      approvalRequestApi.updateDraft(requestId, payload),
+    mutationFn: (vars: {
+      requestId: string;
+      payload: CreateApprovalRequestPayload;
+      attachmentFiles?: File[];
+    }) => updateApprovalRequestWithAttachments(vars.requestId, vars.payload, vars.attachmentFiles),
     onSuccess: async (res, vars) => {
+      setComposeAttachmentFiles([]);
+      await qc.invalidateQueries({ queryKey: ['approval', 'attachments'] });
       if (vars.payload.requestStatus === 'DRAFT') {
         message.success('임시저장했습니다.');
         await refreshUserQueries();
@@ -1207,26 +1435,40 @@ export function ApprovalsPage() {
       setApprovalLineDrafts([]);
       setCcViewers([]);
       setCirculationViewers([]);
+      setOfficialRecipients([]);
+      setComposeDeptVisibleYn('Y');
       setComposePhase('select');
       setLineInfoTab('approval');
       queueMicrotask(() => {
         composeDraftHydratingRef.current = false;
       });
       await refreshUserQueries();
-      navigate({ to: '/app/approvals', search: { tab: 'my', box: 'per-compose-all' }, replace: true });
+      navigate({ to: '/app/approvals', search: { tab: 'my', box: 'per-all', ...embedSearchSuffix }, replace: true });
     },
     onError: (e: Error) => message.error(e.message || '결재 요청 처리에 실패했습니다.'),
+  });
+
+  const deleteComposeRemoteAttachmentM = useMutation({
+    mutationFn: (attachmentId: string) => approvalAttachmentsApi.deleteAttachment(attachmentId),
+    onSuccess: async () => {
+      message.success('첨부를 삭제했습니다.');
+      await qc.invalidateQueries({ queryKey: ['approval', 'attachments'] });
+    },
+    onError: (e: Error) => message.error(e.message || '첨부 삭제에 실패했습니다.'),
   });
 
   const resetComposeToNew = useCallback(() => {
     composeDraftHydratingRef.current = true;
     setComposeEditingRequestId(null);
+    setComposeAttachmentFiles([]);
     form.resetFields();
     form.setFieldsValue({ content: {} });
     setSelectedDocumentId(undefined);
     setApprovalLineDrafts([]);
     setCcViewers([]);
     setCirculationViewers([]);
+    setOfficialRecipients([]);
+    setComposeDeptVisibleYn('Y');
     setOrgTreeSelectedKey(undefined);
     setComposePhase('select');
     setLineInfoTab('approval');
@@ -1249,23 +1491,34 @@ export function ApprovalsPage() {
           return;
         }
         composeDraftHydratingRef.current = true;
+        setComposeAttachmentFiles([]);
         setComposeEditingRequestId(detail.requestId);
+        setComposeDeptVisibleYn(detail.isDeptVisibleYn === 'N' ? 'N' : 'Y');
         const content = parseDetailContentJson(detail);
         form.setFieldsValue({
           documentId: detail.documentId,
           content,
         });
         setSelectedDocumentId(detail.documentId);
-        setApprovalLineDrafts(doc.autoApproveYn === 'Y' ? [] : approvalLinesToMemberDrafts(detail.approvalLines));
+        setApprovalLineDrafts(approvalLinesToMemberDrafts(detail.approvalLines));
         const { cc, circulation } = viewersToDraftRows(detail.viewers ?? []);
         setCcViewers(cc);
         setCirculationViewers(circulation);
+        const recRows = (detail.recipients ?? [])
+          .filter((x) => x.recipientOrganizationId?.trim())
+          .map((x) => ({
+            recipientOrganizationId: x.recipientOrganizationId.trim(),
+            recipientOrganizationName:
+              x.recipientOrganizationName?.trim() || x.recipientOrganizationId.trim(),
+          }));
+        setOfficialRecipients(recRows);
         setOrgTreeSelectedKey(undefined);
         setComposePhase('fill');
-        setLineInfoTab(doc.autoApproveYn === 'Y' ? 'cc' : 'approval');
-        navigate({ to: '/app/approvals', search: { tab: 'compose' }, replace: true });
+        setLineInfoTab('approval');
+        navigate({ to: '/app/approvals', search: { tab: 'compose', ...embedSearchSuffix }, replace: true });
         message.success('임시저장 문서를 불러왔습니다.');
         void qc.invalidateQueries({ queryKey: ['approval-user', 'my-requests'] });
+        void qc.invalidateQueries({ queryKey: ['approval', 'attachments', requestId] });
         queueMicrotask(() => {
           composeDraftHydratingRef.current = false;
         });
@@ -1275,7 +1528,7 @@ export function ApprovalsPage() {
         message.error(e instanceof Error ? e.message : '문서를 불러오지 못했습니다.');
       }
     },
-    [activeDocuments, form, message, navigate, qc],
+    [activeDocuments, embedSearchSuffix, form, message, navigate, qc],
   );
 
   const cancelRequestM = useMutation({
@@ -1357,7 +1610,7 @@ export function ApprovalsPage() {
   const applyPolicyLineDrafts = useCallback(
     async (doc?: ApprovalDocument | null) => {
       if (composeEditingRequestId) return;
-      if (!doc || doc.autoApproveYn === 'Y') {
+      if (!doc) {
         setApprovalLineDrafts([]);
         return;
       }
@@ -1372,6 +1625,7 @@ export function ApprovalsPage() {
           .map((line): ApprovalLineDraft | null => {
             const first = line.candidates[0];
             if (!first) return null;
+            const multi = line.candidates.length > 1;
             return {
               kind: 'member',
               id: `policy-${line.policyLineId}`,
@@ -1382,6 +1636,8 @@ export function ApprovalsPage() {
               jobTitleName: first.jobTitleName,
               organizationName: first.organizationName,
               source: 'policy',
+              policyLineId: line.policyLineId,
+              ...(multi ? { policyCandidates: line.candidates } : {}),
             };
           });
         setApprovalLineDrafts(nextDrafts.filter((v) => v != null) as ApprovalLineDraft[]);
@@ -1391,6 +1647,43 @@ export function ApprovalsPage() {
     },
     [composeEditingRequestId, qc],
   );
+
+  const handleApprovalFormSelectConfirm = useCallback(
+    (documentId: string, doc: ApprovalDocument) => {
+      setComposeFormSelectModalOpen(false);
+      setComposeFormSelectInitialId(undefined);
+      pushRecentApprovalForm(doc);
+      navigate({ to: '/app/approvals', search: { tab: 'compose', ...embedSearchSuffix }, replace: true });
+      setComposeEditingRequestId(null);
+      setApprovalLineDrafts([]);
+      setOrgTreeSelectedKey(undefined);
+      setCcViewers([]);
+      setCirculationViewers([]);
+      setOfficialRecipients([]);
+      setComposeDeptVisibleYn('Y');
+      form.setFieldsValue({ documentId, content: {} });
+      setSelectedDocumentId(documentId);
+      setComposeSidebarTab('line');
+      setLineInfoTab('approval');
+      void applyPolicyLineDrafts(doc);
+      setComposePhase('fill');
+      queueMicrotask(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
+    },
+    [applyPolicyLineDrafts, embedSearchSuffix, form, navigate],
+  );
+
+  const toggleBookmark = useCallback((requestId: string) => {
+    setBookmarkedRequestIds((prev) => {
+      const exists = prev.includes(requestId);
+      const next = exists ? prev.filter((id) => id !== requestId) : [requestId, ...prev].slice(0, 20);
+      try {
+        localStorage.setItem(APPROVAL_HOME_BOOKMARKS_KEY, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, []);
 
   const syncStepOrder = (rows: ApprovalLineDraft[]) => rows.map((r, idx) => ({ ...r, stepOrder: idx + 1 }));
 
@@ -1414,8 +1707,28 @@ export function ApprovalsPage() {
     });
   }, []);
 
+  const applyPolicyCandidateChoice = useCallback((rowId: string, memberPositionId: string) => {
+    setApprovalLineDrafts((prev) =>
+      prev.map((r) => {
+        if (r.id !== rowId || r.kind !== 'member' || r.source !== 'policy') return r;
+        const pool = r.policyCandidates;
+        if (!pool?.length) return r;
+        const c = pool.find((x) => x.memberPositionId === memberPositionId);
+        if (!c) return r;
+        return {
+          ...r,
+          approverMemberId: c.memberId,
+          approverMemberPositionId: c.memberPositionId,
+          memberName: c.memberName,
+          jobTitleName: c.jobTitleName,
+          organizationName: c.organizationName,
+        };
+      }),
+    );
+  }, []);
+
   const addApproverFromOrg = async (memberId: string) => {
-    if (!selectedDocument || selectedDocument.autoApproveYn === 'Y') return;
+    if (!selectedDocument) return;
     try {
       const detail = await memberApi.detail(memberId);
       const positionId = detail.memberPositionId?.trim();
@@ -1483,7 +1796,7 @@ export function ApprovalsPage() {
 
   const bulkAddApproversFromOrg = useCallback(
     async (organizationId: string) => {
-      if (!selectedDocument || selectedDocument.autoApproveYn === 'Y') return;
+      if (!selectedDocument) return;
       const node = findOrgChartNode(orgChart?.organizations ?? [], organizationId);
       if (!node) return;
       const memberIds = collectOrgMemberRowsUnderNode(node).map((r) => r.memberId);
@@ -1625,6 +1938,41 @@ export function ApprovalsPage() {
     [selectedDocument, orgChart, message],
   );
 
+  const composeAttachmentAcceptAttr = useMemo(
+    () => Array.from(APPROVAL_ATTACHMENT_ALLOWED_EXT).map((ext) => `.${ext}`).join(','),
+    [],
+  );
+  const composeAttachmentSlotsLeft = Math.max(
+    0,
+    APPROVAL_ATTACHMENT_MAX_COUNT - composeRemoteAttachments.length - composeAttachmentFiles.length,
+  );
+
+  const addComposeAttachmentFiles = (incoming: File[]) => {
+    if (!incoming.length) return;
+    const existingRemoteCount = composeRemoteAttachments.length;
+    const existingRemoteBytes = composeRemoteAttachments.reduce(
+      (acc, a) => acc + (Number.isFinite(a.fileSize) ? a.fileSize : 0),
+      0,
+    );
+    setComposeAttachmentFiles((prev) => {
+      const next = [...prev];
+      for (const file of incoming) {
+        const pendingLocalBytes = next.reduce((s, f) => s + f.size, 0);
+        const err = validateApprovalAttachmentCandidate(file, {
+          existingRemoteCount,
+          pendingLocalCount: next.length,
+          pendingLocalBytes,
+          existingRemoteBytes,
+        });
+        if (err) {
+          void message.error(err);
+          break;
+        }
+        next.push(file);
+      }
+      return next;
+    });
+  };
 
   const submitCompose = async (status: 'DRAFT' | 'WAIT') => {
     try {
@@ -1639,15 +1987,14 @@ export function ApprovalsPage() {
         return;
       }
 
-      const flatApprovers =
-        selectedDocument.autoApproveYn === 'Y' ? [] : flattenApprovalLinesForSubmit(approvalLineDrafts);
+      const flatApprovers = flattenApprovalLinesForSubmit(approvalLineDrafts);
       const approvalLines = flatApprovers.map((line, idx) => ({
         stepOrder: idx + 1,
         approverMemberId: line.approverMemberId,
         approverMemberPositionId: line.approverMemberPositionId,
       }));
 
-      if (status === 'WAIT' && selectedDocument.autoApproveYn !== 'Y') {
+      if (status === 'WAIT') {
         if (!approvalLines.length) {
           message.warning('결재선을 1명 이상 지정해 주세요.');
           return;
@@ -1667,18 +2014,58 @@ export function ApprovalsPage() {
         ...flattenCirculationViewersForPayload(circulationViewers),
       ];
 
+      const isOfficial = normalizeApprovalRequestType(selectedDocument.requestType) === 'OFFICIAL';
+
+      if (isOfficial && status === 'WAIT') {
+        if (!officialRecipients.length) {
+          message.warning('공문은 수신 부서를 최소 1곳 지정해 주세요.');
+          return;
+        }
+        const seen = new Set<string>();
+        for (const r of officialRecipients) {
+          const id = r.recipientOrganizationId.trim();
+          if (seen.has(id)) {
+            message.warning('동일한 수신 부서를 중복 지정할 수 없습니다.');
+            return;
+          }
+          seen.add(id);
+          if (!r.recipientOrganizationName.trim()) {
+            message.warning('수신 부서명을 확인해 주세요.');
+            return;
+          }
+        }
+      }
+
+      const recipientsPayload =
+        isOfficial && officialRecipients.length > 0
+          ? officialRecipients.map((r) => ({
+              recipientOrganizationId: r.recipientOrganizationId.trim(),
+              recipientOrganizationName: r.recipientOrganizationName.trim(),
+            }))
+          : undefined;
+
       const payload: CreateApprovalRequestPayload = {
         documentId: values.documentId ?? selectedDocument.documentId,
         contentJson: JSON.stringify(values.content ?? {}),
         requestStatus: status,
+        isDeptVisibleYn: isOfficial ? 'Y' : composeDeptVisibleYn,
         ...(approvalLines.length ? { approvalLines } : {}),
         ...(viewersPayload.length ? { viewers: viewersPayload } : {}),
+        ...(recipientsPayload ? { recipients: recipientsPayload } : {}),
       };
 
+      const attach = composeAttachmentFiles;
       if (composeEditingRequestId) {
-        await updateRequestM.mutateAsync({ requestId: composeEditingRequestId, payload });
+        await updateRequestM.mutateAsync({
+          requestId: composeEditingRequestId,
+          payload,
+          attachmentFiles: attach.length ? attach : undefined,
+        });
       } else {
-        await createRequestM.mutateAsync(payload);
+        await createRequestM.mutateAsync({
+          payload,
+          attachmentFiles: attach.length ? attach : undefined,
+        });
       }
     } catch {
       // form validation
@@ -1687,11 +2074,54 @@ export function ApprovalsPage() {
 
   const composeSaving = createRequestM.isPending || updateRequestM.isPending;
 
+  const renderMyInboxActions = (_: unknown, row: ApprovalRequestDetail) => {
+    const st = String(row.requestStatus).toUpperCase();
+    const showResume = st === 'DRAFT';
+    const showCancel = st === 'DRAFT' || st === 'WAIT' || st === 'PENDING';
+    if (!showResume && !showCancel) return null;
+    return (
+      <Space size="small" wrap onClick={(e) => e.stopPropagation()}>
+        {showResume ? (
+          <Button
+            type="link"
+            size="small"
+            icon={<FolderOpenOutlined />}
+            onClick={() => void openDraftForCompose(row.requestId)}
+          >
+            이어쓰기
+          </Button>
+        ) : null}
+        {showCancel ? (
+          <Button type="link" size="small" danger onClick={() => setCancelTarget(row)}>
+            취소
+          </Button>
+        ) : null}
+      </Space>
+    );
+  };
+
   const myColumns = [
+    {
+      title: '제목',
+      key: 'subject',
+      ellipsis: true,
+      render: (_: unknown, row: ApprovalRequestDetail) => getApprovalRequestSubjectLine(row) || '—',
+    },
     {
       title: '양식',
       dataIndex: 'documentName',
       key: 'documentName',
+      ellipsis: true,
+      render: (name: string | undefined) => name?.trim() || '—',
+    },
+    {
+      title: '결재선',
+      key: 'approvalLineStrip',
+      width: 300,
+      onCell: () => ({ className: '!tw-align-middle' }),
+      render: (_: unknown, row: ApprovalRequestDetail) => (
+        <PendingHomeApprovalLineStrip lines={row.approvalLines} />
+      ),
     },
     {
       title: '상태',
@@ -1701,7 +2131,7 @@ export function ApprovalsPage() {
       render: (status: string) => statusTag(status),
     },
     {
-      title: '요청일',
+      title: '기안일',
       dataIndex: 'createdAt',
       key: 'createdAt',
       width: 180,
@@ -1710,29 +2140,61 @@ export function ApprovalsPage() {
     {
       title: '관리',
       key: 'actions',
-      width: 280,
-      render: (_: unknown, row: ApprovalRequestDetail) => (
-        <Space size="small" wrap>
-          <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => setSelectedRequestId(row.requestId)}>
-            상세
-          </Button>
-          {String(row.requestStatus).toUpperCase() === 'DRAFT' ? (
-            <Button
-              type="link"
-              size="small"
-              icon={<FolderOpenOutlined />}
-              onClick={() => void openDraftForCompose(row.requestId)}
-            >
-              이어쓰기
-            </Button>
-          ) : null}
-          {(row.requestStatus === 'DRAFT' || row.requestStatus === 'WAIT') && (
-            <Button type="link" size="small" danger onClick={() => setCancelTarget(row)}>
-              취소
-            </Button>
-          )}
-        </Space>
-      ),
+      width: 200,
+      render: renderMyInboxActions,
+    },
+  ];
+
+  const officialInboxColumns = [
+    {
+      title: '양식',
+      dataIndex: 'documentName',
+      key: 'documentName',
+      ellipsis: true,
+    },
+    {
+      title: '공문 번호',
+      key: 'documentNumber',
+      width: 130,
+      render: (_: unknown, row: ApprovalRequestDetail) => {
+        const st = String(row.requestStatus).toUpperCase();
+        const num = row.documentNumber?.trim();
+        if (st === 'APPROVED' && num) return num;
+        return <Typography.Text type="secondary">발번 전</Typography.Text>;
+      },
+    },
+    {
+      title: '상태',
+      dataIndex: 'requestStatus',
+      key: 'requestStatus',
+      width: 120,
+      render: (status: string) => statusTag(status),
+    },
+    {
+      title: '발신 부서',
+      dataIndex: 'requesterOrganizationName',
+      key: 'requesterOrganizationName',
+      ellipsis: true,
+      render: (v: string | undefined) => v?.trim() || '—',
+    },
+    {
+      title: '수신 부서',
+      key: 'recipients',
+      ellipsis: true,
+      render: (_: unknown, row: ApprovalRequestDetail) => formatOfficialRecipientsSummary(row),
+    },
+    {
+      title: '기안일',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      width: 170,
+      render: (v: string) => formatDateTime(v),
+    },
+    {
+      title: '관리',
+      key: 'actions',
+      width: 240,
+      render: renderMyInboxActions,
     },
   ];
 
@@ -1746,6 +2208,13 @@ export function ApprovalsPage() {
       title: '양식',
       dataIndex: 'documentName',
       key: 'documentName',
+    },
+    {
+      title: '유형',
+      key: 'reqKind',
+      width: 76,
+      render: (_: unknown, row: ApprovalRequestDetail) =>
+        String(row.requestType).toUpperCase() === 'OFFICIAL' ? <Tag color="blue">공문</Tag> : '—',
     },
     {
       title: '구분',
@@ -1785,12 +2254,12 @@ export function ApprovalsPage() {
       render: (_: unknown, row: ApprovalRequestDetail) => {
         const myLine = row.approvalLines.find((l) => String(l.approvalStatus).toUpperCase() === 'PENDING');
         return (
-          <Space size="small">
+          <Space size="small" wrap>
             <Button type="link" size="small" onClick={() => setSelectedRequestId(row.requestId)}>
               상세
             </Button>
             <Button
-              type="link"
+              type="primary"
               size="small"
               disabled={!myLine}
               onClick={() => myLine && setApprovalAction({ approvalId: myLine.approvalId, mode: 'approve' })}
@@ -1798,9 +2267,8 @@ export function ApprovalsPage() {
               승인
             </Button>
             <Button
-              type="link"
-              size="small"
               danger
+              size="small"
               disabled={!myLine}
               onClick={() => myLine && setApprovalAction({ approvalId: myLine.approvalId, mode: 'reject' })}
             >
@@ -1812,15 +2280,10 @@ export function ApprovalsPage() {
     },
   ];
 
-  const viewerChannelColumns: ColumnsType<ApprovalRequestDetail> = useMemo(
+  /** 참조(CC)·공람(CIRCULATION) 각각 — 채널 열 없음 */
+  const viewerCcOnlyColumns: ColumnsType<ApprovalRequestDetail> = useMemo(
     () => [
       { title: '양식', dataIndex: 'documentName', key: 'documentName' },
-      {
-        title: '채널',
-        key: 'channel',
-        width: 88,
-        render: (_: unknown, row: ApprovalRequestDetail) => myViewerChannelLabel(row, authMemberId),
-      },
       {
         title: '열람',
         key: 'read',
@@ -1855,6 +2318,22 @@ export function ApprovalsPage() {
     ],
     [authMemberId],
   );
+
+  const viewerInboxTabKey = routeSearch.viewerSub === 'circ' ? 'circ' : 'cc';
+
+  const navigateViewerInboxTab = (key: string) => {
+    navigate({
+      to: '/app/approvals',
+      search: (prev) => ({
+        ...(prev as Record<string, string | undefined>),
+        tab: 'my',
+        box: 'per-viewers',
+        viewerSub: key === 'circ' ? 'circ' : undefined,
+        ...(isEmbedComposeModal ? { embed: APPROVAL_EMBED_QUERY } : { embed: undefined }),
+      }),
+      replace: true,
+    });
+  };
 
   const renderOrgMemberPicker = () => (
     <Card size="small" title="조직도" variant="borderless" className={APPROVAL_COMPOSE_CARD_CLASS}>
@@ -2059,7 +2538,7 @@ export function ApprovalsPage() {
   };
 
   const reloadPolicyApprovalLine = () => {
-    if (!selectedDocument?.documentId || selectedDocument.autoApproveYn === 'Y') return;
+    if (!selectedDocument?.documentId) return;
     void qc.invalidateQueries({ queryKey: ['approval', 'policy-lines', 'candidates', selectedDocument.documentId] });
     message.info('정책 기본 결재선을 다시 불러옵니다.');
   };
@@ -2083,15 +2562,6 @@ export function ApprovalsPage() {
               임시저장 수정 중
             </Tag>
           ) : null}
-          <Button
-            type="text"
-            size="small"
-            icon={<ArrowLeftOutlined className="tw-text-[13px] tw-text-[#333]" />}
-            className={composeToolbarGhostBtn}
-            onClick={() => setComposePhase('select')}
-          >
-            양식
-          </Button>
           <Button
             type="text"
             size="small"
@@ -2126,29 +2596,11 @@ export function ApprovalsPage() {
           >
             미리보기
           </Button>
-          <Button
-            type="text"
-            size="small"
-            icon={<CloseOutlined className="tw-text-[12px] tw-text-[#333]" />}
-            className={composeToolbarGhostBtn}
-            onClick={() => setComposePhase('select')}
-          >
-            취소
-          </Button>
-          <Button
-            type="text"
-            size="small"
-            icon={<InfoCircleOutlined className="tw-text-[13px] tw-text-[#333]" />}
-            className={composeToolbarGhostBtn}
-            onClick={() => openComposeApprovalModal()}
-          >
-            결재 정보
-          </Button>
         </Space>
         <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-x-3 tw-gap-y-2">
           {showTitle && selectedDocument ? (
             <Typography.Text type="secondary" className="!tw-mr-1 !tw-max-w-[10rem] !tw-truncate !tw-text-xs !tw-text-[#666] sm:!tw-max-w-[14rem]">
-              {selectedDocument.documentName}
+              {formatApprovalDocumentName(selectedDocument.documentName)}
             </Typography.Text>
           ) : null}
           <Select
@@ -2163,29 +2615,16 @@ export function ApprovalsPage() {
               { value: '1m', label: '자동저장(1분)' },
             ]}
           />
-          <Button
-            type="text"
-            size="small"
-            icon={<MenuOutlined className="tw-text-[14px] tw-text-[#333]" />}
-            className={composeToolbarGhostBtn}
-            onClick={() =>
-              navigate({ to: '/app/approvals', search: { tab: 'my', box: 'per-compose-all' }, replace: true })
-            }
-          >
-            목록
+          <Button type="text" size="small" className={composeToolbarGhostBtn} onClick={() => reloadPolicyApprovalLine()}>
+            자동결재선
           </Button>
-          {selectedDocument?.autoApproveYn !== 'Y' ? (
-            <Button type="text" size="small" className={composeToolbarGhostBtn} onClick={() => reloadPolicyApprovalLine()}>
-              자동결재선
-            </Button>
-          ) : null}
         </div>
       </div>
     );
   };
 
-  const renderComposeDocumentSidebar = (opts: { includeApprovalLine: boolean; variant?: 'card' | 'flush' }) => {
-    const variant = opts.variant ?? 'card';
+  const renderComposeDocumentSidebar = (opts?: { variant?: 'card' | 'flush' }) => {
+    const variant = opts?.variant ?? 'card';
     return (
     <div
       className={clsx(
@@ -2218,8 +2657,7 @@ export function ApprovalsPage() {
               label: '결재선',
               children: (
                 <div className="tw-space-y-2">
-                  {opts.includeApprovalLine ? (
-                    <>
+                  <>
                       <button
                         type="button"
                         onClick={() => openComposeApprovalModal('approval')}
@@ -2286,22 +2724,7 @@ export function ApprovalsPage() {
                           참조자 {countViewerDraftMembers(ccViewers)}명
                         </Button>
                       </div>
-                    </>
-                  ) : (
-                    <div className="tw-space-y-2">
-                      <div className="tw-rounded-lg tw-border tw-border-slate-200 tw-bg-white tw-px-3 tw-py-3 tw-text-sm tw-text-slate-600">
-                        자동승인 양식입니다. 결재 단계가 없습니다.
-                      </div>
-                      <Button
-                        type="link"
-                        size="small"
-                        className="!tw-h-auto !tw-p-0 !tw-text-left !tw-text-xs"
-                        onClick={() => openComposeApprovalModal('cc')}
-                      >
-                        참조자 {countViewerDraftMembers(ccViewers)}명
-                      </Button>
-                    </div>
-                  )}
+                  </>
                 </div>
               ),
             },
@@ -2311,11 +2734,12 @@ export function ApprovalsPage() {
               children: selectedDocument ? (
                 <div className="tw-space-y-3">
                   <Descriptions size="small" column={1} bordered className="!tw-bg-white">
-                    <Descriptions.Item label="양식명">{selectedDocument.documentName}</Descriptions.Item>
+                    <Descriptions.Item label="양식명">
+                      {formatApprovalDocumentName(selectedDocument.documentName)}
+                    </Descriptions.Item>
                     <Descriptions.Item label="유형">
                       {REQUEST_TYPE_LABEL[normalizeApprovalRequestType(selectedDocument.requestType)]}
                     </Descriptions.Item>
-                    <Descriptions.Item label="자동승인">{selectedDocument.autoApproveYn === 'Y' ? '예' : '아니오'}</Descriptions.Item>
                     <Descriptions.Item label="기안자">{sidebarDrafterName}</Descriptions.Item>
                     <Descriptions.Item label="소속">{sidebarDrafterOrg}</Descriptions.Item>
                   </Descriptions>
@@ -2475,6 +2899,19 @@ export function ApprovalsPage() {
                     <span className="tw-whitespace-nowrap [word-break:keep-all]">
                       {row.organizationName} ({row.members.length}명)
                     </span>
+                  ) : row.source === 'policy' && row.policyCandidates && row.policyCandidates.length > 1 ? (
+                    <Select
+                      size="small"
+                      className="tw-min-w-[14rem] tw-max-w-[min(100%,22rem)]"
+                      value={row.approverMemberPositionId}
+                      options={row.policyCandidates.map((c) => ({
+                        value: c.memberPositionId,
+                        label: `${c.memberName} · ${c.organizationName?.trim() || '—'}${
+                          c.jobTitleName?.trim() ? ` (${c.jobTitleName.trim()})` : ''
+                        }`,
+                      }))}
+                      onChange={(pid) => applyPolicyCandidateChoice(row.id, pid)}
+                    />
                   ) : (
                     <span className="tw-whitespace-nowrap [word-break:keep-all]">
                       {row.memberName}
@@ -2493,13 +2930,14 @@ export function ApprovalsPage() {
                 key: 'actions',
                 width: 88,
                 align: 'center',
-                render: (_, row) => (
-                  <Space size={4} align="center">
-                    <ApprovalLineDragHandle />
+                render: (_, row) => {
+                  const policyLocked = row.kind === 'member' && row.source === 'policy';
+                  const deleteBtn = (
                     <Button
                       type="text"
                       size="small"
                       danger
+                      disabled={policyLocked}
                       icon={<DeleteOutlined />}
                       onClick={() =>
                         setApprovalLineDrafts((prev) =>
@@ -2507,8 +2945,20 @@ export function ApprovalsPage() {
                         )
                       }
                     />
-                  </Space>
-                ),
+                  );
+                  return (
+                    <Space size={4} align="center">
+                      <ApprovalLineDragHandle />
+                      {policyLocked ? (
+                        <Tooltip title="정책에서 지정된 결재 단계는 삭제할 수 없습니다. 후보가 여러 명이면 이름 열에서 선택하세요.">
+                          <span className="tw-inline-flex">{deleteBtn}</span>
+                        </Tooltip>
+                      ) : (
+                        deleteBtn
+                      )}
+                    </Space>
+                  );
+                },
               },
             ]}
           />
@@ -2522,38 +2972,32 @@ export function ApprovalsPage() {
     const approvalGridClass = stacked
       ? 'tw-flex tw-flex-col tw-gap-4'
       : 'tw-grid tw-grid-cols-1 tw-gap-4 lg:tw-grid-cols-[minmax(260px,300px)_minmax(0,1fr)]';
-    const hideApprovalLineTab = selectedDocument?.autoApproveYn === 'Y';
-
     return (
       <Tabs
         size="small"
         activeKey={lineInfoTab}
         onChange={(k) => setLineInfoTab(k as 'approval' | 'cc' | 'circulation')}
         items={[
-          ...(hideApprovalLineTab
-            ? []
-            : [
-                {
-                  key: 'approval',
-                  label: '결재선',
-                  children: (
-                    <>
-                      <Typography.Paragraph type="secondary" className="!tw-mb-3 !tw-text-sm">
-                        정책라인 결재선을 기본으로 불러옴십니다. 조직도에서 멤버·조직을 오른쪽 목록으로 드래그해 추가하고, 관리 열의 드래그 핸들로 순서를 조정하세요.
-                      </Typography.Paragraph>
-                      <div className={approvalGridClass}>
-                        {renderOrgMemberPicker()}
-                        <ApprovalOrgDropZone
-                          onDropMember={(id) => void addApproverFromOrg(id)}
-                          onDropOrg={(oid) => void bulkAddApproversFromOrg(oid)}
-                        >
-                          {renderComposeApprovalLineTable()}
-                        </ApprovalOrgDropZone>
-                      </div>
-                    </>
-                  ),
-                },
-              ]),
+          {
+            key: 'approval',
+            label: '결재선',
+            children: (
+              <>
+                <Typography.Paragraph type="secondary" className="!tw-mb-3 !tw-text-sm">
+                  정책라인 결재선을 기본으로 불러옴십니다. 조직도에서 멤버·조직을 오른쪽 목록으로 드래그해 추가하고, 관리 열의 드래그 핸들로 순서를 조정하세요.
+                </Typography.Paragraph>
+                <div className={approvalGridClass}>
+                  {renderOrgMemberPicker()}
+                  <ApprovalOrgDropZone
+                    onDropMember={(id) => void addApproverFromOrg(id)}
+                    onDropOrg={(oid) => void bulkAddApproversFromOrg(oid)}
+                  >
+                    {renderComposeApprovalLineTable()}
+                  </ApprovalOrgDropZone>
+                </div>
+              </>
+            ),
+          },
           {
             key: 'cc',
             label: '참조자',
@@ -2569,22 +3013,28 @@ export function ApprovalsPage() {
     );
   };
 
+  const isComposeHubEntry = tab === 'compose' && routeSearch.sideNav === 'request-compose';
+  const composePhaseView = isComposeHubEntry ? 'select' : composePhase;
   const showComposeWorkbench =
-    composePhase === 'fill' && selectedDocument != null && selectedSchema.fields.length > 0;
+    composePhaseView === 'fill' && selectedDocument != null && selectedSchema.fields.length > 0;
 
   const pageTitle =
     tab === 'compose'
-      ? '결재 요청 작성'
+      ? isComposeHubEntry
+        ? '전자결재'
+        : '결재 요청 작성'
       : tab === 'admin' && canAdmin
-        ? '관리자 설정'
+        ? '결재 관리자'
         : guideBox
           ? APPROVAL_GUIDE_BOX_LABEL[guideBox]
           : '내 결재함';
   const pageDescription =
     tab === 'compose'
-      ? '양식을 선택하고 결재선을 구성한 뒤 기안을 제출합니다.'
+      ? isComposeHubEntry
+        ? '결재 대기, 진행 문서, 공문 알림을 한눈에 확인하고 바로 작성하세요.'
+        : '양식을 선택하고 결재선을 구성한 뒤 기안을 제출합니다.'
       : tab === 'admin' && canAdmin
-        ? '결재 관련 관리자 설정을 변경합니다.'
+        ? '양식 옵션(활성·부서 문서함 노출)과 결재 순서(직책/단계)를 설정합니다.'
         : guideBox
           ? '내 결재함'
           : '왼쪽 메뉴에서 문서함을 선택하면 목록이 표시됩니다.';
@@ -2593,18 +3043,478 @@ export function ApprovalsPage() {
     return <Navigate to="/app/approvals" search={{ tab: 'compose' }} replace />;
   }
 
+  const renderHomeDocListCard = (
+    title: string,
+    rows: ApprovalRequestDetail[],
+    emptyText: string,
+    options?: {
+      accent?: 'slate' | 'blue';
+      actionLabel?: string;
+      onAction?: (row: ApprovalRequestDetail) => void;
+      cardClassName?: string;
+      /** 「전체」모달 iframe — 해당 카드에 맞는 문서함만 로드 */
+      fullListEmbed: { panel: ComposeHomeEmbedPanel };
+    },
+  ) => {
+    const accentClass =
+      options?.accent === 'blue' ? 'tw-bg-blue-50/60 tw-border-blue-100' : 'tw-bg-slate-50/80 tw-border-slate-200';
+    return (
+      <Card className={clsx(APPROVAL_HOME_GRID_DOC_CARD_CLASS, options?.cardClassName)}>
+        <div className="tw-mb-3 tw-flex tw-items-center tw-justify-between">
+          <Typography.Text strong>{title}</Typography.Text>
+          <Button
+            type="link"
+            size="small"
+            onClick={() => {
+              if (!options?.fullListEmbed) return;
+              setComposeHomeMoreModal({ kind: 'iframe', panel: options.fullListEmbed.panel });
+            }}
+          >
+            전체
+          </Button>
+        </div>
+        {rows.length === 0 ? (
+          <Typography.Text type="secondary">{emptyText}</Typography.Text>
+        ) : (
+          <div className={APPROVAL_HOME_DOC_LIST_SCROLL}>
+            <Space direction="vertical" size={8} className="tw-w-full">
+              {rows.slice(0, 20).map((row) => (
+                <div
+                  key={row.requestId}
+                  className={`tw-flex tw-items-center tw-justify-between tw-gap-2 tw-rounded-lg tw-border tw-px-3 tw-py-2 ${accentClass} ${
+                    options?.onAction ? '' : 'tw-cursor-pointer tw-transition-colors hover:tw-bg-white/60'
+                  }`}
+                  onClick={
+                    options?.onAction
+                      ? undefined
+                      : () => {
+                          setSelectedRequestId(row.requestId);
+                        }
+                  }
+                  role={options?.onAction ? undefined : 'button'}
+                  tabIndex={options?.onAction ? undefined : 0}
+                  onKeyDown={
+                    options?.onAction
+                      ? undefined
+                      : (e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setSelectedRequestId(row.requestId);
+                          }
+                        }
+                  }
+                >
+                  <div className="tw-min-w-0">
+                    <Typography.Text strong className="!tw-block tw-truncate">
+                      {row.documentName || '—'}
+                    </Typography.Text>
+                    <Typography.Text type="secondary" className="!tw-block tw-text-xs">
+                      {(row.requesterName || '요청자 미상')} · {formatDateTime(row.updatedAt || row.createdAt)}
+                    </Typography.Text>
+                  </div>
+                  {options?.onAction ? (
+                    <Button
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        options.onAction?.(row);
+                      }}
+                    >
+                      {options.actionLabel || '보기'}
+                    </Button>
+                  ) : null}
+                </div>
+              ))}
+            </Space>
+          </div>
+        )}
+      </Card>
+    );
+  };
+
+  const renderHomeApprovalFormsCard = () => {
+    const accentClass = 'tw-bg-slate-50/80 tw-border-slate-200';
+    return (
+      <Card className={APPROVAL_HOME_COMPOSE_FORMS_CARD_CLASS}>
+        <div className="tw-mb-3 tw-flex tw-items-center tw-justify-between tw-gap-2">
+          <Typography.Text strong className="tw-min-w-0">
+            결재 양식
+          </Typography.Text>
+          <Button
+            type="primary"
+            size="small"
+            className="!tw-h-8 !tw-min-w-[5.5rem] !tw-shrink-0 !tw-rounded-lg !tw-px-3 !tw-text-sm !tw-font-semibold tw-shadow-sm"
+            onClick={() => {
+              setComposeFormSelectInitialId(undefined);
+              setComposeFormSelectModalOpen(true);
+            }}
+          >
+            결재 생성
+          </Button>
+        </div>
+        {docsLoading ? (
+          <div
+            className={clsx(
+              APPROVAL_HOME_TOP_ROW_MATCH_SCROLL,
+              'tw-flex tw-items-center tw-justify-center tw-py-4',
+            )}
+          >
+            <Spin />
+          </div>
+        ) : composeHubVisibleDocuments.length === 0 ? (
+          <div
+            className={clsx(
+              APPROVAL_HOME_TOP_ROW_MATCH_SCROLL,
+              'tw-flex tw-items-center tw-justify-center tw-py-4',
+            )}
+          >
+            <Typography.Text type="secondary">사용 가능한 활성 양식이 없습니다.</Typography.Text>
+          </div>
+        ) : (
+          <div className={APPROVAL_HOME_TOP_ROW_MATCH_SCROLL}>
+            <Space direction="vertical" size={8} className="tw-w-full">
+              {composeHubVisibleDocuments.slice(0, 20).map((doc) => {
+                const cat = normalizeApprovalRequestType(doc.requestType);
+                return (
+                  <div
+                    key={doc.documentId}
+                    role="button"
+                    tabIndex={0}
+                    className={`tw-flex tw-cursor-pointer tw-items-center tw-justify-between tw-gap-2 tw-rounded-lg tw-border tw-px-3 tw-py-2 ${accentClass} tw-transition-colors hover:tw-bg-white/60`}
+                    onClick={() => {
+                      setComposeFormSelectInitialId(doc.documentId);
+                      setComposeFormSelectModalOpen(true);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setComposeFormSelectInitialId(doc.documentId);
+                        setComposeFormSelectModalOpen(true);
+                      }
+                    }}
+                  >
+                    <div className="tw-min-w-0">
+                      <Typography.Text strong className="!tw-block tw-truncate">
+                        {doc.documentName?.trim() || '—'}
+                      </Typography.Text>
+                      <Typography.Text type="secondary" className="!tw-block tw-text-xs">
+                        {REQUEST_TYPE_LABEL[cat]} · {cat}
+                      </Typography.Text>
+                    </div>
+                  </div>
+                );
+              })}
+            </Space>
+          </div>
+        )}
+      </Card>
+    );
+  };
+
+  const renderComposeHomeDashboard = () => {
+    const viewerMergedRows = mergeRequestsByRequestId([viewerCcRequests, viewerCirculationRequests]);
+
+    const composeHomePendingTable = (rows: ApprovalRequestDetail[]) => (
+      <table className="tw-w-full tw-table-fixed tw-border-collapse tw-text-center">
+        <colgroup>
+          <col className="tw-w-[100px]" />
+          <col />
+          <col className="tw-w-24" />
+          <col className="tw-w-[min(22rem,40vw)]" />
+          <col className="tw-w-[120px]" />
+          <col className="tw-w-[140px]" />
+        </colgroup>
+        <thead>
+          <tr className="tw-border-b tw-border-slate-200">
+            <th scope="col" className="tw-pb-2 tw-px-2 tw-text-xs tw-font-semibold tw-text-slate-500">
+              문서 상태
+            </th>
+            <th scope="col" className="tw-pb-2 tw-px-2 tw-text-xs tw-font-semibold tw-text-slate-500">
+              제목
+            </th>
+            <th scope="col" className="tw-pb-2 tw-px-2 tw-text-xs tw-font-semibold tw-text-slate-500">
+              요청자
+            </th>
+            <th scope="col" className="tw-pb-2 tw-px-2 tw-text-center tw-text-xs tw-font-semibold tw-text-slate-500">
+              결재선
+            </th>
+            <th scope="col" className="tw-pb-2 tw-px-2 tw-text-xs tw-font-semibold tw-text-slate-500">
+              기안일
+            </th>
+            <th scope="col" className="tw-pb-2 tw-px-2 tw-text-xs tw-font-semibold tw-text-slate-500">
+              결재 처리
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 ? (
+            <tr>
+              <td colSpan={6} className="tw-border tw-border-dashed tw-border-slate-200 tw-bg-slate-50/50 tw-p-6 tw-text-center">
+                <Typography.Text type="secondary">결재 대기 문서가 없습니다.</Typography.Text>
+              </td>
+            </tr>
+          ) : (
+            rows.map((row) => {
+              const myLine = row.approvalLines.find((l) => String(l.approvalStatus).toUpperCase() === 'PENDING');
+              return (
+              <tr key={row.requestId} className="tw-border-b tw-border-slate-200 tw-bg-white">
+                <td className="tw-px-2 tw-py-2.5 tw-align-middle">
+                  <div className="tw-flex tw-justify-center">
+                    <Tag color="gold" className="!tw-m-0">
+                      결재대기
+                    </Tag>
+                  </div>
+                </td>
+                <td className="tw-min-w-0 tw-px-2 tw-py-2.5 tw-align-middle">
+                  <Typography.Text strong className="!tw-block tw-min-w-0 tw-truncate tw-text-center">
+                    {getApprovalRequestSubjectLine(row) || row.documentName?.trim() || '—'}
+                  </Typography.Text>
+                </td>
+                <td className="tw-px-2 tw-py-2.5 tw-align-middle">
+                  <Typography.Text type="secondary" className="!tw-block tw-truncate tw-text-center tw-text-xs">
+                    {row.requesterName || '요청자 미상'}
+                  </Typography.Text>
+                </td>
+                <td className="tw-min-w-0 tw-overflow-hidden tw-px-2 tw-py-2 tw-text-left tw-align-middle">
+                  <PendingHomeApprovalLineStrip lines={row.approvalLines} />
+                </td>
+                <td className="tw-px-2 tw-py-2.5 tw-align-middle">
+                  <Typography.Text className="tw-text-center tw-text-xs tw-text-slate-500">
+                    {formatDateTime(row.createdAt)}
+                  </Typography.Text>
+                </td>
+                <td className="tw-px-2 tw-py-2.5 tw-align-middle">
+                  <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-center tw-gap-2">
+                    <Button
+                      type="primary"
+                      size="small"
+                      disabled={!myLine}
+                      onClick={() => {
+                        if (!myLine) return;
+                        setApprovalAction({ approvalId: myLine.approvalId, mode: 'approve' });
+                      }}
+                    >
+                      승인
+                    </Button>
+                    <Button danger size="small" disabled={!myLine} onClick={() => {
+                        if (!myLine) return;
+                        setApprovalAction({ approvalId: myLine.approvalId, mode: 'reject' });
+                      }}>
+                      반려
+                    </Button>
+                  </div>
+                </td>
+              </tr>
+              );
+            })
+          )}
+        </tbody>
+      </table>
+    );
+
+    return (
+      <div className="tw-space-y-4">
+        <div className="tw-grid tw-grid-cols-1 tw-items-start tw-gap-4 xl:tw-grid-cols-3">
+          <div className="tw-min-w-0 tw-w-full xl:tw-col-span-2">
+            <Card className="tw-w-full tw-rounded-2xl tw-border tw-border-slate-200/90 tw-shadow-sm tw-shadow-slate-900/5">
+            <div className="tw-mb-3 tw-flex tw-items-center tw-justify-between">
+              <Typography.Text strong>결재 대기 문서 리스트</Typography.Text>
+              <Button
+                type="link"
+                size="small"
+                onClick={() =>
+                  setComposeHomeMoreModal({
+                    kind: 'pending-inbox',
+                    title: '결재 대기 문서 전체',
+                  })
+                }
+              >
+                전체
+              </Button>
+            </div>
+            <div className={APPROVAL_HOME_TOP_ROW_MATCH_SCROLL}>
+              {composeHomePendingTable(pendingRequests.slice(0, 20))}
+            </div>
+            </Card>
+          </div>
+          <div className="tw-min-w-0 tw-w-full xl:tw-col-span-1 xl:tw-shrink-0 xl:tw-self-start">
+            {renderHomeApprovalFormsCard()}
+          </div>
+        </div>
+
+        <div className="tw-grid tw-grid-cols-1 tw-gap-4 md:tw-grid-cols-2 xl:tw-grid-cols-3">
+          {renderHomeDocListCard('내 기안 문서함', myRequestsAllForSummary, '기안 문서가 없습니다.', {
+            fullListEmbed: { panel: 'my-all' },
+          })}
+          {renderHomeDocListCard('참조/공람 문서', viewerMergedRows, '참조/공람 문서가 없습니다.', {
+            fullListEmbed: { panel: 'viewers' },
+          })}
+          {renderHomeDocListCard(
+            '부서 문서함',
+            homeDepartmentRequests,
+            myOrganizationIdForDept ? '부서 문서가 없습니다.' : '조직 정보가 없어 부서 문서함을 불러올 수 없습니다.',
+            {
+              fullListEmbed: { panel: 'department' },
+            },
+          )}
+          {renderHomeDocListCard('공문 문서함', homeOfficialSentRequests, '공문 문서가 없습니다.', {
+            fullListEmbed: { panel: 'official' },
+          })}
+          {renderHomeDocListCard(
+            '임시 저장 문서',
+            myDraftRequests,
+            '임시 저장 문서가 없습니다.',
+            {
+              accent: 'blue',
+              actionLabel: '이어쓰기',
+              onAction: (row) => void openDraftForCompose(row.requestId),
+              fullListEmbed: { panel: 'draft' },
+            },
+          )}
+          <Card className={APPROVAL_HOME_GRID_DOC_CARD_CLASS}>
+            <div className="tw-mb-3 tw-flex tw-items-center tw-justify-between">
+              <Typography.Text strong>부재 위임</Typography.Text>
+              <Button
+                type="link"
+                size="small"
+                onClick={() => setComposeHomeMoreModal({ kind: 'iframe', panel: 'absence' })}
+              >
+                전체
+              </Button>
+            </div>
+            {homeAbsencePreviewRows.length === 0 ? (
+              <Typography.Text type="secondary">등록된 부재 위임이 없습니다.</Typography.Text>
+            ) : (
+              <div className={APPROVAL_HOME_CARD_SCROLL}>
+                <Space direction="vertical" size={8} className="tw-w-full">
+                  {homeAbsencePreviewRows.map((row, i) => {
+                    const accentClass = 'tw-bg-slate-50/80 tw-border-slate-200';
+                    const substituteName =
+                      homeAbsenceSubstituteDetailQueries[i]?.data?.name?.trim() || '대결자';
+                    return (
+                      <div
+                        key={row.proxyId}
+                        className={`tw-flex tw-items-center tw-justify-between tw-gap-2 tw-rounded-lg tw-border tw-px-3 tw-py-2 ${accentClass}`}
+                      >
+                        <div className="tw-min-w-0">
+                          <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
+                            <Typography.Text strong className="!tw-block tw-truncate">
+                              대결: {substituteName}
+                            </Typography.Text>
+                            {absenceProxyDashboardTag(row)}
+                          </div>
+                          <Typography.Text type="secondary" className="!tw-block tw-text-xs">
+                            {formatAbsenceProxyRange(row.startDate, row.endDate)}
+                          </Typography.Text>
+                        </div>
+                        <Button
+                          size="small"
+                          onClick={() =>
+                            navigate({ to: '/app/approvals/absence-proxy', search: { ...embedSearchSuffix }, replace: true })
+                          }
+                        >
+                          보기
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </Space>
+              </div>
+            )}
+          </Card>
+        </div>
+
+        <Modal
+          title={composeHomeMoreModal?.kind === 'pending-inbox' ? composeHomeMoreModal.title : null}
+          open={composeHomeMoreModal != null}
+          onCancel={() => setComposeHomeMoreModal(null)}
+          footer={null}
+          width={1120}
+          destroyOnHidden
+          styles={{
+            content: {
+              height: 820,
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              padding: 0,
+              overflow: 'hidden',
+            },
+            header: { flexShrink: 0, marginBottom: 0, padding: '12px 16px' },
+            body: { flex: 1, minHeight: 0, padding: 0, overflow: 'hidden' },
+          }}
+        >
+          {composeHomeMoreModal?.kind === 'pending-inbox' ? (
+            <PendingApprovalInboxModalContent
+              myMemberId={authMemberId}
+              myMemberPositionId={drafterProfile?.memberPositionId?.trim()}
+              onOpenDetail={(requestId) => setSelectedRequestId(requestId)}
+              onStartApprove={(approvalId) => setApprovalAction({ approvalId, mode: 'approve' })}
+              onStartReject={(approvalId) => setApprovalAction({ approvalId, mode: 'reject' })}
+            />
+          ) : composeHomeMoreModal?.kind === 'iframe' ? (
+            <iframe
+              key={composeHomeMoreModal.panel}
+              title="전자결재 문서함"
+              src={composeHomeEmbedPanelUrl(composeHomeMoreModal.panel)}
+              className="tw-h-full tw-min-h-0 tw-w-full tw-border-0"
+            />
+          ) : null}
+        </Modal>
+
+        <ApprovalFormSelectModal
+          open={composeFormSelectModalOpen}
+          onCancel={() => {
+            setComposeFormSelectModalOpen(false);
+            setComposeFormSelectInitialId(undefined);
+          }}
+          documents={activeDocuments}
+          loading={docsLoading}
+          initialDocumentId={composeFormSelectInitialId}
+          onConfirm={handleApprovalFormSelectConfirm}
+        />
+      </div>
+    );
+  };
+
   return (
-    <Space direction="vertical" size={16} className="tw-w-full">
-      <div>
-        <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
-          {pageTitle}
-        </Typography.Title>
+    <div
+      className={clsx(
+        'tw-w-full',
+        isEmbedComposeModal
+          ? 'tw-flex tw-h-full tw-min-h-0 tw-flex-col tw-gap-4 tw-overflow-hidden'
+          : 'tw-flex tw-flex-col tw-gap-4',
+      )}
+    >
+      <div className={clsx(isEmbedComposeModal && 'tw-flex-shrink-0')}>
+        <div className="tw-flex tw-items-center tw-gap-2">
+          {!onComposeHub && !isEmbedComposeModal && tab !== 'admin' ? (
+            <Button
+              type="text"
+              icon={<ArrowLeftOutlined />}
+              aria-label="전자결재로 돌아가기"
+              className="!tw-shrink-0 !tw-text-slate-600 hover:!tw-text-slate-900"
+              onClick={() =>
+                navigate({
+                  to: '/app/approvals',
+                  search: { tab: 'compose', sideNav: 'request-compose' },
+                  replace: true,
+                })
+              }
+            />
+          ) : null}
+          <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
+            {pageTitle}
+          </Typography.Title>
+        </div>
         <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-sm">
           {pageDescription}
         </Typography.Paragraph>
       </div>
 
-      {tab === 'compose' ? (
+      {tab === 'compose' && isComposeHubEntry ? (
+        renderComposeHomeDashboard()
+      ) : tab === 'compose' ? (
         <Card
           className={clsx(
             'tw-border-slate-200/80 tw-shadow-sm',
@@ -2624,22 +3534,25 @@ export function ApprovalsPage() {
                 setOrgTreeSelectedKey(undefined);
                 setCcViewers([]);
                 setCirculationViewers([]);
+                setOfficialRecipients([]);
+                setComposeDeptVisibleYn('Y');
                 form.setFieldValue('content', {});
                 const nextDocId =
                   typeof changed.documentId === 'string' && changed.documentId.trim().length > 0
                     ? changed.documentId
                     : undefined;
-                const nextDoc = activeDocuments.find((d) => d.documentId === nextDocId);
+                const nextDoc = nextDocId ? activeDocuments.find((d) => d.documentId === nextDocId) : undefined;
                 setSelectedDocumentId(nextDocId);
                 setComposeSidebarTab('line');
-                setLineInfoTab(nextDoc?.autoApproveYn === 'Y' ? 'cc' : 'approval');
+                setLineInfoTab('approval');
+                void applyPolicyLineDrafts(nextDoc ?? null);
               }
             }}
           >
             {!showComposeWorkbench ? (
               <Steps
                 size="small"
-                current={composePhase === 'select' ? 0 : 1}
+                current={composePhaseView === 'select' ? 0 : 1}
                 className="tw-mb-6"
                 items={[
                   { title: '양식 선택', description: '카테고리·문서' },
@@ -2648,34 +3561,27 @@ export function ApprovalsPage() {
               />
             ) : null}
 
-            {composePhase === 'fill' && selectedDocument && !showComposeWorkbench ? renderComposeToolbar({ showDocumentTitle: true }) : null}
+            {composePhaseView === 'fill' && selectedDocument && !showComposeWorkbench
+              ? renderComposeToolbar({ showDocumentTitle: true })
+              : null}
 
             <Form.Item
               name="documentId"
-              label={composePhase === 'select' ? '문서 양식' : undefined}
+              label={composePhaseView === 'select' ? '문서 양식' : undefined}
               rules={[{ required: true, message: '카테고리에서 양식을 선택해 주세요.' }]}
-              style={composePhase === 'fill' ? { display: 'none' } : undefined}
+              style={composePhaseView === 'fill' ? { display: 'none' } : undefined}
             >
-              {composePhase === 'select' ? (
+              {composePhaseView === 'select' ? (
                 <DocumentFormPicker
                   documents={activeDocuments}
                   loading={docsLoading}
-                  myPendingApprovalCount={pendingRequests.length}
-                  mySubmittedInProgressCount={mySubmittedInProgressCount}
-                  onOpenPendingTab={() =>
-                    navigate({ to: '/app/approvals', search: { tab: 'pending' }, replace: true })
-                  }
-                  onOpenMyTab={() =>
-                    navigate({
-                      to: '/app/approvals',
-                      search: { tab: 'my', box: 'per-compose-all' },
-                      replace: true,
-                    })
-                  }
                   onAfterPick={(documentId, doc) => {
+                    if (isComposeHubEntry) {
+                      navigate({ to: '/app/approvals', search: { tab: 'compose', ...embedSearchSuffix }, replace: true });
+                    }
                     setSelectedDocumentId(documentId);
                     setComposeSidebarTab('line');
-                    setLineInfoTab(doc?.autoApproveYn === 'Y' ? 'cc' : 'approval');
+                    setLineInfoTab('approval');
                     void applyPolicyLineDrafts(doc);
                     setComposePhase((p) => (p === 'select' ? 'fill' : p));
                     queueMicrotask(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
@@ -2686,13 +3592,13 @@ export function ApprovalsPage() {
               )}
             </Form.Item>
 
-            {composePhase === 'select' ? (
+            {composePhaseView === 'select' ? (
               <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-4 !tw-text-center !tw-text-sm">
                 양식을 누르면 작성·결재 화면으로 이동합니다.
               </Typography.Paragraph>
             ) : null}
 
-            {composePhase === 'select' ? (
+            {composePhaseView === 'select' ? (
               <Card
                 size="small"
                 title={
@@ -2747,24 +3653,23 @@ export function ApprovalsPage() {
               </Card>
             ) : null}
 
-            {composePhase === 'fill' && selectedDocument && selectedSchema.fields.length === 0 ? (
+            {composePhaseView === 'fill' && selectedDocument && selectedSchema.fields.length === 0 ? (
               <Alert type="warning" showIcon message="양식 스키마(formSchema)를 해석할 수 없거나 필드가 없습니다. 관리자에게 문의하거나 다른 양식을 선택해 주세요." />
             ) : null}
 
-            {composePhase === 'fill' && selectedDocument && selectedSchema.fields.length > 0 ? (
+            {composePhaseView === 'fill' && selectedDocument && selectedSchema.fields.length > 0 ? (
               <div className="tw-flex tw-min-h-[min(100vh-220px,920px)] tw-flex-col tw-overflow-hidden lg:tw-flex-row lg:tw-items-stretch">
                 <div className="tw-flex tw-min-h-0 tw-min-w-0 tw-flex-1 tw-flex-col tw-bg-white tw-p-2 sm:tw-p-3">
                   {renderComposeToolbar()}
                   <div className="tw-min-h-0 tw-flex-1 tw-overflow-auto tw-rounded-none tw-bg-white">
                     <div className="tw-p-2 sm:tw-p-3">
                       <ApprovalFormPaperLayout
-                        documentName={selectedDocument.documentName}
+                        documentName={formatApprovalDocumentName(selectedDocument.documentName)}
                         categoryLabel={
                           REQUEST_TYPE_LABEL[normalizeApprovalRequestType(selectedDocument.requestType)] ??
                           String(selectedDocument.requestType)
                         }
                         requestTypeCode={normalizeApprovalRequestType(selectedDocument.requestType)}
-                        autoApproveYn={selectedDocument.autoApproveYn === 'Y' ? 'Y' : 'N'}
                         drafterName={drafterProfile?.name?.trim() || user?.name?.trim() || '—'}
                         drafterOrg={
                           drafterProfile?.organizationName?.trim() || user?.departmentName?.trim() || '—'
@@ -2774,40 +3679,43 @@ export function ApprovalsPage() {
                         }
                         writtenDate={dayjs().format('YYYY-MM-DD')}
                         stampColumn={
-                          selectedDocument.autoApproveYn !== 'Y' ? (
-                            <ApprovalFormStampColumn
-                              drafterName={drafterProfile?.name?.trim() || user?.name?.trim() || '—'}
-                              drafterJobTitle={
-                                drafterProfile?.jobTitleName?.trim() || user?.jobTitle?.trim() || undefined
-                              }
-                              applicationWrittenDateIso={dayjs().format('YYYY-MM-DD')}
-                              approvers={orderedApprovalLineDrafts.map((r) =>
-                                r.kind === 'org'
-                                  ? {
-                                      id: r.id,
-                                      memberName: `${r.organizationName} (${r.members.length}명)`,
-                                      jobTitleName: '조직',
-                                    }
-                                  : {
-                                      id: r.id,
-                                      memberName: r.memberName,
-                                      jobTitleName: r.jobTitleName,
-                                    },
-                              )}
-                              onOpenEdit={() => openComposeApprovalModal('approval')}
-                            />
-                          ) : undefined
+                          <ApprovalFormStampColumn
+                            drafterName={drafterProfile?.name?.trim() || user?.name?.trim() || '—'}
+                            drafterJobTitle={
+                              drafterProfile?.jobTitleName?.trim() || user?.jobTitle?.trim() || undefined
+                            }
+                            applicationWrittenDateIso={dayjs().format('YYYY-MM-DD')}
+                            approvers={orderedApprovalLineDrafts.map((r) =>
+                              r.kind === 'org'
+                                ? {
+                                    id: r.id,
+                                    memberName: `${r.organizationName} (${r.members.length}명)`,
+                                    jobTitleName: '조직',
+                                  }
+                                : {
+                                    id: r.id,
+                                    memberName: r.memberName,
+                                    jobTitleName: r.jobTitleName,
+                                  },
+                            )}
+                            onOpenEdit={() => openComposeApprovalModal('approval')}
+                          />
                         }
                       >
                         {selectedSchema.fields.map((field) => {
                           const namePath: (string | number)[] = ['content', field.name];
                           const ph = field.placeholder;
-                          const requiredRule = { required: true, message: `${field.label} 입력` };
-                          const selectRule = { required: true, message: `${field.label} 선택` };
+                          const fieldLocked = field.locked === true;
+                          const inputRules = fieldLocked
+                            ? [{ required: true as const, message: `${field.label} 입력` }]
+                            : [];
+                          const selectRules = fieldLocked
+                            ? [{ required: true as const, message: `${field.label} 선택` }]
+                            : [];
                           if (field.type === 'textarea') {
                             return (
-                              <ApprovalFormPaperFieldRow key={field.name} label={field.label} required>
-                                <Form.Item name={namePath} rules={[requiredRule]} className="!tw-mb-0">
+                              <ApprovalFormPaperFieldRow key={field.name} label={field.label} required={fieldLocked}>
+                                <Form.Item name={namePath} rules={inputRules} className="!tw-mb-0">
                                   <Input.TextArea rows={4} className="!tw-max-w-full" placeholder={ph} />
                                 </Form.Item>
                               </ApprovalFormPaperFieldRow>
@@ -2815,8 +3723,8 @@ export function ApprovalsPage() {
                           }
                           if (field.type === 'number') {
                             return (
-                              <ApprovalFormPaperFieldRow key={field.name} label={field.label} required>
-                                <Form.Item name={namePath} rules={[requiredRule]} className="!tw-mb-0">
+                              <ApprovalFormPaperFieldRow key={field.name} label={field.label} required={fieldLocked}>
+                                <Form.Item name={namePath} rules={inputRules} className="!tw-mb-0">
                                   <Input type="number" className="!tw-max-w-xs" placeholder={ph} />
                                 </Form.Item>
                               </ApprovalFormPaperFieldRow>
@@ -2824,8 +3732,8 @@ export function ApprovalsPage() {
                           }
                           if (field.type === 'date') {
                             return (
-                              <ApprovalFormPaperFieldRow key={field.name} label={field.label} required>
-                                <Form.Item name={namePath} rules={[requiredRule]} className="!tw-mb-0">
+                              <ApprovalFormPaperFieldRow key={field.name} label={field.label} required={fieldLocked}>
+                                <Form.Item name={namePath} rules={inputRules} className="!tw-mb-0">
                                   <Input type="date" className="!tw-max-w-xs" />
                                 </Form.Item>
                               </ApprovalFormPaperFieldRow>
@@ -2833,8 +3741,8 @@ export function ApprovalsPage() {
                           }
                           if (field.type === 'datetime-local') {
                             return (
-                              <ApprovalFormPaperFieldRow key={field.name} label={field.label} required>
-                                <Form.Item name={namePath} rules={[requiredRule]} className="!tw-mb-0">
+                              <ApprovalFormPaperFieldRow key={field.name} label={field.label} required={fieldLocked}>
+                                <Form.Item name={namePath} rules={inputRules} className="!tw-mb-0">
                                   <Input type="datetime-local" className="!tw-max-w-xs" />
                                 </Form.Item>
                               </ApprovalFormPaperFieldRow>
@@ -2842,8 +3750,8 @@ export function ApprovalsPage() {
                           }
                           if (field.type === 'time') {
                             return (
-                              <ApprovalFormPaperFieldRow key={field.name} label={field.label} required>
-                                <Form.Item name={namePath} rules={[requiredRule]} className="!tw-mb-0">
+                              <ApprovalFormPaperFieldRow key={field.name} label={field.label} required={fieldLocked}>
+                                <Form.Item name={namePath} rules={inputRules} className="!tw-mb-0">
                                   <Input type="time" className="!tw-max-w-xs" step={60} />
                                 </Form.Item>
                               </ApprovalFormPaperFieldRow>
@@ -2851,8 +3759,8 @@ export function ApprovalsPage() {
                           }
                           if (field.type === 'select') {
                             return (
-                              <ApprovalFormPaperFieldRow key={field.name} label={field.label} required>
-                                <Form.Item name={namePath} rules={[selectRule]} className="!tw-mb-0">
+                              <ApprovalFormPaperFieldRow key={field.name} label={field.label} required={fieldLocked}>
+                                <Form.Item name={namePath} rules={selectRules} className="!tw-mb-0">
                                   <Select
                                     className="!tw-max-w-md"
                                     placeholder={ph}
@@ -2863,8 +3771,8 @@ export function ApprovalsPage() {
                             );
                           }
                           return (
-                            <ApprovalFormPaperFieldRow key={field.name} label={field.label} required>
-                              <Form.Item name={namePath} rules={[requiredRule]} className="!tw-mb-0">
+                            <ApprovalFormPaperFieldRow key={field.name} label={field.label} required={fieldLocked}>
+                              <Form.Item name={namePath} rules={inputRules} className="!tw-mb-0">
                                 <Input className="!tw-max-w-full" placeholder={ph} />
                               </Form.Item>
                             </ApprovalFormPaperFieldRow>
@@ -2873,19 +3781,234 @@ export function ApprovalsPage() {
                       </ApprovalFormPaperLayout>
                     </div>
                   </div>
-                  <div className="tw-mt-3 tw-rounded-sm tw-border tw-border-dashed tw-border-slate-400 tw-bg-white tw-py-8 tw-text-center">
-                    <PaperClipOutlined className="tw-text-2xl tw-text-slate-400" />
-                    <div className="tw-mt-2 tw-text-sm tw-leading-relaxed tw-text-[#333]">
-                      이 곳에 파일을 드래그 하세요. 또는{' '}
-                      <Button
-                        type="link"
-                        size="small"
-                        className="!tw-h-auto !tw-p-0 !tw-align-baseline !tw-text-sm"
-                        onClick={() => message.info('파일 첨부는 추후 연동 예정입니다.')}
+                  {composeSelectedOfficial ? (
+                    <div className="tw-px-2 tw-pb-3 sm:tw-px-3">
+                      <Card size="small" title="수신 부서 (공문 필수)" className="tw-border-slate-200">
+                        <Alert
+                          type="info"
+                          showIcon
+                          className="tw-mb-3"
+                          message="상신 시 수신 부서를 최소 1곳 지정해야 합니다. 부서명은 스냅샷으로 저장됩니다."
+                        />
+                        <Select
+                          mode="multiple"
+                          className="tw-w-full"
+                          placeholder="조직도 기준 수신 부서를 검색·선택하세요"
+                          options={officialOrgSelectOptions}
+                          value={officialRecipients.map((r) => r.recipientOrganizationId)}
+                          onChange={(ids: string[]) => {
+                            const labelById = new Map(officialOrgSelectOptions.map((o) => [o.value, o.label]));
+                            setOfficialRecipients(
+                              ids.map((id) => ({
+                                recipientOrganizationId: id,
+                                recipientOrganizationName: labelById.get(id)?.trim() || id,
+                              })),
+                            );
+                          }}
+                          showSearch
+                          optionFilterProp="label"
+                        />
+                      </Card>
+                    </div>
+                  ) : null}
+                  <div className="tw-px-2 tw-pb-2 sm:tw-px-3">
+                    <Card size="small" title="부서 문서함 공개" className="tw-border-slate-200">
+                      <Space direction="vertical" size="small" className="tw-w-full">
+                        <Typography.Paragraph type="secondary" className="!tw-mb-0 tw-text-sm">
+                          켜두면 같은 부서 구성원이 부서 문서함에서 제목과 내용을 볼 수 있습니다. 끄면 작성자만 전체를 열람할 수 있고, 다른 부서원에게는 목록에서만 일부 정보가 표시됩니다.
+                        </Typography.Paragraph>
+                        <Space align="center">
+                          <Switch
+                            checked={composeSelectedOfficial ? true : composeDeptVisibleYn === 'Y'}
+                            disabled={composeSelectedOfficial}
+                            onChange={(checked) =>
+                              setComposeDeptVisibleYn(checked ? 'Y' : 'N')
+                            }
+                            aria-label="부서 문서함에 공개"
+                          />
+                          <Typography.Text className="tw-text-sm">
+                            {composeSelectedOfficial || composeDeptVisibleYn === 'Y' ? '공개' : '비공개'}
+                          </Typography.Text>
+                        </Space>
+                        {composeSelectedOfficial ? (
+                          <Alert
+                            type="info"
+                            showIcon
+                            className="!tw-mb-0"
+                            message="공문은 부서 문서함에 항상 공개됩니다."
+                          />
+                        ) : null}
+                      </Space>
+                    </Card>
+                  </div>
+                  {composeEditingRequestId ? (
+                    <Alert
+                      type="warning"
+                      showIcon
+                      className="tw-mb-3"
+                      message="임시저장을 다시 저장하면 서버에서 기존 첨부가 비워질 수 있습니다. 저장 후 필요한 파일을 다시 올려 주세요."
+                    />
+                  ) : null}
+                  <div
+                    className="tw-mt-3 tw-rounded-sm tw-border tw-border-dashed tw-border-slate-400 tw-bg-white tw-px-3 tw-py-4"
+                    onDragOver={(ev) => {
+                      ev.preventDefault();
+                      ev.stopPropagation();
+                    }}
+                    onDrop={(ev) => {
+                      ev.preventDefault();
+                      ev.stopPropagation();
+                      if (composeAttachmentSlotsLeft <= 0) {
+                        void message.warning(
+                          `첨부는 최대 ${APPROVAL_ATTACHMENT_MAX_COUNT}개까지 등록할 수 있습니다.`,
+                        );
+                        return;
+                      }
+                      const list = ev.dataTransfer.files;
+                      if (list?.length) addComposeAttachmentFiles(Array.from(list));
+                    }}
+                  >
+                    {composeAttachmentSlotsLeft > 0 ? (
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        className="tw-relative tw-min-h-[5.5rem] tw-cursor-pointer tw-rounded-sm tw-py-6 tw-text-center"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            composeAttachmentInputRef.current?.click();
+                          }
+                        }}
+                        onClick={() => composeAttachmentInputRef.current?.click()}
                       >
-                        파일선택
-                      </Button>{' '}
-                      (0MB)
+                        <input
+                          ref={composeAttachmentInputRef}
+                          type="file"
+                          multiple
+                          accept={composeAttachmentAcceptAttr}
+                          className="tw-sr-only"
+                          tabIndex={-1}
+                          onChange={(e) => {
+                            const list = e.target.files;
+                            e.target.value = '';
+                            if (list?.length) addComposeAttachmentFiles(Array.from(list));
+                          }}
+                        />
+                        <PaperClipOutlined className="tw-text-2xl tw-text-slate-400" />
+                        <div className="tw-mt-2 tw-text-sm tw-leading-relaxed tw-text-[#333]">
+                          이 곳에 파일을 드래그하거나 아래에서 파일을 선택하세요.
+                        </div>
+                        <div className="tw-mt-1">
+                          <Button
+                            type="link"
+                            size="small"
+                            className="!tw-h-auto !tw-p-0 !tw-align-baseline !tw-text-sm"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              composeAttachmentInputRef.current?.click();
+                            }}
+                          >
+                            파일 선택
+                          </Button>
+                        </div>
+                        <Typography.Paragraph type="secondary" className="!tw-mb-0 tw-mt-1 tw-text-xs">
+                          최대 {APPROVAL_ATTACHMENT_MAX_COUNT}개, 파일당 10MB 이하, 합계 50MB 이하 (jpg, png, pdf,
+                          Office, hwp, zip 등)
+                        </Typography.Paragraph>
+                      </div>
+                    ) : (
+                      <div
+                        role="presentation"
+                        className="tw-cursor-not-allowed tw-min-h-[5.5rem] tw-py-6 tw-text-center tw-opacity-70"
+                        onClick={() =>
+                          void message.warning(
+                            `첨부는 최대 ${APPROVAL_ATTACHMENT_MAX_COUNT}개까지 등록할 수 있습니다.`,
+                          )
+                        }
+                      >
+                        <PaperClipOutlined className="tw-text-2xl tw-text-slate-400" />
+                        <div className="tw-mt-2 tw-text-sm tw-leading-relaxed tw-text-[#333]">
+                          첨부 슬롯이 가득 찼습니다.
+                        </div>
+                        <Typography.Paragraph type="secondary" className="!tw-mb-0 tw-mt-1 tw-text-xs">
+                          최대 {APPROVAL_ATTACHMENT_MAX_COUNT}개, 파일당 10MB 이하, 합계 50MB 이하 (jpg, png, pdf, Office,
+                          hwp, zip 등)
+                        </Typography.Paragraph>
+                      </div>
+                    )}
+                    {composeRemoteAttachmentsLoading ? (
+                      <div className="tw-py-2 tw-text-center tw-text-sm tw-text-slate-500">첨부 목록 불러오는 중…</div>
+                    ) : null}
+                    {(composeRemoteAttachments.length > 0 || composeAttachmentFiles.length > 0) && (
+                      <ul className="tw-mb-0 tw-mt-3 tw-list-none tw-space-y-2 tw-border-t tw-border-slate-200 tw-pt-3 tw-pl-0">
+                        {composeRemoteAttachments.map((a) => (
+                          <li
+                            key={a.attachmentId}
+                            className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2 tw-text-sm"
+                          >
+                            <span className="tw-min-w-0 tw-truncate tw-text-slate-800" title={a.fileName}>
+                              {a.fileName}
+                            </span>
+                            <Space size={8} wrap>
+                              <Typography.Text type="secondary" className="tw-text-xs">
+                                {formatApprovalAttachmentBytes(a.fileSize)}
+                              </Typography.Text>
+                              <Button
+                                type="link"
+                                size="small"
+                                className="!tw-p-0"
+                                onClick={() => window.open(a.approvalUrl, '_blank', 'noopener,noreferrer')}
+                              >
+                                다운로드
+                              </Button>
+                              <Button
+                                type="link"
+                                size="small"
+                                danger
+                                className="!tw-p-0"
+                                loading={deleteComposeRemoteAttachmentM.isPending}
+                                disabled={deleteComposeRemoteAttachmentM.isPending}
+                                onClick={() => void deleteComposeRemoteAttachmentM.mutateAsync(a.attachmentId)}
+                              >
+                                삭제
+                              </Button>
+                            </Space>
+                          </li>
+                        ))}
+                        {composeAttachmentFiles.map((f, idx) => (
+                          <li
+                            key={`${f.name}-${f.size}-${idx}`}
+                            className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2 tw-text-sm"
+                          >
+                            <span className="tw-min-w-0 tw-truncate tw-text-slate-800" title={f.name}>
+                              {f.name}{' '}
+                              <Typography.Text type="secondary" className="tw-text-xs">
+                                (저장 시 업로드)
+                              </Typography.Text>
+                            </span>
+                            <Space size={8}>
+                              <Typography.Text type="secondary" className="tw-text-xs">
+                                {formatApprovalAttachmentBytes(f.size)}
+                              </Typography.Text>
+                              <Button
+                                type="link"
+                                size="small"
+                                danger
+                                className="!tw-p-0"
+                                onClick={() =>
+                                  setComposeAttachmentFiles((prev) => prev.filter((_, i) => i !== idx))
+                                }
+                              >
+                                제거
+                              </Button>
+                            </Space>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <div className="tw-mt-2 tw-text-center tw-text-xs tw-text-slate-500">
+                      남은 첨부 슬롯 {composeAttachmentSlotsLeft}개
                     </div>
                   </div>
                   <div className="tw-mt-2 tw-flex tw-flex-wrap tw-items-center tw-gap-2 tw-rounded-sm tw-border tw-border-slate-300 tw-bg-white tw-px-3 tw-py-2">
@@ -2909,36 +4032,13 @@ export function ApprovalsPage() {
                     'tw-max-h-[50vh] tw-shrink-0 tw-overflow-hidden tw-border-t tw-border-[#e5e7eb] tw-bg-white tw-p-0 lg:tw-max-h-none lg:tw-self-stretch lg:tw-border-l lg:tw-border-t-0',
                   )}
                 >
-                  {selectedDocument.autoApproveYn === 'Y' ? (
-                    <Space direction="vertical" size={12} className="tw-w-full">
-                      <Alert
-                        type="info"
-                        showIcon
-                        message="자동승인 양식입니다. 결재자 선택 없이 제출 즉시 승인 처리됩니다."
-                      />
-                      {renderComposeDocumentSidebar({ includeApprovalLine: false, variant: 'flush' })}
-                    </Space>
-                  ) : (
-                    renderComposeDocumentSidebar({ includeApprovalLine: true, variant: 'flush' })
-                  )}
+                  {renderComposeDocumentSidebar({ variant: 'flush' })}
                 </aside>
               </div>
             ) : null}
 
-            {composePhase === 'fill' &&
-            selectedDocument?.autoApproveYn === 'Y' &&
-            selectedSchema.fields.length === 0 ? (
-              <Space direction="vertical" size={12} className="tw-mb-4 tw-w-full">
-                <Alert type="info" showIcon message="자동승인 양식입니다. 결재자 선택 없이 제출 즉시 승인 처리됩니다." />
-                <div className="tw-max-w-lg">{renderComposeDocumentSidebar({ includeApprovalLine: false })}</div>
-              </Space>
-            ) : null}
-
-            {composePhase === 'fill' &&
-            selectedDocument &&
-            selectedDocument.autoApproveYn !== 'Y' &&
-            selectedSchema.fields.length === 0 ? (
-              <div className="tw-mb-4 tw-max-w-lg">{renderComposeDocumentSidebar({ includeApprovalLine: true })}</div>
+            {composePhaseView === 'fill' && selectedDocument && selectedSchema.fields.length === 0 ? (
+              <div className="tw-mb-4 tw-max-w-lg">{renderComposeDocumentSidebar()}</div>
             ) : null}
 
           </Form>
@@ -2946,124 +4046,332 @@ export function ApprovalsPage() {
       ) : tab === 'admin' && canAdmin ? (
         <ApprovalsAdminPage />
       ) : (
-        <>
+        <div
+          className={clsx(
+            isEmbedComposeModal && 'tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-hidden',
+          )}
+        >
           {tab === 'my' ? (
-        <Card className="tw-border-slate-200/80 tw-shadow-sm">
-          <>
-            {guideBox === 'per-official' ? (
-              <Alert
-                type="info"
-                showIcon
-                message="공문 문서함: 내 기안 중 requestType이 OFFICIAL인 문서만 표시합니다. 서버에서 requestType 쿼리를 지원하면 그에 맞게 바꿀 수 있습니다."
-                className="tw-mb-3"
-              />
-            ) : null}
-            {guideBox === 'per-compose-all' ? (
-              <div className="tw-mb-3 tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2">
-                <Select<ApprovalRequestStatus | 'ALL'>
-                  value={requestStatusFilter}
-                  onChange={(v) => {
-                    navigate({
-                      to: '/app/approvals',
-                      search: {
-                        tab: 'my',
-                        box: 'per-compose-all',
-                        ...(v === 'ALL' ? {} : { myStatus: v }),
-                      },
-                      replace: true,
-                    });
-                  }}
-                  style={{ width: 220 }}
-                  options={[
-                    { value: 'ALL', label: '전체 상태' },
-                    ...APPROVAL_REQUEST_STATUS.map((v) => ({ value: v, label: REQUEST_STATUS_LABEL[v] })),
-                  ]}
-                />
-              </div>
-            ) : null}
-            <Table<ApprovalRequestDetail>
-              rowKey="requestId"
-              loading={myTableLoading}
-              columns={
-                guideBox === 'per-viewers-all' || guideBox === 'per-inbox-combined'
-                  ? viewerChannelColumns
-                  : myColumns
+            <Card
+              size="small"
+              className={clsx(
+                'tw-rounded-lg tw-border-slate-200/80 tw-shadow-sm',
+                isEmbedComposeModal && 'tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-hidden',
+              )}
+              styles={
+                isEmbedComposeModal
+                  ? { body: { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 16 } }
+                  : undefined
               }
-              dataSource={myInboxRows}
-              pagination={{ pageSize: 10 }}
-            />
-          </>
-        </Card>
+            >
+              {isEmbedComposeModal ? (
+                <div className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-gap-4">
+                  <div className="tw-flex tw-shrink-0 tw-flex-col tw-gap-3">
+                    {guideBox === 'per-all' ? (
+                      <Tabs
+                        size="small"
+                        className="[&_.ant-tabs-content]:tw-hidden [&_.ant-tabs-nav]:tw-mb-0"
+                        activeKey={requestStatusFilter}
+                        onChange={(k) => {
+                          const next = k as 'ALL' | ApprovalRequestStatus;
+                          navigate({
+                            to: '/app/approvals',
+                            search: {
+                              tab: 'my',
+                              box: 'per-all',
+                              ...(next === 'ALL' ? {} : { myStatus: next }),
+                              ...embedSearchSuffix,
+                            },
+                            replace: true,
+                          });
+                        }}
+                        items={MY_INBOX_FILTER_TABS.map(({ key, label }) => ({ key, label }))}
+                      />
+                    ) : null}
+                    {guideBox === 'per-official' ? (
+                      <Tabs
+                        size="small"
+                        className="[&_.ant-tabs-content]:tw-hidden [&_.ant-tabs-nav]:tw-mb-0"
+                        activeKey={requestStatusFilter}
+                        onChange={(k) => {
+                          const next = k as 'ALL' | ApprovalRequestStatus;
+                          navigate({
+                            to: '/app/approvals',
+                            search: {
+                              tab: 'my',
+                              box: 'per-official',
+                              ...(next === 'ALL' ? {} : { myStatus: next }),
+                              ...embedSearchSuffix,
+                            },
+                            replace: true,
+                          });
+                        }}
+                        items={OFFICIAL_INBOX_FILTER_TABS.map(({ key, label }) => ({ key, label }))}
+                      />
+                    ) : null}
+                  </div>
+                  <div className="tw-min-h-0 tw-flex-1 tw-overflow-auto">
+                    {guideBox === 'per-viewers' ? (
+                      <Tabs
+                        size="small"
+                        tabBarStyle={{ marginBottom: 12 }}
+                        activeKey={viewerInboxTabKey}
+                        onChange={navigateViewerInboxTab}
+                        items={[
+                          {
+                            key: 'cc',
+                            label: '참조',
+                            children: (
+                              <Table<ApprovalRequestDetail>
+                                size="small"
+                                rowKey="requestId"
+                                loading={myTableLoading}
+                                columns={viewerCcOnlyColumns}
+                                dataSource={viewerCcRequests}
+                                pagination={{ pageSize: 10 }}
+                              />
+                            ),
+                          },
+                          {
+                            key: 'circ',
+                            label: '공람',
+                            children: (
+                              <Table<ApprovalRequestDetail>
+                                size="small"
+                                rowKey="requestId"
+                                loading={myTableLoading}
+                                columns={viewerCcOnlyColumns}
+                                dataSource={viewerCirculationRequests}
+                                pagination={{ pageSize: 10 }}
+                              />
+                            ),
+                          },
+                        ]}
+                      />
+                    ) : (
+                      <Table<ApprovalRequestDetail>
+                        size="small"
+                        rowKey="requestId"
+                        loading={myTableLoading}
+                        columns={guideBox === 'per-official' ? officialInboxColumns : myColumns}
+                        dataSource={myInboxRows}
+                        pagination={{ pageSize: 10 }}
+                        scroll={{ x: 'max-content' }}
+                        onRow={(record) => ({
+                          onClick: () => setSelectedRequestId(record.requestId),
+                          style: { cursor: 'pointer' },
+                        })}
+                      />
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {guideBox === 'per-all' ? (
+                    <Tabs
+                      size="small"
+                      className="tw-mb-3 [&_.ant-tabs-content]:tw-hidden [&_.ant-tabs-nav]:tw-mb-0"
+                      activeKey={requestStatusFilter}
+                      onChange={(k) => {
+                        const next = k as 'ALL' | ApprovalRequestStatus;
+                        navigate({
+                          to: '/app/approvals',
+                          search: {
+                            tab: 'my',
+                            box: 'per-all',
+                            ...(next === 'ALL' ? {} : { myStatus: next }),
+                            ...embedSearchSuffix,
+                          },
+                          replace: true,
+                        });
+                      }}
+                      items={MY_INBOX_FILTER_TABS.map(({ key, label }) => ({ key, label }))}
+                    />
+                  ) : null}
+                  {guideBox === 'per-official' ? (
+                    <Tabs
+                      size="small"
+                      className="tw-mb-3 [&_.ant-tabs-content]:tw-hidden [&_.ant-tabs-nav]:tw-mb-0"
+                      activeKey={requestStatusFilter}
+                      onChange={(k) => {
+                        const next = k as 'ALL' | ApprovalRequestStatus;
+                        navigate({
+                          to: '/app/approvals',
+                          search: {
+                            tab: 'my',
+                            box: 'per-official',
+                            ...(next === 'ALL' ? {} : { myStatus: next }),
+                            ...embedSearchSuffix,
+                          },
+                          replace: true,
+                        });
+                      }}
+                      items={OFFICIAL_INBOX_FILTER_TABS.map(({ key, label }) => ({ key, label }))}
+                    />
+                  ) : null}
+                  {guideBox === 'per-viewers' ? (
+                    <Tabs
+                      tabBarStyle={{ marginBottom: 12 }}
+                      activeKey={viewerInboxTabKey}
+                      onChange={navigateViewerInboxTab}
+                      items={[
+                        {
+                          key: 'cc',
+                          label: '참조',
+                          children: (
+                            <Table<ApprovalRequestDetail>
+                              rowKey="requestId"
+                              loading={myTableLoading}
+                              columns={viewerCcOnlyColumns}
+                              dataSource={viewerCcRequests}
+                              pagination={{ pageSize: 10 }}
+                            />
+                          ),
+                        },
+                        {
+                          key: 'circ',
+                          label: '공람',
+                          children: (
+                            <Table<ApprovalRequestDetail>
+                              rowKey="requestId"
+                              loading={myTableLoading}
+                              columns={viewerCcOnlyColumns}
+                              dataSource={viewerCirculationRequests}
+                              pagination={{ pageSize: 10 }}
+                            />
+                          ),
+                        },
+                      ]}
+                    />
+                  ) : (
+                    <Table<ApprovalRequestDetail>
+                      rowKey="requestId"
+                      loading={myTableLoading}
+                      columns={guideBox === 'per-official' ? officialInboxColumns : myColumns}
+                      dataSource={myInboxRows}
+                      pagination={{ pageSize: 10 }}
+                      scroll={{ x: 'max-content' }}
+                      onRow={(record) => ({
+                        onClick: () => setSelectedRequestId(record.requestId),
+                        style: { cursor: 'pointer' },
+                      })}
+                    />
+                  )}
+                </>
+              )}
+            </Card>
           ) : null}
           {tab === 'pending' ? (
-        <Card className="tw-border-slate-200/80 tw-shadow-sm">
-          <Table<ApprovalRequestDetail>
-            rowKey="requestId"
-            loading={pendingTableLoading}
-            columns={guideBox === 'do-cc-wait' ? viewerChannelColumns : pendingColumns}
-            dataSource={pendingInboxRows}
-            pagination={{ pageSize: 10 }}
-          />
-        </Card>
+            <Card
+              size="small"
+              className={clsx(
+                'tw-rounded-lg tw-border-slate-200/80 tw-shadow-sm',
+                isEmbedComposeModal && 'tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-hidden',
+              )}
+              styles={
+                isEmbedComposeModal
+                  ? { body: { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 16 } }
+                  : undefined
+              }
+            >
+              {(() => {
+                const pendingTable = (
+                  <Table<ApprovalRequestDetail>
+                    size={isEmbedComposeModal ? 'small' : undefined}
+                    rowKey="requestId"
+                    loading={pendingTableLoading}
+                    columns={pendingColumns}
+                    dataSource={pendingInboxRows}
+                    pagination={{ pageSize: 10 }}
+                  />
+                );
+                return isEmbedComposeModal ? (
+                  <div className="tw-min-h-0 tw-flex-1 tw-overflow-auto">{pendingTable}</div>
+                ) : (
+                  pendingTable
+                );
+              })()}
+            </Card>
           ) : null}
           {tab === 'acted' ? (
-        <Card className="tw-border-slate-200/80 tw-shadow-sm">
-          <Table<ApprovalRequestDetail>
-            rowKey="requestId"
-            loading={actedLoading}
-            columns={[
-              { title: '양식', dataIndex: 'documentName', key: 'documentName' },
-              {
-                title: '처리',
-                key: 'proxyAct',
-                width: 88,
-                render: (_: unknown, row: ApprovalRequestDetail) =>
-                  requestIncludesMyProxyAct(row, {
-                    myMemberId: authMemberId,
-                    myMemberPositionId: myPositionIdForProxy,
-                  }) ? (
-                    <Tag color="purple">대결</Tag>
-                  ) : (
-                    <Tag>직접</Tag>
-                  ),
-              },
-              {
-                title: '요청 상태',
-                dataIndex: 'requestStatus',
-                key: 'requestStatus',
-                width: 130,
-                render: (status: string) => statusTag(status),
-              },
-              {
-                title: '최종 수정일',
-                dataIndex: 'updatedAt',
-                key: 'updatedAt',
-                width: 180,
-                render: (v: string) => formatDateTime(v),
-              },
-              {
-                title: '상세',
-                key: 'actions',
-                width: 100,
-                render: (_, row) => (
-                  <Button type="link" size="small" onClick={() => setSelectedRequestId(row.requestId)}>
-                    보기
-                  </Button>
-                ),
-              },
-            ]}
-            dataSource={actedRequests}
-            pagination={{ pageSize: 10 }}
-          />
-        </Card>
+            <Card
+              size="small"
+              className={clsx(
+                'tw-rounded-lg tw-border-slate-200/80 tw-shadow-sm',
+                isEmbedComposeModal && 'tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-hidden',
+              )}
+              styles={
+                isEmbedComposeModal
+                  ? { body: { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 16 } }
+                  : undefined
+              }
+            >
+              {(() => {
+                const actedTable = (
+                  <Table<ApprovalRequestDetail>
+                    size={isEmbedComposeModal ? 'small' : undefined}
+                    rowKey="requestId"
+                    loading={actedLoading}
+                    columns={[
+                      { title: '양식', dataIndex: 'documentName', key: 'documentName' },
+                      {
+                        title: '처리',
+                        key: 'proxyAct',
+                        width: 88,
+                        render: (_: unknown, row: ApprovalRequestDetail) =>
+                          requestIncludesMyProxyAct(row, {
+                            myMemberId: authMemberId,
+                            myMemberPositionId: myPositionIdForProxy,
+                          }) ? (
+                            <Tag color="purple">대결</Tag>
+                          ) : (
+                            <Tag>직접</Tag>
+                          ),
+                      },
+                      {
+                        title: '요청 상태',
+                        dataIndex: 'requestStatus',
+                        key: 'requestStatus',
+                        width: 130,
+                        render: (status: string) => statusTag(status),
+                      },
+                      {
+                        title: '최종 수정일',
+                        dataIndex: 'updatedAt',
+                        key: 'updatedAt',
+                        width: 180,
+                        render: (v: string) => formatDateTime(v),
+                      },
+                      {
+                        title: '상세',
+                        key: 'actions',
+                        width: 100,
+                        render: (_, row) => (
+                          <Button type="link" size="small" onClick={() => setSelectedRequestId(row.requestId)}>
+                            보기
+                          </Button>
+                        ),
+                      },
+                    ]}
+                    dataSource={actedRequests}
+                    pagination={{ pageSize: 10 }}
+                  />
+                );
+                return isEmbedComposeModal ? (
+                  <div className="tw-min-h-0 tw-flex-1 tw-overflow-auto">{actedTable}</div>
+                ) : (
+                  actedTable
+                );
+              })()}
+            </Card>
           ) : null}
-        </>
+        </div>
       )}
 
 
       <Modal
         title="미리보기"
-        open={composePreviewOpen && composePhase === 'fill' && selectedDocument != null && tab === 'compose'}
+        open={composePreviewOpen && composePhaseView === 'fill' && selectedDocument != null && tab === 'compose'}
         onCancel={() => setComposePreviewOpen(false)}
         footer={
           <Button type="primary" onClick={() => setComposePreviewOpen(false)}>
@@ -3083,7 +4391,7 @@ export function ApprovalsPage() {
       <Modal
         title="결재 정보"
         open={
-          composeApprovalInfoModalOpen && composePhase === 'fill' && selectedDocument != null && tab === 'compose'
+          composeApprovalInfoModalOpen && composePhaseView === 'fill' && selectedDocument != null && tab === 'compose'
         }
         onCancel={() => setComposeApprovalInfoModalOpen(false)}
         width={1000}
@@ -3163,6 +4471,6 @@ export function ApprovalsPage() {
           placeholder={approvalAction?.mode === 'approve' ? '승인 의견(선택)' : '반려 사유(필수)'}
         />
       </Modal>
-    </Space>
+    </div>
   );
 }
