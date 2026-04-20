@@ -194,6 +194,8 @@ export const PERFORMANCE_PAGE_KO = {
   goalSortProgressDesc: '진행률 높은 순',
   advancedFilters: '상세 조건',
   avgAchievement: '진행 중 평균 달성률',
+  /** ACTIVE는 있으나 산출 가능한 달성률(pct)이 없을 때 요약 바 대신 */
+  avgAchievementUnavailable: '산출 가능한 달성률이 없어 평균을 표시할 수 없습니다.',
   statAll: '전체',
   statTotal: '목표',
   statActive: '진행 중',

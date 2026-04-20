@@ -133,8 +133,29 @@ export function GoalWorkflowSteps({ goalStatus, approvalFlowStatus, approvalPoli
     );
   }
 
+  if (compact) {
+    const activeStep = steps.find((s) => s.status === 'current' || s.status === 'waiting') ?? steps[steps.length - 1];
+    const toneClass =
+      activeStep.status === 'done'
+        ? 'tw-bg-emerald-50 tw-text-emerald-700 tw-border-emerald-200'
+        : activeStep.status === 'waiting'
+          ? 'tw-bg-amber-50 tw-text-amber-700 tw-border-amber-200'
+          : activeStep.status === 'current'
+            ? 'tw-bg-blue-50 tw-text-blue-700 tw-border-blue-200'
+            : 'tw-bg-slate-100 tw-text-slate-600 tw-border-slate-200';
+
+    return (
+      <Tooltip title={activeStep.hint ?? ''} open={activeStep.hint ? undefined : false}>
+        <span className={`tw-inline-flex tw-items-center tw-gap-1 tw-rounded-md tw-border tw-px-1.5 tw-py-0.5 tw-text-[10px] tw-font-semibold ${toneClass}`}>
+          {activeStep.status === 'waiting' ? <ClockCircleOutlined className="tw-text-[10px]" /> : null}
+          <span className="tw-leading-none">{activeStep.label}</span>
+        </span>
+      </Tooltip>
+    );
+  }
+
   return (
-    <div className={`tw-flex tw-items-center tw-gap-0 ${compact ? 'tw-py-1' : 'tw-py-3'}`}>
+    <div className="tw-flex tw-items-center tw-gap-0 tw-py-3">
       {steps.map((step, idx) => {
         const style = STATUS_STYLES[step.status];
         const isLast = idx === steps.length - 1;
@@ -149,23 +170,23 @@ export function GoalWorkflowSteps({ goalStatus, approvalFlowStatus, approvalPoli
               <div className="tw-flex tw-flex-col tw-items-center tw-gap-1">
                 <div
                   className={`tw-flex tw-items-center tw-justify-center tw-rounded-full tw-transition-all ${
-                    compact ? 'tw-h-6 tw-w-6' : 'tw-h-8 tw-w-8'
+                    'tw-h-8 tw-w-8'
                   } ${style.dot}`}
                 >
                   {step.status === 'done' ? (
-                    <CheckCircleOutlined className={compact ? 'tw-text-[10px]' : 'tw-text-xs'} />
+                    <CheckCircleOutlined className="tw-text-xs" />
                   ) : step.status === 'waiting' ? (
-                    <ClockCircleOutlined className={compact ? 'tw-text-[10px]' : 'tw-text-xs'} />
+                    <ClockCircleOutlined className="tw-text-xs" />
                   ) : (
-                    <span className={`tw-font-bold ${compact ? 'tw-text-[10px]' : 'tw-text-xs'}`}>
+                    <span className="tw-font-bold tw-text-xs">
                       {idx + 1}
                     </span>
                   )}
                 </div>
-                <span className={`tw-whitespace-nowrap tw-text-center ${compact ? 'tw-text-[10px]' : 'tw-text-xs'} ${style.text}`}>
+                <span className={`tw-whitespace-nowrap tw-text-center tw-text-xs ${style.text}`}>
                   {step.label}
                 </span>
-                {step.hint && step.status === 'current' && !compact ? (
+                {step.hint && step.status === 'current' ? (
                   <span className="tw-max-w-[120px] tw-text-center tw-text-[10px] tw-leading-tight tw-text-[#1e3a5f]/60">
                     {step.hint}
                   </span>
@@ -175,8 +196,8 @@ export function GoalWorkflowSteps({ goalStatus, approvalFlowStatus, approvalPoli
 
             {/* Connector line */}
             {!isLast ? (
-              <div className={`tw-mx-1.5 tw-flex tw-items-center ${compact ? 'tw-mx-1' : ''}`}>
-                <div className={`tw-h-0.5 ${compact ? 'tw-w-4' : 'tw-w-8'} tw-rounded-full ${style.line}`} />
+              <div className="tw-mx-1.5 tw-flex tw-items-center">
+                <div className={`tw-h-0.5 tw-w-8 tw-rounded-full ${style.line}`} />
                 <RightOutlined className={`tw-text-[8px] ${step.status === 'done' ? 'tw-text-emerald-400' : 'tw-text-slate-300'}`} />
               </div>
             ) : null}

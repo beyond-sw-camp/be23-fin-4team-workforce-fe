@@ -1270,77 +1270,81 @@ function PerformancePage() {
           </Paragraph>
 
           <div className="tw-mt-6 tw-border-t tw-border-slate-100 tw-pt-6">
-            <div className="tw-grid tw-grid-cols-2 tw-gap-3 sm:tw-grid-cols-4 sm:tw-gap-4">
-              {(
-                [
-                  {
-                    k: 't',
-                    label: PERFORMANCE_PAGE_KO.statAll,
-                    value: stats.total,
-                    icon: <BarChartOutlined className="tw-text-[15px] tw-text-slate-400" />,
-                  },
-                  {
-                    k: 'a',
-                    label: PERFORMANCE_PAGE_KO.statActive,
-                    value: stats.active,
-                    icon: <TeamOutlined className="tw-text-[15px] tw-text-slate-400" />,
-                  },
-                  {
-                    k: 'c',
-                    label: PERFORMANCE_PAGE_KO.statCompleted,
-                    value: stats.completed,
-                    icon: <CheckCircleOutlined className="tw-text-[15px] tw-text-slate-400" />,
-                  },
-                  {
-                    k: 'y',
-                    label: PERFORMANCE_PAGE_KO.statDelayed,
-                    value: stats.delayed,
-                    icon: <WarningOutlined className="tw-text-[15px] tw-text-amber-600/80" />,
-                  },
-                ] as const
-              ).map((m) => (
-                <div
-                  key={m.k}
-                  className="tw-min-w-0 tw-rounded-2xl tw-border tw-border-white/80 tw-bg-white tw-px-4 tw-py-4 tw-shadow-[0_1px_2px_rgba(15,23,42,0.05)]"
-                >
-                  <div className="tw-mb-1 tw-flex tw-items-center tw-gap-1.5 tw-text-xs tw-font-medium tw-text-slate-500">
-                    {m.icon}
-                    <span>{m.label}</span>
+            <div className="tw-flex tw-flex-col tw-gap-4">
+              <div className="tw-flex tw-w-full tw-min-w-0 tw-flex-col tw-gap-5 lg:tw-flex-row lg:tw-items-stretch lg:tw-gap-6 xl:tw-gap-8">
+                <div className="tw-flex tw-min-h-0 tw-min-w-0 tw-flex-1 tw-flex-col tw-gap-4 md:tw-gap-5 lg:tw-basis-0">
+                  <div className="tw-grid tw-w-full tw-grid-cols-2 tw-gap-3 sm:tw-gap-4 md:tw-grid-cols-4 md:tw-gap-4 xl:tw-gap-5">
+                    {(
+                      [
+                        {
+                          k: 't',
+                          label: PERFORMANCE_PAGE_KO.statAll,
+                          value: stats.total,
+                          icon: <BarChartOutlined className="tw-text-[15px] tw-text-slate-400" />,
+                        },
+                        {
+                          k: 'a',
+                          label: PERFORMANCE_PAGE_KO.statActive,
+                          value: stats.active,
+                          icon: <TeamOutlined className="tw-text-[15px] tw-text-slate-400" />,
+                        },
+                        {
+                          k: 'c',
+                          label: PERFORMANCE_PAGE_KO.statCompleted,
+                          value: stats.completed,
+                          icon: <CheckCircleOutlined className="tw-text-[15px] tw-text-slate-400" />,
+                        },
+                        {
+                          k: 'y',
+                          label: PERFORMANCE_PAGE_KO.statDelayed,
+                          value: stats.delayed,
+                          icon: <WarningOutlined className="tw-text-[15px] tw-text-amber-600/80" />,
+                        },
+                      ] as const
+                    ).map((m) => (
+                      <div
+                        key={m.k}
+                        className="tw-flex tw-h-full tw-min-h-[5rem] tw-min-w-0 tw-flex-col tw-justify-between tw-rounded-2xl tw-border tw-border-white/80 tw-bg-white tw-px-3 tw-py-3.5 tw-shadow-[0_1px_2px_rgba(15,23,42,0.05)] sm:tw-px-4 sm:tw-py-4"
+                      >
+                        <div className="tw-mb-1 tw-flex tw-min-w-0 tw-items-center tw-gap-1.5 tw-text-xs tw-font-medium tw-text-slate-500">
+                          {m.icon}
+                          <span className="tw-truncate">{m.label}</span>
+                        </div>
+                        <div className="tw-text-xl tw-font-semibold tw-tabular-nums tw-text-[#1e3a5f] sm:tw-text-2xl">{m.value}</div>
+                      </div>
+                    ))}
                   </div>
-                  <div className="tw-text-xl tw-font-semibold tw-tabular-nums tw-text-[#1e3a5f]">{m.value}</div>
+
+                <div className="tw-space-y-1.5">
+                  <div className="tw-flex tw-items-center tw-gap-3">
+                    <Text className="tw-shrink-0 tw-text-xs tw-text-slate-500">{PERFORMANCE_PAGE_KO.avgAchievement}</Text>
+                    <div className="tw-h-2 tw-min-w-0 tw-flex-1 tw-rounded-full tw-bg-slate-200/80">
+                      <div
+                        className="tw-h-full tw-rounded-full tw-transition-[width] tw-bg-[#3b82f6]"
+                        style={{ width: `${Math.min(100, Math.max(0, progressAvg ?? 0))}%` }}
+                      />
+                    </div>
+                    <Text className="tw-tabular-nums tw-text-sm tw-font-semibold tw-text-[#1e3a5f]">{progressAvg ?? 0}%</Text>
+                  </div>
+                  {progressAvg == null ? (
+                    <Text className="tw-block tw-text-[11px] tw-leading-snug tw-text-slate-400">
+                      {PERFORMANCE_PAGE_KO.avgAchievementUnavailable}
+                    </Text>
+                  ) : null}
                 </div>
-              ))}
-            </div>
-
-            {progressAvg != null ? (
-              <div className="tw-mt-5 tw-flex tw-items-center tw-gap-3">
-                <Text className="tw-shrink-0 tw-text-xs tw-text-slate-500">{PERFORMANCE_PAGE_KO.avgAchievement}</Text>
-                <div className="tw-h-2 tw-min-w-0 tw-flex-1 tw-rounded-full tw-bg-slate-200/80">
-                  <div
-                    className="tw-h-full tw-rounded-full tw-transition-[width] tw-bg-[#3b82f6]"
-                    style={{ width: `${Math.min(100, progressAvg)}%` }}
-                  />
                 </div>
-                <Text className="tw-tabular-nums tw-text-sm tw-font-semibold tw-text-[#1e3a5f]">{progressAvg}%</Text>
-              </div>
-            ) : null}
 
-            <div className="tw-mt-4 tw-rounded-lg tw-bg-slate-50/90 tw-px-3 tw-py-2">
-              <Text className="tw-text-[11px] tw-leading-normal tw-text-slate-500">
-                {PERFORMANCE_PAGE_KO.statScopeNote}
-              </Text>
-            </div>
-
-            {/* ── 승인 현황 배너 ── */}
+              {/* ── 승인 현황 배너 (우측 열 · lg 미만에서는 통계 아래 전폭) ── */}
+              <div className="tw-flex tw-w-full tw-min-w-0 tw-flex-col tw-self-stretch lg:tw-flex-none lg:tw-shrink-0 lg:tw-basis-80 xl:tw-basis-96">
             {(() => {
               const pendingCount = pendingApprovalsQuery.data?.length ?? 0;
               const myCount = approvalHistoryQuery.data?.length ?? 0;
               const hasPending = pendingCount > 0;
               return (
-                <div className={`tw-mt-5 tw-flex tw-flex-col tw-gap-2 tw-rounded-xl tw-border tw-px-3 tw-py-2.5 tw-shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:tw-flex-row sm:tw-flex-wrap sm:tw-items-center sm:tw-justify-between sm:tw-gap-3 sm:tw-px-4 sm:tw-py-3 ${
+                <div className={`tw-flex tw-h-full tw-min-h-0 tw-flex-col tw-justify-center tw-gap-2 tw-rounded-xl tw-border tw-px-3 tw-py-2.5 tw-shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:tw-flex-row sm:tw-flex-wrap sm:tw-items-center sm:tw-justify-between sm:tw-gap-3 sm:tw-px-4 sm:tw-py-3 lg:tw-flex-col lg:tw-items-stretch lg:tw-justify-center ${
                   hasPending
                     ? 'tw-border-amber-300/80 tw-bg-amber-50/70'
-                    : 'tw-border-slate-200/80 tw-bg-white'
+                    : 'tw-border-slate-300/80 tw-bg-slate-50/70'
                 }`}>
                   <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
                     {hasPending ? (
@@ -1348,37 +1352,43 @@ function PerformancePage() {
                         {pendingCount}
                       </span>
                     ) : (
-                      <FileDoneOutlined className="tw-shrink-0 tw-text-[15px] tw-text-slate-400" />
+                      <span className="tw-flex tw-h-7 tw-w-7 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-lg tw-bg-slate-400 tw-text-white">
+                        <FileDoneOutlined className="tw-text-[14px]" />
+                      </span>
                     )}
                     <div>
-                      <Text className="tw-text-xs tw-font-semibold sm:tw-text-sm" style={{ color: hasPending ? '#92400e' : '#475569' }}>
+                      <Text className="tw-text-xs tw-font-semibold sm:tw-text-sm" style={{ color: hasPending ? '#92400e' : '#1e293b' }}>
                         {hasPending ? `승인 대기 ${pendingCount}건` : PERFORMANCE_PAGE_KO.approvalStripTitle}
                       </Text>
                       {hasPending ? (
                         <div className="tw-text-[11px] tw-text-amber-700/70">내가 승인해야 할 목표가 있습니다.</div>
-                      ) : null}
+                      ) : (
+                        <div className="tw-text-[11px] tw-text-slate-600/80">{PERFORMANCE_PAGE_KO.approvalStripEmptyPending}</div>
+                      )}
                     </div>
                   </div>
-                  <div className="tw-flex tw-min-w-0 tw-flex-wrap tw-items-center tw-gap-2 sm:tw-gap-3">
+                  <div className="tw-flex tw-min-w-0 tw-flex-wrap tw-items-center tw-gap-2 sm:tw-gap-3 lg:tw-w-full">
                     {!hasPending ? (
-                      <div className="tw-flex tw-min-w-[7rem] tw-items-baseline tw-gap-1.5 tw-rounded-lg tw-border tw-border-slate-200/90 tw-bg-slate-50/80 tw-px-2.5 tw-py-1 sm:tw-px-3 sm:tw-py-1.5">
-                        <span className="tw-text-[11px] tw-text-slate-500 sm:tw-text-xs">{PERFORMANCE_PAGE_KO.approvalStripPendingShort}</span>
-                        <span className="tw-text-base tw-font-semibold tw-tabular-nums tw-text-[#1e3a5f] sm:tw-text-lg">0</span>
-                      </div>
+                      <>
+                        <div className="tw-flex tw-min-w-[7rem] tw-items-baseline tw-gap-1.5 tw-rounded-lg tw-border tw-border-slate-200/90 tw-bg-white tw-px-2.5 tw-py-1 sm:tw-px-3 sm:tw-py-1.5">
+                          <span className="tw-text-[11px] tw-text-slate-500 sm:tw-text-xs">{PERFORMANCE_PAGE_KO.approvalStripPendingShort}</span>
+                          <span className="tw-text-base tw-font-semibold tw-tabular-nums tw-text-[#1e3a5f] sm:tw-text-lg">0</span>
+                        </div>
+                        <div className="tw-flex tw-min-w-[7rem] tw-items-baseline tw-gap-1.5 tw-rounded-lg tw-border tw-border-slate-200/90 tw-bg-white tw-px-2.5 tw-py-1 sm:tw-px-3 sm:tw-py-1.5">
+                          <span className="tw-text-[11px] tw-text-slate-500 sm:tw-text-xs">{PERFORMANCE_PAGE_KO.approvalStripMineShort}</span>
+                          <span className="tw-text-base tw-font-semibold tw-tabular-nums tw-text-[#1e3a5f] sm:tw-text-lg">
+                            {approvalHistoryQuery.isPending ? '…' : myCount}
+                          </span>
+                        </div>
+                      </>
                     ) : null}
-                    <div className="tw-flex tw-min-w-[7rem] tw-items-baseline tw-gap-1.5 tw-rounded-lg tw-border tw-border-slate-200/90 tw-bg-white tw-px-2.5 tw-py-1 sm:tw-px-3 sm:tw-py-1.5">
-                      <span className="tw-text-[11px] tw-text-slate-500 sm:tw-text-xs">{PERFORMANCE_PAGE_KO.approvalStripMineShort}</span>
-                      <span className="tw-text-base tw-font-semibold tw-tabular-nums tw-text-[#1e3a5f] sm:tw-text-lg">
-                        {approvalHistoryQuery.isPending ? '…' : myCount}
-                      </span>
-                    </div>
                     <Button
                       type={hasPending ? 'primary' : 'default'}
                       size="small"
                       onClick={() => setApprovalHubOpen(true)}
                       className={hasPending
                         ? '!tw-rounded-lg !tw-bg-amber-500 hover:!tw-bg-amber-600 !tw-font-semibold !tw-border-amber-500'
-                        : '!tw-rounded-lg !tw-font-semibold'}
+                        : '!tw-rounded-lg !tw-border-slate-300 !tw-bg-white !tw-font-semibold !tw-text-slate-700 hover:!tw-bg-slate-100 hover:!tw-border-slate-400'}
                     >
                       {hasPending ? '지금 확인하기' : `${PERFORMANCE_PAGE_KO.approvalStripCenter} →`}
                     </Button>
@@ -1386,6 +1396,15 @@ function PerformancePage() {
                 </div>
               );
             })()}
+              </div>
+            </div>
+
+              <div className="tw-rounded-lg tw-border tw-border-slate-100/80 tw-bg-slate-50/90 tw-px-3 tw-py-2">
+                <Text className="tw-text-[11px] tw-leading-normal tw-text-slate-500">
+                  {PERFORMANCE_PAGE_KO.statScopeNote}
+                </Text>
+              </div>
+            </div>
           </div>
         </section>
         <Modal
@@ -1399,7 +1418,7 @@ function PerformancePage() {
                   {PERFORMANCE_PAGE_KO.approvalStripCenter}
                 </div>
                 <div className="tw-mt-0.5 tw-text-xs tw-font-normal tw-text-slate-500">
-                  완료 제출 건을 확인하고 승인하거나, 보낸 요청을 조회합니다.
+                  {PERFORMANCE_PAGE_KO.approvalStripCenterHint}
                 </div>
               </div>
             </div>
@@ -1946,9 +1965,14 @@ function PerformancePage() {
                 : '';
             if (parentTrim) payload.parentGoalId = parentTrim;
             const approverIdTrim = String(values.approverId ?? '').trim();
-            if (approverIdTrim) payload.approverId = approverIdTrim;
-            // 승인 정책이 있으면 activateImmediately 보내지 않음
-            if (goalFormPolicy !== 'NONE') payload.requireApproval = true;
+            // 활성화 승인이 필요한 정책(ACTIVATION_ONLY / BOTH)일 때만 생성 시
+            // requireApproval=true + approverId 를 실어 ACTIVATION 번들을 만들게 한다.
+            // COMPLETION_ONLY 템플릿은 생성 시점엔 승인이 필요 없으므로 approverId/requireApproval 을
+            // 보내지 않는다. (보내면 서버가 "ACTIVATION 승인을 요구하지 않습니다"로 400을 낸다)
+            if (policyRequiresActivation(goalFormPolicy)) {
+              if (approverIdTrim) payload.approverId = approverIdTrim;
+              payload.requireApproval = true;
+            }
             createGoalMutation.mutate(payload);
           }}
         >
@@ -2805,6 +2829,7 @@ function PerformancePage() {
                 });
                 setCompletionSubmitModalOpen(true);
               }}
+              onOpenApprovalCenter={() => setApprovalHubOpen(true)}
               onDirectComplete={() => directCompleteMutation.mutate(detailGoal.id)}
               onCancel={() => cancelMutation.mutate(detailGoal.id)}
               activateLoading={activateMutation.isPending && activatingGoalId === detailGoal.id}

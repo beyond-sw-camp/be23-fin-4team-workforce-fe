@@ -25,6 +25,7 @@ export type GoalActionBarProps = {
   onActivate: () => void;
   onRequestActivationApproval: () => void;
   onRequestCompletionApproval: () => void;
+  onOpenApprovalCenter: () => void;
   onDirectComplete: () => void;
   onCancel: () => void;
   // 로딩 상태
@@ -79,7 +80,7 @@ export function GoalActionBar(props: GoalActionBarProps) {
             description: '승인자가 검토 중입니다. 승인되면 자동으로 진행이 시작됩니다.',
             buttonLabel: '승인센터에서 확인',
             buttonColor: '!tw-bg-amber-500 hover:!tw-bg-amber-600',
-            onClick: () => {},
+            onClick: props.onOpenApprovalCenter,
             loading: false,
           };
         }
@@ -130,7 +131,7 @@ export function GoalActionBar(props: GoalActionBarProps) {
             description: '승인자가 완료 근거를 검토 중입니다. 승인되면 자동으로 목표가 종료됩니다.',
             buttonLabel: '승인센터에서 확인',
             buttonColor: '!tw-bg-amber-500 hover:!tw-bg-amber-600',
-            onClick: () => {},
+            onClick: props.onOpenApprovalCenter,
             loading: false,
           };
         }

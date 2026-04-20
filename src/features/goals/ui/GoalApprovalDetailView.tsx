@@ -121,7 +121,7 @@ export function GoalApprovalDetailView({
     return <Spin className="tw-w-full tw-py-16 tw-flex tw-justify-center" />;
   }
   if (detailQuery.isError || !d) {
-    return <Card>완료 제출 승인 요청을 불러올 수 없습니다.</Card>;
+    return <Card>목표 완료 승인 요청을 불러올 수 없습니다.</Card>;
   }
 
   return (
