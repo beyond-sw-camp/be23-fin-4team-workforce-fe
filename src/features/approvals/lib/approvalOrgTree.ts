@@ -16,7 +16,7 @@ function collectDirectMembersOfNode(node: OrgChartOrgNode): OrgPickerMemberRow[]
       rows.push({
         memberId: m.memberId,
         name: m.name,
-        jobTitleName: m.jobTitleName,
+        jobTitleName: m.jobGradeName,
         organizationName: node.name,
       });
     }
@@ -49,7 +49,7 @@ export function buildOrgTreeWithMemberLeaves(nodes: OrgChartOrgNode[]): DataNode
       for (const m of g.members) {
         memberLeaves.push({
           key: `member:${node.organizationId}:${m.memberId}`,
-          title: `${m.name}${m.jobTitleName ? ` (${m.jobTitleName})` : ''}`,
+          title: `${m.name}${m.jobGradeName ? ` (${m.jobGradeName})` : ''}`,
           isLeaf: true,
         });
       }

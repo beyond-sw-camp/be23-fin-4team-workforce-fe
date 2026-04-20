@@ -976,16 +976,6 @@ function SortableApprovalTableRow({ children, style, className, ...rest }: Sorta
   );
 }
 
-<<<<<<< HEAD
-=======
-type OrgPickerMemberRow = {
-  memberId: string;
-  name: string;
-  jobGradeName: string;
-  organizationName: string;
-};
-
->>>>>>> origin/main
 function findOrgChartNode(roots: OrgChartOrgNode[], organizationId: string): OrgChartOrgNode | null {
   for (const n of roots) {
     if (n.organizationId === organizationId) return n;
@@ -1022,7 +1012,7 @@ function collectOrgMemberRowsUnderNode(node: OrgChartOrgNode): OrgPickerMemberRo
       rows.push({
         memberId: m.memberId,
         name: m.name,
-        jobGradeName: m.jobGradeName,
+        jobTitleName: m.jobGradeName,
         organizationName: n.name,
       });
     }
@@ -1032,120 +1022,6 @@ function collectOrgMemberRowsUnderNode(node: OrgChartOrgNode): OrgPickerMemberRo
   return rows;
 }
 
-<<<<<<< HEAD
-=======
-/** 해당 조직 노드에 직접 매달린 멤버만 (하위 부서 제외) */
-function collectDirectMembersOfNode(node: OrgChartOrgNode): OrgPickerMemberRow[] {
-  const rows: OrgPickerMemberRow[] = [];
-  for (const m of node.members) {
-    rows.push({
-      memberId: m.memberId,
-      name: m.name,
-      jobGradeName: m.jobGradeName,
-      organizationName: node.name,
-    });
-  }
-  return rows;
-}
-
-/** 전체 조직도에서 직접 소속 멤버만 모아 memberId 기준 중복 제거 (검색용) */
-function flattenDirectMembersDeduped(roots: OrgChartOrgNode[]): OrgPickerMemberRow[] {
-  const seen = new Set<string>();
-  const out: OrgPickerMemberRow[] = [];
-  const walk = (n: OrgChartOrgNode) => {
-    for (const r of collectDirectMembersOfNode(n)) {
-      if (seen.has(r.memberId)) continue;
-      seen.add(r.memberId);
-      out.push(r);
-    }
-    n.children.forEach(walk);
-  };
-  roots.forEach(walk);
-  return out;
-}
-
-/** 조직 트리 + 각 조직 아래 소속 멤버를 자식 노드로 표시 */
-function buildOrgTreeWithMemberLeaves(nodes: OrgChartOrgNode[]): DataNode[] {
-  const mapNode = (node: OrgChartOrgNode): DataNode => {
-    const childOrgs = node.children.map(mapNode);
-    const memberLeaves: DataNode[] = [];
-    for (const m of node.members) {
-      memberLeaves.push({
-        key: `member:${node.organizationId}:${m.memberId}`,
-        title: `${m.name}${m.jobGradeName ? ` (${m.jobGradeName})` : ''}`,
-        isLeaf: true,
-      });
-    }
-    return {
-      key: node.organizationId,
-      title: node.name,
-      children: [...childOrgs, ...memberLeaves],
-    };
-  };
-  return nodes.map(mapNode);
-}
-
-const APPROVAL_ORG_DRAG_MIME = 'application/x-approval-org-picker';
-
-function parseApprovalOrgDrag(e: React.DragEvent): { kind: 'member'; memberId: string } | { kind: 'org'; organizationId: string } | null {
-  try {
-    const raw = e.dataTransfer.getData(APPROVAL_ORG_DRAG_MIME);
-    if (!raw) return null;
-    const o = JSON.parse(raw) as { kind?: string; memberId?: string; organizationId?: string };
-    if (o.kind === 'member' && o.memberId) return { kind: 'member', memberId: o.memberId };
-    if (o.kind === 'org' && o.organizationId) return { kind: 'org', organizationId: o.organizationId };
-  } catch {
-    /* ignore */
-  }
-  return null;
-}
-
-function ApprovalOrgDropZone(props: {
-  children: React.ReactNode;
-  onDropMember: (memberId: string) => void;
-  onDropOrg: (organizationId: string) => void;
-}) {
-  const [over, setOver] = useState(false);
-  const depthRef = useRef(0);
-  return (
-    <div
-      className={clsx(
-        'tw-min-h-0 tw-min-w-0 tw-flex-1 tw-rounded-lg tw-transition-colors',
-        over && 'tw-bg-blue-50/50 tw-ring-2 tw-ring-blue-200',
-      )}
-      onDragEnter={(e) => {
-        e.preventDefault();
-        depthRef.current += 1;
-        setOver(true);
-      }}
-      onDragLeave={(e) => {
-        e.preventDefault();
-        depthRef.current -= 1;
-        if (depthRef.current <= 0) {
-          depthRef.current = 0;
-          setOver(false);
-        }
-      }}
-      onDragOver={(e) => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'copy';
-      }}
-      onDrop={(e) => {
-        e.preventDefault();
-        depthRef.current = 0;
-        setOver(false);
-        const parsed = parseApprovalOrgDrag(e);
-        if (!parsed) return;
-        if (parsed.kind === 'member') props.onDropMember(parsed.memberId);
-        else props.onDropOrg(parsed.organizationId);
-      }}
-    >
-      {props.children}
-    </div>
-  );
-}
-
->>>>>>> origin/main
 export function ApprovalsPage() {
   const { message } = App.useApp();
   const qc = useQueryClient();
@@ -1727,7 +1603,7 @@ export function ApprovalsPage() {
     const q = memberKeyword.trim().toLowerCase();
     if (!q) return [];
     return orgPickerSearchMembers.filter((m) =>
-      `${m.name} ${m.jobGradeName} ${m.organizationName}`.toLowerCase().includes(q),
+      `${m.name} ${m.jobTitleName} ${m.organizationName}`.toLowerCase().includes(q),
     );
   }, [memberKeyword, orgPickerSearchMembers]);
 
@@ -2534,7 +2410,7 @@ export function ApprovalsPage() {
                 className="tw-flex tw-cursor-grab tw-select-none tw-items-center tw-rounded-lg tw-bg-slate-50/70 tw-px-2 tw-py-1.5 tw-transition-colors hover:tw-bg-slate-100/80"
               >
                 <span className="tw-truncate tw-pr-2 tw-text-sm">
-                  {m.name} {m.jobGradeName ? `(${m.jobGradeName})` : ''}
+                  {m.name} {m.jobTitleName ? `(${m.jobTitleName})` : ''}
                   <span className="tw-text-slate-500"> · {m.organizationName}</span>
                 </span>
               </div>

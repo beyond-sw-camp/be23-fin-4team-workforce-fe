@@ -537,7 +537,6 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
             canAccessMemberDirectoryFromPermissionStrings(user?.permissions);
         const items = buildAppShellMenuItems(isAdmin, approvalMenuChildren, showMemberDirectoryMenu);
 
-<<<<<<< HEAD
         const approvalFormSettingsItem = showApprovalFormSettings
             ? {
                   key: encodeWfNavKey({to: '/app/approvals', search: {tab: 'admin'}}),
@@ -550,7 +549,6 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
         const withApprovalSettings = approvalFormSettingsItem ? [...items, approvalFormSettingsItem] : items;
 
         if (!isAdmin) return withApprovalSettings;
-=======
         const esgMenuItem =
             esgPaths.length > 0
                 ? {
@@ -573,7 +571,6 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
         }
 
         /** 시스템 관리자: 보안 조회 다음 · HR 정책 문서 바로 위에 ESG */
->>>>>>> origin/main
         const chatAdmin = {
             key: '/app/member-chat/admin',
             icon: <MessageOutlined className="tw-text-lg"/>,
@@ -586,16 +583,12 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
             label: 'HR 정책 문서',
             title: 'HR 정책 문서',
         };
-<<<<<<< HEAD
-        return [...withApprovalSettings, chatAdmin, doc];
-    }, [esgConfig, isAdmin, approvalOrgChart, meMember, showApprovalFormSettings, status]);
-=======
+
         if (esgMenuItem) {
             return [...items, chatAdmin, esgMenuItem, doc];
         }
         return [...items, chatAdmin, doc];
     }, [esgConfig, isAdmin, approvalOrgChart, meMember, status, user?.permissions]);
->>>>>>> origin/main
 }
 
 const headerGhostIconClass =

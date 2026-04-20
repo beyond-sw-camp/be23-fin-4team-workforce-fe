@@ -40,14 +40,23 @@ export const ORG_CHART_HIDDEN_JOB_GRADE = '관리자';
 export type OrgChartMember = {
   memberId: string;
   name: string;
+  /** 표시용 직급/직책명 (API 필드명이 jobTitle·jobGrade 등으로 섞여 올 수 있음) */
   jobGradeName: string;
   /** 있으면 재직만 보기 필터에 사용 */
   memberStatus?: string;
 };
 
+export type OrgChartJobGrade = {
+  jobGradeName: string;
+  displayOrder?: number;
+  members: OrgChartMember[];
+};
+
 export type OrgChartOrgNode = {
   organizationId: string;
   name: string;
+  jobGrades: OrgChartJobGrade[];
+  /** jobGrades를 펼친 직속 멤버(검색·트리 UI 호환) */
   members: OrgChartMember[];
   children: OrgChartOrgNode[];
 };
@@ -77,7 +86,6 @@ function pickMemberId(o: Record<string, unknown>): string {
 function normalizeOrgChartMember(raw: unknown): OrgChartMember | null {
   if (!raw || typeof raw !== 'object') return null;
   const o = raw as Record<string, unknown>;
-<<<<<<< HEAD
   const memberId = pickMemberId(o);
   const name = pickStr(o, [
     'name',
@@ -92,29 +100,24 @@ function normalizeOrgChartMember(raw: unknown): OrgChartMember | null {
     'employeeName',
     'employee_name',
   ]);
-  const jobTitleName =
+  if (!memberId || !name) return null;
+  const jobGradeName =
     pickStr(o, [
       'jobTitleName',
       'job_title_name',
       'jobTitle',
       'job_title',
+      'jobGradeName',
+      'job_grade_name',
       'positionName',
       'position_name',
       'title',
     ]) || '—';
   const memberStatus = pickStr(o, ['memberStatus', 'member_status', 'status', 'employmentStatus', 'employment_status']);
-=======
-  const memberId = pickStr(o, ['memberId', 'member_id']);
-  const name = pickStr(o, ['name']);
-  const jobGradeName = pickStr(o, ['jobGradeName', 'job_grade_name']) || '—';
-  const memberStatus = pickStr(o, ['memberStatus', 'member_status']);
->>>>>>> origin/main
-  if (!memberId || !name) return null;
   return {
     memberId,
     name,
-<<<<<<< HEAD
-    jobTitleName,
+    jobGradeName,
     ...(memberStatus ? { memberStatus } : {}),
   };
 }
@@ -136,10 +139,9 @@ function normalizeOrgChartJobGrade(raw: unknown): OrgChartJobGrade | null {
     ? membersRaw.map(normalizeOrgChartMember).filter((m): m is OrgChartMember => m != null)
     : [];
   return {
-=======
->>>>>>> origin/main
     jobGradeName,
-    ...(memberStatus ? { memberStatus } : {}),
+    ...(displayOrder !== undefined && Number.isFinite(displayOrder) ? { displayOrder } : {}),
+    members,
   };
 }
 
@@ -149,15 +151,9 @@ function normalizeOrgChartNode(raw: unknown): OrgChartOrgNode | null {
   const organizationId = pickStr(o, ['organizationId', 'organization_id']);
   const name = pickStr(o, ['name']);
   if (!organizationId || !name) return null;
-<<<<<<< HEAD
   const jobGradesRaw = o.jobGrades ?? o.job_grades;
-  let jobGrades = Array.isArray(jobGradesRaw)
+  let jobGrades: OrgChartJobGrade[] = Array.isArray(jobGradesRaw)
     ? jobGradesRaw.map(normalizeOrgChartJobGrade).filter((g): g is OrgChartJobGrade => g != null)
-=======
-  const membersRaw = o.members;
-  const members = Array.isArray(membersRaw)
-    ? membersRaw.map(normalizeOrgChartMember).filter((m): m is OrgChartMember => m != null)
->>>>>>> origin/main
     : [];
 
   const membersInGrades = jobGrades.reduce((n, g) => n + g.members.length, 0);
@@ -169,11 +165,13 @@ function normalizeOrgChartNode(raw: unknown): OrgChartOrgNode | null {
     }
   }
 
+  const members = jobGrades.flatMap((g) => g.members);
+
   const childrenRaw = o.children;
   const children = Array.isArray(childrenRaw)
     ? childrenRaw.map(normalizeOrgChartNode).filter((c): c is OrgChartOrgNode => c != null)
     : [];
-  return { organizationId, name, members, children };
+  return { organizationId, name, jobGrades, members, children };
 }
 
 function normalizeOrgChartDataPayload(raw: unknown): OrgChartData {
@@ -192,6 +190,10 @@ function normalizeOrgChartDataPayload(raw: unknown): OrgChartData {
 function mapOrgChartTree(node: OrgChartOrgNode): OrgChartOrgNode {
   return {
     ...node,
+    jobGrades: node.jobGrades.map((g) => ({
+      ...g,
+      members: [...g.members],
+    })),
     members: [...node.members],
     children: node.children.map(mapOrgChartTree),
   };

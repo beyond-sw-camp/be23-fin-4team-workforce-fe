@@ -13,23 +13,7 @@ import { ApprovalRequestReadOnlyModal } from '@/features/approvals/ui/ApprovalRe
 import { useAuth } from '@/features/auth/useAuth';
 import { memberApi } from '@/features/member/api/memberApi';
 import { organizationApi } from '@/features/organization/api/organizationApi';
-<<<<<<< HEAD
 import { findMemberOrganizationId } from '@/features/organization/lib/findMemberOrganizationInOrgChart';
-=======
-
-function findMemberOrganizationId(roots: OrgChartOrgNode[], memberId: string): string | null {
-  const id = memberId.trim();
-  if (!id) return null;
-  for (const node of roots) {
-    for (const m of node.members) {
-      if (m.memberId === id) return node.organizationId;
-    }
-    const sub = findMemberOrganizationId(node.children, memberId);
-    if (sub) return sub;
-  }
-  return null;
-}
->>>>>>> origin/main
 
 function formatDateTime(value?: string | null) {
   if (!value) return '—';
