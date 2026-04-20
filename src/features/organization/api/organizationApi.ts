@@ -65,13 +65,43 @@ function pickStr(o: Record<string, unknown>, keys: string[]): string {
   return '';
 }
 
+function pickMemberId(o: Record<string, unknown>): string {
+  const fromKeys = pickStr(o, ['memberId', 'member_id', 'userId', 'user_id', 'employeeId', 'employee_id']);
+  if (fromKeys) return fromKeys;
+  const id = o.id;
+  if (typeof id === 'string' && id.trim()) return id.trim();
+  if (typeof id === 'number' && Number.isFinite(id)) return String(id);
+  return '';
+}
+
 function normalizeOrgChartMember(raw: unknown): OrgChartMember | null {
   if (!raw || typeof raw !== 'object') return null;
   const o = raw as Record<string, unknown>;
-  const memberId = pickStr(o, ['memberId', 'member_id']);
-  const name = pickStr(o, ['name']);
-  const jobTitleName = pickStr(o, ['jobTitleName', 'job_title_name']) || '—';
-  const memberStatus = pickStr(o, ['memberStatus', 'member_status']);
+  const memberId = pickMemberId(o);
+  const name = pickStr(o, [
+    'name',
+    'memberName',
+    'member_name',
+    'userName',
+    'user_name',
+    'fullName',
+    'full_name',
+    'displayName',
+    'display_name',
+    'employeeName',
+    'employee_name',
+  ]);
+  const jobTitleName =
+    pickStr(o, [
+      'jobTitleName',
+      'job_title_name',
+      'jobTitle',
+      'job_title',
+      'positionName',
+      'position_name',
+      'title',
+    ]) || '—';
+  const memberStatus = pickStr(o, ['memberStatus', 'member_status', 'status', 'employmentStatus', 'employment_status']);
   if (!memberId || !name) return null;
   return {
     memberId,
@@ -84,8 +114,8 @@ function normalizeOrgChartMember(raw: unknown): OrgChartMember | null {
 function normalizeOrgChartJobGrade(raw: unknown): OrgChartJobGrade | null {
   if (!raw || typeof raw !== 'object') return null;
   const o = raw as Record<string, unknown>;
-  const jobGradeName = pickStr(o, ['jobGradeName', 'job_grade_name']);
-  if (!jobGradeName) return null;
+  const jobGradeName =
+    pickStr(o, ['jobGradeName', 'job_grade_name', 'gradeName', 'grade_name', 'jobGrade', 'label']) || '미분류';
   const displayOrderRaw = o.displayOrder ?? o.display_order;
   const displayOrder =
     typeof displayOrderRaw === 'number'
@@ -93,7 +123,7 @@ function normalizeOrgChartJobGrade(raw: unknown): OrgChartJobGrade | null {
       : typeof displayOrderRaw === 'string' && displayOrderRaw.trim() !== ''
         ? Number(displayOrderRaw)
         : undefined;
-  const membersRaw = o.members;
+  const membersRaw = o.members ?? o.memberList ?? o.member_list ?? o.employees ?? o.staff;
   const members = Array.isArray(membersRaw)
     ? membersRaw.map(normalizeOrgChartMember).filter((m): m is OrgChartMember => m != null)
     : [];
@@ -111,9 +141,19 @@ function normalizeOrgChartNode(raw: unknown): OrgChartOrgNode | null {
   const name = pickStr(o, ['name']);
   if (!organizationId || !name) return null;
   const jobGradesRaw = o.jobGrades ?? o.job_grades;
-  const jobGrades = Array.isArray(jobGradesRaw)
+  let jobGrades = Array.isArray(jobGradesRaw)
     ? jobGradesRaw.map(normalizeOrgChartJobGrade).filter((g): g is OrgChartJobGrade => g != null)
     : [];
+
+  const membersInGrades = jobGrades.reduce((n, g) => n + g.members.length, 0);
+  const directMembersRaw = o.members ?? o.memberList ?? o.member_list ?? o.orgMembers ?? o.organizationMembers;
+  if (membersInGrades === 0 && Array.isArray(directMembersRaw) && directMembersRaw.length > 0) {
+    const direct = directMembersRaw.map(normalizeOrgChartMember).filter((m): m is OrgChartMember => m != null);
+    if (direct.length > 0) {
+      jobGrades = [{ jobGradeName: '소속', members: direct }, ...jobGrades];
+    }
+  }
+
   const childrenRaw = o.children;
   const children = Array.isArray(childrenRaw)
     ? childrenRaw.map(normalizeOrgChartNode).filter((c): c is OrgChartOrgNode => c != null)

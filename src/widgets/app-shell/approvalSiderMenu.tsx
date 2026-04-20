@@ -10,9 +10,6 @@ export type ApprovalNavPayload = {
 };
 
 export const APPROVAL_SIDEBAR_ROOT_KEY = 'group-approval';
-export const APPROVAL_SUBMENU_DO_KEY = 'approval-sub-do';
-export const APPROVAL_SUBMENU_PERSONAL_KEY = 'approval-sub-personal';
-export const APPROVAL_SUBMENU_DEPT_KEY = 'approval-sub-dept';
 
 export function encodeWfNavKey(payload: ApprovalNavPayload): string {
   return `${WF_NAV_PREFIX}${JSON.stringify(payload)}`;
@@ -48,7 +45,7 @@ function navDepartment(search: Record<string, string | undefined>): string {
 /** Current URL leaf menu key for approvals / department inbox */
 export function approvalSiderSelectedMenuKeys(pathname: string, rawSearch: Record<string, unknown>): string[] {
   if (pathname === '/app/approvals/absence-proxy') {
-    return [encodeWfNavKey({ to: '/app/approvals/absence-proxy' })];
+    return [navApprovals({ tab: 'compose', sideNav: 'request-compose' })];
   }
   if (pathname === '/app/approvals/department') {
     const organizationId = typeof rawSearch.organizationId === 'string' ? rawSearch.organizationId.trim() : '';
@@ -82,121 +79,23 @@ export function approvalSecondaryPanelOpenKeys(pathname: string, rawSearch: Reco
 }
 
 /** Exposed for AppShellLayout openKeys sync / onOpenChange guard. */
-export function approvalSecondaryOpenParentKey(pathname: string, rawSearch: Record<string, unknown>): string | null {
+export function approvalSecondaryOpenParentKey(pathname: string, _rawSearch: Record<string, unknown>): string | null {
   if (!pathname.startsWith('/app/approvals')) return null;
   if (pathname === '/app/approvals/absence-proxy') return null;
-  if (pathname === '/app/approvals/department') return APPROVAL_SUBMENU_DEPT_KEY;
-
   if (pathname !== '/app/approvals') return null;
-  const tabRaw = typeof rawSearch.tab === 'string' ? rawSearch.tab : 'compose';
-  const segment = APPROVAL_PATH_TABS.has(tabRaw) ? tabRaw : 'compose';
-  const myStatus =
-    typeof rawSearch.myStatus === 'string' && rawSearch.myStatus.trim() ? rawSearch.myStatus.trim() : undefined;
-  const compose =
-    typeof rawSearch.compose === 'string' && rawSearch.compose.trim() ? rawSearch.compose.trim() : undefined;
-  const sideNav =
-    typeof rawSearch.sideNav === 'string' && rawSearch.sideNav.trim() ? rawSearch.sideNav.trim() : undefined;
-
-  if (segment === 'pending') {
-    return APPROVAL_SUBMENU_DO_KEY;
-  }
-  if (segment === 'my') {
-    return APPROVAL_SUBMENU_PERSONAL_KEY;
-  }
-  if (segment === 'compose') {
-    /** 최상위 `결재 홈` 전용 링크 — `결재하기` 서브메뉴는 펼치지 않음 */
-    if (sideNav === 'request-compose') return null;
-    return compose === 'scheduled' ? APPROVAL_SUBMENU_DO_KEY : APPROVAL_SUBMENU_PERSONAL_KEY;
-  }
   return null;
 }
 
 export function buildApprovalMenuGroupChildren(
   _organizations: OrgChartOrgNode[],
-  opts?: { myOrganizationId?: string; myOrganizationName?: string },
+  _opts?: { myOrganizationId?: string; myOrganizationName?: string },
 ): NonNullable<MenuProps['items']> {
-  const myOrgId = opts?.myOrganizationId?.trim() ?? '';
-
-  const deptSearchBase = myOrgId ? { organizationId: myOrgId } : {};
-  const deptChildren: NonNullable<MenuProps['items']> = [
-    {
-      key: navDepartment({ ...deptSearchBase, deptView: 'draft' }),
-      label: '부서 문서함',
-      title: '부서 문서함',
-    },
-    {
-      key: navDepartment({ ...deptSearchBase, deptView: 'received' }),
-      label: '공문 수신함',
-      title: '공문 수신함',
-    },
-  ];
-
   return [
     {
       key: navApprovals({ tab: 'compose', sideNav: 'request-compose' }),
       icon: <FormOutlined className="tw-text-lg" />,
-      label: '결재 홈',
-      title: '결재 홈',
-    },
-    {
-      key: APPROVAL_SUBMENU_DO_KEY,
-      label: '결재하기',
-      title: '결재하기',
-      children: [
-        {
-          key: navApprovals({ tab: 'pending' }),
-          label: '결재 대기 문서',
-          title: '결재 대기 문서',
-        },
-        {
-          key: navApprovals({ tab: 'acted' }),
-          label: '결재 완료 문서',
-          title: '결재 완료 문서',
-        },
-        {
-          key: navApprovals({ tab: 'pending', box: 'do-upcoming' }),
-          label: '결재 예정 문서',
-          title: '결재 예정 문서',
-        },
-      ],
-    },
-    {
-      key: APPROVAL_SUBMENU_PERSONAL_KEY,
-      label: '개인 문서함',
-      title: '개인 문서함',
-      children: [
-        {
-          key: navApprovals({ tab: 'my', box: 'per-all' }),
-          label: '내 기안 문서',
-          title: '내 기안 문서',
-        },
-        {
-          key: navApprovals({ tab: 'my', myStatus: 'DRAFT' }),
-          label: '임시 저장함',
-          title: '임시 저장함',
-        },
-        {
-          key: navApprovals({ tab: 'my', box: 'per-viewers' }),
-          label: '참조/공람 문서',
-          title: '참조/공람 문서',
-        },
-        {
-          key: navApprovals({ tab: 'my', box: 'per-official' }),
-          label: '공문 문서함',
-          title: '공문 문서함',
-        },
-      ],
-    },
-    {
-      key: APPROVAL_SUBMENU_DEPT_KEY,
-      label: '부서 문서함',
-      title: '부서 문서함',
-      children: deptChildren,
-    },
-    {
-      key: encodeWfNavKey({ to: '/app/approvals/absence-proxy' }),
-      label: '부재 위임',
-      title: '부재 위임',
+      label: '전자결재',
+      title: '전자결재',
     },
   ];
 }

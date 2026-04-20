@@ -14,11 +14,16 @@ import { EMPLOYMENT_TYPE_KO } from '@/app/locale/app-ko';
 import { AppButton } from '@/shared/ui/AppButton';
 
 const PROFILE_ACCEPT = '.jpg,.jpeg,.png,.gif,image/jpeg,image/png,image/gif';
+const SIGNATURE_ACCEPT = '.png,image/png';
 
 function isAllowedProfileImage(file: File): boolean {
   const okType = ['image/jpeg', 'image/png', 'image/gif'].includes(file.type);
   const okName = /\.(jpe?g|png|gif)$/i.test(file.name);
   return okType || okName;
+}
+
+function isPngSignature(file: File): boolean {
+  return file.type === 'image/png' || /\.png$/i.test(file.name);
 }
 
 function displayText(v: string | null | undefined, emptyLabel = '—') {
@@ -43,6 +48,12 @@ export function MyProfilePage() {
   const { data: member, isLoading } = useQuery({
     queryKey: ['member', 'detail', id],
     queryFn: () => memberApi.detail(id!),
+    enabled: Boolean(id),
+  });
+
+  const { data: signatureImageUrl, isLoading: signatureLoading } = useQuery({
+    queryKey: ['member', 'signature', id],
+    queryFn: () => memberApi.getSignatureImageUrl(),
     enabled: Boolean(id),
   });
 
@@ -72,6 +83,24 @@ export function MyProfilePage() {
       await queryClient.invalidateQueries({ queryKey: ['member', 'detail', id] });
     },
     onError: (e: Error) => message.error(e.message || '삭제에 실패했습니다.'),
+  });
+
+  const uploadSignatureM = useMutation({
+    mutationFn: (file: File) => memberApi.uploadSignatureImage(file),
+    onSuccess: async () => {
+      message.success('전자서명 이미지가 등록되었습니다.');
+      await queryClient.invalidateQueries({ queryKey: ['member', 'signature', id] });
+    },
+    onError: (e: Error) => message.error(e.message || '서명 업로드에 실패했습니다.'),
+  });
+
+  const deleteSignatureM = useMutation({
+    mutationFn: () => memberApi.deleteSignatureImage(),
+    onSuccess: async () => {
+      message.success('전자서명이 삭제되었습니다.');
+      await queryClient.invalidateQueries({ queryKey: ['member', 'signature', id] });
+    },
+    onError: (e: Error) => message.error(e.message || '서명 삭제에 실패했습니다.'),
   });
 
   if (!id) {
@@ -142,6 +171,53 @@ export function MyProfilePage() {
             </Upload>
             <Button danger loading={deleteImgM.isPending} onClick={() => void deleteImgM.mutateAsync()}>
               이미지 삭제
+            </Button>
+          </Space>
+        </div>
+      </Card>
+
+      <Card className="tw-border-slate-200/80 tw-shadow-sm" title="전자결재 서명">
+        <Typography.Paragraph type="secondary" className="!tw-mb-3 !tw-mt-0 !tw-text-sm">
+          PNG 이미지를 등록하면 결재 승인 시 서버에 저장된 서명이 결재라인에 표시됩니다. 미등록 시 서명 없이 승인됩니다.
+        </Typography.Paragraph>
+        <div className="tw-flex tw-flex-wrap tw-items-start tw-gap-6">
+          <div className="tw-flex tw-min-h-[120px] tw-min-w-[200px] tw-items-center tw-justify-center tw-rounded-lg tw-border tw-border-slate-200 tw-bg-slate-50 tw-p-3">
+            {signatureLoading ? (
+              <Typography.Text type="secondary">불러오는 중…</Typography.Text>
+            ) : signatureImageUrl ? (
+              <img
+                src={signatureImageUrl}
+                alt="등록된 전자서명"
+                className="tw-max-h-28 tw-max-w-full tw-object-contain"
+              />
+            ) : (
+              <Typography.Text type="secondary">등록된 서명이 없습니다.</Typography.Text>
+            )}
+          </div>
+          <Space wrap>
+            <Upload
+              accept={SIGNATURE_ACCEPT}
+              showUploadList={false}
+              beforeUpload={(file) => {
+                if (!isPngSignature(file)) {
+                  message.error('PNG 형식만 업로드할 수 있습니다.');
+                  return false;
+                }
+                void uploadSignatureM.mutateAsync(file);
+                return false;
+              }}
+            >
+              <Button type="primary" loading={uploadSignatureM.isPending}>
+                {signatureImageUrl ? '서명 교체' : '서명 등록'}
+              </Button>
+            </Upload>
+            <Button
+              danger
+              loading={deleteSignatureM.isPending}
+              disabled={!signatureImageUrl}
+              onClick={() => void deleteSignatureM.mutateAsync()}
+            >
+              서명 삭제
             </Button>
           </Space>
         </div>

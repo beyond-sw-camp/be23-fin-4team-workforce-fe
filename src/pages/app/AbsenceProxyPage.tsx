@@ -1,4 +1,4 @@
-import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, PlusOutlined } from '@ant-design/icons';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
@@ -6,20 +6,31 @@ import {
   Button,
   Card,
   DatePicker,
+  Divider,
   Input,
   Modal,
   Space,
   Table,
   Tabs,
   Tag,
+  Tree,
   Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import type { DataNode } from 'antd/es/tree';
+import clsx from 'clsx';
 import dayjs, { type Dayjs } from 'dayjs';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
+import { useNavigate, useRouterState } from '@tanstack/react-router';
 import { absenceProxyApi, type AbsenceProxyRecord } from '@/features/approvals/api/absenceProxyApi';
+import {
+  buildOrgTreeWithMemberLeaves,
+  flattenDirectMembersDeduped,
+} from '@/features/approvals/lib/approvalOrgTree';
+import { APPROVAL_ORG_DRAG_MIME, ApprovalOrgDropZone } from '@/features/approvals/ui/ApprovalOrgDropZone';
 import { useAuth } from '@/features/auth/useAuth';
 import { memberApi, type MemberListItemForApproval } from '@/features/member/api/memberApi';
+import { organizationApi } from '@/features/organization/api/organizationApi';
 import { parseApiError } from '@/shared/api/error-parser';
 
 /** `toISOString()`은 UTC로 바뀌어 한국 등 로컬 '오늘'이 전날로 밀릴 수 있음 — LocalDateTime용 로컬 벽시각 */
@@ -55,12 +66,18 @@ function proxyStatusTag(row: AbsenceProxyRecord) {
 
 export function AbsenceProxyPage() {
   const { message, modal } = App.useApp();
+  const navigate = useNavigate();
+  const routeSearch = useRouterState({
+    select: (s) => s.location.search as { embed?: string },
+  });
+  const isEmbedModal = routeSearch.embed === 'compose-modal';
   const { user } = useAuth();
   const myMemberId = user?.id?.trim();
   const qc = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [pickerRange, setPickerRange] = useState<[Dayjs | null, Dayjs | null] | null>(null);
-  const [memberKeyword, setMemberKeyword] = useState('');
+  const [substitutePickerKeyword, setSubstitutePickerKeyword] = useState('');
+  const [orgTreeSelectedKey, setOrgTreeSelectedKey] = useState<string>();
   const [selectedSubstitute, setSelectedSubstitute] = useState<MemberListItemForApproval | null>(null);
 
   const {
@@ -91,12 +108,59 @@ export function AbsenceProxyPage() {
     refetchOnMount: 'always',
   });
 
-  const { data: memberCandidates = [], isFetching: membersLoading } = useQuery({
-    queryKey: ['member', 'list-approvals', 'absence-proxy', memberKeyword],
-    queryFn: () => memberApi.listMembersForApprovals({ keyword: memberKeyword || undefined }),
+  const { data: orgChart } = useQuery({
+    queryKey: ['organization', 'org-chart'],
+    queryFn: () => organizationApi.getOrgChart(),
     enabled: createOpen,
-    staleTime: 30_000,
+    staleTime: 60_000,
   });
+
+  const orgTreeDataWithMembers = useMemo<DataNode[]>(
+    () => buildOrgTreeWithMemberLeaves(orgChart?.organizations ?? []),
+    [orgChart],
+  );
+
+  const orgPickerSearchMembers = useMemo(
+    () => flattenDirectMembersDeduped(orgChart?.organizations ?? []),
+    [orgChart],
+  );
+
+  const orgPickerSearchMatches = useMemo(() => {
+    const q = substitutePickerKeyword.trim().toLowerCase();
+    if (!q) return [];
+    return orgPickerSearchMembers.filter((m) =>
+      `${m.name} ${m.jobTitleName} ${m.organizationName}`.toLowerCase().includes(q),
+    );
+  }, [substitutePickerKeyword, orgPickerSearchMembers]);
+
+  const pickSubstituteByMemberId = useCallback(
+    async (memberId: string) => {
+      const mid = memberId?.trim();
+      if (!mid) return;
+      if (myMemberId && mid === myMemberId) {
+        message.warning('본인은 대결자로 지정할 수 없습니다.');
+        return;
+      }
+      try {
+        const detail = await memberApi.detail(mid);
+        const positionId = detail.memberPositionId?.trim();
+        if (!positionId) {
+          message.warning('선택 멤버의 직위 정보를 찾을 수 없습니다.');
+          return;
+        }
+        setSelectedSubstitute({
+          memberId: mid,
+          memberPositionId: positionId,
+          name: detail.name || mid,
+          organizationName: detail.organizationName || '',
+          jobTitleName: detail.jobTitleName || '',
+        });
+      } catch (e) {
+        message.error(e instanceof Error ? e.message : '멤버 정보를 불러오지 못했습니다.');
+      }
+    },
+    [message, myMemberId],
+  );
 
   const memberIdSet = useMemo(() => {
     const s = new Set<string>();
@@ -134,7 +198,8 @@ export function AbsenceProxyPage() {
       setCreateOpen(false);
       setSelectedSubstitute(null);
       setPickerRange(null);
-      setMemberKeyword('');
+      setSubstitutePickerKeyword('');
+      setOrgTreeSelectedKey(undefined);
       await qc.refetchQueries({ queryKey: ['approval', 'absence-proxy', 'my'] });
       const mineAfter = qc.getQueryData<AbsenceProxyRecord[]>(['approval', 'absence-proxy', 'my']);
       const hasCreated = mineAfter?.some((r) => r.proxyId === created.proxyId);
@@ -255,27 +320,75 @@ export function AbsenceProxyPage() {
     });
   };
 
+  const tabTableWrap = (node: ReactNode) => (
+    <div
+      className={clsx(
+        isEmbedModal &&
+          'tw-box-border tw-flex tw-h-full tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-auto tw-p-4 tw-pt-3',
+      )}
+    >
+      {node}
+    </div>
+  );
+
   return (
-    <div className="tw-mx-auto tw-max-w-5xl">
-      <div className="tw-mb-4 tw-flex tw-flex-wrap tw-items-start tw-justify-between tw-gap-3">
+    <div
+      className={clsx(
+        isEmbedModal
+          ? 'tw-flex tw-h-full tw-min-h-0 tw-w-full tw-flex-col tw-gap-4 tw-overflow-hidden'
+          : 'tw-mx-auto tw-max-w-5xl',
+      )}
+    >
+      <div
+        className={clsx(
+          isEmbedModal
+            ? 'tw-flex tw-flex-shrink-0 tw-flex-col tw-gap-3'
+            : 'tw-mb-4 tw-flex tw-flex-wrap tw-items-start tw-justify-between tw-gap-3',
+        )}
+      >
         <div>
-          <Typography.Title level={4} className="!tw-mb-1">
-            부재 위임(대결)
-          </Typography.Title>
-          <Typography.Paragraph type="secondary" className="!tw-mb-0 tw-max-w-xl tw-text-sm">
+          <div className="tw-flex tw-flex-nowrap tw-items-center tw-gap-2">
+            {!isEmbedModal ? (
+              <Button
+                type="text"
+                icon={<ArrowLeftOutlined />}
+                aria-label="전자결재로 돌아가기"
+                className="!tw-shrink-0 !tw-text-slate-600 hover:!tw-text-slate-900"
+                onClick={() =>
+                  navigate({
+                    to: '/app/approvals',
+                    search: { tab: 'compose', sideNav: 'request-compose' },
+                    replace: true,
+                  })
+                }
+              />
+            ) : null}
+            <Typography.Title level={4} className="!tw-m-0 tw-leading-none">
+              부재 위임(대결)
+            </Typography.Title>
+          </div>
+          <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-2 tw-max-w-xl tw-text-sm">
             휴가·출장 등 부재 시 대결자를 지정하면, 해당 기간 동안 원 결재자 대신 결재 대기함에 문서가 표시되고 승인·반려할 수 있습니다.
           </Typography.Paragraph>
         </div>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
-          위임 등록
-        </Button>
+        {isEmbedModal ? (
+          <div className="tw-flex tw-w-full tw-shrink-0 tw-justify-end tw-pr-1">
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
+              위임 등록
+            </Button>
+          </div>
+        ) : (
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
+            위임 등록
+          </Button>
+        )}
       </div>
 
       {mineIsError || delegatedIsError ? (
         <Alert
           type="error"
           showIcon
-          className="tw-mb-4"
+          className={clsx(isEmbedModal ? 'tw-flex-shrink-0' : 'tw-mb-4')}
           message="위임 목록을 불러오지 못했습니다."
           description={
             <div className="tw-space-y-1">
@@ -305,13 +418,36 @@ export function AbsenceProxyPage() {
         />
       ) : null}
 
-      <Card className="tw-border-slate-200/80 tw-shadow-sm">
+      <Card
+        size="small"
+        className={clsx(
+          'tw-border-slate-200/80 tw-shadow-sm',
+          isEmbedModal && 'tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-hidden tw-rounded-lg',
+        )}
+        styles={
+          isEmbedModal
+            ? { body: { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 0 } }
+            : undefined
+        }
+      >
         <Tabs
+          rootClassName={
+            isEmbedModal
+              ? clsx(
+                  'tw-min-h-0 tw-flex-1 tw-flex tw-flex-col',
+                  '[&_.ant-tabs]:tw-mb-0 [&_.ant-tabs]:tw-flex [&_.ant-tabs]:tw-h-full [&_.ant-tabs]:tw-min-h-0 [&_.ant-tabs]:tw-flex-col',
+                  '[&_.ant-tabs-nav]:tw-mb-0 [&_.ant-tabs-nav]:tw-shrink-0 [&_.ant-tabs-nav]:tw-px-4 [&_.ant-tabs-nav]:tw-pt-1',
+                  '[&_.ant-tabs-content-holder]:tw-min-h-0 [&_.ant-tabs-content-holder]:tw-flex-1 [&_.ant-tabs-content-holder]:tw-flex [&_.ant-tabs-content-holder]:tw-flex-col',
+                  '[&_.ant-tabs-content]:tw-min-h-0 [&_.ant-tabs-content]:tw-flex-1 [&_.ant-tabs-content]:tw-flex [&_.ant-tabs-content]:tw-flex-col',
+                  '[&_.ant-tabs-tabpane.ant-tabs-tabpane-active]:tw-flex [&_.ant-tabs-tabpane.ant-tabs-tabpane-active]:tw-min-h-0 [&_.ant-tabs-tabpane.ant-tabs-tabpane-active]:tw-flex-1 [&_.ant-tabs-tabpane.ant-tabs-tabpane-active]:tw-flex-col',
+                )
+              : undefined
+          }
           items={[
             {
               key: 'mine',
               label: '내가 등록한 위임',
-              children: (
+              children: tabTableWrap(
                 <Table<AbsenceProxyRecord>
                   rowKey="proxyId"
                   loading={mineLoading}
@@ -319,13 +455,14 @@ export function AbsenceProxyPage() {
                   dataSource={mine}
                   pagination={{ pageSize: 8 }}
                   locale={{ emptyText: '등록된 위임이 없습니다.' }}
-                />
+                  className={isEmbedModal ? '[&_.ant-table-wrapper]:tw-min-h-0' : undefined}
+                />,
               ),
             },
             {
               key: 'delegated',
               label: '나에게 위임된 목록',
-              children: (
+              children: tabTableWrap(
                 <Table<AbsenceProxyRecord>
                   rowKey="proxyId"
                   loading={delegatedLoading}
@@ -333,7 +470,8 @@ export function AbsenceProxyPage() {
                   dataSource={delegated}
                   pagination={{ pageSize: 8 }}
                   locale={{ emptyText: '나에게 위임된 일정이 없습니다.' }}
-                />
+                  className={isEmbedModal ? '[&_.ant-table-wrapper]:tw-min-h-0' : undefined}
+                />,
               ),
             },
           ]}
@@ -347,6 +485,8 @@ export function AbsenceProxyPage() {
           setCreateOpen(false);
           setSelectedSubstitute(null);
           setPickerRange(null);
+          setSubstitutePickerKeyword('');
+          setOrgTreeSelectedKey(undefined);
         }}
         okText="등록"
         confirmLoading={createMut.isPending}
@@ -371,52 +511,139 @@ export function AbsenceProxyPage() {
           </div>
           <div>
             <Typography.Text className="tw-mb-1 tw-block tw-text-sm tw-font-medium">대결자 선택</Typography.Text>
-            <Input
-              allowClear
-              prefix={<SearchOutlined />}
-              placeholder="이름, 부서, 직위로 검색"
-              value={memberKeyword}
-              onChange={(e) => setMemberKeyword(e.target.value)}
-              className="tw-mb-2"
-            />
-            <div className="tw-max-h-56 tw-overflow-auto tw-rounded-md tw-border tw-border-slate-100 tw-bg-slate-50/50">
-              {membersLoading ? (
-                <Typography.Text type="secondary" className="tw-block tw-p-3 tw-text-sm">
-                  불러오는 중…
+            <Typography.Paragraph type="secondary" className="!tw-mb-2 !tw-mt-0 !tw-text-xs">
+              결재 작성 화면과 같이 조직도에서 멤버를 드래그해 오른쪽 칸에 놓거나, 멤버 노드를 클릭해 선택하세요. 조직 단위는
+              지정할 수 없습니다.
+            </Typography.Paragraph>
+            <div className="tw-grid tw-grid-cols-1 tw-gap-4 lg:tw-grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+              <Card size="small" title="조직도" variant="borderless" className="tw-shadow-none tw-bg-transparent">
+                <Input
+                  value={substitutePickerKeyword}
+                  onChange={(e) => setSubstitutePickerKeyword(e.target.value)}
+                  placeholder="이름, 직위, 부서 검색"
+                  className="tw-mb-2"
+                />
+                <div className="tw-max-h-[min(40vh,320px)] tw-overflow-auto tw-rounded-md tw-border tw-border-slate-100 tw-bg-white tw-p-1">
+                  <Tree
+                    showLine
+                    blockNode
+                    expandAction="click"
+                    treeData={orgTreeDataWithMembers}
+                    selectedKeys={
+                      orgTreeSelectedKey && !String(orgTreeSelectedKey).startsWith('member:')
+                        ? [orgTreeSelectedKey]
+                        : []
+                    }
+                    onSelect={(keys) => {
+                      const key = typeof keys[0] === 'string' ? keys[0] : undefined;
+                      if (!key) {
+                        setOrgTreeSelectedKey(undefined);
+                        return;
+                      }
+                      if (key.startsWith('member:')) {
+                        const rest = key.slice('member:'.length);
+                        const ci = rest.indexOf(':');
+                        const memberId = ci === -1 ? '' : rest.slice(ci + 1);
+                        if (memberId) void pickSubstituteByMemberId(memberId);
+                        setOrgTreeSelectedKey(undefined);
+                        return;
+                      }
+                      setOrgTreeSelectedKey(key);
+                    }}
+                    titleRender={(nodeData) => {
+                      const key = String(nodeData.key);
+                      const isMember = key.startsWith('member:');
+                      const dragPayload = isMember
+                        ? (() => {
+                            const rest = key.slice('member:'.length);
+                            const ci = rest.indexOf(':');
+                            const memberId = ci === -1 ? '' : rest.slice(ci + 1);
+                            return { kind: 'member' as const, memberId };
+                          })()
+                        : { kind: 'org' as const, organizationId: key };
+                      return (
+                        <span
+                          draggable
+                          onDragStart={(e) => {
+                            e.dataTransfer.setData(APPROVAL_ORG_DRAG_MIME, JSON.stringify(dragPayload));
+                            e.dataTransfer.effectAllowed = 'copy';
+                          }}
+                          className="tw-inline-flex tw-cursor-grab tw-select-none tw-items-center tw-gap-1"
+                        >
+                          {nodeData.title as ReactNode}
+                        </span>
+                      );
+                    }}
+                  />
+                </div>
+                <Divider className="!tw-my-3" />
+                <Typography.Text type="secondary" className="tw-mb-2 tw-block tw-text-xs">
+                  검색 결과 (드래그하여 추가)
                 </Typography.Text>
-              ) : memberCandidates.length === 0 ? (
-                <Typography.Text type="secondary" className="tw-block tw-p-3 tw-text-sm">
-                  검색 결과가 없습니다.
-                </Typography.Text>
-              ) : (
-                memberCandidates
-                  .filter((m) => !myMemberId || m.memberId !== myMemberId)
-                  .map((m) => {
-                  const active = selectedSubstitute?.memberId === m.memberId;
-                  return (
-                    <button
-                      key={m.memberPositionId}
-                      type="button"
-                      onClick={() => setSelectedSubstitute(m)}
-                      className={`tw-block tw-w-full tw-border-0 tw-border-b tw-border-slate-100 tw-bg-transparent tw-p-2.5 tw-text-left tw-text-sm last:tw-border-b-0 hover:tw-bg-white ${
-                        active ? 'tw-bg-blue-50' : ''
-                      }`}
-                    >
-                      <span className="tw-font-medium">{m.name}</span>
-                      {m.jobTitleName ? (
-                        <span className="tw-text-slate-600"> ({m.jobTitleName})</span>
-                      ) : null}
-                      <div className="tw-text-xs tw-text-slate-500">{m.organizationName}</div>
-                    </button>
-                  );
-                })
-              )}
+                <Space direction="vertical" className="tw-w-full" size={6}>
+                  {substitutePickerKeyword.trim() ? (
+                    orgPickerSearchMatches.length ? (
+                      orgPickerSearchMatches
+                        .filter((m) => !myMemberId || m.memberId !== myMemberId)
+                        .map((m) => (
+                          <div
+                            key={m.memberId}
+                            draggable
+                            onDragStart={(e) => {
+                              e.dataTransfer.setData(
+                                APPROVAL_ORG_DRAG_MIME,
+                                JSON.stringify({ kind: 'member' as const, memberId: m.memberId }),
+                              );
+                              e.dataTransfer.effectAllowed = 'copy';
+                            }}
+                            className="tw-flex tw-cursor-grab tw-select-none tw-items-center tw-rounded-lg tw-bg-slate-50/70 tw-px-2 tw-py-1.5 tw-transition-colors hover:tw-bg-slate-100/80"
+                          >
+                            <span className="tw-truncate tw-pr-2 tw-text-sm">
+                              {m.name} {m.jobTitleName ? `(${m.jobTitleName})` : ''}
+                              <span className="tw-text-slate-500"> · {m.organizationName}</span>
+                            </span>
+                          </div>
+                        ))
+                    ) : (
+                      <Typography.Text type="secondary" className="tw-text-xs">
+                        검색 결과가 없습니다.
+                      </Typography.Text>
+                    )
+                  ) : (
+                    <Typography.Text type="secondary" className="tw-text-xs">
+                      이름·직위·부서로 검색한 결과를 드래그하거나, 트리에서 바로 드래그하세요.
+                    </Typography.Text>
+                  )}
+                </Space>
+              </Card>
+              <ApprovalOrgDropZone
+                onDropMember={(id) => void pickSubstituteByMemberId(id)}
+                onDropOrg={() =>
+                  message.info('대결자는 멤버 한 명만 지정할 수 있습니다. 조직이 아닌 사람을 드래그해 주세요.')
+                }
+              >
+                <Card size="small" title="대결자" variant="borderless" className="tw-min-h-[200px] tw-shadow-none tw-bg-transparent">
+                  {selectedSubstitute ? (
+                    <div className="tw-space-y-2">
+                      <div>
+                        <span className="tw-font-medium">{selectedSubstitute.name}</span>
+                        {selectedSubstitute.jobTitleName ? (
+                          <span className="tw-text-slate-600"> ({selectedSubstitute.jobTitleName})</span>
+                        ) : null}
+                        <div className="tw-text-xs tw-text-slate-500">{selectedSubstitute.organizationName}</div>
+                      </div>
+                      <Button type="link" size="small" className="!tw-h-auto !tw-p-0" onClick={() => setSelectedSubstitute(null)}>
+                        선택 해제
+                      </Button>
+                    </div>
+                  ) : (
+                    <Typography.Text type="secondary" className="tw-text-sm">
+                      멤버를 이 영역으로 드래그해 놓으세요.
+                    </Typography.Text>
+                  )}
+                </Card>
+              </ApprovalOrgDropZone>
             </div>
-            {selectedSubstitute ? (
-              <Typography.Text className="!tw-mt-2 tw-block tw-text-xs tw-text-slate-600">
-                선택: <strong>{selectedSubstitute.name}</strong> · {selectedSubstitute.organizationName}
-              </Typography.Text>
-            ) : null}
           </div>
         </Space>
       </Modal>

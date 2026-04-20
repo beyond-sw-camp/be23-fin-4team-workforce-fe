@@ -40,6 +40,7 @@ import {useContext, useEffect, useMemo, useState} from 'react';
 import {useQuery, useQueryClient} from '@tanstack/react-query';
 import {Link, Outlet, useNavigate, useRouterState} from '@tanstack/react-router';
 import {useAuth} from '@/features/auth/useAuth';
+import {PERM} from '@/features/permissions/backend-permissions';
 import {usePermissions} from '@/features/permissions/usePermissionsHook';
 import type {EsgConfig} from '@/features/esg/api/esgApi';
 import {esgApi} from '@/features/esg/api/esgApi';
@@ -76,11 +77,11 @@ import {OrgChartModal} from '@/widgets/organization/OrgChartModal';
 import {HeaderSearchMemberDetailModal} from '@/widgets/app-shell/HeaderSearchMemberDetailModal';
 import {MemberChatModal} from '@/widgets/app-shell/MemberChatModal';
 import {
-    APPROVAL_SIDEBAR_ROOT_KEY,
     approvalSecondaryPanelOpenKeys,
     approvalSiderSelectedMenuKeys,
     buildApprovalMenuGroupChildren,
     decodeWfNavKey,
+    encodeWfNavKey,
 } from '@/widgets/app-shell/approvalSiderMenu';
 
 /** 왼쪽 날개 패널 + 본문 — 접기·펼치기 동일 아이콘(선형·둥근 테두리). */
@@ -279,13 +280,9 @@ function buildAppShellMenuItems(
             if (!approvalInserted) {
                 approvalInserted = true;
                 if (approvalMenuChildren && approvalMenuChildren.length > 0) {
-                    items.push({
-                        key: APPROVAL_SIDEBAR_ROOT_KEY,
-                        label: (
-                            <SiderGroupedMenuLabel icon={<FileDoneOutlined className="tw-text-lg"/>} text="전자결재"/>
-                        ),
-                        children: approvalMenuChildren,
-                    });
+                    for (const entry of approvalMenuChildren) {
+                        items.push(entry);
+                    }
                 } else {
                     const composeEntry = APPROVAL_SHELL_MENU_ENTRIES[0];
                     const guideLeaves = APPROVAL_SHELL_MENU_ENTRIES.slice(1);
@@ -358,6 +355,7 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
     const {status, user} = useAuth();
     const isAdmin = user?.isSystemAdmin === true;
     const {hasPermission} = usePermissions();
+    const showApprovalFormSettings = hasPermission(PERM.APPROVAL_AD_READ);
 
     const {data: esgConfig} = useQuery({
         queryKey: ['esg', 'config'],
@@ -389,7 +387,18 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
         });
         const items = buildAppShellMenuItems(esgPaths, isAdmin, approvalMenuChildren);
 
-        if (!isAdmin) return items;
+        const approvalFormSettingsItem = showApprovalFormSettings
+            ? {
+                  key: encodeWfNavKey({to: '/app/approvals', search: {tab: 'admin'}}),
+                  icon: <SettingOutlined className="tw-text-lg"/>,
+                  label: '결재 양식 설정',
+                  title: '결재 양식 설정',
+              }
+            : null;
+
+        const withApprovalSettings = approvalFormSettingsItem ? [...items, approvalFormSettingsItem] : items;
+
+        if (!isAdmin) return withApprovalSettings;
         const chatAdmin = {
             key: '/app/member-chat/admin',
             icon: <MessageOutlined className="tw-text-lg"/>,
@@ -402,8 +411,8 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
             label: 'HR 정책 문서',
             title: 'HR 정책 문서',
         };
-        return [...items, chatAdmin, doc];
-    }, [esgConfig, isAdmin, approvalOrgChart, meMember, status]);
+        return [...withApprovalSettings, chatAdmin, doc];
+    }, [esgConfig, isAdmin, approvalOrgChart, meMember, showApprovalFormSettings, status]);
 }
 
 const headerGhostIconClass =
@@ -984,8 +993,6 @@ function menuOpenKeysForPath(pathname: string, search: Record<string, unknown>):
     }
     if (pathname.startsWith('/app/esg')) keys.push(ESG_GROUP_KEY);
     if (pathname.startsWith('/app/approvals')) {
-        keys.push(APPROVAL_SIDEBAR_ROOT_KEY);
-        keys.push(APPROVAL_GROUP_KEY);
         keys.push(
             ...approvalSecondaryPanelOpenKeys(pathname, {
                 tab: typeof search.tab === 'string' ? search.tab : undefined,
@@ -1034,8 +1041,7 @@ function AppShellLayout() {
     }, [siderCollapsed]);
 
     /**
-     * TanStack Router location 변경 시: `menuOpenKeysForPath`로 현재 경로에 필요한 부모 키만 openKeys에 추가(이미 열린 전자결재 섹션은 닫지 않음).
-     * 전자결재 화면을 벗어나면 group-approvals / ap-section-*만 정리.
+     * TanStack Router location 변경 시: `menuOpenKeysForPath`로 현재 경로에 필요한 부모 키만 openKeys에 추가.
      */
     const [menuOpenKeys, setMenuOpenKeys] = useState<string[]>(() => {
         if (typeof window === 'undefined') return [];
@@ -1059,6 +1065,19 @@ function AppShellLayout() {
             return [...merged];
         });
     }, [pathname, search, siderCollapsed]);
+
+    /** 작성 허브「전체」모달 iframe — 사이드·헤더 없이 본문만(실제 라우트 화면과 동일). */
+    const embedComposeModal =
+        typeof search?.embed === 'string' && search.embed === 'compose-modal' && isApprovalsShellPathname(pathname);
+    if (embedComposeModal) {
+        return (
+            <Layout className="tw-flex tw-h-[100dvh] tw-min-h-0 tw-bg-slate-50">
+                <Layout.Content className="wf-scrollbar tw-min-h-0 tw-flex-1 tw-overflow-y-auto tw-bg-transparent tw-p-4">
+                    <Outlet />
+                </Layout.Content>
+            </Layout>
+        );
+    }
 
     return (
         <Layout className="tw-flex tw-h-[100dvh] tw-min-h-0 tw-bg-slate-50">

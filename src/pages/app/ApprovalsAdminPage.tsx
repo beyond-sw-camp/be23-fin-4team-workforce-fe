@@ -1,4 +1,4 @@
-import { DeleteOutlined, EyeOutlined, PlusOutlined, ReloadOutlined, SaveOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EyeOutlined, FormOutlined, PlusOutlined, ReloadOutlined, SaveOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
@@ -21,8 +21,17 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   APPROVAL_REQUEST_TYPES,
   approvalApi,
+  type ApprovalDocument,
   type ApprovalRequestType,
 } from '@/features/approvals/api/approvalApi';
+import {
+  ApprovalFormSchemaBuilder,
+  defaultSchemaFields,
+  serializeFormSchema,
+  validateSchemaFieldsForSubmit,
+} from '@/features/approvals/ui/ApprovalFormSchemaBuilder';
+import { parseFormSchema, type FormFieldSchema } from '@/features/approvals/lib/approvalFormSchema';
+import { parseApiError } from '@/shared/api/error-parser';
 import { flattenOrganizationsWithMeta } from '@/features/organization/lib/flattenOrganizationTree';
 import { organizationApi } from '@/features/organization/api/organizationApi';
 import { PERM } from '@/features/permissions/backend-permissions';
@@ -32,10 +41,12 @@ import { usePermissions } from '@/features/permissions/usePermissionsHook';
 type DocForm = {
   documentName: string;
   requestType: ApprovalRequestType;
-  autoApproveYn?: 'Y' | 'N';
   /** 부서 문서함 노출 — 급여·부서이동 등은 기본 N 권장 */
   isDeptVisibleYn?: 'Y' | 'N';
-  formSchema: string;
+};
+
+type EditDocForm = {
+  isDeptVisibleYn: 'Y' | 'N';
 };
 
 const REQUEST_TYPES_DEFAULT_DEPT_HIDDEN: ReadonlySet<ApprovalRequestType> = new Set(['SALARY', 'HR_MOVEMENT']);
@@ -60,6 +71,7 @@ const REQUEST_TYPE_LABEL: Record<ApprovalRequestType, string> = {
   GENERAL: '일반기안',
   CONTRACT: '전자계약',
   CERTIFICATE: '문서발급',
+  OFFICIAL: '공문',
 };
 
 function parseJobTitleOptions(raw: Array<Record<string, unknown>>): JobTitleOption[] {
@@ -75,19 +87,6 @@ function parseJobTitleOptions(raw: Array<Record<string, unknown>>): JobTitleOpti
     })
     .filter((item): item is JobTitleOption => item != null)
     .sort((a, b) => a.label.localeCompare(b.label, 'ko'));
-}
-
-function defaultSchemaText() {
-  return JSON.stringify(
-    {
-      fields: [
-        { name: 'title', label: '제목', type: 'text' },
-        { name: 'reason', label: '사유', type: 'textarea' },
-      ],
-    },
-    null,
-    2,
-  );
 }
 
 function validatePolicyLines(rows: PolicyLineDraft[]) {
@@ -112,7 +111,12 @@ export function ApprovalsAdminPage() {
   const [activeTab, setActiveTab] = useState<'documents' | 'policy-lines'>('documents');
   const [selectedDocumentId, setSelectedDocumentId] = useState<string>('');
   const [policyDrafts, setPolicyDrafts] = useState<PolicyLineDraft[]>([]);
+  const [schemaFields, setSchemaFields] = useState<FormFieldSchema[]>(() => defaultSchemaFields());
   const [form] = Form.useForm<DocForm>();
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingDocumentId, setEditingDocumentId] = useState<string | null>(null);
+  const [editSchemaFields, setEditSchemaFields] = useState<FormFieldSchema[]>([]);
+  const [editForm] = Form.useForm<EditDocForm>();
 
   const canRead = hasPermission(PERM.APPROVAL_AD_READ);
   const canCreate = hasPermission(PERM.APPROVAL_AD_CREATE);
@@ -151,6 +155,17 @@ export function ApprovalsAdminPage() {
     }));
   }, [orgTree]);
 
+  const jobTitleNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const o of jobTitleOptions) m.set(o.value, o.label);
+    return m;
+  }, [jobTitleOptions]);
+
+  const organizationNameById = useMemo(() => {
+    const flat = flattenOrganizationsWithMeta(orgTree);
+    return new Map(flat.map((row) => [row.id, row.name] as const));
+  }, [orgTree]);
+
   const { data: policyLines = [], isFetching: policyLoading } = useQuery({
     queryKey: ['approval', 'policy-lines', selectedDocumentId],
     queryFn: () => approvalApi.getPolicyLines(selectedDocumentId),
@@ -161,11 +176,10 @@ export function ApprovalsAdminPage() {
     () => documents.find((doc) => doc.documentId === selectedDocumentId) ?? null,
     [documents, selectedDocumentId],
   );
-  const isAutoApproveDocument = selectedDocument?.autoApproveYn === 'Y';
   const { data: policyLineCandidates = [], isFetching: candidatesLoading } = useQuery({
     queryKey: ['approval', 'policy-lines', 'candidates', selectedDocumentId],
     queryFn: () => approvalApi.getPolicyLineCandidates(selectedDocumentId),
-    enabled: selectedDocumentId.length > 0 && !isAutoApproveDocument,
+    enabled: selectedDocumentId.length > 0,
   });
 
   useEffect(() => {
@@ -198,9 +212,31 @@ export function ApprovalsAdminPage() {
       message.success('양식을 생성했습니다.');
       setCreateOpen(false);
       form.resetFields();
+      setSchemaFields(defaultSchemaFields());
       await refreshAll();
     },
-    onError: (e: Error) => message.error(e.message || '양식 생성에 실패했습니다.'),
+    onError: (e: unknown) => message.error(parseApiError(e).message || '양식 생성에 실패했습니다.'),
+  });
+
+  const updateDocumentM = useMutation({
+    mutationFn: ({
+      documentId,
+      formSchema,
+      isDeptVisibleYn,
+    }: {
+      documentId: string;
+      formSchema: string;
+      isDeptVisibleYn: 'Y' | 'N';
+    }) => approvalApi.updateDocument(documentId, { formSchema, isDeptVisibleYn }),
+    onSuccess: async () => {
+      message.success('양식을 수정했습니다.');
+      setEditOpen(false);
+      setEditingDocumentId(null);
+      setEditSchemaFields([]);
+      editForm.resetFields();
+      await refreshAll();
+    },
+    onError: (e: unknown) => message.error(parseApiError(e).message || '양식 수정에 실패했습니다.'),
   });
 
   const activateM = useMutation({
@@ -219,16 +255,6 @@ export function ApprovalsAdminPage() {
       await refreshAll();
     },
     onError: (e: Error) => message.error(e.message || '비활성화에 실패했습니다.'),
-  });
-
-  const autoApproveM = useMutation({
-    mutationFn: ({ documentId, enabled }: { documentId: string; enabled: boolean }) =>
-      enabled ? approvalApi.enableAutoApprove(documentId) : approvalApi.disableAutoApprove(documentId),
-    onSuccess: async () => {
-      message.success('자동승인 설정을 변경했습니다.');
-      await refreshAll();
-    },
-    onError: (e: Error) => message.error(e.message || '자동승인 변경에 실패했습니다.'),
   });
 
   const deptVisibleM = useMutation({
@@ -262,38 +288,70 @@ export function ApprovalsAdminPage() {
 
   const handleOpenCreate = () => {
     setCreateOpen(true);
+    setSchemaFields(defaultSchemaFields());
     form.setFieldsValue({
       documentName: '',
       requestType: 'GENERAL',
-      autoApproveYn: 'N',
       isDeptVisibleYn: 'Y',
-      formSchema: defaultSchemaText(),
     });
   };
 
+  const editingDocument = useMemo(
+    () => (editingDocumentId ? documents.find((d) => d.documentId === editingDocumentId) ?? null : null),
+    [documents, editingDocumentId],
+  );
+
+  const handleOpenEdit = (doc: ApprovalDocument) => {
+    setEditingDocumentId(doc.documentId);
+    const parsed = parseFormSchema(doc.formSchema);
+    setEditSchemaFields(parsed.fields);
+    editForm.setFieldsValue({
+      isDeptVisibleYn: doc.isDeptVisibleYn,
+    });
+    setEditOpen(true);
+  };
+
+  const handleSubmitEdit = async () => {
+    if (!editingDocumentId) return;
+    const schemaError = validateSchemaFieldsForSubmit(editSchemaFields);
+    if (schemaError) {
+      message.warning(schemaError);
+      return;
+    }
+    try {
+      const values = await editForm.validateFields();
+      const formSchema = serializeFormSchema(editSchemaFields);
+      await updateDocumentM.mutateAsync({
+        documentId: editingDocumentId,
+        formSchema,
+        isDeptVisibleYn: values.isDeptVisibleYn,
+      });
+    } catch {
+      // validation
+    }
+  };
+
   const handleSubmitCreate = async () => {
+    const schemaError = validateSchemaFieldsForSubmit(schemaFields);
+    if (schemaError) {
+      message.warning(schemaError);
+      return;
+    }
     try {
       const values = await form.validateFields();
-      JSON.parse(values.formSchema);
+      const formSchema = serializeFormSchema(schemaFields);
       await createDocumentM.mutateAsync({
         documentName: values.documentName.trim(),
         requestType: values.requestType,
-        formSchema: values.formSchema,
-        autoApproveYn: values.autoApproveYn ?? 'N',
+        formSchema,
         isDeptVisibleYn: values.isDeptVisibleYn ?? 'Y',
       });
-    } catch (error) {
-      if (error instanceof SyntaxError) {
-        message.error('formSchema는 유효한 JSON 문자열이어야 합니다.');
-      }
+    } catch {
+      // validation
     }
   };
 
   const handleAddPolicyLine = () => {
-    if (isAutoApproveDocument) {
-      message.info('자동승인 양식은 정책라인 설정이 필요하지 않습니다.');
-      return;
-    }
     setPolicyDrafts((prev) => [
       ...prev,
       {
@@ -308,10 +366,6 @@ export function ApprovalsAdminPage() {
   const handleSavePolicyLines = async () => {
     if (!selectedDocumentId) {
       message.warning('양식을 먼저 선택해 주세요.');
-      return;
-    }
-    if (isAutoApproveDocument) {
-      message.info('자동승인 양식은 정책라인 저장 대상이 아닙니다.');
       return;
     }
     const sorted = [...policyDrafts].sort((a, b) => a.stepOrder - b.stepOrder);
@@ -332,24 +386,11 @@ export function ApprovalsAdminPage() {
 
   const handleDeletePolicyLines = async () => {
     if (!selectedDocumentId) return;
-    if (isAutoApproveDocument) {
-      message.info('자동승인 양식은 정책라인 삭제가 필요하지 않습니다.');
-      return;
-    }
     await deletePolicyLineM.mutateAsync(selectedDocumentId);
   };
 
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
-      <div>
-        <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
-          결재 관리자
-        </Typography.Title>
-        <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-sm">
-          양식 옵션(활성·자동승인·부서 문서함 노출)과 결재 순서(직책/단계)를 설정합니다.
-        </Typography.Paragraph>
-      </div>
-
       <PermissionGuard
         required={PERM.APPROVAL_AD_READ}
         fallback={<Alert type="warning" showIcon message="결재 관리자 화면을 보려면 조회 권한이 필요합니다." />}
@@ -428,27 +469,6 @@ export function ApprovalsAdminPage() {
                         ),
                       },
                       {
-                        title: '자동승인',
-                        dataIndex: 'autoApproveYn',
-                        key: 'autoApproveYn',
-                        width: 140,
-                        render: (value: 'Y' | 'N', row) => (
-                          <Button
-                            size="small"
-                            type={value === 'Y' ? 'primary' : 'default'}
-                            disabled={!canUpdate}
-                            onClick={() =>
-                              autoApproveM.mutate({
-                                documentId: row.documentId,
-                                enabled: value !== 'Y',
-                              })
-                            }
-                          >
-                            {value === 'Y' ? 'ON' : 'OFF'}
-                          </Button>
-                        ),
-                      },
-                      {
                         title: '부서 문서함',
                         dataIndex: 'isDeptVisibleYn',
                         key: 'isDeptVisibleYn',
@@ -488,9 +508,19 @@ export function ApprovalsAdminPage() {
                       {
                         title: '정책라인',
                         key: 'actions',
-                        width: 120,
+                        width: 220,
                         render: (_, row) => (
                           <Space size="small" wrap>
+                            {canUpdate ? (
+                              <Button
+                                type="link"
+                                size="small"
+                                icon={<FormOutlined />}
+                                onClick={() => handleOpenEdit(row)}
+                              >
+                                양식 수정
+                              </Button>
+                            ) : null}
                             <Button
                               type="link"
                               size="small"
@@ -541,27 +571,15 @@ export function ApprovalsAdminPage() {
                           <Tag color={selectedDocument.isActiveYn === 'Y' ? 'success' : 'default'}>
                             {selectedDocument.isActiveYn === 'Y' ? '활성' : '비활성'}
                           </Tag>
-                          <Tag color={selectedDocument.autoApproveYn === 'Y' ? 'processing' : 'default'}>
-                            자동승인 {selectedDocument.autoApproveYn === 'Y' ? 'ON' : 'OFF'}
-                          </Tag>
                           <Tag color={selectedDocument.isDeptVisibleYn === 'Y' ? 'blue' : 'default'}>
                             부서함 {selectedDocument.isDeptVisibleYn === 'Y' ? '노출' : '숨김'}
                           </Tag>
                         </Space>
                       </Card>
                     ) : null}
-                    {isAutoApproveDocument ? (
-                      <Alert
-                        showIcon
-                        type="warning"
-                        message="자동승인 양식은 정책라인 설정이 필요하지 않습니다."
-                        description="후보 결재자 선택은 일반 사용자가 결재 요청을 올릴 때 진행됩니다."
-                      />
-                    ) : null}
-
                     <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
                       {canCreate ? (
-                        <Button icon={<PlusOutlined />} onClick={handleAddPolicyLine} disabled={isAutoApproveDocument}>
+                        <Button icon={<PlusOutlined />} onClick={handleAddPolicyLine}>
                           라인 추가
                         </Button>
                       ) : null}
@@ -570,7 +588,6 @@ export function ApprovalsAdminPage() {
                           type="primary"
                           icon={<SaveOutlined />}
                           loading={savePolicyLineM.isPending}
-                          disabled={isAutoApproveDocument}
                           onClick={() => void handleSavePolicyLines()}
                         >
                           라인 저장
@@ -581,14 +598,12 @@ export function ApprovalsAdminPage() {
                           title="선택 양식의 정책라인을 전부 삭제할까요?"
                           okText="삭제"
                           cancelText="취소"
-                          disabled={isAutoApproveDocument}
                           onConfirm={() => void handleDeletePolicyLines()}
                         >
                           <Button
                             danger
                             icon={<DeleteOutlined />}
                             loading={deletePolicyLineM.isPending}
-                            disabled={isAutoApproveDocument}
                           >
                             전체 삭제
                           </Button>
@@ -611,7 +626,6 @@ export function ApprovalsAdminPage() {
                             <InputNumber
                               min={1}
                               value={value}
-                              disabled={isAutoApproveDocument}
                               onChange={(next) => {
                                 setPolicyDrafts((prev) =>
                                   prev.map((item) =>
@@ -631,7 +645,6 @@ export function ApprovalsAdminPage() {
                               value={value || undefined}
                               style={{ minWidth: 220 }}
                               placeholder="직책 선택"
-                              disabled={isAutoApproveDocument}
                               options={jobTitleOptions}
                               onChange={(next) =>
                                 setPolicyDrafts((prev) =>
@@ -651,7 +664,6 @@ export function ApprovalsAdminPage() {
                               value={value ?? undefined}
                               style={{ minWidth: 250 }}
                               placeholder="조직 제한 없음"
-                              disabled={isAutoApproveDocument}
                               options={orgOptions}
                               onChange={(next) =>
                                 setPolicyDrafts((prev) =>
@@ -671,7 +683,7 @@ export function ApprovalsAdminPage() {
                             <Button
                               type="link"
                               danger
-                              disabled={!canCreate || isAutoApproveDocument}
+                              disabled={!canCreate}
                               onClick={() => setPolicyDrafts((prev) => prev.filter((item) => item.key !== row.key))}
                             >
                               삭제
@@ -681,26 +693,25 @@ export function ApprovalsAdminPage() {
                       ]}
                       locale={{ emptyText: selectedDocumentId ? '정책라인이 없습니다.' : '양식을 먼저 선택하세요.' }}
                     />
-                    {!isAutoApproveDocument ? (
-                      <Card
-                        size="small"
-                        title="후보 결재자 미리보기"
-                        extra={
-                          <Button
-                            size="small"
-                            icon={<ReloadOutlined />}
-                            loading={candidatesLoading}
-                            onClick={() =>
-                              void qc.invalidateQueries({
-                                queryKey: ['approval', 'policy-lines', 'candidates', selectedDocumentId],
-                              })
-                            }
-                          >
-                            새로고침
-                          </Button>
-                        }
-                      >
-                        <Table
+                    <Card
+                      size="small"
+                      title="후보 결재자 미리보기"
+                      extra={
+                        <Button
+                          size="small"
+                          icon={<ReloadOutlined />}
+                          loading={candidatesLoading}
+                          onClick={() =>
+                            void qc.invalidateQueries({
+                              queryKey: ['approval', 'policy-lines', 'candidates', selectedDocumentId],
+                            })
+                          }
+                        >
+                          새로고침
+                        </Button>
+                      }
+                    >
+                      <Table
                           rowKey={(row) => row.policyLineId}
                           size="small"
                           loading={candidatesLoading}
@@ -719,18 +730,20 @@ export function ApprovalsAdminPage() {
                               width: 90,
                             },
                             {
-                              title: '직책 ID',
+                              title: '직책',
                               dataIndex: 'jobTitleId',
                               key: 'jobTitleId',
                               width: 220,
                               ellipsis: true,
+                              render: (id: string) => jobTitleNameById.get(id) ?? id,
                             },
                             {
                               title: '조직 제한',
                               dataIndex: 'organizationId',
                               key: 'organizationId',
                               width: 220,
-                              render: (v: string | null) => v ?? '없음',
+                              render: (v: string | null) =>
+                                v == null || v === '' ? '없음' : (organizationNameById.get(v) ?? v),
                             },
                             {
                               title: '후보',
@@ -750,8 +763,7 @@ export function ApprovalsAdminPage() {
                             },
                           ]}
                         />
-                      </Card>
-                    ) : null}
+                    </Card>
 
                   </Space>
                 </Card>
@@ -770,7 +782,7 @@ export function ApprovalsAdminPage() {
         cancelText="취소"
         confirmLoading={createDocumentM.isPending}
         destroyOnHidden
-        width={760}
+        width={880}
       >
         <Form<DocForm>
           form={form}
@@ -808,21 +820,53 @@ export function ApprovalsAdminPage() {
               ]}
             />
           </Form.Item>
-          <Form.Item name="autoApproveYn" label="자동승인">
+          <Form.Item label="기안 입력 항목" required>
+            <ApprovalFormSchemaBuilder value={schemaFields} onChange={setSchemaFields} />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={editingDocument ? `양식 수정 — ${editingDocument.documentName}` : '양식 수정'}
+        open={editOpen}
+        onCancel={() => {
+          setEditOpen(false);
+          setEditingDocumentId(null);
+          setEditSchemaFields([]);
+          editForm.resetFields();
+        }}
+        onOk={() => void handleSubmitEdit()}
+        okText="저장"
+        cancelText="취소"
+        confirmLoading={updateDocumentM.isPending}
+        destroyOnHidden
+        width={880}
+      >
+        <Form<EditDocForm> form={editForm} layout="vertical" className="tw-pt-2">
+          <Form.Item label="양식명">
+            <Input readOnly value={editingDocument?.documentName ?? ''} className="!tw-bg-slate-50" />
+          </Form.Item>
+          <Form.Item label="요청 유형">
+            <Input
+              readOnly
+              value={
+                editingDocument
+                  ? `${REQUEST_TYPE_LABEL[editingDocument.requestType as ApprovalRequestType] ?? editingDocument.requestType} (${editingDocument.requestType})`
+                  : ''
+              }
+              className="!tw-bg-slate-50"
+            />
+          </Form.Item>
+          <Form.Item name="isDeptVisibleYn" label="부서 문서함 노출">
             <Select
               options={[
-                { value: 'N', label: '비활성 (N)' },
-                { value: 'Y', label: '활성 (Y)' },
+                { value: 'Y', label: '노출 (Y)' },
+                { value: 'N', label: '숨김 (N)' },
               ]}
             />
           </Form.Item>
-          <Form.Item
-            name="formSchema"
-            label="formSchema(JSON 문자열)"
-            rules={[{ required: true, message: 'formSchema를 입력해 주세요.' }]}
-            extra="지원 type: text, textarea, number, date, select"
-          >
-            <Input.TextArea rows={12} placeholder='{"fields":[...]}' />
+          <Form.Item label="기안 입력 항목" required>
+            <ApprovalFormSchemaBuilder value={editSchemaFields} onChange={setEditSchemaFields} respectFieldLocks />
           </Form.Item>
         </Form>
       </Modal>

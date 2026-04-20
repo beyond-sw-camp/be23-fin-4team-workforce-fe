@@ -182,7 +182,7 @@ export function buildNavigateForGuideBox(
 ):
   | NavigateOptions
   | { to: '/app/approvals/absence-proxy'; replace?: boolean }
-  | { to: '/app/approvals/department'; search: { deptView: 'draft' | 'received' }; replace?: boolean } {
+  | { to: '/app/approvals/department'; search: { deptView: 'draft' | 'sent' | 'received' }; replace?: boolean } {
   if (box === 'per-absence') {
     return { to: '/app/approvals/absence-proxy', replace: true };
   }

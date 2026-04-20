@@ -1,34 +1,35 @@
+import { ArrowLeftOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Card, Select, Space, Table, Tag, Typography } from 'antd';
+import { Alert, App, Button, Card, Table, Tag, Typography } from 'antd';
+import clsx from 'clsx';
 import dayjs from 'dayjs';
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useRouterState } from '@tanstack/react-router';
-import { approvalRequestApi } from '@/features/approvals/api/approvalRequestApi';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate, useRouterState } from '@tanstack/react-router';
+import {
+  approvalRequestApi,
+  isDepartmentInboxMaskedPrivateRow,
+} from '@/features/approvals/api/approvalRequestApi';
 import { ApprovalRequestReadOnlyModal } from '@/features/approvals/ui/ApprovalRequestReadOnlyModal';
 import { useAuth } from '@/features/auth/useAuth';
 import { memberApi } from '@/features/member/api/memberApi';
-import type { OrgChartOrgNode } from '@/features/organization/api/organizationApi';
 import { organizationApi } from '@/features/organization/api/organizationApi';
-
-function findMemberOrganizationId(roots: OrgChartOrgNode[], memberId: string): string | null {
-  const id = memberId.trim();
-  if (!id) return null;
-  for (const node of roots) {
-    for (const g of node.jobGrades) {
-      for (const m of g.members) {
-        if (m.memberId === id) return node.organizationId;
-      }
-    }
-    const sub = findMemberOrganizationId(node.children, memberId);
-    if (sub) return sub;
-  }
-  return null;
-}
+import { findMemberOrganizationId } from '@/features/organization/lib/findMemberOrganizationInOrgChart';
 
 function formatDateTime(value?: string | null) {
   if (!value) return '—';
   const d = dayjs(value);
   return d.isValid() ? d.format('YYYY-MM-DD HH:mm') : value;
+}
+
+function formatOfficialRecipientsLine(r: {
+  recipients?: { recipientOrganizationName?: string; recipientOrganizationId?: string }[] | null;
+}): string {
+  const list = r.recipients ?? [];
+  if (!list.length) return '—';
+  return list
+    .map((x) => x.recipientOrganizationName?.trim() || x.recipientOrganizationId || '')
+    .filter(Boolean)
+    .join(', ');
 }
 
 function requestStatusTag(status: string) {
@@ -47,23 +48,35 @@ function isHttpStatus(e: unknown, status: number): boolean {
   return r?.status === status;
 }
 
-type DeptView = 'draft' | 'received';
+type DeptView = 'draft' | 'sent' | 'received';
 
 function parseDeptView(v: unknown): DeptView {
-  return v === 'received' ? 'received' : 'draft';
+  if (v === 'received') return 'received';
+  if (v === 'sent') return 'sent';
+  return 'draft';
 }
 
 export function DepartmentApprovalsInboxPage() {
+  const { message } = App.useApp();
   const navigate = useNavigate();
   const routeLocation = useRouterState({
     select: (s) => ({
       pathname: s.location.pathname,
-      search: s.location.search as { organizationId?: string; deptView?: string },
+      search: s.location.search as { organizationId?: string; deptView?: string; embed?: string },
     }),
   });
   const routeSearch = routeLocation.search;
+  /** 모달 iframe(`embed=compose-modal`)에서 부서 이동 시에도 앱 셸 없음 유지 */
+  const preserveEmbedSearch = useMemo(
+    () => (routeSearch.embed ? { embed: routeSearch.embed } : {}),
+    [routeSearch.embed],
+  );
   const onDepartmentRoute = routeLocation.pathname === '/app/approvals/department';
-  const deptView = parseDeptView(routeSearch.deptView);
+  const routerDeptView = parseDeptView(routeSearch.deptView);
+  /** 모달 iframe에서는 탭 전환 시 URL을 바꾸지 않고 로컬 상태만 사용 */
+  const [embedDeptView, setEmbedDeptView] = useState<DeptView | null>(null);
+  const isEmbedModal = routeSearch.embed === 'compose-modal';
+  const deptView = isEmbedModal ? (embedDeptView ?? routerDeptView) : routerDeptView;
   const urlOrgId = routeSearch.organizationId?.trim() ?? '';
 
   const { user } = useAuth();
@@ -91,43 +104,19 @@ export function DepartmentApprovalsInboxPage() {
     return null;
   }, [me?.organizationId, authMemberId, orgChart?.organizations]);
 
-  const orgSelectOptions = useMemo(() => {
-    if (!myOrgId) return [];
-    return [{ value: myOrgId, label: me?.organizationName?.trim() || '내 부서' }];
-  }, [myOrgId, me?.organizationName]);
-
-  const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
-
-  const orgIdInOptions = useMemo(() => {
-    if (!urlOrgId || !myOrgId) return false;
-    return urlOrgId === myOrgId;
-  }, [urlOrgId, myOrgId]);
-
   useEffect(() => {
-    if (!onDepartmentRoute) return;
-    if (urlOrgId && orgIdInOptions) {
-      setSelectedOrgId(urlOrgId);
-      return;
-    }
-    if (myOrgId) {
-      setSelectedOrgId((prev) => prev ?? myOrgId);
-    }
-  }, [myOrgId, onDepartmentRoute, orgIdInOptions, urlOrgId]);
-
-  useEffect(() => {
-    if (!onDepartmentRoute) return;
+    if (!onDepartmentRoute || isEmbedModal) return;
     if (!myOrgId || urlOrgId) return;
-    if (orgSelectOptions.length === 0) return;
     navigate({
       to: '/app/approvals/department',
-      search: { organizationId: myOrgId, deptView },
+      search: { organizationId: myOrgId, deptView: routerDeptView, ...preserveEmbedSearch },
       replace: true,
     });
-  }, [deptView, myOrgId, navigate, onDepartmentRoute, orgSelectOptions.length, urlOrgId]);
+  }, [isEmbedModal, myOrgId, navigate, onDepartmentRoute, preserveEmbedSearch, routerDeptView, urlOrgId]);
 
   const [detailRequestId, setDetailRequestId] = useState<string | null>(null);
 
-  const deptListEnabled = Boolean(selectedOrgId) && deptView === 'draft';
+  const deptListEnabled = Boolean(myOrgId) && (deptView === 'draft' || deptView === 'sent');
 
   const {
     data: rows = [],
@@ -135,8 +124,8 @@ export function DepartmentApprovalsInboxPage() {
     error,
     refetch,
   } = useQuery({
-    queryKey: ['approval-user', 'department-requests', selectedOrgId],
-    queryFn: () => approvalRequestApi.listDepartmentRequests(selectedOrgId!),
+    queryKey: ['approval-user', 'department-requests', myOrgId],
+    queryFn: () => approvalRequestApi.listDepartmentRequests(myOrgId!),
     enabled: deptListEnabled,
     retry: (_, err) => !isHttpStatus(err, 403),
   });
@@ -151,61 +140,135 @@ export function DepartmentApprovalsInboxPage() {
     enabled: deptView === 'received',
   });
 
+  const officialSentRows = useMemo(() => {
+    return rows.filter((r) => {
+      const hasRecipients = Array.isArray(r.recipients) && r.recipients.length > 0;
+      return hasRecipients || Boolean(r.documentNumber?.trim());
+    });
+  }, [rows]);
+
   const displayRows = useMemo(() => {
-    return deptView === 'received' ? officialReceivedRows : rows;
-  }, [deptView, officialReceivedRows, rows]);
+    if (deptView === 'received') return officialReceivedRows;
+    if (deptView === 'sent') return officialSentRows;
+    return rows;
+  }, [deptView, officialReceivedRows, officialSentRows, rows]);
   const pageError = deptView === 'received' ? officialReceivedError : error;
   const pageLoading = deptView === 'received' ? officialReceivedLoading : deptListEnabled ? isFetching : false;
 
+  const navigateDeptView = useCallback(
+    (next: DeptView) => {
+      if (isEmbedModal) {
+        setEmbedDeptView(next);
+        return;
+      }
+      navigate({
+        to: '/app/approvals/department',
+        search: {
+          organizationId: myOrgId ?? undefined,
+          deptView: next,
+          ...preserveEmbedSearch,
+        },
+        replace: true,
+      });
+    },
+    [isEmbedModal, navigate, preserveEmbedSearch, myOrgId],
+  );
 
   return (
-    <div className="tw-mx-auto tw-max-w-6xl tw-space-y-4">
-      <div className="tw-flex tw-flex-wrap tw-items-start tw-justify-between tw-gap-3">
+    <div
+      className={clsx(
+        isEmbedModal
+          ? 'tw-flex tw-h-full tw-min-h-0 tw-w-full tw-flex-col tw-gap-4 tw-overflow-hidden'
+          : 'tw-mx-auto tw-max-w-6xl tw-space-y-4',
+      )}
+    >
+      <div className="tw-flex tw-flex-shrink-0 tw-flex-wrap tw-items-start tw-gap-3">
         <div>
-          <Typography.Title level={4} className="!tw-mb-1">
-            부서 문서함
-            {deptView === 'draft' ? '' : ' — 공문 수신함'}
-          </Typography.Title>
+          <div className="tw-flex tw-flex-nowrap tw-items-center tw-gap-2">
+            {!isEmbedModal ? (
+              <Button
+                type="text"
+                icon={<ArrowLeftOutlined />}
+                aria-label="전자결재로 돌아가기"
+                className="!tw-shrink-0 !tw-text-slate-600 hover:!tw-text-slate-900"
+                onClick={() =>
+                  navigate({
+                    to: '/app/approvals',
+                    search: { tab: 'compose', sideNav: 'request-compose' },
+                    replace: true,
+                  })
+                }
+              />
+            ) : null}
+            <Typography.Title level={4} className="!tw-m-0 tw-whitespace-nowrap tw-leading-none">
+              부서 문서함
+            </Typography.Title>
+          </div>
           <Typography.Paragraph type="secondary" className="!tw-mb-0 tw-text-sm">
             {deptView === 'received'
               ? '내 조직이 수신부서로 지정된 최종 승인 공문을 조회합니다.'
-              : '본인 소속 부서에서 열람 가능한 결재 문서를 조회합니다. 부서 비노출 양식은 서버에서 제외됩니다.'}
+              : deptView === 'sent'
+                ? '내 조직에서 발송한 공문 문서를 조회합니다.'
+              : '본인 소속 부서에서 열람 가능한 결재 문서를 조회합니다. 비공개로 상신한 문서는 부서원에게 제목·내용이 가려질 수 있습니다.'}
           </Typography.Paragraph>
         </div>
-        <Link to="/app/approvals" className="tw-text-sm tw-text-blue-600 hover:tw-underline">
-          전자결재(작성·결재함)로 이동
-        </Link>
       </div>
 
-      <Card size="small">
-        <Space direction="vertical" size="middle" className="tw-w-full">
-          {deptView === 'draft' ? (
-            <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-3">
-              <Typography.Text strong>조회 기준 부서</Typography.Text>
-              <Select
-                className="tw-min-w-[240px]"
-                placeholder="부서를 선택하세요"
-                loading={!myOrgId && Boolean(authMemberId)}
-                value={selectedOrgId ?? undefined}
-                options={orgSelectOptions.map((o) => ({ value: o.value, label: o.label }))}
-                onChange={(v) => {
-                  setSelectedOrgId(v);
-                  navigate({
-                    to: '/app/approvals/department',
-                    search: { organizationId: v, deptView },
-                  });
-                }}
-                disabled={orgSelectOptions.length === 0}
-              />
-            </div>
-          ) : null}
+      <Card
+        size="small"
+        className={clsx(
+          'tw-overflow-hidden tw-rounded-lg tw-border-slate-200/80 tw-shadow-sm',
+          isEmbedModal && 'tw-flex tw-min-h-0 tw-flex-1 tw-flex-col',
+        )}
+        styles={
+          isEmbedModal
+            ? { body: { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 16 } }
+            : undefined
+        }
+      >
+        <div
+          className={clsx(
+            'tw-flex tw-w-full tw-flex-col tw-gap-4',
+            isEmbedModal && 'tw-min-h-0 tw-flex-1',
+          )}
+        >
+          <div
+            role="tablist"
+            aria-label="부서 문서함 구분"
+            className="tw-flex tw-gap-8"
+          >
+            {(
+              [
+                { key: 'draft' as const, label: '기안 완료함' },
+                { key: 'sent' as const, label: '공문 발송함' },
+                { key: 'received' as const, label: '공문 수신함' },
+              ] as const
+            ).map(({ key, label }) => (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={deptView === key}
+                className={clsx(
+                  '-tw-mb-px tw-border-0 tw-bg-transparent tw-px-0 tw-pb-2 tw-text-sm tw-font-medium tw-outline-none tw-transition-colors',
+                  'focus-visible:tw-ring-2 focus-visible:tw-ring-blue-500 focus-visible:tw-ring-offset-2',
+                  deptView === key
+                    ? 'tw-border-b-2 tw-border-solid tw-border-blue-600 tw-text-blue-600'
+                    : 'tw-border-b-2 tw-border-transparent tw-text-slate-600 hover:tw-text-slate-900',
+                )}
+                onClick={() => navigateDeptView(key)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
 
           {deptView === 'received' ? (
             <Alert
               type="info"
               showIcon
               className="tw-text-sm"
-              message="공문 수신함은 최종 승인된 공문만 표시됩니다."
+              message="최종 승인된 공문만 표시됩니다."
             />
           ) : null}
 
@@ -229,6 +292,7 @@ export function DepartmentApprovalsInboxPage() {
             />
           ) : null}
 
+          <div className={clsx(isEmbedModal && 'tw-min-h-0 tw-flex-1 tw-overflow-auto')}>
           <Table
             size="small"
             rowKey="requestId"
@@ -236,52 +300,141 @@ export function DepartmentApprovalsInboxPage() {
             dataSource={displayRows}
             pagination={{ pageSize: 15, showSizeChanger: true }}
             locale={{
-              emptyText: selectedOrgId
+              emptyText: myOrgId
                 ? '표시할 문서가 없습니다.'
-                : '소속 부서 정보를 불러오는 중이거나, 부서를 선택할 수 없습니다.',
+                : '소속 부서 정보를 불러오는 중이거나, 부서를 확인할 수 없습니다.',
             }}
-            onRow={(record) => ({
-              onClick: () => setDetailRequestId(record.requestId),
-              className: 'tw-cursor-pointer',
-            })}
-            columns={[
-              {
-                title: '작성일',
-                dataIndex: 'createdAt',
-                key: 'createdAt',
-                width: 160,
-                render: (v: string) => formatDateTime(v),
-              },
-              {
-                title: '작성자',
-                key: 'requester',
-                width: 120,
-                render: (_: unknown, r: (typeof displayRows)[number]) =>
-                  r.requesterName?.trim() || r.memberId || '—',
-              },
-              {
-                title: '작성자 소속',
-                key: 'requesterOrg',
-                ellipsis: true,
-                render: (_: unknown, r: (typeof displayRows)[number]) =>
-                  r.requesterOrganizationName?.trim() || '—',
-              },
-              {
-                title: '양식명',
-                dataIndex: 'documentName',
-                key: 'documentName',
-                ellipsis: true,
-              },
-              {
-                title: '상태',
-                dataIndex: 'requestStatus',
-                key: 'requestStatus',
-                width: 100,
-                render: (v: string) => requestStatusTag(v),
-              },
-            ]}
+            rowClassName={(record) =>
+              deptView !== 'received' && isDepartmentInboxMaskedPrivateRow(record)
+                ? 'tw-bg-slate-100/80 tw-text-slate-500'
+                : ''
+            }
+            onRow={(record) => {
+              const masked = deptView !== 'received' && isDepartmentInboxMaskedPrivateRow(record);
+              return {
+                onClick: () => {
+                  if (masked) {
+                    message.warning('비공개로 설정된 문서는 내용을 열람할 수 없습니다.');
+                    return;
+                  }
+                  setDetailRequestId(record.requestId);
+                },
+                className: masked ? 'tw-cursor-not-allowed' : 'tw-cursor-pointer',
+              };
+            }}
+            columns={
+              deptView === 'received'
+                ? [
+                    {
+                      title: '공문 번호',
+                      key: 'documentNumber',
+                      width: 140,
+                      render: (_: unknown, r: (typeof displayRows)[number]) =>
+                        r.documentNumber?.trim() || '—',
+                    },
+                    {
+                      title: '발신 부서',
+                      key: 'requesterOrg',
+                      ellipsis: true,
+                      render: (_: unknown, r: (typeof displayRows)[number]) =>
+                        r.requesterOrganizationName?.trim() || '—',
+                    },
+                    {
+                      title: '기안자',
+                      key: 'requester',
+                      width: 120,
+                      render: (_: unknown, r: (typeof displayRows)[number]) =>
+                        r.requesterName?.trim() || r.memberId || '—',
+                    },
+                    {
+                      title: '수신 부서',
+                      key: 'recipients',
+                      ellipsis: true,
+                      render: (_: unknown, r: (typeof displayRows)[number]) => formatOfficialRecipientsLine(r),
+                    },
+                    {
+                      title: '접수일',
+                      dataIndex: 'createdAt',
+                      key: 'createdAt',
+                      width: 160,
+                      render: (v: string) => formatDateTime(v),
+                    },
+                  ]
+                : deptView === 'sent'
+                  ? [
+                      {
+                        title: '공문 번호',
+                        key: 'documentNumber',
+                        width: 140,
+                        render: (_: unknown, r: (typeof displayRows)[number]) => r.documentNumber?.trim() || '—',
+                      },
+                      {
+                        title: '양식명',
+                        dataIndex: 'documentName',
+                        key: 'documentName',
+                        ellipsis: true,
+                      },
+                      {
+                        title: '수신 부서',
+                        key: 'recipients',
+                        ellipsis: true,
+                        render: (_: unknown, r: (typeof displayRows)[number]) => formatOfficialRecipientsLine(r),
+                      },
+                      {
+                        title: '기안자',
+                        key: 'requester',
+                        width: 120,
+                        render: (_: unknown, r: (typeof displayRows)[number]) =>
+                          r.requesterName?.trim() || r.memberId || '—',
+                      },
+                      {
+                        title: '발송일',
+                        dataIndex: 'createdAt',
+                        key: 'createdAt',
+                        width: 160,
+                        render: (v: string) => formatDateTime(v),
+                      },
+                    ]
+                : [
+                    {
+                      title: '작성일',
+                      dataIndex: 'createdAt',
+                      key: 'createdAt',
+                      width: 160,
+                      render: (v: string) => formatDateTime(v),
+                    },
+                    {
+                      title: '작성자',
+                      key: 'requester',
+                      width: 120,
+                      render: (_: unknown, r: (typeof displayRows)[number]) =>
+                        r.requesterName?.trim() || r.memberId || '—',
+                    },
+                    {
+                      title: '작성자 소속',
+                      key: 'requesterOrg',
+                      ellipsis: true,
+                      render: (_: unknown, r: (typeof displayRows)[number]) =>
+                        r.requesterOrganizationName?.trim() || '—',
+                    },
+                    {
+                      title: '양식명',
+                      dataIndex: 'documentName',
+                      key: 'documentName',
+                      ellipsis: true,
+                    },
+                    {
+                      title: '상태',
+                      dataIndex: 'requestStatus',
+                      key: 'requestStatus',
+                      width: 100,
+                      render: (v: string) => requestStatusTag(v),
+                    },
+                  ]
+            }
           />
-        </Space>
+          </div>
+        </div>
       </Card>
 
       <ApprovalRequestReadOnlyModal
