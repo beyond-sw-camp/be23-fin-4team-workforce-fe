@@ -7,7 +7,7 @@ import {
 } from '@tanstack/react-router';
 import { z } from 'zod';
 import type { AppRouterContext } from '@/app/router/types';
-import { requireAuth, requirePermissions } from '@/app/router/guards';
+import { requireAuth, requireMemberDirectoryAccess, requirePermissions } from '@/app/router/guards';
 import { PERM } from '@/features/permissions/backend-permissions';
 import { HomePublicLayout } from '@/pages/public/HomePublicLayout';
 import { LandingHomePage } from '@/pages/public/LandingHomePage';
@@ -20,9 +20,7 @@ import { CompanyOnboardingPage } from '@/pages/public/CompanyOnboardingPage';
 import { CalendarPage } from '@/pages/app/CalendarPage';
 import { DashboardPage } from '@/pages/app/DashboardPage';
 import { HrInsightsPage } from '@/pages/app/HrInsightsPage';
-import { EsgActivitiesPage } from '@/pages/app/esg/EsgActivitiesPage';
 import { EsgAdminPage } from '@/pages/app/esg/EsgAdminPage';
-import { EsgCampaignsPage } from '@/pages/app/esg/EsgCampaignsPage';
 import { EsgHomePage } from '@/pages/app/esg/EsgHomePage';
 import { EsgShopPage } from '@/pages/app/esg/EsgShopPage';
 import { MembersPage } from '@/pages/app/MembersPage';
@@ -40,8 +38,23 @@ import { AbsenceProxyPage } from '@/pages/app/AbsenceProxyPage';
 import { DepartmentApprovalsInboxPage } from '@/pages/app/DepartmentApprovalsInboxPage';
 import { GenericPage } from '@/pages/app/GenericPage';
 import { AiDocumentsAdminPage } from '@/pages/app/AiDocumentsAdminPage';
+import { AdminAttendanceDailyPage } from '@/pages/app/salary-service/admin/AdminAttendanceDailyPage';
+import { AdminAttendanceMonthlyPage } from '@/pages/app/salary-service/admin/AdminAttendanceMonthlyPage';
+import { AdminCompanyHolidaysPage } from '@/pages/app/salary-service/admin/AdminCompanyHolidaysPage';
+import { AdminLeaveGrantPage } from '@/pages/app/salary-service/admin/AdminLeaveGrantPage';
+import { AdminLeavePoliciesPage } from '@/pages/app/salary-service/admin/AdminLeavePoliciesPage';
+import { AdminPayrollManagePage } from '@/pages/app/salary-service/admin/AdminPayrollManagePage';
+import { AdminPayrollPage } from '@/pages/app/salary-service/admin/AdminPayrollPage';
+import { AdminSalarySettingsPage } from '@/pages/app/salary-service/admin/AdminSalarySettingsPage';
+import { AdminUnusedLeavePayoutPage } from '@/pages/app/salary-service/admin/AdminUnusedLeavePayoutPage';
+import { AdminWorkSchedulesPage } from '@/pages/app/salary-service/admin/AdminWorkSchedulesPage';
+import { MyAttendanceMonthlyPage } from '@/pages/app/salary-service/my/MyAttendanceMonthlyPage';
+import { MyAttendancePage } from '@/pages/app/salary-service/my/MyAttendancePage';
+import { MyLeavePage } from '@/pages/app/salary-service/my/MyLeavePage';
+import { MyPayrollPage } from '@/pages/app/salary-service/my/MyPayrollPage';
+import { MyWorkTripsPage } from '@/pages/app/salary-service/my/MyWorkTripsPage';
+import { PayrollDetailPage } from '@/pages/app/salary-service/my/PayrollDetailPage';
 import { OrganizationPage } from '@/pages/app/OrganizationPage';
-import { RolesPage } from '@/pages/app/RolesPage';
 import { MyProfilePage } from '@/pages/app/MyProfilePage';
 import { MyProfileEditPage } from '@/pages/app/MyProfileEditPage';
 import MeetingsPage from '@/pages/app/MeetingsPage';
@@ -107,7 +120,11 @@ const changePasswordRoute = createRoute({
 const resetPasswordRoute = createRoute({
   getParentRoute: () => publicLayoutRoute,
   path: '/reset-password',
-  validateSearch: z.object({ forced: z.boolean().optional() }),
+  validateSearch: z.object({
+    email: z.string().optional(),
+    from: z.string().optional(),
+    forced: z.boolean().optional(),
+  }),
   component: ResetPasswordPage,
 });
 const verifyEmailRoute = createRoute({ getParentRoute: () => publicLayoutRoute, path: '/verify-email', component: VerifyEmailPage });
@@ -141,16 +158,6 @@ const esgHomeRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/esg',
   component: EsgHomePage,
-});
-const esgActivitiesRoute = createRoute({
-  getParentRoute: () => appBaseRoute,
-  path: '/esg/activities',
-  component: EsgActivitiesPage,
-});
-const esgCampaignsRoute = createRoute({
-  getParentRoute: () => appBaseRoute,
-  path: '/esg/campaigns',
-  component: EsgCampaignsPage,
 });
 const esgShopRoute = createRoute({
   getParentRoute: () => appBaseRoute,
@@ -192,7 +199,7 @@ const membersRoute = createRoute({
   }),
   component: MembersPage,
   beforeLoad: ({ context }) => {
-    requirePermissions(context, [PERM.MEMBER_READ, PERM.MEMBER_CREATE]);
+    requireMemberDirectoryAccess(context);
   },
 });
 
@@ -201,7 +208,7 @@ const memberDetailRoute = createRoute({
   path: '/members/$memberId',
   component: MemberDetailPage,
   beforeLoad: ({ context }) => {
-    requirePermissions(context, [PERM.MEMBER_READ, PERM.MEMBER_CREATE]);
+    requireMemberDirectoryAccess(context);
   },
 });
 
@@ -304,9 +311,14 @@ const evaluationWriteRoute = createRoute({
   component: EvaluationWritePage,
 });
 
+const organizationSearchSchema = z.object({
+  tab: z.enum(['structure', 'grades', 'titles', 'roles']).optional(),
+});
+
 const organizationRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/organization',
+  validateSearch: organizationSearchSchema,
   component: OrganizationPage,
   beforeLoad: ({ context }) => {
     if (!context.auth.user?.isSystemAdmin) {
@@ -315,14 +327,15 @@ const organizationRoute = createRoute({
   },
 });
 
+/** 이전 `/app/roles` 경로 — 조직 설정의 역할·권한 탭으로 통합 */
 const rolesRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/roles',
-  component: RolesPage,
   beforeLoad: ({ context }) => {
     if (!context.auth.user?.isSystemAdmin) {
       throw redirect({ to: '/403' });
     }
+    throw redirect({ to: '/app/organization', search: { tab: 'roles' } });
   },
 });
 
@@ -349,13 +362,153 @@ const meetingDetailRoute = createRoute({
   component: MeetingDetailPage,
 });
 
-const genericPaths = [
-  '/attendance',
-  '/leave',
-  '/payroll',
-  '/ai-assistant',
-  '/settings',
-] as const;
+const myAttendanceRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/attendance',
+  component: MyAttendancePage,
+});
+
+const myAttendanceMonthlyRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/attendance/monthly',
+  component: MyAttendanceMonthlyPage,
+});
+
+const adminAttendanceMonthlyRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/attendance/company/monthly',
+  component: AdminAttendanceMonthlyPage,
+  beforeLoad: ({ context }) => {
+    if (!context.auth.user?.isSystemAdmin) {
+      throw redirect({ to: '/app/attendance' });
+    }
+  },
+});
+
+const adminAttendanceDailyRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/attendance/company',
+  component: AdminAttendanceDailyPage,
+  beforeLoad: ({ context }) => {
+    if (!context.auth.user?.isSystemAdmin) {
+      throw redirect({ to: '/app/attendance' });
+    }
+  },
+});
+
+const adminCompanyHolidaysRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/attendance/holidays',
+  component: AdminCompanyHolidaysPage,
+  beforeLoad: ({ context }) => {
+    if (!context.auth.user?.isSystemAdmin) {
+      throw redirect({ to: '/app/attendance' });
+    }
+  },
+});
+
+const adminWorkSchedulesRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/attendance/schedules',
+  component: AdminWorkSchedulesPage,
+  beforeLoad: ({ context }) => {
+    if (!context.auth.user?.isSystemAdmin) {
+      throw redirect({ to: '/app/attendance' });
+    }
+  },
+});
+
+const myLeaveRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/leave',
+  component: MyLeavePage,
+});
+
+const adminLeaveGrantRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/leave/grant',
+  component: AdminLeaveGrantPage,
+  beforeLoad: ({ context }) => {
+    if (!context.auth.user?.isSystemAdmin) {
+      throw redirect({ to: '/app/leave' });
+    }
+  },
+});
+
+const adminLeavePoliciesRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/leave/policies',
+  component: AdminLeavePoliciesPage,
+  beforeLoad: ({ context }) => {
+    if (!context.auth.user?.isSystemAdmin) {
+      throw redirect({ to: '/app/leave' });
+    }
+  },
+});
+
+const myWorkTripsRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/work-trips',
+  component: MyWorkTripsPage,
+});
+
+const payrollAdminManageRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/payroll/admin/$payrollId',
+  component: AdminPayrollManagePage,
+  beforeLoad: ({ context }) => {
+    if (!context.auth.user?.isSystemAdmin) {
+      throw redirect({ to: '/app/payroll' });
+    }
+  },
+});
+
+const payrollAdminRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/payroll/admin',
+  component: AdminPayrollPage,
+  beforeLoad: ({ context }) => {
+    if (!context.auth.user?.isSystemAdmin) {
+      throw redirect({ to: '/app/payroll' });
+    }
+  },
+});
+
+const payrollDetailRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/payroll/$payrollId',
+  component: PayrollDetailPage,
+});
+
+const myPayrollRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/payroll',
+  component: MyPayrollPage,
+});
+
+const adminSalarySettingsRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/salary/settings',
+  component: AdminSalarySettingsPage,
+  beforeLoad: ({ context }) => {
+    if (!context.auth.user?.isSystemAdmin) {
+      throw redirect({ to: '/app/payroll' });
+    }
+  },
+});
+
+const adminUnusedLeavePayoutRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/salary/unused-leave',
+  component: AdminUnusedLeavePayoutPage,
+  beforeLoad: ({ context }) => {
+    if (!context.auth.user?.isSystemAdmin) {
+      throw redirect({ to: '/app/payroll' });
+    }
+  },
+});
+
+const genericPaths = ['/mail', '/ai-assistant', '/settings'] as const;
 
 const genericRoutes = genericPaths.map((path) => {
   const copy = APP_GENERIC_PAGE_COPY[path] ?? { title: '페이지', description: '준비 중입니다.' };
@@ -383,8 +536,6 @@ const routeTree = rootRoute.addChildren([
       hrInsightsRoute,
       calendarRoute,
       esgHomeRoute,
-      esgActivitiesRoute,
-      esgCampaignsRoute,
       esgShopRoute,
       esgAdminRoute,
       myProfileEditRoute,
@@ -407,6 +558,22 @@ const routeTree = rootRoute.addChildren([
       meetingsRoute,
       meetingDetailRoute,
       aiDocumentsAdminRoute,
+      myAttendanceRoute,
+      myAttendanceMonthlyRoute,
+      adminAttendanceMonthlyRoute,
+      adminAttendanceDailyRoute,
+      adminCompanyHolidaysRoute,
+      adminWorkSchedulesRoute,
+      myLeaveRoute,
+      adminLeaveGrantRoute,
+      adminLeavePoliciesRoute,
+      myWorkTripsRoute,
+      payrollAdminManageRoute,
+      payrollAdminRoute,
+      payrollDetailRoute,
+      myPayrollRoute,
+      adminSalarySettingsRoute,
+      adminUnusedLeavePayoutRoute,
       ...genericRoutes,
     ]),
   ]),

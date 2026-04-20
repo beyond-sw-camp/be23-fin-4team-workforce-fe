@@ -1,4 +1,4 @@
-import { Client, type IMessage, type StompSubscription } from '@stomp/stompjs';
+import { Client, type IMessage, type StompHeaders, type StompSubscription } from '@stomp/stompjs';
 import SockJS from 'sockjs-client/dist/sockjs';
 import { env } from '@/app/config/env';
 import { getAccessToken } from '@/shared/stores/authTokenStore';
@@ -13,7 +13,7 @@ function websocketEndpointUrl(): string {
   return `${base}${WS_ENDPOINT_PATH}`;
 }
 
-function authHeaders() {
+function authHeaders(): StompHeaders {
   const token = getAccessToken();
   if (!token) return {};
   return { Authorization: `Bearer ${token}` };

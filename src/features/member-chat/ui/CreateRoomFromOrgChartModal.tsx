@@ -5,11 +5,14 @@ import type { DataNode } from 'antd/es/tree';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { memberChatApi } from '@/features/member-chat/api/memberChatApi';
 import type { MemberChatRoomSummary } from '@/features/member-chat/model/types';
-import { type OrgChartOrgNode, organizationApi } from '@/features/organization/api/organizationApi';
+import {
+  ORG_CHART_HIDDEN_JOB_GRADE,
+  type OrgChartOrgNode,
+  organizationApi,
+} from '@/features/organization/api/organizationApi';
 import { AppButton } from '@/shared/ui/AppButton';
 
 const KS = '\x1f';
-const FLATTEN_GRADE_LABEL = '관리자';
 
 const ORG_CHART_TREE_LINE_CLASS =
   '[&_.ant-tree-show-line_.ant-tree-indent-unit::before]:![border-inline-end-color:rgb(226_232_240)] ' +
@@ -20,16 +23,14 @@ function orgSubtreeMatchesQuery(node: OrgChartOrgNode, q: string): boolean {
   if (!q) return true;
   const low = q.toLowerCase();
   if (node.name.toLowerCase().includes(low)) return true;
-  for (const g of node.jobGrades) {
-    if (g.jobGradeName.toLowerCase().includes(low)) return true;
-    for (const m of g.members) {
-      if (
-        m.name.toLowerCase().includes(low) ||
-        m.jobTitleName.toLowerCase().includes(low) ||
-        (m.memberStatus ?? '').toLowerCase().includes(low)
-      ) {
-        return true;
-      }
+  for (const m of node.members) {
+    if (m.jobGradeName.trim() === ORG_CHART_HIDDEN_JOB_GRADE) continue;
+    if (
+      m.name.toLowerCase().includes(low) ||
+      m.jobGradeName.toLowerCase().includes(low) ||
+      (m.memberStatus ?? '').toLowerCase().includes(low)
+    ) {
+      return true;
     }
   }
   return node.children.some((c) => orgSubtreeMatchesQuery(c, q));
@@ -54,10 +55,9 @@ function isSelectableMember(memberId: string, memberStatus: string | undefined, 
 function collectSelectableMemberIdsFromOrg(org: OrgChartOrgNode, selfMemberId?: string): string[] {
   const out: string[] = [];
   const walk = (n: OrgChartOrgNode) => {
-    for (const g of n.jobGrades) {
-      for (const m of g.members) {
-        if (isSelectableMember(m.memberId, m.memberStatus, selfMemberId)) out.push(m.memberId);
-      }
+    for (const m of n.members) {
+      if (m.jobGradeName.trim() === ORG_CHART_HIDDEN_JOB_GRADE) continue;
+      if (isSelectableMember(m.memberId, m.memberStatus, selfMemberId)) out.push(m.memberId);
     }
     for (const c of n.children) walk(c);
   };
@@ -73,11 +73,10 @@ function collectAllSelectableFromRoots(orgs: OrgChartOrgNode[], selfMemberId?: s
 
 function buildNameMap(orgs: OrgChartOrgNode[], selfMemberId?: string, bucket = new Map<string, string>()) {
   for (const org of orgs) {
-    for (const g of org.jobGrades) {
-      for (const m of g.members) {
-        if (isSelectableMember(m.memberId, m.memberStatus, selfMemberId) && !bucket.has(m.memberId)) {
-          bucket.set(m.memberId, m.name);
-        }
+    for (const m of org.members) {
+      if (m.jobGradeName.trim() === ORG_CHART_HIDDEN_JOB_GRADE) continue;
+      if (isSelectableMember(m.memberId, m.memberStatus, selfMemberId) && !bucket.has(m.memberId)) {
+        bucket.set(m.memberId, m.name);
       }
     }
     buildNameMap(org.children, selfMemberId, bucket);
@@ -141,17 +140,6 @@ export function CreateRoomFromOrgChartModal({
     });
   }, []);
 
-  const toggleIds = useCallback((ids: string[], checked: boolean) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      for (const id of ids) {
-        if (checked) next.add(id);
-        else next.delete(id);
-      }
-      return next;
-    });
-  }, []);
-
   const allVisibleIds = useMemo(
     () => collectAllSelectableFromRoots(filteredRoots, selfMemberId),
     [filteredRoots, selfMemberId],
@@ -160,103 +148,77 @@ export function CreateRoomFromOrgChartModal({
   const treeData: DataNode[] = useMemo(() => {
     if (!data) return [];
 
-    const orgCheckboxState = (ids: string[]) => {
-      if (ids.length === 0) return { checked: false, indeterminate: false };
-      const sel = ids.filter((id) => selected.has(id)).length;
-      if (sel === 0) return { checked: false, indeterminate: false };
-      if (sel === ids.length) return { checked: true, indeterminate: false };
-      return { checked: false, indeterminate: true };
-    };
-
-    const memberRow = (m: { memberId: string; name: string; jobTitleName: string }) => {
+    const memberRow = (m: { memberId: string; name: string; jobGradeName: string }) => {
       const isOn = selected.has(m.memberId);
+      const flip = () => toggleMember(m.memberId, !isOn);
       return (
-        <div className="tw-flex tw-w-full tw-min-w-0 tw-items-center tw-justify-between tw-gap-2 tw-pr-1">
-          <span className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
+        <div
+          className="tw-flex tw-w-full tw-min-w-0 tw-cursor-pointer tw-items-center tw-justify-between tw-gap-2 tw-rounded-md tw-pr-1 hover:tw-bg-slate-50/90"
+          role="button"
+          tabIndex={0}
+          onClick={(e) => {
+            e.stopPropagation();
+            flip();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              e.stopPropagation();
+              flip();
+            }
+          }}
+        >
+          <span className="tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-2">
             <Avatar size={28} className="tw-shrink-0 tw-bg-slate-200 tw-text-xs tw-text-slate-700">
               {(m.name || '?').slice(0, 1)}
             </Avatar>
             <span className="tw-truncate tw-text-sm tw-text-slate-800">
               <span className="tw-font-medium">{m.name}</span>{' '}
-              <span className="tw-text-xs tw-font-normal tw-text-slate-500">{m.jobTitleName}</span>
+              <span className="tw-text-xs tw-font-normal tw-text-slate-500">{m.jobGradeName}</span>
             </span>
           </span>
-          <Checkbox
-            checked={isOn}
-            onClick={(e) => e.stopPropagation()}
-            onChange={(e) => {
-              e.stopPropagation();
-              toggleMember(m.memberId, e.target.checked);
-            }}
-          />
+          <span className="tw-shrink-0" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+            <Checkbox
+              checked={isOn}
+              onChange={(e) => {
+                e.stopPropagation();
+                toggleMember(m.memberId, e.target.checked);
+              }}
+            />
+          </span>
         </div>
       );
     };
 
-    const orgTitleRow = (label: string, memberCount: number, ids: string[], smallLabel?: boolean) => {
-      const st = orgCheckboxState(ids);
-      return (
-        <div className="tw-flex tw-w-full tw-min-w-0 tw-items-center tw-justify-between tw-gap-2 tw-pr-1">
-          <span
-            className={`tw-truncate tw-text-slate-800 tw-text-sm tw-font-semibold ${smallLabel ? 'tw-font-medium tw-text-slate-600' : ''}`}
-          >
-            {label}
-            <span className="tw-ml-1 tw-font-normal tw-text-slate-400"> {memberCount}</span>
-          </span>
-          <Checkbox
-            checked={st.checked}
-            indeterminate={st.indeterminate}
-            disabled={ids.length === 0}
-            onClick={(e) => e.stopPropagation()}
-            onChange={(e) => {
-              e.stopPropagation();
-              toggleIds(ids, e.target.checked);
-            }}
-          />
-        </div>
-      );
-    };
+    const orgTitleRow = (label: string, memberCount: number) => (
+      <div className="tw-flex tw-w-full tw-min-w-0 tw-items-center tw-pr-1">
+        <span className="tw-truncate tw-text-sm tw-font-semibold tw-text-slate-800">
+          {label}
+          <span className="tw-ml-1 tw-font-normal tw-text-slate-400"> {memberCount}</span>
+        </span>
+      </div>
+    );
 
     function buildOrgNodes(orgs: OrgChartOrgNode[]): DataNode[] {
       return orgs.map((org) => {
         const subtreeIds = collectSelectableMemberIdsFromOrg(org, selfMemberId);
-        const flattenedAdminMembers: DataNode[] = [];
-        const gradeNodes: DataNode[] = [];
-
-        for (const g of org.jobGrades) {
-          if (g.members.length === 0) continue;
-          if (g.jobGradeName.trim() === FLATTEN_GRADE_LABEL) {
-            for (const m of g.members) {
-              if (!isSelectableMember(m.memberId, m.memberStatus, selfMemberId)) continue;
-              flattenedAdminMembers.push({
-                key: `m${KS}${org.organizationId}${KS}${m.memberId}`,
-                title: memberRow(m),
-                isLeaf: true,
-              });
-            }
-          } else {
-            const mems = g.members.filter((m) => isSelectableMember(m.memberId, m.memberStatus, selfMemberId));
-            if (mems.length === 0) continue;
-            const gradeIds = mems.map((m) => m.memberId);
-            gradeNodes.push({
-              key: `g${KS}${org.organizationId}${KS}${g.jobGradeName}`,
-              title: orgTitleRow(g.jobGradeName, gradeIds.length, gradeIds, true),
-              selectable: false,
-              children: mems.map((m) => ({
-                key: `m${KS}${org.organizationId}${KS}${m.memberId}`,
-                title: memberRow(m),
-                isLeaf: true,
-              })),
-            });
-          }
+        const memberNodes: DataNode[] = [];
+        for (const m of org.members) {
+          if (m.jobGradeName.trim() === ORG_CHART_HIDDEN_JOB_GRADE) continue;
+          if (!isSelectableMember(m.memberId, m.memberStatus, selfMemberId)) continue;
+          memberNodes.push({
+            key: `m${KS}${org.organizationId}${KS}${m.memberId}`,
+            title: memberRow(m),
+            isLeaf: true,
+          });
         }
 
         const childOrgNodes = buildOrgNodes(org.children);
-        const children = [...flattenedAdminMembers, ...gradeNodes, ...childOrgNodes];
+        const children = [...memberNodes, ...childOrgNodes];
 
         return {
           key: `o${KS}${org.organizationId}`,
-          title: orgTitleRow(org.name, subtreeIds.length, subtreeIds),
+          title: orgTitleRow(org.name, subtreeIds.length),
           selectable: false,
           ...(children.length > 0 ? { children } : { isLeaf: true }),
         };
@@ -264,26 +226,15 @@ export function CreateRoomFromOrgChartModal({
     }
 
     const roots = buildOrgNodes(filteredRoots);
-    const st = orgCheckboxState(allVisibleIds);
     return [
       {
         key: 'root-company',
         title: (
-          <div className="tw-flex tw-w-full tw-min-w-0 tw-items-center tw-justify-between tw-gap-2 tw-pr-1">
+          <div className="tw-flex tw-w-full tw-min-w-0 tw-items-center tw-pr-1">
             <span className="tw-truncate tw-text-sm tw-font-semibold tw-text-[#1e3a5f]">
               {data.companyName}
               <span className="tw-ml-1 tw-font-normal tw-text-slate-400"> {allVisibleIds.length}</span>
             </span>
-            <Checkbox
-              checked={st.checked}
-              indeterminate={st.indeterminate}
-              disabled={allVisibleIds.length === 0}
-              onClick={(e) => e.stopPropagation()}
-              onChange={(e) => {
-                e.stopPropagation();
-                toggleIds(allVisibleIds, e.target.checked);
-              }}
-            />
           </div>
         ),
         selectable: false,
@@ -291,7 +242,7 @@ export function CreateRoomFromOrgChartModal({
         isLeaf: roots.length === 0,
       },
     ];
-  }, [data, filteredRoots, allVisibleIds, selfMemberId, selected, toggleIds, toggleMember]);
+  }, [data, filteredRoots, allVisibleIds, selfMemberId, selected, toggleMember]);
 
   const createDirectMutation = useMutation({
     mutationFn: (otherMemberId: string) => memberChatApi.createDirectRoom(otherMemberId),
@@ -375,6 +326,7 @@ export function CreateRoomFromOrgChartModal({
               >
                 <Tree
                   blockNode
+                  expandAction="click"
                   showLine={{ showLeafIcon: false }}
                   defaultExpandAll
                   selectable={false}

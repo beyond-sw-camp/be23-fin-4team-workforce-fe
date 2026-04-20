@@ -1,10 +1,22 @@
-import { DeleteOutlined, EditOutlined, PlusOutlined, RightOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EditOutlined, MoreOutlined, PlusOutlined, RightOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Card, Divider, Form, Input, Modal, Popconfirm, Space, Table, Tree, Typography } from 'antd';
+import { App, Button, Card, Dropdown, Form, Input, InputNumber, Modal, Space, Table, Tabs, Tree, Typography } from 'antd';
 import type { DataNode } from 'antd/es/tree';
+import { useNavigate, useSearch } from '@tanstack/react-router';
 import { useMemo, useState, type Key } from 'react';
 import { type OrganizationTreeNode, organizationApi } from '@/features/organization/api/organizationApi';
-import { AppButton } from '@/shared/ui/AppButton';
+import { OrganizationRolesSection } from '@/features/organization/ui/OrganizationRolesSection';
+
+type OrgSettingsTab = 'structure' | 'grades' | 'titles' | 'roles';
+
+const ORG_TAB_KEYS: readonly OrgSettingsTab[] = ['structure', 'grades', 'titles', 'roles'] as const;
+
+function parseOrgTab(raw: unknown): OrgSettingsTab {
+  if (typeof raw === 'string' && (ORG_TAB_KEYS as readonly string[]).includes(raw)) {
+    return raw as OrgSettingsTab;
+  }
+  return 'structure';
+}
 
 function pickOrgId(node: OrganizationTreeNode): string {
   const raw =
@@ -74,8 +86,21 @@ function pickRowId(row: Record<string, unknown>, keys: string[]): string {
   return '';
 }
 
+function pickDisplayOrder(row: Record<string, unknown>): number | undefined {
+  const raw = row.displayOrder ?? row.display_order;
+  if (typeof raw === 'number' && !Number.isNaN(raw)) return raw;
+  if (typeof raw === 'string' && raw.trim() !== '') {
+    const n = Number(raw);
+    return Number.isNaN(n) ? undefined : n;
+  }
+  return undefined;
+}
+
 export function OrganizationPage() {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
+  const navigate = useNavigate();
+  const search = useSearch({ strict: false }) as { tab?: string };
+  const activeTab = parseOrgTab(search.tab);
   const qc = useQueryClient();
   const [selectedOrgKeys, setSelectedOrgKeys] = useState<Key[]>([]);
   const [orgModal, setOrgModal] = useState<null | { mode: 'create'; parentId: string | null } | { mode: 'edit'; id: string; name: string }>(
@@ -84,8 +109,8 @@ export function OrganizationPage() {
   const [gradeModal, setGradeModal] = useState<null | { mode: 'create' } | { mode: 'edit'; id: string; name: string }>(null);
   const [titleModal, setTitleModal] = useState<null | { mode: 'create' } | { mode: 'edit'; id: string; name: string }>(null);
   const [orgForm] = Form.useForm<{ name: string }>();
-  const [gradeForm] = Form.useForm<{ name: string }>();
-  const [titleForm] = Form.useForm<{ name: string }>();
+  const [gradeForm] = Form.useForm<{ name: string; displayOrder: number }>();
+  const [titleForm] = Form.useForm<{ name: string; displayOrder: number }>();
 
   const { data: orgList = [], isFetching: orgLoading, refetch: refetchOrgList } = useQuery({
     queryKey: ['organization', 'list'],
@@ -145,16 +170,19 @@ export function OrganizationPage() {
       message.success('직급이 등록되었습니다.');
       setGradeModal(null);
       void qc.invalidateQueries({ queryKey: ['organization', 'job-grades'] });
+      void qc.invalidateQueries({ queryKey: ['organization', 'org-chart'] });
     },
     onError: (e: Error) => message.error(e.message || '등록에 실패했습니다.'),
   });
 
   const updateGradeM = useMutation({
-    mutationFn: ({ id, name }: { id: string; name: string }) => organizationApi.updateJobGrade(id, { name }),
+    mutationFn: ({ id, name, displayOrder }: { id: string; name: string; displayOrder: number }) =>
+      organizationApi.updateJobGrade(id, { name, displayOrder }),
     onSuccess: () => {
       message.success('직급이 수정되었습니다.');
       setGradeModal(null);
       void qc.invalidateQueries({ queryKey: ['organization', 'job-grades'] });
+      void qc.invalidateQueries({ queryKey: ['organization', 'org-chart'] });
     },
     onError: (e: Error) => message.error(e.message || '수정에 실패했습니다.'),
   });
@@ -164,6 +192,7 @@ export function OrganizationPage() {
     onSuccess: () => {
       message.success('직급이 삭제되었습니다.');
       void qc.invalidateQueries({ queryKey: ['organization', 'job-grades'] });
+      void qc.invalidateQueries({ queryKey: ['organization', 'org-chart'] });
     },
     onError: (e: Error) => message.error(e.message || '삭제에 실패했습니다.'),
   });
@@ -174,16 +203,19 @@ export function OrganizationPage() {
       message.success('직책이 등록되었습니다.');
       setTitleModal(null);
       void qc.invalidateQueries({ queryKey: ['organization', 'job-titles'] });
+      void qc.invalidateQueries({ queryKey: ['organization', 'org-chart'] });
     },
     onError: (e: Error) => message.error(e.message || '등록에 실패했습니다.'),
   });
 
   const updateTitleM = useMutation({
-    mutationFn: ({ id, name }: { id: string; name: string }) => organizationApi.updateJobTitle(id, { name }),
+    mutationFn: ({ id, name, displayOrder }: { id: string; name: string; displayOrder: number }) =>
+      organizationApi.updateJobTitle(id, { name, displayOrder }),
     onSuccess: () => {
       message.success('직책이 수정되었습니다.');
       setTitleModal(null);
       void qc.invalidateQueries({ queryKey: ['organization', 'job-titles'] });
+      void qc.invalidateQueries({ queryKey: ['organization', 'org-chart'] });
     },
     onError: (e: Error) => message.error(e.message || '수정에 실패했습니다.'),
   });
@@ -193,14 +225,10 @@ export function OrganizationPage() {
     onSuccess: () => {
       message.success('직책이 삭제되었습니다.');
       void qc.invalidateQueries({ queryKey: ['organization', 'job-titles'] });
+      void qc.invalidateQueries({ queryKey: ['organization', 'org-chart'] });
     },
     onError: (e: Error) => message.error(e.message || '삭제에 실패했습니다.'),
   });
-
-  const openCreateRoot = () => {
-    orgForm.resetFields();
-    setOrgModal({ mode: 'create', parentId: null });
-  };
 
   const openCreateChild = () => {
     if (!selectedOrgId) {
@@ -209,17 +237,6 @@ export function OrganizationPage() {
     }
     orgForm.resetFields();
     setOrgModal({ mode: 'create', parentId: selectedOrgId });
-  };
-
-  const openEditOrg = () => {
-    if (!selectedOrgId) {
-      message.warning('수정할 조직을 선택해 주세요.');
-      return;
-    }
-    const node = orgList.find((n) => pickOrgId(n) === selectedOrgId);
-    const name = node ? pickOrgName(node) : '';
-    orgForm.setFieldsValue({ name });
-    setOrgModal({ mode: 'edit', id: selectedOrgId, name });
   };
 
   const submitOrgModal = async () => {
@@ -241,32 +258,69 @@ export function OrganizationPage() {
         typeof row.name === 'string' ? row.name : String(row.name ?? ''),
     },
     {
-      title: '관리',
+      title: '직급순서',
+      key: 'displayOrder',
+      width: 100,
+      render: (_: unknown, row: Record<string, unknown>) => {
+        const o = pickDisplayOrder(row);
+        return o !== undefined ? String(o) : '—';
+      },
+      sorter: (a: Record<string, unknown>, b: Record<string, unknown>) =>
+        (pickDisplayOrder(a) ?? 999_999) - (pickDisplayOrder(b) ?? 999_999),
+    },
+    {
+      title: '',
       key: 'actions',
-      width: 160,
+      width: 90,
       render: (_: unknown, row: Record<string, unknown>) => {
         const id = pickRowId(row, ['id', 'jobGradeId', 'job_grade_id']);
         const name = typeof row.name === 'string' ? row.name : '';
         return (
-          <Space size="small">
-            <AppButton
+          <Dropdown
+            trigger={['click']}
+            menu={{
+              items: [
+                {
+                  key: 'edit',
+                  label: '수정',
+                  icon: <EditOutlined />,
+                },
+                {
+                  key: 'delete',
+                  label: '삭제',
+                  icon: <DeleteOutlined />,
+                  danger: true,
+                },
+              ],
+              onClick: ({ key }) => {
+                if (key === 'edit') {
+                  gradeForm.setFieldsValue({
+                    name,
+                    displayOrder: pickDisplayOrder(row) ?? 0,
+                  });
+                  setGradeModal({ mode: 'edit', id, name });
+                  return;
+                }
+                if (key === 'delete' && id) {
+                  modal.confirm({
+                    title: '이 직급을 삭제할까요?',
+                    okText: '삭제',
+                    okType: 'danger',
+                    cancelText: '취소',
+                    onOk: () => deleteGradeM.mutate(id),
+                  });
+                }
+              },
+            }}
+          >
+            <Button
               type="text"
-              variant="text"
               size="small"
-              icon={<EditOutlined />}
-              onClick={() => {
-                gradeForm.setFieldsValue({ name });
-                setGradeModal({ mode: 'edit', id, name });
-              }}
-            >
-              수정
-            </AppButton>
-            <Popconfirm title="이 직급을 삭제할까요?" onConfirm={() => id && deleteGradeM.mutate(id)}>
-              <AppButton type="text" variant="text" size="small" danger icon={<DeleteOutlined />}>
-                삭제
-              </AppButton>
-            </Popconfirm>
-          </Space>
+              icon={<MoreOutlined />}
+              className="!tw-px-1 tw-text-slate-600"
+              aria-label="직급 관리 메뉴"
+            />
+          </Dropdown>
         );
       },
     },
@@ -281,32 +335,69 @@ export function OrganizationPage() {
         typeof row.name === 'string' ? row.name : String(row.name ?? ''),
     },
     {
-      title: '관리',
+      title: '직책순서',
+      key: 'displayOrder',
+      width: 100,
+      render: (_: unknown, row: Record<string, unknown>) => {
+        const o = pickDisplayOrder(row);
+        return o !== undefined ? String(o) : '—';
+      },
+      sorter: (a: Record<string, unknown>, b: Record<string, unknown>) =>
+        (pickDisplayOrder(a) ?? 999_999) - (pickDisplayOrder(b) ?? 999_999),
+    },
+    {
+      title: '',
       key: 'actions',
-      width: 160,
+      width: 90,
       render: (_: unknown, row: Record<string, unknown>) => {
         const id = pickRowId(row, ['id', 'jobTitleId', 'job_title_id']);
         const name = typeof row.name === 'string' ? row.name : '';
         return (
-          <Space size="small">
-            <AppButton
+          <Dropdown
+            trigger={['click']}
+            menu={{
+              items: [
+                {
+                  key: 'edit',
+                  label: '수정',
+                  icon: <EditOutlined />,
+                },
+                {
+                  key: 'delete',
+                  label: '삭제',
+                  icon: <DeleteOutlined />,
+                  danger: true,
+                },
+              ],
+              onClick: ({ key }) => {
+                if (key === 'edit') {
+                  titleForm.setFieldsValue({
+                    name,
+                    displayOrder: pickDisplayOrder(row) ?? 0,
+                  });
+                  setTitleModal({ mode: 'edit', id, name });
+                  return;
+                }
+                if (key === 'delete' && id) {
+                  modal.confirm({
+                    title: '이 직책을 삭제할까요?',
+                    okText: '삭제',
+                    okType: 'danger',
+                    cancelText: '취소',
+                    onOk: () => deleteTitleM.mutate(id),
+                  });
+                }
+              },
+            }}
+          >
+            <Button
               type="text"
-              variant="text"
               size="small"
-              icon={<EditOutlined />}
-              onClick={() => {
-                titleForm.setFieldsValue({ name });
-                setTitleModal({ mode: 'edit', id, name });
-              }}
-            >
-              수정
-            </AppButton>
-            <Popconfirm title="이 직책을 삭제할까요?" onConfirm={() => id && deleteTitleM.mutate(id)}>
-              <AppButton type="text" variant="text" size="small" danger icon={<DeleteOutlined />}>
-                삭제
-              </AppButton>
-            </Popconfirm>
-          </Space>
+              icon={<MoreOutlined />}
+              className="!tw-px-1 tw-text-slate-600"
+              aria-label="직책 관리 메뉴"
+            />
+          </Dropdown>
         );
       },
     },
@@ -339,124 +430,191 @@ export function OrganizationPage() {
           조직
         </Typography.Title>
         <Typography.Paragraph className="!tw-mb-0 !tw-max-w-3xl !tw-text-sm !tw-leading-relaxed !tw-text-slate-600">
-          조직 구조와 직급·직책 마스터를 설정합니다. 조직도 조회는 왼쪽 메뉴의 조직도에서 열 수 있습니다.
+          조직 구조·직급·직책·역할·권한을 탭에서 설정합니다. 조직도 조회는 왼쪽 메뉴의 조직도에서 열 수 있습니다.
         </Typography.Paragraph>
       </div>
 
       <Card variant="borderless" className={perfCardClass}>
-        <Space direction="vertical" className="tw-w-full" size={0}>
-          <div>
-            <div className={`${sectionLabelClass} tw-mb-3`}>조직 구조</div>
-            <Space wrap size={[8, 8]} className="tw-w-full">
-              <AppButton icon={<PlusOutlined />} onClick={openCreateRoot} className={toolbarPrimaryBtn}>
-                최상위 조직 추가
-              </AppButton>
-              <AppButton variant="secondary" icon={<PlusOutlined />} onClick={openCreateChild} className={toolbarSecondaryBtn}>
-                하위 조직 추가
-              </AppButton>
-              <AppButton variant="secondary" icon={<EditOutlined />} onClick={openEditOrg} className={toolbarSecondaryBtn}>
-                이름 수정
-              </AppButton>
-              <Popconfirm
-                title="선택한 조직을 삭제할까요?"
-                disabled={!selectedOrgId}
-                onConfirm={() => selectedOrgId && deleteOrgM.mutate(selectedOrgId)}
-              >
-                <AppButton variant="danger" icon={<DeleteOutlined />} disabled={!selectedOrgId} className={toolbarDangerBtn}>
-                  삭제
-                </AppButton>
-              </Popconfirm>
-            </Space>
-            <div className="tw-mt-4 tw-min-h-[220px] tw-rounded-xl tw-border tw-border-slate-200/90 tw-bg-slate-50/40 tw-p-3">
-              {orgLoading ? (
-                <Typography.Text type="secondary" className="tw-text-sm">
-                  불러오는 중…
-                </Typography.Text>
-              ) : treeData.length === 0 ? (
-                <Typography.Text type="secondary" className="tw-text-sm">
-                  등록된 조직이 없습니다. 최상위 조직을 추가해 보세요.
-                </Typography.Text>
-              ) : (
-                <Tree
-                  blockNode
-                  showLine={{ showLeafIcon: false }}
-                  switcherIcon={({ expanded }) => (
-                    <RightOutlined
-                      className={`tw-text-[11px] tw-text-slate-400 tw-transition-transform tw-duration-200 tw-ease-out ${expanded ? 'tw-rotate-90' : ''}`}
+        <Tabs
+          activeKey={activeTab}
+          onChange={(key) =>
+            void navigate({
+              to: '/app/organization',
+              search: { tab: key as OrgSettingsTab },
+              replace: true,
+            })
+          }
+          className="[&_.ant-tabs-nav]:tw-mb-4 [&_.ant-tabs-tab]:!tw-text-slate-600 [&_.ant-tabs-tab-active_.ant-tabs-tab-btn]:!tw-font-semibold [&_.ant-tabs-tab-active_.ant-tabs-tab-btn]:!tw-text-[#1e3a5f] [&_.ant-tabs-ink-bar]:!tw-bg-[#1e3a5f]"
+          items={[
+            {
+              key: 'structure',
+              label: '조직 구조',
+              children: (
+                <div>
+                  <Space wrap size={[8, 8]} className="tw-w-full">
+                    <Button type="primary" onClick={openCreateChild} className={toolbarPrimaryBtn}>
+                      하위 조직 추가
+                    </Button>
+                  </Space>
+                  <div className="tw-mt-4 tw-min-h-[220px] tw-rounded-xl tw-border tw-border-slate-200/90 tw-bg-slate-50/40 tw-p-3">
+                    {orgLoading ? (
+                      <Typography.Text type="secondary" className="tw-text-sm">
+                        불러오는 중…
+                      </Typography.Text>
+                    ) : treeData.length === 0 ? (
+                      <Typography.Text type="secondary" className="tw-text-sm">
+                        등록된 조직이 없습니다. 최상위 조직을 추가해 보세요.
+                      </Typography.Text>
+                    ) : (
+                      <Tree
+                        blockNode
+                        checkable
+                        checkStrictly
+                        showLine={{ showLeafIcon: false }}
+                        switcherIcon={({ expanded }) => (
+                          <RightOutlined
+                            className={`tw-text-[11px] tw-text-slate-400 tw-transition-transform tw-duration-200 tw-ease-out ${expanded ? 'tw-rotate-90' : ''}`}
+                          />
+                        )}
+                        className="tw-bg-transparent [&_.ant-tree-switcher]:tw-flex [&_.ant-tree-switcher]:tw-w-5 [&_.ant-tree-switcher]:tw-shrink-0 [&_.ant-tree-switcher]:tw-items-center [&_.ant-tree-switcher]:tw-justify-center [&_.ant-tree-switcher]:tw-bg-transparent [&_.ant-tree-node-content-wrapper]:tw-rounded-md"
+                        treeData={treeData}
+                        titleRender={(node) => {
+                          const id = String(node.key);
+                          const name = typeof node.title === 'string' ? node.title : String(node.title ?? '');
+                          return (
+                            <Dropdown
+                              trigger={['click']}
+                              menu={{
+                                items: [
+                                  { key: 'edit', label: '수정', icon: <EditOutlined /> },
+                                  { key: 'delete', label: '삭제', icon: <DeleteOutlined />, danger: true },
+                                ],
+                                onClick: ({ key, domEvent }) => {
+                                  domEvent.stopPropagation();
+                                  setSelectedOrgKeys([id]);
+                                  if (key === 'edit') {
+                                    orgForm.setFieldsValue({ name });
+                                    setOrgModal({ mode: 'edit', id, name });
+                                    return;
+                                  }
+                                  modal.confirm({
+                                    title: '선택한 조직을 삭제할까요?',
+                                    okText: '삭제',
+                                    okType: 'danger',
+                                    cancelText: '취소',
+                                    onOk: () => deleteOrgM.mutate(id),
+                                  });
+                                },
+                              }}
+                            >
+                              <span
+                                role="button"
+                                tabIndex={0}
+                                className="tw-inline-block tw-cursor-pointer"
+                                onClick={(e) => e.stopPropagation()}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                  }
+                                }}
+                              >
+                                {name}
+                              </span>
+                            </Dropdown>
+                          );
+                        }}
+                        checkedKeys={selectedOrgKeys}
+                        onCheck={(checked) => {
+                          const raw = Array.isArray(checked) ? checked : checked.checked;
+                          const keys = raw.filter((k): k is Key => k != null);
+                          const last = keys.at(-1);
+                          setSelectedOrgKeys(last != null ? [last] : []);
+                        }}
+                        defaultExpandAll
+                      />
+                    )}
+                  </div>
+                </div>
+              ),
+            },
+            {
+              key: 'grades',
+              label: '직급',
+              children: (
+                <div>
+                  <div className="tw-mb-3 tw-flex tw-flex-wrap tw-items-center tw-justify-end tw-gap-2">
+                    <Button
+                      type="primary"
+                      size="small"
+                      onClick={() => {
+                        gradeForm.resetFields();
+                        setGradeModal({ mode: 'create' });
+                      }}
+                      className={addRowBtn}
+                    >
+                      직급 추가
+                    </Button>
+                  </div>
+                  <div className="tw-overflow-hidden tw-rounded-xl tw-border tw-border-slate-200/90">
+                    <Table
+                      size="middle"
+                      rowKey={(row) =>
+                        pickRowId(row as Record<string, unknown>, ['id', 'jobGradeId', 'job_grade_id']) || JSON.stringify(row)
+                      }
+                      loading={gradesLoading}
+                      columns={gradeColumns}
+                      dataSource={grades}
+                      pagination={false}
+                      locale={{ emptyText: '등록된 직급이 없습니다.' }}
+                      className="[&_.ant-table-thead>tr>th]:!tw-bg-slate-50/90 [&_.ant-table-thead>tr>th]:!tw-text-xs [&_.ant-table-thead>tr>th]:!tw-font-semibold [&_.ant-table-thead>tr>th]:!tw-text-slate-600"
                     />
-                  )}
-                  className="tw-bg-transparent [&_.ant-tree-switcher]:tw-flex [&_.ant-tree-switcher]:tw-w-5 [&_.ant-tree-switcher]:tw-shrink-0 [&_.ant-tree-switcher]:tw-items-center [&_.ant-tree-switcher]:tw-justify-center [&_.ant-tree-switcher]:tw-bg-transparent [&_.ant-tree-node-content-wrapper]:tw-rounded-md"
-                  treeData={treeData}
-                  selectedKeys={selectedOrgKeys}
-                  onSelect={(keys) => setSelectedOrgKeys(keys)}
-                  defaultExpandAll
-                />
-              )}
-            </div>
-          </div>
-
-          <Divider className="!tw-my-8 !tw-border-slate-100" />
-
-          <div>
-            <div className="tw-mb-3 tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2">
-              <span className={sectionLabelClass}>직급</span>
-              <AppButton
-                size="small"
-                icon={<PlusOutlined />}
-                onClick={() => {
-                  gradeForm.resetFields();
-                  setGradeModal({ mode: 'create' });
-                }}
-                className={addRowBtn}
-              >
-                직급 추가
-              </AppButton>
-            </div>
-            <div className="tw-overflow-hidden tw-rounded-xl tw-border tw-border-slate-200/90">
-              <Table
-                size="middle"
-                rowKey={(row) => pickRowId(row as Record<string, unknown>, ['id', 'jobGradeId', 'job_grade_id']) || JSON.stringify(row)}
-                loading={gradesLoading}
-                columns={gradeColumns}
-                dataSource={grades}
-                pagination={false}
-                locale={{ emptyText: '등록된 직급이 없습니다.' }}
-                className="[&_.ant-table-thead>tr>th]:!tw-bg-slate-50/90 [&_.ant-table-thead>tr>th]:!tw-text-xs [&_.ant-table-thead>tr>th]:!tw-font-semibold [&_.ant-table-thead>tr>th]:!tw-text-slate-600"
-              />
-            </div>
-          </div>
-
-          <Divider className="!tw-my-8 !tw-border-slate-100" />
-
-          <div>
-            <div className="tw-mb-3 tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2">
-              <span className={sectionLabelClass}>직책</span>
-              <AppButton
-                size="small"
-                icon={<PlusOutlined />}
-                onClick={() => {
-                  titleForm.resetFields();
-                  setTitleModal({ mode: 'create' });
-                }}
-                className={addRowBtn}
-              >
-                직책 추가
-              </AppButton>
-            </div>
-            <div className="tw-overflow-hidden tw-rounded-xl tw-border tw-border-slate-200/90">
-              <Table
-                size="middle"
-                rowKey={(row) => pickRowId(row as Record<string, unknown>, ['id', 'jobTitleId', 'job_title_id']) || JSON.stringify(row)}
-                loading={titlesLoading}
-                columns={titleColumns}
-                dataSource={titles}
-                pagination={false}
-                locale={{ emptyText: '등록된 직책이 없습니다.' }}
-                className="[&_.ant-table-thead>tr>th]:!tw-bg-slate-50/90 [&_.ant-table-thead>tr>th]:!tw-text-xs [&_.ant-table-thead>tr>th]:!tw-font-semibold [&_.ant-table-thead>tr>th]:!tw-text-slate-600"
-              />
-            </div>
-          </div>
-        </Space>
+                  </div>
+                </div>
+              ),
+            },
+            {
+              key: 'titles',
+              label: '직책',
+              children: (
+                <div>
+                  <div className="tw-mb-3 tw-flex tw-flex-wrap tw-items-center tw-justify-end tw-gap-2">
+                    <Button
+                      type="primary"
+                      size="small"
+                      onClick={() => {
+                        titleForm.resetFields();
+                        setTitleModal({ mode: 'create' });
+                      }}
+                      className={addRowBtn}
+                    >
+                      직책 추가
+                    </Button>
+                  </div>
+                  <div className="tw-overflow-hidden tw-rounded-xl tw-border tw-border-slate-200/90">
+                    <Table
+                      size="middle"
+                      rowKey={(row) =>
+                        pickRowId(row as Record<string, unknown>, ['id', 'jobTitleId', 'job_title_id']) || JSON.stringify(row)
+                      }
+                      loading={titlesLoading}
+                      columns={titleColumns}
+                      dataSource={titles}
+                      pagination={false}
+                      locale={{ emptyText: '등록된 직책이 없습니다.' }}
+                      className="[&_.ant-table-thead>tr>th]:!tw-bg-slate-50/90 [&_.ant-table-thead>tr>th]:!tw-text-xs [&_.ant-table-thead>tr>th]:!tw-font-semibold [&_.ant-table-thead>tr>th]:!tw-text-slate-600"
+                    />
+                  </div>
+                </div>
+              ),
+            },
+            {
+              key: 'roles',
+              label: '역할·권한',
+              children: <OrganizationRolesSection />,
+            },
+          ]}
+        />
       </Card>
 
       <Modal
@@ -482,19 +640,31 @@ export function OrganizationPage() {
         onOk={async () => {
           const v = await gradeForm.validateFields();
           if (!gradeModal) return;
+          const displayOrder = typeof v.displayOrder === 'number' ? v.displayOrder : Number(v.displayOrder);
           if (gradeModal.mode === 'create') {
-            createGradeM.mutate({ name: v.name.trim() });
+            createGradeM.mutate({ name: v.name.trim(), displayOrder });
           } else {
-            updateGradeM.mutate({ id: gradeModal.id, name: v.name.trim() });
+            updateGradeM.mutate({ id: gradeModal.id, name: v.name.trim(), displayOrder });
           }
         }}
         confirmLoading={createGradeM.isPending || updateGradeM.isPending}
         okText="저장"
+        okButtonProps={{ className: toolbarPrimaryBtn }}
         destroyOnHidden
       >
         <Form form={gradeForm} layout="vertical" className="tw-mt-2">
           <Form.Item name="name" label="직급명" rules={[{ required: true, message: '직급명을 입력해 주세요.' }]}>
             <Input placeholder="예: 대리, 과장" />
+          </Form.Item>
+          <Form.Item
+            name="displayOrder"
+            label="직급순서"
+            rules={[
+              { required: true, message: '직급순서를 입력해 주세요.' },
+              { type: 'number', min: 0, message: '0 이상의 숫자를 입력해 주세요.' },
+            ]}
+          >
+            <InputNumber min={0} step={1} className="tw-w-full" />
           </Form.Item>
         </Form>
       </Modal>
@@ -506,19 +676,31 @@ export function OrganizationPage() {
         onOk={async () => {
           const v = await titleForm.validateFields();
           if (!titleModal) return;
+          const displayOrder = typeof v.displayOrder === 'number' ? v.displayOrder : Number(v.displayOrder);
           if (titleModal.mode === 'create') {
-            createTitleM.mutate({ name: v.name.trim() });
+            createTitleM.mutate({ name: v.name.trim(), displayOrder });
           } else {
-            updateTitleM.mutate({ id: titleModal.id, name: v.name.trim() });
+            updateTitleM.mutate({ id: titleModal.id, name: v.name.trim(), displayOrder });
           }
         }}
         confirmLoading={createTitleM.isPending || updateTitleM.isPending}
         okText="저장"
+        okButtonProps={{ className: toolbarPrimaryBtn }}
         destroyOnHidden
       >
         <Form form={titleForm} layout="vertical" className="tw-mt-2">
           <Form.Item name="name" label="직책명" rules={[{ required: true, message: '직책명을 입력해 주세요.' }]}>
             <Input placeholder="예: 팀장, 담당" />
+          </Form.Item>
+          <Form.Item
+            name="displayOrder"
+            label="직책순서"
+            rules={[
+              { required: true, message: '직책순서를 입력해 주세요.' },
+              { type: 'number', min: 0, message: '0 이상의 숫자를 입력해 주세요.' },
+            ]}
+          >
+            <InputNumber min={0} step={1} className="tw-w-full" />
           </Form.Item>
         </Form>
       </Modal>

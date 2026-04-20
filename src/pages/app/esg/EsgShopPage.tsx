@@ -2,6 +2,7 @@ import { ShoppingCartOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Button, Card, Col, Image, Row, Space, Typography } from 'antd';
 import { esgApi } from '@/features/esg/api/esgApi';
+import { esgAccentTextClass, esgPrimaryButtonClass } from '@/features/esg/esgUiTokens';
 
 export function EsgShopPage() {
   const { message } = App.useApp();
@@ -45,7 +46,7 @@ export function EsgShopPage() {
           ESG 사내 샵
         </Typography.Title>
         {esgOn && (
-          <Typography.Text className="tw-text-base tw-font-semibold tw-text-[#2563EB]">
+          <Typography.Text className={`tw-text-base tw-font-semibold ${esgAccentTextClass}`}>
             내 포인트{' '}
             {totalPts != null && Number.isFinite(totalPts) ? `${totalPts}P` : '—'}
           </Typography.Text>
@@ -76,13 +77,13 @@ export function EsgShopPage() {
                 {it.description ?? ''}
               </Typography.Paragraph>
               <div className="tw-flex tw-items-center tw-justify-between tw-gap-2">
-                <span className="tw-font-semibold tw-text-[#2563EB]">{it.requiredPoints}P</span>
+                <span className={`tw-font-semibold ${esgAccentTextClass}`}>{it.requiredPoints}P</span>
                 <span className="tw-text-xs tw-text-slate-500">재고 {it.stock}</span>
               </div>
               <Button
                 type="primary"
                 block
-                className="tw-mt-3"
+                className={`tw-mt-3 ${esgPrimaryButtonClass}`}
                 disabled={it.stock <= 0 || !it.itemId}
                 loading={orderM.isPending}
                 onClick={() => orderM.mutate(it.itemId)}

@@ -19,6 +19,8 @@ import {
   Badge,
   Progress,
   DatePicker,
+  Row,
+  Col,
 } from 'antd';
 import {
   ArrowLeftOutlined,

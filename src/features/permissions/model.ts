@@ -26,8 +26,8 @@ export const toPermissionCode = (permission: PermissionSpec): string => {
 
 /** 백엔드 `CheckPermission` 과 동일: 보유 권한 문자열이 `requiredPrefix` 로 시작하는지 (예: MEMBER:READ:SELF → MEMBER:READ) */
 export function grantedStartsWithRequired(grantedCode: string, requiredPrefix: string): boolean {
-  const g = grantedCode.trim();
-  const req = requiredPrefix.trim();
+  const g = grantedCode.trim().toUpperCase();
+  const req = requiredPrefix.trim().toUpperCase();
   if (!req) return false;
   return g === req || g.startsWith(`${req}:`);
 }
