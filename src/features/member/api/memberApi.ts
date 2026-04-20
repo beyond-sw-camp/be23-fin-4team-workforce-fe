@@ -706,6 +706,11 @@ export const memberApi = {
     const response = await httpClient.patch(`/member/${memberId}/return`);
     return unwrapApiResponse<null>(response.data);
   },
+  /** PATCH /member/onboarding/complete — 관리자 최초 세팅 완료 처리 */
+  async completeOnboarding() {
+    const response = await httpClient.patch('/member/onboarding/complete');
+    return unwrapApiResponse<null>(response.data);
+  },
 
   // Role management (역할/권한)
   async getRoles() {

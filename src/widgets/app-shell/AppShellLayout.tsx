@@ -551,7 +551,11 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
     const {status, user} = useAuth();
     const isAdmin = user?.isSystemAdmin === true;
     const {hasPermission} = usePermissions();
-    const showApprovalFormSettings = hasPermission(PERM.APPROVAL_AD_READ);
+    /** 결재 양식 설정 메뉴: 시스템 관리자 + 인사팀 + 승인관리 권한 */
+    const showApprovalFormSettings =
+      isAdmin ||
+      hasPermission(PERM.APPROVAL_AD_READ) ||
+      canAccessMemberDirectory(hasPermission);
 
     const {data: esgConfig} = useQuery({
         queryKey: ['esg', 'config'],
@@ -635,9 +639,9 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
         };
 
         if (esgMenuItem) {
-            return [...items, chatAdmin, esgMenuItem, doc];
+            return [...withApprovalSettings, chatAdmin, esgMenuItem, doc];
         }
-        return [...items, chatAdmin, doc];
+        return [...withApprovalSettings, chatAdmin, doc];
     }, [esgConfig, isAdmin, approvalOrgChart, meMember, status, user?.permissions]);
 }
 
@@ -993,7 +997,7 @@ function AppShellAccountMenu() {
     );
 }
 
-function AppShellHeader() {
+function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
     const {status} = useAuth();
     const queryClient = useQueryClient();
     const {openMemberChat} = useMemberChatOpener();
@@ -1055,73 +1059,75 @@ function AppShellHeader() {
     return (
         <Layout.Header
             className="tw-m-0 tw-flex tw-h-16 tw-shrink-0 tw-items-center tw-gap-3 tw-overflow-visible tw-border-0 tw-border-b tw-border-solid tw-border-slate-200 tw-bg-white tw-px-4 tw-leading-none tw-shadow-none md:tw-gap-6 md:tw-px-7">
-            <div className="tw-relative tw-flex tw-min-w-0 tw-flex-1 tw-justify-start">
-                <AppSearchField
-                    className="tw-max-w-2xl"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="메뉴, 동료, 문서 검색..."
-                    aria-label="메뉴, 동료, 문서 검색"
-                />
-                {showSearchPanel && (
-                    <div
-                        className="tw-absolute tw-left-0 tw-top-[calc(100%+8px)] tw-z-50 tw-w-full tw-max-w-2xl tw-overflow-hidden tw-rounded-2xl tw-border tw-border-slate-200 tw-bg-white tw-shadow-xl">
-                        {searchLoading ? (
-                            <div className="tw-flex tw-items-center tw-justify-center tw-p-6">
-                                <Spin size="small"/>
-                            </div>
-                        ) : list.length === 0 ? (
-                            <div className="tw-p-4">
-                                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="검색 결과가 없습니다."/>
-                            </div>
-                        ) : (
-                            <div className="tw-max-h-[420px] tw-overflow-y-auto tw-py-1">
-                                {list.map((row) => {
-                                    if (!row.memberId) return null;
-                                    return (
-                                        <div
-                                            key={row.memberId}
-                                            role="button"
-                                            tabIndex={0}
-                                            className="tw-flex tw-cursor-pointer tw-items-start tw-gap-3 tw-px-4 tw-py-3 hover:tw-bg-slate-50"
-                                            onClick={() => {
-                                                setHeaderDetailMemberId(row.memberId);
-                                                setSearch('');
-                                            }}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter' || e.key === ' ') {
-                                                    e.preventDefault();
+            {hideSearch ? <div className="tw-flex-1" /> : (
+                <div className="tw-relative tw-flex tw-min-w-0 tw-flex-1 tw-justify-start">
+                    <AppSearchField
+                        className="tw-max-w-2xl"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        placeholder="메뉴, 동료, 문서 검색..."
+                        aria-label="메뉴, 동료, 문서 검색"
+                    />
+                    {showSearchPanel && (
+                        <div
+                            className="tw-absolute tw-left-0 tw-top-[calc(100%+8px)] tw-z-50 tw-w-full tw-max-w-2xl tw-overflow-hidden tw-rounded-2xl tw-border tw-border-slate-200 tw-bg-white tw-shadow-xl">
+                            {searchLoading ? (
+                                <div className="tw-flex tw-items-center tw-justify-center tw-p-6">
+                                    <Spin size="small"/>
+                                </div>
+                            ) : list.length === 0 ? (
+                                <div className="tw-p-4">
+                                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="검색 결과가 없습니다."/>
+                                </div>
+                            ) : (
+                                <div className="tw-max-h-[420px] tw-overflow-y-auto tw-py-1">
+                                    {list.map((row) => {
+                                        if (!row.memberId) return null;
+                                        return (
+                                            <div
+                                                key={row.memberId}
+                                                role="button"
+                                                tabIndex={0}
+                                                className="tw-flex tw-cursor-pointer tw-items-start tw-gap-3 tw-px-4 tw-py-3 hover:tw-bg-slate-50"
+                                                onClick={() => {
                                                     setHeaderDetailMemberId(row.memberId);
                                                     setSearch('');
-                                                }
-                                            }}
-                                        >
-                                            <Avatar
-                                                src={row.profileUrl || undefined}
-                                                icon={!row.profileUrl ? <UserOutlined/> : undefined}
-                                                size={32}
-                                                className={row.profileUrl ? '[&_img]:tw-object-cover' : 'tw-bg-slate-100'}
-                                            />
-                                            <div className="tw-min-w-0 tw-flex-1">
-                                                <div
-                                                    className="tw-truncate tw-text-sm tw-font-semibold tw-text-slate-900">
-                                                    {row.name ?? '이름 없음'}
-                                                </div>
-                                                <div className="tw-truncate tw-text-xs tw-text-slate-500">
-                                                    {row.email ?? '—'}
-                                                </div>
-                                                <div className="tw-truncate tw-text-xs tw-text-slate-400">
-                                                    {[row.organizationName, row.jobTitleName, row.memberStatus].filter(Boolean).join(' · ') || '—'}
+                                                }}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' || e.key === ' ') {
+                                                        e.preventDefault();
+                                                        setHeaderDetailMemberId(row.memberId);
+                                                        setSearch('');
+                                                    }
+                                                }}
+                                            >
+                                                <Avatar
+                                                    src={row.profileUrl || undefined}
+                                                    icon={!row.profileUrl ? <UserOutlined/> : undefined}
+                                                    size={32}
+                                                    className={row.profileUrl ? '[&_img]:tw-object-cover' : 'tw-bg-slate-100'}
+                                                />
+                                                <div className="tw-min-w-0 tw-flex-1">
+                                                    <div
+                                                        className="tw-truncate tw-text-sm tw-font-semibold tw-text-slate-900">
+                                                        {row.name ?? '이름 없음'}
+                                                    </div>
+                                                    <div className="tw-truncate tw-text-xs tw-text-slate-500">
+                                                        {row.email ?? '—'}
+                                                    </div>
+                                                    <div className="tw-truncate tw-text-xs tw-text-slate-400">
+                                                        {[row.organizationName, row.jobTitleName, row.memberStatus].filter(Boolean).join(' · ') || '—'}
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        )}
-                    </div>
-                )}
-            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
 
             <HeaderSearchMemberDetailModal
                 open={headerDetailMemberId != null}
@@ -1317,6 +1323,23 @@ function AppShellLayout() {
                     <Outlet />
                 </Layout.Content>
             </Layout>
+        );
+    }
+
+    // 관리자 최초 로그인 온보딩은 독립 화면으로 표시(헤더만 노출, 사이드바/FAB 숨김)
+    if (pathname === '/app/onboarding') {
+        return (
+            <MemberChatProvider>
+                <Layout className="tw-flex tw-h-[100dvh] tw-min-h-0 tw-bg-slate-50">
+                    <Layout className="tw-flex tw-min-h-0 tw-min-w-0 tw-flex-1 tw-flex-col tw-bg-slate-50">
+                        <AppShellHeader hideSearch/>
+                        <Layout.Content
+                            className="wf-scrollbar tw-min-h-0 tw-flex-1 tw-overflow-y-auto tw-bg-transparent tw-p-6">
+                            <Outlet/>
+                        </Layout.Content>
+                    </Layout>
+                </Layout>
+            </MemberChatProvider>
         );
     }
 

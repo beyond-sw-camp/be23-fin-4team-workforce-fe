@@ -63,6 +63,7 @@ import { PayrollDetailPage } from '@/pages/app/salary-service/my/PayrollDetailPa
 import { OrganizationPage } from '@/pages/app/OrganizationPage';
 import { MyProfilePage } from '@/pages/app/MyProfilePage';
 import { MyProfileEditPage } from '@/pages/app/MyProfileEditPage';
+import OnboardingStepperPage from '@/pages/app/OnboardingStepperPage';
 import MeetingsPage from '@/pages/app/MeetingsPage';
 import MeetingDetailPage from '@/pages/app/MeetingDetailPage';
 import { ForbiddenPage } from '@/pages/ForbiddenPage';
@@ -70,6 +71,12 @@ import { NotFoundPage } from '@/pages/NotFoundPage';
 import { APP_POST_LOGIN_PATH } from '@/app/config/paths';
 import { APP_GENERIC_PAGE_COPY } from '@/app/locale/app-ko';
 import AppShellLayout from '@/widgets/app-shell/AppShellLayout';
+
+function resolvePostAuthPath(user: AppRouterContext['auth']['user']) {
+  if (user?.flags?.mustChangePassword) return '/change-password' as const;
+  if (user?.flags?.onboardingRequired) return '/app/onboarding' as const;
+  return APP_POST_LOGIN_PATH;
+}
 
 const rootRoute = createRootRouteWithContext<AppRouterContext>()({
   component: Outlet,
@@ -93,7 +100,11 @@ const homeRoute = createRoute({
   component: HomePublicLayout,
   beforeLoad: ({ context }) => {
     if (context.auth.isAuthenticated) {
-      throw redirect({ to: APP_POST_LOGIN_PATH });
+      const to = resolvePostAuthPath(context.auth.user);
+      if (to === '/change-password') {
+        throw redirect({ to, search: { forced: true } });
+      }
+      throw redirect({ to });
     }
   },
 });
@@ -146,6 +157,17 @@ const dashboardRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/dashboard',
   component: DashboardPage,
+});
+
+const onboardingStepperRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/onboarding',
+  component: OnboardingStepperPage,
+  beforeLoad: ({ context }) => {
+    if (!context.auth.user?.isSystemAdmin) {
+      throw redirect({ to: '/403' });
+    }
+  },
 });
 
 const hrInsightsRoute = createRoute({
@@ -589,6 +611,7 @@ const routeTree = rootRoute.addChildren([
   appLayoutRoute.addChildren([
     appBaseRoute.addChildren([
       dashboardRoute,
+      onboardingStepperRoute,
       hrInsightsRoute,
       calendarRoute,
       esgHomeRoute,

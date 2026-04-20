@@ -1093,8 +1093,13 @@ export function ApprovalsPage() {
   const composeDraftHydratingRef = useRef(false);
   const [form] = Form.useForm();
 
-  const canAdmin = hasPermission(PERM.APPROVAL_AD_READ);
   const { user } = useAuth();
+  /** 결재 양식 설정 탭: 시스템 관리자 + 인사팀(MEMBER 생성/수정) + 기존 승인관리 권한 */
+  const canAdmin =
+    user?.isSystemAdmin === true ||
+    hasPermission(PERM.APPROVAL_AD_READ) ||
+    hasPermission(PERM.MEMBER_CREATE) ||
+    hasPermission(PERM.MEMBER_UPDATE);
   /** 결재 API·라인의 memberId와 동일해야 함 — JWT/로컬 저장 `X-User-UUID`로 보강 */
   const authMemberId =
     user?.id?.trim() || getRefreshIdentityHeaders()['X-User-UUID']?.trim() || undefined;

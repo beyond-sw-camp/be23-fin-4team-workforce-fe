@@ -35,8 +35,8 @@ import { parseApiError } from '@/shared/api/error-parser';
 import { flattenOrganizationsWithMeta } from '@/features/organization/lib/flattenOrganizationTree';
 import { organizationApi } from '@/features/organization/api/organizationApi';
 import { PERM } from '@/features/permissions/backend-permissions';
-import { PermissionGuard } from '@/features/permissions/permission-guard';
 import { usePermissions } from '@/features/permissions/usePermissionsHook';
+import { useAuth } from '@/features/auth/useAuth';
 
 type DocForm = {
   documentName: string;
@@ -50,6 +50,8 @@ type EditDocForm = {
 };
 
 const REQUEST_TYPES_DEFAULT_DEPT_HIDDEN: ReadonlySet<ApprovalRequestType> = new Set(['SALARY', 'HR_MOVEMENT']);
+const NAVY_BUTTON_CLASS =
+  '!tw-border-0 !tw-bg-[#1e3a5f] !tw-text-white hover:!tw-bg-[#152a45] hover:!tw-text-white disabled:!tw-opacity-60';
 
 type PolicyLineDraft = {
   key: string;
@@ -107,6 +109,8 @@ export function ApprovalsAdminPage() {
   const { message } = App.useApp();
   const qc = useQueryClient();
   const { hasPermission } = usePermissions();
+  const { user } = useAuth();
+  const isSystemAdmin = user?.isSystemAdmin === true;
   const [createOpen, setCreateOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'documents' | 'policy-lines'>('documents');
   const [selectedDocumentId, setSelectedDocumentId] = useState<string>('');
@@ -118,10 +122,10 @@ export function ApprovalsAdminPage() {
   const [editSchemaFields, setEditSchemaFields] = useState<FormFieldSchema[]>([]);
   const [editForm] = Form.useForm<EditDocForm>();
 
-  const canRead = hasPermission(PERM.APPROVAL_AD_READ);
-  const canCreate = hasPermission(PERM.APPROVAL_AD_CREATE);
-  const canUpdate = hasPermission(PERM.APPROVAL_AD_UPDATE);
-  const canDelete = hasPermission(PERM.APPROVAL_AD_DELETE);
+  const canRead = isSystemAdmin || hasPermission(PERM.APPROVAL_AD_READ);
+  const canCreate = isSystemAdmin || hasPermission(PERM.APPROVAL_AD_CREATE);
+  const canUpdate = isSystemAdmin || hasPermission(PERM.APPROVAL_AD_UPDATE);
+  const canDelete = isSystemAdmin || hasPermission(PERM.APPROVAL_AD_DELETE);
 
   const { data: documents = [], isFetching: docsLoading } = useQuery({
     queryKey: ['approval', 'documents', 'all'],
@@ -391,10 +395,9 @@ export function ApprovalsAdminPage() {
 
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
-      <PermissionGuard
-        required={PERM.APPROVAL_AD_READ}
-        fallback={<Alert type="warning" showIcon message="결재 관리자 화면을 보려면 조회 권한이 필요합니다." />}
-      >
+      {!canRead ? (
+        <Alert type="warning" showIcon message="결재 관리자 화면을 보려면 조회 권한이 필요합니다." />
+      ) : (
         <Tabs
           activeKey={activeTab}
           onChange={(key) => setActiveTab(key as 'documents' | 'policy-lines')}
@@ -413,7 +416,7 @@ export function ApprovalsAdminPage() {
                         새로고침
                       </Button>
                       {canCreate ? (
-                        <Button type="primary" icon={<PlusOutlined />} onClick={handleOpenCreate}>
+                        <Button type="primary" icon={<PlusOutlined />} className={NAVY_BUTTON_CLASS} onClick={handleOpenCreate}>
                           양식 추가
                         </Button>
                       ) : null}
@@ -423,7 +426,7 @@ export function ApprovalsAdminPage() {
                     rowKey="documentId"
                     loading={docsLoading}
                     dataSource={documents}
-                    pagination={false}
+                    pagination={{ pageSize: 5, showSizeChanger: false }}
                     columns={[
                       {
                         title: '양식명',
@@ -477,6 +480,7 @@ export function ApprovalsAdminPage() {
                           <Button
                             size="small"
                             type={value === 'Y' ? 'primary' : 'default'}
+                            className={value === 'Y' ? NAVY_BUTTON_CLASS : undefined}
                             disabled={!canUpdate || deptVisibleM.isPending}
                             onClick={() => {
                               if (value === 'Y') {
@@ -615,7 +619,7 @@ export function ApprovalsAdminPage() {
                       rowKey="key"
                       loading={policyLoading}
                       dataSource={[...policyDrafts].sort((a, b) => a.stepOrder - b.stepOrder)}
-                      pagination={false}
+                      pagination={{ pageSize: 5, showSizeChanger: false }}
                       columns={[
                         {
                           title: '순서',
@@ -715,7 +719,7 @@ export function ApprovalsAdminPage() {
                           rowKey={(row) => row.policyLineId}
                           size="small"
                           loading={candidatesLoading}
-                          pagination={false}
+                          pagination={{ pageSize: 5, showSizeChanger: false }}
                           dataSource={policyLineCandidates}
                           locale={{
                             emptyText: selectedDocumentId
@@ -771,7 +775,7 @@ export function ApprovalsAdminPage() {
             },
           ]}
         />
-      </PermissionGuard>
+      )}
 
       <Modal
         title="결재 양식 추가"
