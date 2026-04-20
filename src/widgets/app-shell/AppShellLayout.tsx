@@ -819,7 +819,8 @@ function SiderAccountPopoverContent({
     );
 }
 
-function SiderUserFooter({collapsed}: { collapsed?: boolean }) {
+/** 헤더 우측(알림 옆) — 프로필·마이페이지·설정·로그아웃 (기존 사이드바 하단 계정 영역 이동) */
+function AppShellAccountMenu() {
     const {user, logout} = useAuth();
     const navigate = useNavigate();
     const [accountPopoverOpen, setAccountPopoverOpen] = useState(false);
@@ -853,11 +854,9 @@ function SiderUserFooter({collapsed}: { collapsed?: boolean }) {
         <Avatar
             src={profileSrc || undefined}
             alt=""
-            icon={!profileSrc ? <UserOutlined className="tw-text-lg tw-text-slate-500"/> : undefined}
-            className={
-                profileSrc ? '[&_img]:tw-object-cover' : 'tw-bg-slate-100'
-            }
-            size={40}
+            icon={!profileSrc ? <UserOutlined className="tw-text-base tw-text-slate-500"/> : undefined}
+            className={profileSrc ? '[&_img]:tw-object-cover' : 'tw-bg-slate-100'}
+            size={36}
         />
     );
 
@@ -888,38 +887,10 @@ function SiderUserFooter({collapsed}: { collapsed?: boolean }) {
         content: popoverContent,
     };
 
-    if (collapsed) {
-        return (
-            <Popover {...popoverCommon} placement="rightTop">
-                <div
-                    className="tw-flex tw-w-full tw-shrink-0 tw-cursor-pointer tw-flex-col tw-items-center tw-rounded-lg tw-border-t tw-border-slate-100 tw-px-2 tw-py-3 tw-outline-none hover:tw-bg-slate-50/80 focus-visible:tw-ring-2 focus-visible:tw-ring-blue-500/30"
-                    role="button"
-                    tabIndex={0}
-                    aria-label="계정 정보"
-                    aria-expanded={accountPopoverOpen}
-                    aria-haspopup="dialog"
-                    onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            setAccountPopoverOpen((o) => !o);
-                        }
-                    }}
-                >
-                    {avatar}
-                </div>
-            </Popover>
-        );
-    }
-
     return (
-        <Popover
-            {...popoverCommon}
-            placement="top"
-            /** 트리거(사이드 ~248px)보다 패널(~288px)이 넓어 `topRight`면 왼쪽으로 크게 밀림 → 가운데 정렬 + 살짝 위로 */
-            align={{offset: [0, -8]}}
-        >
+        <Popover {...popoverCommon} placement="bottomRight" align={{offset: [0, 6]}}>
             <div
-                className="tw-flex tw-w-full tw-shrink-0 tw-cursor-pointer tw-items-center tw-gap-2 tw-px-3 tw-py-3 tw-outline-none hover:tw-bg-slate-50/80 focus-visible:tw-ring-2 focus-visible:tw-ring-blue-500/30"
+                className="tw-flex tw-min-w-0 tw-max-w-[min(100vw-96px,280px)] tw-shrink-0 tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-lg tw-py-1 tw-pl-1 tw-pr-1.5 tw-outline-none hover:tw-bg-slate-100/90 focus-visible:tw-ring-2 focus-visible:tw-ring-blue-500/30 md:tw-gap-2.5 md:tw-px-2"
                 role="button"
                 tabIndex={0}
                 aria-label="계정 정보"
@@ -932,15 +903,13 @@ function SiderUserFooter({collapsed}: { collapsed?: boolean }) {
                     }
                 }}
             >
-                <div className="tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-3">
-                    {avatar}
-                    <div className="tw-min-w-0 tw-flex-1">
-                        <div className="tw-truncate tw-text-sm tw-font-semibold tw-text-slate-900" title={name}>
-                            {name}
-                        </div>
-                        <div className="tw-truncate tw-text-xs tw-text-slate-500" title={orgLine}>
-                            {orgLine}
-                        </div>
+                {avatar}
+                <div className="tw-hidden tw-min-w-0 tw-flex-1 md:tw-block">
+                    <div className="tw-truncate tw-text-left tw-text-sm tw-font-semibold tw-text-slate-900" title={name}>
+                        {name}
+                    </div>
+                    <div className="tw-truncate tw-text-left tw-text-xs tw-text-slate-500" title={orgLine}>
+                        {orgLine}
                     </div>
                 </div>
                 <MoreOutlined className="tw-shrink-0 tw-text-base tw-text-slate-500"/>
@@ -1104,6 +1073,7 @@ function AppShellHeader() {
                         <BellOutlined className="tw-text-[20px]"/>
                     </Link>
                 </Badge>
+                <AppShellAccountMenu/>
             </div>
         </Layout.Header>
     );
@@ -1383,7 +1353,6 @@ function AppShellLayout() {
                             </Button>
                         </Tooltip>
                     </div>
-                    <SiderUserFooter collapsed={siderCollapsed}/>
                 </div>
             </Layout.Sider>
             <Layout className="tw-flex tw-min-h-0 tw-min-w-0 tw-flex-1 tw-flex-col tw-bg-slate-50">
