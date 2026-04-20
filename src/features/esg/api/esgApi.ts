@@ -5,19 +5,16 @@ export type Yn = 'YES' | 'NO';
 
 export type EsgConfig = {
   esgEnabledYn: Yn;
-  rewardEnabledYn?: Yn;
-  campaignEnabledYn?: Yn;
-  shopEnabledYn?: Yn;
   monthlyPointLimit?: number;
 };
 
 export type EsgConfigUpdatePayload = {
   esgEnabledYn: Yn;
-  rewardEnabledYn: Yn;
-  campaignEnabledYn: Yn;
-  shopEnabledYn: Yn;
   monthlyPointLimit: number;
 };
+
+/** GET /esg/points/history 행의 referenceType (백엔드: CAMPAIGN 제거) */
+export type EsgPointReferenceType = 'ACTIVITY' | 'SHOP_ORDER';
 
 export type EsgSubjectCategory = 'E' | 'S' | 'G';
 
@@ -62,35 +59,6 @@ export type EsgActivity = {
   [key: string]: unknown;
 };
 
-export type EsgCampaignStatus = 'ACTIVE' | 'CLOSED' | string;
-
-/** 백엔드 EsgCampaignResDto */
-export type EsgCampaign = {
-  esgCampaignId?: string;
-  campaignId?: string;
-  title?: string;
-  description?: string;
-  category?: EsgActivityCategoryCode;
-  categoryDescription?: string;
-  status?: EsgCampaignStatus;
-  startDate?: string;
-  endDate?: string;
-  rewardPoints?: number;
-  maxParticipants?: number | null;
-  createdAt?: string | null;
-  [key: string]: unknown;
-};
-
-export type EsgCampaignPayload = {
-  title: string;
-  description: string;
-  category: EsgSubjectCategory;
-  startDate: string;
-  endDate: string;
-  rewardPoints: number;
-  maxParticipants: number;
-};
-
 /** 백엔드 샵 물품 DTO — 식별자는 esgShopItemId 등으로 올 수 있음, 목록 매핑 후 itemId로 통일 */
 export type EsgShopItem = {
   itemId: string;
@@ -99,6 +67,16 @@ export type EsgShopItem = {
   requiredPoints: number;
   stock: number;
   imageUrl?: string;
+};
+
+/** GET /esg/shop/orders, GET /esg/shop/orders/my 행 */
+export type EsgShopOrder = {
+  esgShopOrderId: string;
+  memberId?: string;
+  memberName?: string;
+  itemTitle: string;
+  usedPoints: number;
+  createdAt?: string | null;
 };
 
 /** 레거시 객체 응답용 — 최신 API는 `data`에 숫자만 올 수 있음 */
@@ -188,17 +166,6 @@ function normalizeActivityApiRow(row: unknown): EsgActivity {
   return r as EsgActivity;
 }
 
-/** 캠페인 목록 행이 `{ campaign: { ... } }` 형태일 때 상위로 병합 */
-function normalizeCampaignApiRow(row: unknown): EsgCampaign {
-  if (!row || typeof row !== 'object') return row as EsgCampaign;
-  const r = row as Record<string, unknown>;
-  const inner = r.campaign ?? r.campaignDto ?? r.esgCampaign ?? r.esgCampaignDto;
-  if (inner && typeof inner === 'object' && !Array.isArray(inner)) {
-    return { ...(inner as Record<string, unknown>), ...r } as EsgCampaign;
-  }
-  return r as EsgCampaign;
-}
-
 function isLikelyEsgSubjectRow(row: unknown): boolean {
   if (!row || typeof row !== 'object' || Array.isArray(row)) return false;
   const r = row as Record<string, unknown>;
@@ -230,6 +197,30 @@ function pickId(row: Record<string, unknown>, keys: string[]): string {
     if (typeof v === 'number' && Number.isFinite(v)) return String(v);
   }
   return '';
+}
+
+function normalizeShopOrderRow(row: unknown): EsgShopOrder {
+  const r = (row && typeof row === 'object' ? row : {}) as Record<string, unknown>;
+  const esgShopOrderId =
+    pickId(r, ['esgShopOrderId', 'esg_shop_order_id', 'shopOrderId', 'orderId', 'id']) || '';
+  const memberIdRaw = r.memberId ?? r.member_id;
+  const memberNameRaw = r.memberName ?? r.member_name;
+  const itemTitleRaw = r.itemTitle ?? r.item_title ?? r.title;
+  const usedRaw = r.usedPoints ?? r.used_points ?? r.points;
+  const createdRaw = r.createdAt ?? r.created_at;
+  return {
+    esgShopOrderId,
+    memberId: typeof memberIdRaw === 'string' && memberIdRaw.trim() ? memberIdRaw.trim() : undefined,
+    memberName: typeof memberNameRaw === 'string' && memberNameRaw.trim() ? memberNameRaw.trim() : undefined,
+    itemTitle: typeof itemTitleRaw === 'string' ? itemTitleRaw : String(itemTitleRaw ?? ''),
+    usedPoints: typeof usedRaw === 'number' && Number.isFinite(usedRaw) ? usedRaw : Number(usedRaw) || 0,
+    createdAt:
+      typeof createdRaw === 'string' && createdRaw.trim()
+        ? createdRaw.trim()
+        : createdRaw == null
+          ? null
+          : String(createdRaw),
+  };
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -287,9 +278,6 @@ function normalizeConfig(raw: unknown): EsgConfig | null {
     'NO';
   return {
     esgEnabledYn: esg,
-    rewardEnabledYn: yn(r.rewardEnabledYn ?? r.reward_enabled_yn),
-    campaignEnabledYn: yn(r.campaignEnabledYn ?? r.campaign_enabled_yn),
-    shopEnabledYn: yn(r.shopEnabledYn ?? r.shop_enabled_yn),
     monthlyPointLimit:
       typeof r.monthlyPointLimit === 'number'
         ? r.monthlyPointLimit
@@ -399,32 +387,6 @@ export const esgApi = {
     return normalizeList(unwrapped);
   },
 
-  async createCampaign(payload: EsgCampaignPayload) {
-    await httpClient.post('/esg/campaigns', payload);
-  },
-
-  async listCampaigns(status?: EsgCampaignStatus) {
-    const response = await httpClient.get('/esg/campaigns', {
-      params: status ? { status } : undefined,
-    });
-    const unwrapped = unwrapApiResponse<unknown>(response.data);
-    return normalizeList(unwrapped).map((row) => normalizeCampaignApiRow(row)) as EsgCampaign[];
-  },
-
-  async joinCampaign(campaignId: string) {
-    await httpClient.post(`/esg/campaigns/${encodeURIComponent(campaignId)}/join`);
-  },
-
-  async completeCampaignMember(campaignId: string, targetMemberId: string) {
-    await httpClient.patch(
-      `/esg/campaigns/${encodeURIComponent(campaignId)}/members/${encodeURIComponent(targetMemberId)}/complete`,
-    );
-  },
-
-  async closeCampaign(campaignId: string) {
-    await httpClient.patch(`/esg/campaigns/${encodeURIComponent(campaignId)}/close`);
-  },
-
   async createShopItem(params: {
     title: string;
     description: string;
@@ -477,16 +439,16 @@ export const esgApi = {
     await httpClient.post(`/esg/shop/orders/${encodeURIComponent(id)}`);
   },
 
-  async listMyOrders() {
+  async listMyOrders(): Promise<EsgShopOrder[]> {
     const response = await httpClient.get('/esg/shop/orders/my');
     const unwrapped = unwrapApiResponse<unknown>(response.data);
-    return normalizeList(unwrapped);
+    return normalizeList(unwrapped).map((row) => normalizeShopOrderRow(row));
   },
 
-  async listAllOrders() {
+  async listAllOrders(): Promise<EsgShopOrder[]> {
     const response = await httpClient.get('/esg/shop/orders');
     const unwrapped = unwrapApiResponse<unknown>(response.data);
-    return normalizeList(unwrapped);
+    return normalizeList(unwrapped).map((row) => normalizeShopOrderRow(row));
   },
 
   async aggregateScores(yearMonth: string) {

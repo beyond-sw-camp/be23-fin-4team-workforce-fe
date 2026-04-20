@@ -127,8 +127,6 @@ const APP_MENU_ICONS: Record<string, ReactNode> = {
 
 const ESG_MENU_ICONS: Record<string, ReactNode> = {
     '/app/esg': <GlobalOutlined className="tw-text-lg"/>,
-    '/app/esg/activities': <FormOutlined className="tw-text-lg"/>,
-    '/app/esg/campaigns': <FlagOutlined className="tw-text-lg"/>,
     '/app/esg/shop': <ShoppingOutlined className="tw-text-lg"/>,
     '/app/esg/admin': <ControlOutlined className="tw-text-lg"/>,
 };
@@ -139,12 +137,6 @@ function shouldShowEsgMenuItem(path: string, cfg: EsgConfig | null | undefined, 
     }
     if (!cfg || cfg.esgEnabledYn !== 'YES') {
         return false;
-    }
-    if (path === '/app/esg/campaigns') {
-        return cfg.campaignEnabledYn !== 'NO';
-    }
-    if (path === '/app/esg/shop') {
-        return cfg.shopEnabledYn !== 'NO';
     }
     return true;
 }
