@@ -50,7 +50,10 @@ httpClient.interceptors.request.use((config) => {
 });
 
 function isPublicAuthRoute(url: string) {
-  return ['/member/login', '/member/email/', '/member/reset-password/'].some((path) => url.includes(path));
+  return (
+    ['/member/login', '/member/email/'].some((path) => url.includes(path)) ||
+    url.includes('/member/reset-password')
+  );
 }
 
 /**

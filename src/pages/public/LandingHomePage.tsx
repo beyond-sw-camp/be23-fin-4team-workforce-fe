@@ -176,6 +176,30 @@ export function LandingHomePage() {
             />
           </div>
         </ScrollReveal>
+
+        <ScrollReveal className="tw-mx-auto tw-grid tw-max-w-6xl tw-items-stretch tw-gap-10 tw-px-5 tw-py-12 md:tw-grid-cols-2 md:tw-gap-16">
+          <div className="tw-order-2 md:tw-order-1">
+            <h2 className="tw-mb-4 tw-text-2xl tw-font-bold tw-text-slate-900 md:tw-text-3xl">지능형 HR AI 챗봇</h2>
+            <p className="tw-mb-8 tw-text-base tw-leading-relaxed tw-text-slate-600">
+              인사 규정·복리후생·업무 절차를 물으면 대화로 바로 안내합니다. 필요한 메뉴와 문서로 이어져 반복 질문을 줄이고 업무 속도를 높입니다.
+            </p>
+            <ul className="tw-space-y-3 tw-pl-0">
+              {['정책·규정을 자연어로 질문하고 즉시 답변', '대화형 안내로 필요한 화면·기능까지 연결', '업무 시간에 맞춰 활용 가능한 내부 도우미'].map((t) => (
+                <li key={t} className="tw-flex tw-items-start tw-gap-2 tw-text-slate-800">
+                  <CheckCircleOutlined className="tw-mt-0.5 tw-text-[#2563EB]" />
+                  <span>{t}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="tw-relative tw-order-1 tw-min-h-[220px] tw-h-full tw-w-full tw-min-w-0 tw-overflow-hidden tw-rounded-2xl tw-shadow-xl tw-shadow-slate-900/10 tw-ring-1 tw-ring-slate-200/80 md:tw-order-2">
+            <img
+              src="https://images.unsplash.com/photo-1677442136019-21780ecad995?q=80&w=2070&auto=format&fit=crop"
+              alt=""
+              className="tw-absolute tw-inset-0 tw-h-full tw-w-full tw-object-cover"
+            />
+          </div>
+        </ScrollReveal>
       </main>
 
       <section id="faq" className="tw-bg-slate-50 tw-py-16 md:tw-py-24">

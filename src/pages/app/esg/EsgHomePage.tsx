@@ -329,11 +329,9 @@ export function EsgHomePage() {
     <Space direction="vertical" className="tw-w-full" size={12}>
       <div>
         <Typography.Title level={4} className="!tw-m-0 !tw-text-base tw-font-semibold tw-text-slate-900">
-          ESG
+          My ESG
         </Typography.Title>
-        <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-0.5 !tw-text-xs">
-          환경·사회·지배구조 활동과 포인트를 관리합니다.
-        </Typography.Paragraph>
+        
       </div>
 
       {pts != null && Number.isFinite(pts) && (
@@ -362,9 +360,7 @@ export function EsgHomePage() {
           </Space>
         }
       >
-        <Typography.Paragraph type="secondary" className="!tw-mb-2 !tw-text-[11px] tw-leading-snug">
-          회사에서 등록한 제출 양식입니다. 목록 순 상위 {PREVIEW_ROWS}건을 미리 보여 줍니다.
-        </Typography.Paragraph>
+        
         <Table<EsgSubject>
           className={cardTableCls}
           rowKey={(r) => r.subjectId || JSON.stringify(r)}
@@ -388,9 +384,7 @@ export function EsgHomePage() {
           </Button>
         }
       >
-        <Typography.Paragraph type="secondary" className="!tw-mb-2 !tw-text-[11px] tw-leading-snug">
-          제출일 기준 최신 {PREVIEW_ROWS}건입니다. 새 제출은 위 활동 양식 카드의「활동 제출」을 이용하세요.
-        </Typography.Paragraph>
+       
         <Table<EsgActivity>
           className={cardTableCls}
           rowKey={(r) => pickActivityId(r) || JSON.stringify(r)}
@@ -414,9 +408,7 @@ export function EsgHomePage() {
           </Button>
         }
       >
-        <Typography.Paragraph type="secondary" className="!tw-mb-2 !tw-text-[11px] tw-leading-snug">
-          구매일시 기준 최신 {PREVIEW_ROWS}건입니다.
-        </Typography.Paragraph>
+       
         <Table<EsgShopOrder>
           className={cardTableCls}
           rowKey={(row) => row.esgShopOrderId || JSON.stringify(row)}

@@ -7,7 +7,7 @@ import {
 } from '@tanstack/react-router';
 import { z } from 'zod';
 import type { AppRouterContext } from '@/app/router/types';
-import { requireAuth, requirePermissions } from '@/app/router/guards';
+import { requireAuth, requireMemberDirectoryAccess, requirePermissions } from '@/app/router/guards';
 import { PERM } from '@/features/permissions/backend-permissions';
 import { HomePublicLayout } from '@/pages/public/HomePublicLayout';
 import { LandingHomePage } from '@/pages/public/LandingHomePage';
@@ -120,7 +120,11 @@ const changePasswordRoute = createRoute({
 const resetPasswordRoute = createRoute({
   getParentRoute: () => publicLayoutRoute,
   path: '/reset-password',
-  validateSearch: z.object({ forced: z.boolean().optional() }),
+  validateSearch: z.object({
+    email: z.string().optional(),
+    from: z.string().optional(),
+    forced: z.boolean().optional(),
+  }),
   component: ResetPasswordPage,
 });
 const verifyEmailRoute = createRoute({ getParentRoute: () => publicLayoutRoute, path: '/verify-email', component: VerifyEmailPage });
@@ -195,7 +199,7 @@ const membersRoute = createRoute({
   }),
   component: MembersPage,
   beforeLoad: ({ context }) => {
-    requirePermissions(context, [PERM.MEMBER_READ, PERM.MEMBER_CREATE]);
+    requireMemberDirectoryAccess(context);
   },
 });
 
@@ -204,7 +208,7 @@ const memberDetailRoute = createRoute({
   path: '/members/$memberId',
   component: MemberDetailPage,
   beforeLoad: ({ context }) => {
-    requirePermissions(context, [PERM.MEMBER_READ, PERM.MEMBER_CREATE]);
+    requireMemberDirectoryAccess(context);
   },
 });
 
