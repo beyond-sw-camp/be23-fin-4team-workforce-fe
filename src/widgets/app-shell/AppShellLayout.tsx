@@ -42,6 +42,7 @@ import {useContext, useEffect, useMemo, useState} from 'react';
 import {useQuery, useQueryClient} from '@tanstack/react-query';
 import {Link, Outlet, useNavigate, useRouterState} from '@tanstack/react-router';
 import {useAuth} from '@/features/auth/useAuth';
+import {PERM} from '@/features/permissions/backend-permissions';
 import {usePermissions} from '@/features/permissions/usePermissionsHook';
 import type {EsgConfig} from '@/features/esg/api/esgApi';
 import {esgApi} from '@/features/esg/api/esgApi';
@@ -84,9 +85,11 @@ import {MemberChatProvider, useMemberChatOpener} from '@/widgets/app-shell/Membe
 import {OrgChartModal} from '@/widgets/organization/OrgChartModal';
 import {HeaderSearchMemberDetailModal} from '@/widgets/app-shell/HeaderSearchMemberDetailModal';
 import {
-    APPROVAL_SIDEBAR_ROOT_KEY,
+    approvalSecondaryPanelOpenKeys,
+    approvalSiderSelectedMenuKeys,
     buildApprovalMenuGroupChildren,
     decodeWfNavKey,
+    encodeWfNavKey,
 } from '@/widgets/app-shell/approvalSiderMenu';
 
 /** 왼쪽 날개 패널 + 본문 — 접기·펼치기 동일 아이콘(선형·둥근 테두리). */
@@ -188,20 +191,15 @@ function approvalSectionIcon(section: (typeof APPROVAL_GUIDE_SECTION_ORDER)[numb
 
 function approvalLeafIcon(box: string) {
     if (box === 'do-pending') return <ClockCircleOutlined className="tw-text-lg"/>;
-    if (box === 'do-received') return <FileDoneOutlined className="tw-text-lg"/>;
-    if (box === 'do-cc-wait') return <EyeOutlined className="tw-text-lg"/>;
+    if (box === 'do-acted') return <FileDoneOutlined className="tw-text-lg"/>;
     if (box === 'do-upcoming') return <CalendarOutlined className="tw-text-lg"/>;
-    if (box === 'per-compose-all') return <FormOutlined className="tw-text-lg"/>;
+    if (box === 'per-all') return <FormOutlined className="tw-text-lg"/>;
     if (box === 'per-draft') return <FolderOpenOutlined className="tw-text-lg"/>;
-    if (box === 'per-acted-as-approver') return <FileDoneOutlined className="tw-text-lg"/>;
-    if (box === 'per-viewers-all') return <EyeOutlined className="tw-text-lg"/>;
-    if (box === 'per-inbox-combined') return <BellOutlined className="tw-text-lg"/>;
-    if (box === 'per-sent') return <ProjectOutlined className="tw-text-lg"/>;
+    if (box === 'per-viewers') return <EyeOutlined className="tw-text-lg"/>;
     if (box === 'per-absence') return <TeamOutlined className="tw-text-lg"/>;
     if (box === 'per-official') return <SafetyCertificateOutlined className="tw-text-lg"/>;
-    if (box === 'dept-draft') return <FormOutlined className="tw-text-lg"/>;
-    if (box === 'dept-ref') return <EyeOutlined className="tw-text-lg"/>;
-    if (box === 'dept-official') return <SafetyCertificateOutlined className="tw-text-lg"/>;
+    if (box === 'dept-all') return <FormOutlined className="tw-text-lg"/>;
+    if (box === 'dept-received') return <SafetyCertificateOutlined className="tw-text-lg"/>;
     return <FileTextOutlined className="tw-text-lg"/>;
 }
 
@@ -397,13 +395,9 @@ function buildAppShellMenuItems(
             if (!approvalInserted) {
                 approvalInserted = true;
                 if (approvalMenuChildren && approvalMenuChildren.length > 0) {
-                    items.push({
-                        key: APPROVAL_SIDEBAR_ROOT_KEY,
-                        label: (
-                            <SiderGroupedMenuLabel icon={<FileDoneOutlined className="tw-text-lg"/>} text="전자결재"/>
-                        ),
-                        children: approvalMenuChildren,
-                    });
+                    for (const entry of approvalMenuChildren) {
+                        items.push(entry);
+                    }
                 } else {
                     const composeEntry = APPROVAL_SHELL_MENU_ENTRIES[0];
                     const guideLeaves = APPROVAL_SHELL_MENU_ENTRIES.slice(1);
@@ -507,6 +501,7 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
     const {status, user} = useAuth();
     const isAdmin = user?.isSystemAdmin === true;
     const {hasPermission} = usePermissions();
+    const showApprovalFormSettings = hasPermission(PERM.APPROVAL_AD_READ);
 
     const {data: esgConfig} = useQuery({
         queryKey: ['esg', 'config'],
@@ -542,6 +537,18 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
             canAccessMemberDirectoryFromPermissionStrings(user?.permissions);
         const items = buildAppShellMenuItems(isAdmin, approvalMenuChildren, showMemberDirectoryMenu);
 
+        const approvalFormSettingsItem = showApprovalFormSettings
+            ? {
+                  key: encodeWfNavKey({to: '/app/approvals', search: {tab: 'admin'}}),
+                  icon: <SettingOutlined className="tw-text-lg"/>,
+                  label: '결재 양식 설정',
+                  title: '결재 양식 설정',
+              }
+            : null;
+
+        const withApprovalSettings = approvalFormSettingsItem ? [...items, approvalFormSettingsItem] : items;
+
+        if (!isAdmin) return withApprovalSettings;
         const esgMenuItem =
             esgPaths.length > 0
                 ? {
@@ -576,6 +583,7 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
             label: 'HR 정책 문서',
             title: 'HR 정책 문서',
         };
+
         if (esgMenuItem) {
             return [...items, chatAdmin, esgMenuItem, doc];
         }
@@ -1115,6 +1123,8 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
     if (pathname.startsWith('/app/payroll/admin')) return ['/app/payroll/admin'];
     if (pathname === '/app/payroll' || /^\/app\/payroll\/[^/]+$/.test(pathname)) return ['/app/payroll'];
     if (pathname.startsWith('/app/approvals')) {
+        const wfKeys = approvalSiderSelectedMenuKeys(pathname, search);
+        if (wfKeys.length > 0) return wfKeys;
         const leaf = approvalShellMenuItemKeyFromLocation(pathname, {
             tab: typeof search.tab === 'string' ? search.tab : undefined,
             box: typeof search.box === 'string' ? search.box : undefined,
@@ -1163,14 +1173,15 @@ function menuOpenKeysForPath(
     }
     if (pathname.startsWith('/app/esg')) keys.push(ESG_GROUP_KEY);
     if (pathname.startsWith('/app/approvals')) {
-        keys.push(APPROVAL_GROUP_KEY);
-        const sec = approvalShellSectionOpenKeyFromLocation(pathname, {
-            tab: typeof search.tab === 'string' ? search.tab : undefined,
-            box: typeof search.box === 'string' ? search.box : undefined,
-            myStatus: typeof search.myStatus === 'string' ? search.myStatus : undefined,
-            deptView: typeof search.deptView === 'string' ? search.deptView : undefined,
-        });
-        if (sec) keys.push(sec);
+        keys.push(
+            ...approvalSecondaryPanelOpenKeys(pathname, {
+                tab: typeof search.tab === 'string' ? search.tab : undefined,
+                myStatus: typeof search.myStatus === 'string' ? search.myStatus : undefined,
+                compose: typeof search.compose === 'string' ? search.compose : undefined,
+                sideNav: typeof search.sideNav === 'string' ? search.sideNav : undefined,
+                deptView: typeof search.deptView === 'string' ? search.deptView : undefined,
+            }),
+        );
     }
     return keys;
 }
@@ -1212,8 +1223,7 @@ function AppShellLayout() {
     }, [siderCollapsed]);
 
     /**
-     * TanStack Router location 변경 시: `menuOpenKeysForPath`로 현재 경로에 필요한 부모 키만 openKeys에 추가(이미 열린 전자결재 섹션은 닫지 않음).
-     * 전자결재 화면을 벗어나면 group-approvals / ap-section-*만 정리.
+     * TanStack Router location 변경 시: `menuOpenKeysForPath`로 현재 경로에 필요한 부모 키만 openKeys에 추가.
      */
     const [menuOpenKeys, setMenuOpenKeys] = useState<string[]>(() => {
         if (typeof window === 'undefined') return [];
@@ -1237,6 +1247,19 @@ function AppShellLayout() {
             return [...merged];
         });
     }, [pathname, search, siderCollapsed, isSystemAdmin]);
+
+    /** 작성 허브「전체」모달 iframe — 사이드·헤더 없이 본문만(실제 라우트 화면과 동일). */
+    const embedComposeModal =
+        typeof search?.embed === 'string' && search.embed === 'compose-modal' && isApprovalsShellPathname(pathname);
+    if (embedComposeModal) {
+        return (
+            <Layout className="tw-flex tw-h-[100dvh] tw-min-h-0 tw-bg-slate-50">
+                <Layout.Content className="wf-scrollbar tw-min-h-0 tw-flex-1 tw-overflow-y-auto tw-bg-transparent tw-p-4">
+                    <Outlet />
+                </Layout.Content>
+            </Layout>
+        );
+    }
 
     return (
         <MemberChatProvider>
