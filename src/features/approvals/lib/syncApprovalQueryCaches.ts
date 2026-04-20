@@ -49,4 +49,7 @@ export function syncApprovalQueryCachesAfterAct(
   });
 
   qc.setQueryData<ApprovalRequestDetail>(['approval-user', 'request-detail', rid], detail);
+
+  void qc.invalidateQueries({ queryKey: ['approval-user', 'approval-inbox'] });
+  void qc.invalidateQueries({ queryKey: ['approval-user', 'approval-waiting'] });
 }

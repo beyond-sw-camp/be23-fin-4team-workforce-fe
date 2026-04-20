@@ -13,7 +13,6 @@ export type ApprovalFormPaperLayoutProps = PropsWithChildren<{
   categoryLabel: string;
   /** RequestType 코드 (예: VACATION) */
   requestTypeCode: string;
-  autoApproveYn: 'Y' | 'N';
   drafterName?: string;
   drafterOrg?: string;
   drafterJobTitle?: string;
@@ -149,6 +148,8 @@ export type ApprovalStampApproverItem = {
   id: string;
   memberName: string;
   jobTitleName?: string;
+  /** 승인 후 서버가 저장한 서명 이미지 URL — 있으면 성명 칸에 이미지 표시 */
+  signatureImageUrl?: string | null;
   /** 대리결재(부재 위임) 건 */
   isProxy?: boolean;
   /** 처리일(승인·반려) 표시 시 이름 아래 `(대결: …)` — 값 없으면 `(대결)`만 */
@@ -218,6 +219,7 @@ function ApprovalStampApprovalTable({ approvers }: { approvers: ApprovalStampApp
           key: a.id,
           role: a.jobTitleName?.trim() ?? '',
           name: a.memberName?.trim() || '—',
+          signatureImageUrl: a.signatureImageUrl?.trim() ?? '',
           isProxy: a.isProxy === true,
           proxyActorName: a.proxyActorName?.trim() || '',
           bottom: formatApprovalStampActionDate(a.actedAt, a.approvalStatus),
@@ -227,6 +229,7 @@ function ApprovalStampApprovalTable({ approvers }: { approvers: ApprovalStampApp
             key: 'placeholder',
             role: '',
             name: '\uBBF8\uC9C0\uC815',
+            signatureImageUrl: '',
             isProxy: false,
             proxyActorName: '',
             bottom: '',
@@ -260,7 +263,24 @@ function ApprovalStampApprovalTable({ approvers }: { approvers: ApprovalStampApp
           {columns.map((c) => (
             <td key={`${c.key}-m`} className={stampRowMidName}>
               <div className="tw-flex tw-flex-col tw-items-center tw-justify-center tw-gap-0.5 tw-leading-tight">
-                {c.isProxy && c.bottom ? (
+                {c.signatureImageUrl ? (
+                  <>
+                    <span className="tw-inline-block tw-max-w-full tw-text-center [word-break:keep-all] tw-text-[10px] tw-font-semibold tw-leading-tight tw-text-black sm:tw-text-[11px]">
+                      {c.name}
+                    </span>
+                    <img
+                      src={c.signatureImageUrl}
+                      alt=""
+                      className="tw-mx-auto tw-max-h-[2rem] tw-w-full tw-max-w-[3.25rem] tw-object-contain tw-object-center"
+                      aria-hidden
+                    />
+                    {c.isProxy && c.bottom ? (
+                      <span className="tw-inline-block tw-max-w-full tw-whitespace-normal tw-text-center [word-break:keep-all] tw-text-[9px] tw-font-normal tw-leading-tight tw-text-black sm:tw-text-[10px]">
+                        {c.proxyActorName ? '(대결: ' + c.proxyActorName + ')' : '(대결)'}
+                      </span>
+                    ) : null}
+                  </>
+                ) : c.isProxy && c.bottom ? (
                   <>
                     <span className="tw-inline-block tw-max-w-full tw-whitespace-normal tw-text-center [word-break:keep-all] tw-text-[11px] tw-font-semibold tw-leading-tight tw-text-black">
                       {c.name}

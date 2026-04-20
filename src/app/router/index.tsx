@@ -260,6 +260,11 @@ const approvalsSearchSchema = z.object({
   compose: z.string().optional(),
   sideNav: z.string().optional(),
   box: z.string().optional(),
+  /** 참조/공람 문서함: `cc` 참조만, `circ` 공람만, 없으면 참조 탭 */
+  viewerSub: z.string().optional(),
+  fromHome: z.string().optional(),
+  /** 작성 허브 모달 iframe에서 앱 셸 없이 본문만 표시 */
+  embed: z.string().optional(),
 });
 
 const approvalsAdminRoute = createRoute({
@@ -271,7 +276,9 @@ const approvalsAdminRoute = createRoute({
 
 const departmentApprovalsSearchSchema = z.object({
   organizationId: z.string().optional(),
-  deptView: z.enum(['draft', 'ref', 'official']).optional(),
+  deptView: z.enum(['draft', 'sent', 'received']).optional(),
+  fromHome: z.string().optional(),
+  embed: z.string().optional(),
 });
 
 const departmentApprovalsInboxRoute = createRoute({
@@ -281,9 +288,14 @@ const departmentApprovalsInboxRoute = createRoute({
   component: DepartmentApprovalsInboxPage,
 });
 
+const absenceProxySearchSchema = z.object({
+  embed: z.string().optional(),
+});
+
 const absenceProxyRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/approvals/absence-proxy',
+  validateSearch: absenceProxySearchSchema,
   component: AbsenceProxyPage,
 });
 

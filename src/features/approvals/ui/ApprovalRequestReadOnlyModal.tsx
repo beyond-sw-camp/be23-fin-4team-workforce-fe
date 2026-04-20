@@ -1,16 +1,19 @@
-import { useQueries, useQuery } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
+  Button,
   Card,
   Descriptions,
+  message,
   Modal,
   Space,
   Table,
   Tag,
   Typography,
 } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import {
   APPROVAL_REQUEST_TYPES,
   approvalApi,
@@ -23,6 +26,13 @@ import {
   type ApprovalRequestStatus,
   type ApprovalViewer,
 } from '@/features/approvals/api/approvalRequestApi';
+import {
+  approvalAttachmentsApi,
+  formatApprovalAttachmentBytes,
+  type ApprovalAttachment,
+} from '@/features/approvals/api/approvalAttachmentsApi';
+import { useAuth } from '@/features/auth/useAuth';
+import { getRefreshIdentityHeaders } from '@/shared/stores/authRefreshIdentityStore';
 import {
   formatStoredContentValue,
   parseDetailContentJson,
@@ -43,6 +53,7 @@ const REQUEST_TYPE_LABEL: Record<ApprovalRequestType, string> = {
   GENERAL: '일반기안',
   CONTRACT: '전자계약',
   CERTIFICATE: '문서발급',
+  OFFICIAL: '공문',
 };
 
 const REQUEST_STATUS_LABEL: Record<ApprovalRequestStatus, string> = {
@@ -208,11 +219,46 @@ export function ApprovalRequestReadOnlyModal({
   title = '결재 상세',
 }: ApprovalRequestReadOnlyModalProps) {
   const open = requestId != null;
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  const authMemberId =
+    user?.id?.trim() || getRefreshIdentityHeaders()['X-User-UUID']?.trim() || '';
 
   const { data: selectedRequestDetail, isFetching: detailLoading } = useQuery({
     queryKey: ['approval-user', 'request-detail', requestId],
     queryFn: () => approvalRequestApi.getRequest(requestId!),
     enabled: open,
+  });
+
+  const { data: attachments = [], isFetching: attachmentsLoading } = useQuery({
+    queryKey: ['approval', 'attachments', requestId],
+    queryFn: () => approvalAttachmentsApi.listAttachments(requestId!),
+    enabled: open && Boolean(requestId),
+    staleTime: 30_000,
+  });
+
+  const deleteAttachmentM = useMutation({
+    mutationFn: (attachmentId: string) => approvalAttachmentsApi.deleteAttachment(attachmentId),
+    onSuccess: async () => {
+      message.success('첨부를 삭제했습니다.');
+      await qc.invalidateQueries({ queryKey: ['approval', 'attachments', requestId] });
+    },
+    onError: (e: Error) => message.error(e.message || '첨부 삭제에 실패했습니다.'),
+  });
+
+  const markViewerReadM = useMutation({
+    mutationFn: (viewerId: string) => approvalRequestApi.markViewerRead(viewerId),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['approval-user', 'request-detail', requestId] }),
+        qc.invalidateQueries({ queryKey: ['approval-user', 'my-requests'] }),
+        qc.invalidateQueries({ queryKey: ['approval-user', 'viewer-cc'] }),
+        qc.invalidateQueries({ queryKey: ['approval-user', 'viewer-circulation'] }),
+      ]);
+    },
+    onError: () => {
+      /* 403/404/400 등은 열람 맥락에 따라 무시 — 서버·데이터 정합성 문제만 조용히 무시 */
+    },
   });
 
   const { data: activeDocuments = [] } = useQuery({
@@ -221,6 +267,20 @@ export function ApprovalRequestReadOnlyModal({
     enabled: open,
     staleTime: 60_000,
   });
+
+  /** 참조/공람자로 지정된 경우 상세 열람 시 읽음 PATCH — UNREAD일 때만 호출 */
+  useEffect(() => {
+    if (!open || !selectedRequestDetail || !requestId || !authMemberId) return;
+    const mid = authMemberId.trim();
+    if (!mid) return;
+    const mine = selectedRequestDetail.viewers?.find((v) => v.viewerMemberId?.trim() === mid);
+    if (!mine?.viewerId?.trim()) return;
+    const unread =
+      !mine.viewedAt?.trim() || String(mine.viewerReadStatus ?? '').toUpperCase() === 'UNREAD';
+    if (!unread) return;
+    markViewerReadM.mutate(mine.viewerId.trim());
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- markViewerReadM.mutate 안정
+  }, [open, selectedRequestDetail, requestId, authMemberId]);
 
   const detailMemberIds = useMemo(() => {
     if (!open || !selectedRequestDetail) return [] as string[];
@@ -319,6 +379,69 @@ export function ApprovalRequestReadOnlyModal({
     [requestDetailDocument],
   );
 
+  const canDeleteAttachments = useMemo(() => {
+    if (!selectedRequestDetail || !authMemberId.trim()) return false;
+    const st = String(selectedRequestDetail.requestStatus).toUpperCase();
+    if (st !== 'DRAFT' && st !== 'WAIT') return false;
+    const drafter = selectedRequestDetail.memberId?.trim() ?? '';
+    return Boolean(drafter) && drafter === authMemberId.trim();
+  }, [selectedRequestDetail, authMemberId]);
+
+  const attachmentColumns: ColumnsType<ApprovalAttachment> = useMemo(
+    () => [
+      {
+        title: '파일명',
+        dataIndex: 'fileName',
+        key: 'fileName',
+        ellipsis: true,
+      },
+      {
+        title: '크기',
+        key: 'fileSize',
+        width: 100,
+        render: (_: unknown, row: ApprovalAttachment) => formatApprovalAttachmentBytes(row.fileSize),
+      },
+      {
+        title: '다운로드',
+        key: 'dl',
+        width: 88,
+        render: (_: unknown, row: ApprovalAttachment) => (
+          <Button
+            type="link"
+            size="small"
+            className="!tw-p-0"
+            onClick={() => window.open(row.approvalUrl, '_blank', 'noopener,noreferrer')}
+          >
+            열기
+          </Button>
+        ),
+      },
+      ...(canDeleteAttachments
+        ? [
+            {
+              title: '삭제',
+              key: 'del',
+              width: 72,
+              render: (_: unknown, row: ApprovalAttachment) => (
+                <Button
+                  type="link"
+                  size="small"
+                  danger
+                  className="!tw-p-0"
+                  loading={deleteAttachmentM.isPending}
+                  disabled={deleteAttachmentM.isPending}
+                  onClick={() => void deleteAttachmentM.mutateAsync(row.attachmentId)}
+                >
+                  삭제
+                </Button>
+              ),
+            },
+          ]
+        : []),
+    ],
+    [canDeleteAttachments, deleteAttachmentM.isPending],
+  );
+
   return (
     <Modal
       title={title}
@@ -338,7 +461,37 @@ export function ApprovalRequestReadOnlyModal({
             <Descriptions.Item label="상태">{statusTag(selectedRequestDetail.requestStatus)}</Descriptions.Item>
             <Descriptions.Item label="요청일">{formatDateTime(selectedRequestDetail.createdAt)}</Descriptions.Item>
             <Descriptions.Item label="수정일">{formatDateTime(selectedRequestDetail.updatedAt)}</Descriptions.Item>
+            {normalizeApprovalRequestType(selectedRequestDetail.requestType) === 'OFFICIAL' ? (
+              <Descriptions.Item label="공문 번호" span={2}>
+                {selectedRequestDetail.documentNumber?.trim() ? (
+                  <Typography.Text strong>{selectedRequestDetail.documentNumber.trim()}</Typography.Text>
+                ) : (
+                  <Typography.Text type="secondary">발번 전 (최종 승인 후 부여)</Typography.Text>
+                )}
+              </Descriptions.Item>
+            ) : null}
           </Descriptions>
+          {normalizeApprovalRequestType(selectedRequestDetail.requestType) === 'OFFICIAL' &&
+          (selectedRequestDetail.recipients?.length ?? 0) > 0 ? (
+            <Card size="small" title="수신 부서">
+              <Table
+                size="small"
+                pagination={false}
+                rowKey={(r) => r.recipientId ?? `${r.recipientOrganizationId}-${r.recipientOrganizationName}`}
+                dataSource={selectedRequestDetail.recipients ?? []}
+                columns={[
+                  { title: '수신 부서명', dataIndex: 'recipientOrganizationName', key: 'name' },
+                  {
+                    title: '조직 ID',
+                    dataIndex: 'recipientOrganizationId',
+                    key: 'oid',
+                    width: 280,
+                    ellipsis: true,
+                  },
+                ]}
+              />
+            </Card>
+          ) : null}
           <Card size="small" title="내용">
             {requestDetailDocument && requestDetailSchema.fields.length > 0 ? (
               <div className="tw-max-h-[min(70vh,720px)] tw-overflow-auto">
@@ -359,6 +512,7 @@ export function ApprovalRequestReadOnlyModal({
                       id: l.approvalId,
                       memberName: disp.primary.trim() || '—',
                       jobTitleName: disp.title,
+                      signatureImageUrl: l.signatureImageUrl,
                       isProxy: proxyUi,
                       proxyActorName,
                       actedAt: l.actedAt,
@@ -372,20 +526,17 @@ export function ApprovalRequestReadOnlyModal({
                         REQUEST_TYPE_LABEL[normalizeApprovalRequestType(doc.requestType)] ?? String(doc.requestType)
                       }
                       requestTypeCode={normalizeApprovalRequestType(doc.requestType)}
-                      autoApproveYn={doc.autoApproveYn === 'Y' ? 'Y' : 'N'}
                       drafterName={dName}
                       drafterOrg={dOrg}
                       drafterJobTitle={dTitle}
                       writtenDate={dayjs(detail.createdAt).format('YYYY-MM-DD')}
                       stampColumn={
-                        doc.autoApproveYn !== 'Y' ? (
-                          <ApprovalFormStampColumn
-                            drafterName={dName}
-                            drafterJobTitle={dTitle}
-                            approvers={approvers}
-                            applicationWrittenDateIso={dayjs(detail.createdAt).format('YYYY-MM-DD')}
-                          />
-                        ) : undefined
+                        <ApprovalFormStampColumn
+                          drafterName={dName}
+                          drafterJobTitle={dTitle}
+                          approvers={approvers}
+                          applicationWrittenDateIso={dayjs(detail.createdAt).format('YYYY-MM-DD')}
+                        />
                       }
                     >
                       {requestDetailSchema.fields.map((field) => {
@@ -418,6 +569,21 @@ export function ApprovalRequestReadOnlyModal({
                   {selectedRequestDetail.contentJson || '{}'}
                 </pre>
               </>
+            )}
+          </Card>
+          <Card size="small" title="첨부파일">
+            {attachmentsLoading ? (
+              <Typography.Text type="secondary">불러오는 중...</Typography.Text>
+            ) : attachments.length === 0 ? (
+              <Typography.Text type="secondary">첨부파일이 없습니다.</Typography.Text>
+            ) : (
+              <Table
+                size="small"
+                pagination={false}
+                rowKey="attachmentId"
+                dataSource={attachments}
+                columns={attachmentColumns}
+              />
             )}
           </Card>
           <Card size="small" title="결재라인">

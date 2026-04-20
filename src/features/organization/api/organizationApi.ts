@@ -40,14 +40,23 @@ export const ORG_CHART_HIDDEN_JOB_GRADE = '관리자';
 export type OrgChartMember = {
   memberId: string;
   name: string;
+  /** 표시용 직급/직책명 (API 필드명이 jobTitle·jobGrade 등으로 섞여 올 수 있음) */
   jobGradeName: string;
   /** 있으면 재직만 보기 필터에 사용 */
   memberStatus?: string;
 };
 
+export type OrgChartJobGrade = {
+  jobGradeName: string;
+  displayOrder?: number;
+  members: OrgChartMember[];
+};
+
 export type OrgChartOrgNode = {
   organizationId: string;
   name: string;
+  jobGrades: OrgChartJobGrade[];
+  /** jobGrades를 펼친 직속 멤버(검색·트리 UI 호환) */
   members: OrgChartMember[];
   children: OrgChartOrgNode[];
 };
@@ -65,19 +74,74 @@ function pickStr(o: Record<string, unknown>, keys: string[]): string {
   return '';
 }
 
+function pickMemberId(o: Record<string, unknown>): string {
+  const fromKeys = pickStr(o, ['memberId', 'member_id', 'userId', 'user_id', 'employeeId', 'employee_id']);
+  if (fromKeys) return fromKeys;
+  const id = o.id;
+  if (typeof id === 'string' && id.trim()) return id.trim();
+  if (typeof id === 'number' && Number.isFinite(id)) return String(id);
+  return '';
+}
+
 function normalizeOrgChartMember(raw: unknown): OrgChartMember | null {
   if (!raw || typeof raw !== 'object') return null;
   const o = raw as Record<string, unknown>;
-  const memberId = pickStr(o, ['memberId', 'member_id']);
-  const name = pickStr(o, ['name']);
-  const jobGradeName = pickStr(o, ['jobGradeName', 'job_grade_name']) || '—';
-  const memberStatus = pickStr(o, ['memberStatus', 'member_status']);
+  const memberId = pickMemberId(o);
+  const name = pickStr(o, [
+    'name',
+    'memberName',
+    'member_name',
+    'userName',
+    'user_name',
+    'fullName',
+    'full_name',
+    'displayName',
+    'display_name',
+    'employeeName',
+    'employee_name',
+  ]);
   if (!memberId || !name) return null;
+  const jobGradeName =
+    pickStr(o, [
+      'jobTitleName',
+      'job_title_name',
+      'jobTitle',
+      'job_title',
+      'jobGradeName',
+      'job_grade_name',
+      'positionName',
+      'position_name',
+      'title',
+    ]) || '—';
+  const memberStatus = pickStr(o, ['memberStatus', 'member_status', 'status', 'employmentStatus', 'employment_status']);
   return {
     memberId,
     name,
     jobGradeName,
     ...(memberStatus ? { memberStatus } : {}),
+  };
+}
+
+function normalizeOrgChartJobGrade(raw: unknown): OrgChartJobGrade | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const jobGradeName =
+    pickStr(o, ['jobGradeName', 'job_grade_name', 'gradeName', 'grade_name', 'jobGrade', 'label']) || '미분류';
+  const displayOrderRaw = o.displayOrder ?? o.display_order;
+  const displayOrder =
+    typeof displayOrderRaw === 'number'
+      ? displayOrderRaw
+      : typeof displayOrderRaw === 'string' && displayOrderRaw.trim() !== ''
+        ? Number(displayOrderRaw)
+        : undefined;
+  const membersRaw = o.members ?? o.memberList ?? o.member_list ?? o.employees ?? o.staff;
+  const members = Array.isArray(membersRaw)
+    ? membersRaw.map(normalizeOrgChartMember).filter((m): m is OrgChartMember => m != null)
+    : [];
+  return {
+    jobGradeName,
+    ...(displayOrder !== undefined && Number.isFinite(displayOrder) ? { displayOrder } : {}),
+    members,
   };
 }
 
@@ -87,15 +151,27 @@ function normalizeOrgChartNode(raw: unknown): OrgChartOrgNode | null {
   const organizationId = pickStr(o, ['organizationId', 'organization_id']);
   const name = pickStr(o, ['name']);
   if (!organizationId || !name) return null;
-  const membersRaw = o.members;
-  const members = Array.isArray(membersRaw)
-    ? membersRaw.map(normalizeOrgChartMember).filter((m): m is OrgChartMember => m != null)
+  const jobGradesRaw = o.jobGrades ?? o.job_grades;
+  let jobGrades: OrgChartJobGrade[] = Array.isArray(jobGradesRaw)
+    ? jobGradesRaw.map(normalizeOrgChartJobGrade).filter((g): g is OrgChartJobGrade => g != null)
     : [];
+
+  const membersInGrades = jobGrades.reduce((n, g) => n + g.members.length, 0);
+  const directMembersRaw = o.members ?? o.memberList ?? o.member_list ?? o.orgMembers ?? o.organizationMembers;
+  if (membersInGrades === 0 && Array.isArray(directMembersRaw) && directMembersRaw.length > 0) {
+    const direct = directMembersRaw.map(normalizeOrgChartMember).filter((m): m is OrgChartMember => m != null);
+    if (direct.length > 0) {
+      jobGrades = [{ jobGradeName: '소속', members: direct }, ...jobGrades];
+    }
+  }
+
+  const members = jobGrades.flatMap((g) => g.members);
+
   const childrenRaw = o.children;
   const children = Array.isArray(childrenRaw)
     ? childrenRaw.map(normalizeOrgChartNode).filter((c): c is OrgChartOrgNode => c != null)
     : [];
-  return { organizationId, name, members, children };
+  return { organizationId, name, jobGrades, members, children };
 }
 
 function normalizeOrgChartDataPayload(raw: unknown): OrgChartData {
@@ -114,6 +190,10 @@ function normalizeOrgChartDataPayload(raw: unknown): OrgChartData {
 function mapOrgChartTree(node: OrgChartOrgNode): OrgChartOrgNode {
   return {
     ...node,
+    jobGrades: node.jobGrades.map((g) => ({
+      ...g,
+      members: [...g.members],
+    })),
     members: [...node.members],
     children: node.children.map(mapOrgChartTree),
   };

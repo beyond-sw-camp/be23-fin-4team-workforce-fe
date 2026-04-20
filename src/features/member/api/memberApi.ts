@@ -783,4 +783,30 @@ export const memberApi = {
     const response = await httpClient.delete('/member/profile-image');
     return unwrapApiResponse<null>(response.data);
   },
+
+  /** GET /member/signature — 등록된 서명 이미지 URL, 미등록 시 null */
+  async getSignatureImageUrl(): Promise<string | null> {
+    const response = await httpClient.get('/member/signature');
+    const payload = response.data;
+    if (payload && typeof payload === 'object' && 'data' in payload) {
+      const d = (payload as { data: unknown }).data;
+      if (d === null || d === undefined) return null;
+      if (typeof d === 'string' && d.trim()) return d.trim();
+      return null;
+    }
+    if (typeof payload === 'string' && payload.trim()) return payload.trim();
+    return null;
+  },
+  /** PATCH /member/signature — PNG 서명 등록·교체 (multipart `signatureImage`) */
+  async uploadSignatureImage(file: File) {
+    const formData = new FormData();
+    formData.append('signatureImage', file);
+    const response = await httpClient.patch('/member/signature', formData);
+    return unwrapApiResponse<null>(response.data);
+  },
+  /** DELETE /member/signature */
+  async deleteSignatureImage() {
+    const response = await httpClient.delete('/member/signature');
+    return unwrapApiResponse<null>(response.data);
+  },
 };

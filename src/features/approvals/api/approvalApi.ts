@@ -9,6 +9,7 @@ export const APPROVAL_REQUEST_TYPES = [
   'GENERAL',
   'CONTRACT',
   'CERTIFICATE',
+  'OFFICIAL',
 ] as const;
 
 export type ApprovalRequestType = (typeof APPROVAL_REQUEST_TYPES)[number];
@@ -20,7 +21,6 @@ export type ApprovalDocument = {
   formSchema: string;
   isActiveYn: 'Y' | 'N';
   requestType: ApprovalRequestType | string;
-  autoApproveYn: 'Y' | 'N';
   /** 부서 문서함 노출 — 민감 양식은 N */
   isDeptVisibleYn: 'Y' | 'N';
   createdAt: string;
@@ -114,7 +114,6 @@ function normalizeApprovalDocument(raw: unknown): ApprovalDocument | null {
     formSchema: asText(o.formSchema ?? o.form_schema),
     isActiveYn: asYn(o.isActiveYn ?? o.is_active_yn),
     requestType,
-    autoApproveYn: asYn(o.autoApproveYn ?? o.auto_approve_yn),
     isDeptVisibleYn,
     createdAt: asText(o.createdAt ?? o.created_at),
     updatedAt: asText(o.updatedAt ?? o.updated_at),
@@ -202,10 +201,25 @@ export const approvalApi = {
     documentName: string;
     requestType: ApprovalRequestType;
     formSchema: string;
-    autoApproveYn?: 'Y' | 'N';
     isDeptVisibleYn?: 'Y' | 'N';
   }): Promise<ApprovalDocument> {
     const response = await httpClient.post('/approval/documents', payload);
+    return unwrapDocument(unwrapApiResponse<unknown>(response.data));
+  },
+
+  /** 양식 스키마·부서 문서함 노출 수정 (documentName·requestType 변경 불가) */
+  async updateDocument(
+    documentId: string,
+    payload: {
+      formSchema: string;
+      isDeptVisibleYn?: 'Y' | 'N' | null;
+    },
+  ): Promise<ApprovalDocument> {
+    const body: { formSchema: string; isDeptVisibleYn?: 'Y' | 'N' | null } = {
+      formSchema: payload.formSchema,
+    };
+    if (payload.isDeptVisibleYn !== undefined) body.isDeptVisibleYn = payload.isDeptVisibleYn;
+    const response = await httpClient.put(`/approval/documents/${encodeURIComponent(documentId)}`, body);
     return unwrapDocument(unwrapApiResponse<unknown>(response.data));
   },
 
@@ -221,16 +235,6 @@ export const approvalApi = {
 
   async deactivateDocument(documentId: string): Promise<ApprovalDocument> {
     const response = await httpClient.patch(`/approval/documents/${encodeURIComponent(documentId)}/deactivate`);
-    return unwrapDocument(unwrapApiResponse<unknown>(response.data));
-  },
-
-  async enableAutoApprove(documentId: string): Promise<ApprovalDocument> {
-    const response = await httpClient.patch(`/approval/documents/${encodeURIComponent(documentId)}/auto-approve/enable`);
-    return unwrapDocument(unwrapApiResponse<unknown>(response.data));
-  },
-
-  async disableAutoApprove(documentId: string): Promise<ApprovalDocument> {
-    const response = await httpClient.patch(`/approval/documents/${encodeURIComponent(documentId)}/auto-approve/disable`);
     return unwrapDocument(unwrapApiResponse<unknown>(response.data));
   },
 

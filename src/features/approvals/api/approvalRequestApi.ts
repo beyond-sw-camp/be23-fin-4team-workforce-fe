@@ -36,6 +36,13 @@ export type ApprovalLine = {
   actualApproverJobTitleName?: string;
 };
 
+/** 공문 수신 부서 스냅샷 — `GET /approval/requests/*` 응답에 포함 */
+export type OfficialRecipient = {
+  recipientId?: string;
+  recipientOrganizationId: string;
+  recipientOrganizationName: string;
+};
+
 export type ApprovalViewer = {
   viewerId: string;
   requestId: string;
@@ -64,16 +71,24 @@ export type ApprovalRequestDetail = {
   updatedAt: string;
   approvalLines: ApprovalLine[];
   viewers: ApprovalViewer[];
+  /** 최종 승인 후 발번 — 공문 등 */
+  documentNumber?: string | null;
+  /** 공문 수신 부서 */
+  recipients?: OfficialRecipient[] | null;
   /** 목록 API(내 결재·부서 문서함 등)에서 올 수 있음 */
   requesterName?: string;
   requesterOrganizationId?: string;
   requesterOrganizationName?: string;
+  /** 부서 문서함 노출 — 공문은 서버에서 Y 고정 */
+  isDeptVisibleYn?: 'Y' | 'N';
 };
 
 export type CreateApprovalRequestPayload = {
   documentId: string;
   contentJson: string;
   requestStatus: 'DRAFT' | 'WAIT';
+  /** 부서 문서함 공개 Y / 비공개 N — 미전송 시 서버 기본 Y. 공문은 Y 강제 */
+  isDeptVisibleYn?: 'Y' | 'N';
   approvalLines?: Array<{
     stepOrder: number;
     approverMemberId: string;
@@ -83,6 +98,11 @@ export type CreateApprovalRequestPayload = {
     viewerMemberId: string;
     viewerMemberPositionId: string;
     viewerType: ViewerType;
+  }>;
+  /** 공문(OFFICIAL) — 상신 시 최소 1건, 스냅샷용으로 부서명 필수 */
+  recipients?: Array<{
+    recipientOrganizationId: string;
+    recipientOrganizationName: string;
   }>;
 };
 
@@ -112,7 +132,20 @@ function pickArray(raw: unknown, depth = 0): unknown[] {
   if (Array.isArray(raw)) return raw;
   if (!raw || typeof raw !== 'object') return [];
   const o = raw as Record<string, unknown>;
-  for (const k of ['data', 'items', 'list', 'content', 'result', 'rows', 'payload']) {
+  for (const k of [
+    'data',
+    'items',
+    'list',
+    'content',
+    'result',
+    'rows',
+    'payload',
+    'body',
+    'records',
+    'values',
+    'dataList',
+    'recordList',
+  ]) {
     const v = o[k];
     if (Array.isArray(v)) return v;
     if (v && typeof v === 'object') {
@@ -120,6 +153,31 @@ function pickArray(raw: unknown, depth = 0): unknown[] {
       if (nested.length) return nested;
     }
   }
+  return [];
+}
+
+/**
+ * 목록 API 응답 — `{ data: [...] }`, 이중 `data`, Page `content`, `records` 등 분기 통합.
+ * inbox/waiting 등 백엔드 스키마 차이로 `unwrapApiResponse` 한 번만으로 배열이 비는 경우 방지.
+ */
+function toApprovalListRows(payload: unknown): unknown[] {
+  if (payload == null) return [];
+  if (Array.isArray(payload)) return payload;
+
+  const a = pickArray(unwrapApiResponse<unknown>(payload));
+  if (a.length > 0) return a;
+
+  const b = pickArray(payload);
+  if (b.length > 0) return b;
+
+  const once = unwrapApiResponse<unknown>(payload);
+  if (once && typeof once === 'object' && once !== payload) {
+    const c = pickArray(unwrapApiResponse(once));
+    if (c.length > 0) return c;
+    const d = pickArray(once);
+    if (d.length > 0) return d;
+  }
+
   return [];
 }
 
@@ -156,10 +214,14 @@ function parseProxyYnRaw(raw: unknown): 'Y' | 'N' | null {
   return null;
 }
 
-function normalizeApprovalLine(raw: unknown): ApprovalLine | null {
+function normalizeApprovalLine(raw: unknown, syntheticRequestId?: string): ApprovalLine | null {
   if (!raw || typeof raw !== 'object') return null;
   const o = raw as Record<string, unknown>;
-  const approvalId = asText(o.approvalId ?? o.approval_id);
+  const stepOrder = asNumber(o.stepOrder ?? o.step_order);
+  let approvalId = asText(o.approvalId ?? o.approval_id);
+  if (!approvalId && syntheticRequestId) {
+    approvalId = `__inline_${syntheticRequestId}_${stepOrder}`;
+  }
   if (!approvalId) return null;
   const approverName = optionalNonEmptyText(
     o.approverName ?? o.approver_name ?? o.memberName ?? o.member_name ?? o.name,
@@ -266,7 +328,7 @@ function normalizeApprovalLine(raw: unknown): ApprovalLine | null {
     requestId: asText(o.requestId ?? o.request_id),
     approverMemberId: asText(o.approverMemberId ?? o.approver_member_id),
     approverMemberPositionId: asText(o.approverMemberPositionId ?? o.approver_member_position_id),
-    stepOrder: asNumber(o.stepOrder ?? o.step_order),
+    stepOrder,
     approvalStatus: asText(o.approvalStatus ?? o.approval_status),
     actedAt: asNullableText(o.actedAt ?? o.acted_at),
     comment: asNullableText(o.comment),
@@ -327,6 +389,34 @@ function normalizeRequest(raw: unknown): ApprovalRequestDetail | null {
   const requesterOrganizationName = optionalNonEmptyText(
     o.requesterOrganizationName ?? o.requester_organization_name,
   );
+  const documentNumber = asNullableText(o.documentNumber ?? o.document_number);
+  const recipientsRaw = o.recipients ?? o.officialRecipients;
+  const isDeptVisibleRaw = o.isDeptVisibleYn ?? o.is_dept_visible_yn;
+  const isDeptVisibleYn: 'Y' | 'N' | undefined =
+    isDeptVisibleRaw == null || isDeptVisibleRaw === ''
+      ? undefined
+      : String(isDeptVisibleRaw).trim().toUpperCase() === 'N'
+        ? 'N'
+        : 'Y';
+  let recipients: OfficialRecipient[] | null = null;
+  if (Array.isArray(recipientsRaw)) {
+    const parsed: OfficialRecipient[] = [];
+    for (const item of recipientsRaw) {
+      if (!item || typeof item !== 'object') continue;
+      const r = item as Record<string, unknown>;
+      const recipientOrganizationId = asText(r.recipientOrganizationId ?? r.recipient_organization_id);
+      if (!recipientOrganizationId) continue;
+      const recipientOrganizationName = asText(
+        r.recipientOrganizationName ?? r.recipient_organization_name ?? '',
+      );
+      parsed.push({
+        recipientId: optionalNonEmptyText(r.recipientId ?? r.recipient_id),
+        recipientOrganizationId,
+        recipientOrganizationName,
+      });
+    }
+    recipients = parsed.length ? parsed : null;
+  }
   return {
     requestId,
     documentId: asText(o.documentId ?? o.document_id),
@@ -339,7 +429,9 @@ function normalizeRequest(raw: unknown): ApprovalRequestDetail | null {
     createdAt: asText(o.createdAt ?? o.created_at),
     updatedAt: asText(o.updatedAt ?? o.updated_at),
     approvalLines: Array.isArray(linesRaw)
-      ? linesRaw.map((v) => normalizeApprovalLine(v)).filter((v): v is ApprovalLine => v != null)
+      ? linesRaw
+          .map((v) => normalizeApprovalLine(v, requestId))
+          .filter((v): v is ApprovalLine => v != null)
       : [],
     viewers: Array.isArray(viewersRaw)
       ? viewersRaw.map((v) => normalizeViewer(v)).filter((v): v is ApprovalViewer => v != null)
@@ -347,6 +439,9 @@ function normalizeRequest(raw: unknown): ApprovalRequestDetail | null {
     ...(requesterName ? { requesterName } : {}),
     ...(requesterOrganizationId ? { requesterOrganizationId } : {}),
     ...(requesterOrganizationName ? { requesterOrganizationName } : {}),
+    ...(documentNumber != null && documentNumber !== '' ? { documentNumber } : {}),
+    ...(recipients != null ? { recipients } : {}),
+    ...(isDeptVisibleYn != null ? { isDeptVisibleYn } : {}),
   };
 }
 
@@ -362,33 +457,48 @@ export function isOfficialApprovalRequestType(requestType: string | unknown): bo
   return u === 'OFFICIAL';
 }
 
+/**
+ * 부서 문서함 목록에서 타인의 비공개 건에 대해 서버가 내려주는 마스킹 행인지.
+ * 작성자 본인 조회는 동일 플래그여도 필드가 채워져 false가 됨.
+ */
+export function isDepartmentInboxMaskedPrivateRow(r: ApprovalRequestDetail): boolean {
+  if (r.isDeptVisibleYn !== 'N') return false;
+  const title = r.documentName?.trim();
+  if (title === '비공개 문서입니다') return true;
+  const hasDoc = Boolean(r.documentId?.trim());
+  const hasBody = Boolean(String(r.contentJson ?? '').trim());
+  if (hasDoc && hasBody) return false;
+  return !hasDoc || !hasBody;
+}
+
 export const approvalRequestApi = {
   async createRequest(payload: CreateApprovalRequestPayload): Promise<ApprovalRequestDetail> {
     const response = await httpClient.post('/approval/requests', payload);
     return unwrapSingle(unwrapApiResponse<unknown>(response.data));
   },
 
-  async listMyRequests(status?: ApprovalRequestStatus): Promise<ApprovalRequestDetail[]> {
+  async listMyRequests(status?: ApprovalRequestStatus, requestType?: string): Promise<ApprovalRequestDetail[]> {
     const response = await httpClient.get('/approval/requests/my', {
-      params: status ? { status } : undefined,
+      params: {
+        ...(status ? { status } : {}),
+        ...(requestType ? { requestType } : {}),
+      },
     });
-    const unwrapped = unwrapApiResponse<unknown>(response.data);
-    return pickArray(unwrapped)
+    return toApprovalListRows(response.data)
       .map((item) => normalizeRequest(item))
       .filter((item): item is ApprovalRequestDetail => item != null);
   },
 
   /** 부서·하위 조직의 최종 처리(승인/반려) 문서 — 민감 양식은 서버에서 제외 */
-  async listDepartmentRequests(organizationId: string): Promise<ApprovalRequestDetail[]> {
+  async listDepartmentRequests(organizationId: string, requestType?: string): Promise<ApprovalRequestDetail[]> {
     const id = organizationId?.trim();
     if (!id) {
       throw new Error('조직 ID가 없습니다.');
     }
     const response = await httpClient.get('/approval/requests/department', {
-      params: { organizationId: id },
+      params: { organizationId: id, ...(requestType ? { requestType } : {}) },
     });
-    const unwrapped = unwrapApiResponse<unknown>(response.data);
-    return pickArray(unwrapped)
+    return toApprovalListRows(response.data)
       .map((item) => normalizeRequest(item))
       .filter((item): item is ApprovalRequestDetail => item != null);
   },
@@ -410,32 +520,51 @@ export const approvalRequestApi = {
 
   async listPendingApprovals(): Promise<ApprovalRequestDetail[]> {
     const response = await httpClient.get('/approval/approvals/pending');
-    const unwrapped = unwrapApiResponse<unknown>(response.data);
-    return pickArray(unwrapped)
+    return toApprovalListRows(response.data)
+      .map((item) => normalizeRequest(item))
+      .filter((item): item is ApprovalRequestDetail => item != null);
+  },
+
+  /** 결재 예정 — 앞 결재자 처리 전, 아직 내 차례가 아닌 문서 */
+  async listWaitingApprovals(): Promise<ApprovalRequestDetail[]> {
+    const response = await httpClient.get('/approval/approvals/waiting');
+    return toApprovalListRows(response.data)
+      .map((item) => normalizeRequest(item))
+      .filter((item): item is ApprovalRequestDetail => item != null);
+  },
+
+  /** 결재함 전체 — 대기(PENDING) + 예정(WAITING) 통합 */
+  async listApprovalInbox(): Promise<ApprovalRequestDetail[]> {
+    const response = await httpClient.get('/approval/approvals/inbox');
+    return toApprovalListRows(response.data)
       .map((item) => normalizeRequest(item))
       .filter((item): item is ApprovalRequestDetail => item != null);
   },
 
   async listActedApprovals(): Promise<ApprovalRequestDetail[]> {
     const response = await httpClient.get('/approval/approvals/acted');
-    const unwrapped = unwrapApiResponse<unknown>(response.data);
-    return pickArray(unwrapped)
+    return toApprovalListRows(response.data)
       .map((item) => normalizeRequest(item))
       .filter((item): item is ApprovalRequestDetail => item != null);
   },
 
   async listViewerCcRequests(): Promise<ApprovalRequestDetail[]> {
     const response = await httpClient.get('/approval/viewers/cc');
-    const unwrapped = unwrapApiResponse<unknown>(response.data);
-    return pickArray(unwrapped)
+    return toApprovalListRows(response.data)
       .map((item) => normalizeRequest(item))
       .filter((item): item is ApprovalRequestDetail => item != null);
   },
 
   async listViewerCirculationRequests(): Promise<ApprovalRequestDetail[]> {
     const response = await httpClient.get('/approval/viewers/circulation');
-    const unwrapped = unwrapApiResponse<unknown>(response.data);
-    return pickArray(unwrapped)
+    return toApprovalListRows(response.data)
+      .map((item) => normalizeRequest(item))
+      .filter((item): item is ApprovalRequestDetail => item != null);
+  },
+
+  async listOfficialReceivedRequests(): Promise<ApprovalRequestDetail[]> {
+    const response = await httpClient.get('/approval/requests/official/received');
+    return toApprovalListRows(response.data)
       .map((item) => normalizeRequest(item))
       .filter((item): item is ApprovalRequestDetail => item != null);
   },
@@ -518,6 +647,35 @@ export function approvalLineIsProxy(line: ApprovalLine): boolean {
 /** API 계약상 `isProxyYn === 'Y'`만 엄격히 true — 목록 배지 등 플래그 기반 표시용 */
 export function approvalLineIsProxyYnYes(line: ApprovalLine): boolean {
   return String(line.isProxyYn ?? '').trim().toUpperCase() === 'Y';
+}
+
+/** 목록 API가 `approvalId`를 생략한 경우 합성 id — 승인/반려 API에는 사용 불가 */
+export function isInlineSyntheticApprovalId(id: string | null | undefined): boolean {
+  return Boolean(id?.startsWith('__inline_'));
+}
+
+/**
+ * 결재함 전체·통합 인박스: `approverMemberId`가 내 memberId인 라인 우선,
+ * 없으면 대결 PENDING 슬롯(내 직위 기준).
+ */
+export function findMyInboxApprovalLine(
+  request: ApprovalRequestDetail,
+  opts: { myMemberId?: string; myMemberPositionId?: string },
+): ApprovalLine | undefined {
+  const mid = opts.myMemberId?.trim();
+  const pid = opts.myMemberPositionId?.trim();
+  const lines = request.approvalLines ?? [];
+  if (mid) {
+    const direct = lines.find((l) => eqMemberKey(l.approverMemberId, mid));
+    if (direct) return direct;
+  }
+  if (pid) {
+    const proxyPending = lines.find(
+      (l) => String(l.approvalStatus).toUpperCase() === 'PENDING' && isPendingApprovalLineForProxyActor(l, pid),
+    );
+    if (proxyPending) return proxyPending;
+  }
+  return undefined;
 }
 
 /**

@@ -18,6 +18,8 @@ export type FormFieldSchema = {
   type: FormFieldType;
   options?: string[];
   placeholder?: string;
+  /** true면 양식 수정 API에서 삭제·라벨·타입·순서·잠금 해제 불가 */
+  locked?: boolean;
 };
 
 export type FormSchema = {
@@ -42,6 +44,7 @@ export function parseFormSchema(raw: string): FormSchema {
               ? o.options.filter((v): v is string => typeof v === 'string').map((v) => v.trim())
               : undefined;
             const placeholder = typeof o.placeholder === 'string' ? o.placeholder.trim() : undefined;
+            const locked = o.locked === true;
             if (!name || !label) return null;
             return {
               name,
@@ -49,6 +52,7 @@ export function parseFormSchema(raw: string): FormSchema {
               type,
               ...(options?.length ? { options } : {}),
               ...(placeholder ? { placeholder } : {}),
+              ...(locked ? { locked: true } : {}),
             };
           })
           .filter((f): f is FormFieldSchema => f != null)
@@ -68,6 +72,14 @@ export function parseDetailContentJson(detail: ApprovalRequestDetail): Record<st
   } catch {
     return {};
   }
+}
+
+/** 기안 본문의 `title` 필드(양식 기본 '제목') — 없으면 빈 문자열 */
+export function getApprovalRequestSubjectLine(detail: ApprovalRequestDetail): string {
+  const c = parseDetailContentJson(detail);
+  const t = c.title;
+  if (typeof t === 'string' && t.trim()) return t.trim();
+  return '';
 }
 
 export function formatStoredContentValue(value: unknown): string {
