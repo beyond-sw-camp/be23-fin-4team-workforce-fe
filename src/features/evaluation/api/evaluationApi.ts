@@ -13,6 +13,8 @@ import type {
   SaveResponsePayload,
   CalibrationAdjustPayload,
   CalibrationBaselinePayload,
+  QuestionType,
+  DesignQuestion,
 } from '@/features/evaluation/model/types';
 import { httpClient } from '@/shared/api/httpClient';
 import { unwrapApiResponse } from '@/shared/api/response';
@@ -36,14 +38,27 @@ function mapSeason(raw: any): EvaluationSeason {
     startDate: raw.startDate,
     endDate: raw.endDate,
     status: raw.status,
-    phase: raw.phase ?? 'NOT_STARTED',
-    phaseUpdatedAt: raw.phaseUpdatedAt ?? undefined,
     resultPublishDate: raw.resultPublishDate,
+    resultsPublishedAt: raw.resultsPublishedAt ?? undefined,
     schedule: safeJsonParse(raw.scheduleJson, undefined),
   };
 }
 
+function mapEvaluatorMapsFromApi(raw: Record<string, unknown>): EvaluationGroup['evaluatorMaps'] {
+  const fromVo = raw.evaluatorMaps;
+  if (Array.isArray(fromVo)) {
+    return fromVo.map((m: any) => ({
+      targetMemberId: String(m.targetMemberId ?? m.target_member_id ?? ''),
+      evaluatorId: String(m.evaluatorId ?? m.evaluator_id ?? ''),
+      evaluationType: (m.evaluationType ?? m.evaluation_type) as EvaluationGroup['evaluatorMaps'][number]['evaluationType'],
+    }));
+  }
+  const legacy = raw.evaluatorMapsJson ?? raw.evaluator_maps_json;
+  return safeJsonParse(typeof legacy === 'string' ? legacy : '[]', []);
+}
+
 function mapGroup(raw: any): EvaluationGroup {
+  const r = raw as Record<string, unknown>;
   return {
     groupId: raw.groupId,
     companyId: raw.companyId,
@@ -52,17 +67,80 @@ function mapGroup(raw: any): EvaluationGroup {
     evaluationTypes: safeJsonParse(raw.evaluationTypesJson, []),
     targetMemberIds: safeJsonParse(raw.targetMemberIdsJson, []),
     designId: raw.designId,
-    evaluatorMaps: safeJsonParse(raw.evaluatorMapsJson, []),
+    evaluatorMaps: mapEvaluatorMapsFromApi(r),
   };
 }
 
+/** 백엔드 VO(EvaluationSection) 또는 JSON 문자열 모두 수용 */
+function mapDesignSectionsFromApi(raw: Record<string, unknown>): EvaluationDesign['sections'] {
+  const vo = raw.sections;
+  if (Array.isArray(vo)) {
+    return vo.map((sec: any) => ({
+      sectionId: sec.sectionId,
+      title: String(sec.title ?? ''),
+      weight: Number(sec.weight ?? 0),
+      type: sec.type,
+      kpiFilter: sec.kpiFilter,
+      questions: Array.isArray(sec.questions)
+        ? sec.questions.map((q: any) => ({
+            id: String(q.id ?? ''),
+            type: String(q.type ?? 'text') as QuestionType,
+            title: String(q.title ?? ''),
+            description: q.description != null ? String(q.description) : undefined,
+            required: Boolean(q.required),
+            weight: Number(q.weight ?? 0),
+            options: q.options as DesignQuestion['options'],
+          }))
+        : [],
+    }));
+  }
+  return safeJsonParse(typeof raw.sectionsJson === 'string' ? raw.sectionsJson : '[]', []);
+}
+
+function mapGradeConfigFromApi(raw: Record<string, unknown>): EvaluationDesign['gradeConfig'] {
+  const vo = raw.gradeConfig ?? raw.grade_config;
+  if (vo && typeof vo === 'object' && !Array.isArray(vo)) {
+    const g = vo as Record<string, unknown>;
+    const gradesRaw = g.grades;
+    const grades = Array.isArray(gradesRaw)
+      ? gradesRaw.map((x: any) => ({
+          label: String(x.label ?? ''),
+          minScore: Number(x.minScore ?? x.min_score ?? 0),
+          maxScore: Number(x.maxScore ?? x.max_score ?? 0),
+          color: String(x.color ?? '#94a3b8'),
+        }))
+      : [];
+    const td = g.targetDistribution ?? g.target_distribution;
+    let targetDistribution: Record<string, number> | undefined;
+    if (td && typeof td === 'object' && !Array.isArray(td)) {
+      targetDistribution = {};
+      for (const [k, v] of Object.entries(td as Record<string, unknown>)) {
+        const n = typeof v === 'number' ? v : Number(v);
+        if (!Number.isNaN(n)) targetDistribution[k] = n;
+      }
+    }
+    const t = String(g.type ?? 'ABSOLUTE').toUpperCase();
+    return {
+      type: t === 'RELATIVE' ? 'RELATIVE' : 'ABSOLUTE',
+      grades,
+      targetDistribution,
+    };
+  }
+  const json = raw.gradeConfigJson ?? raw.grade_config_json;
+  return safeJsonParse(typeof json === 'string' ? json : '', undefined);
+}
+
 function mapDesign(raw: any): EvaluationDesign {
+  const r = raw as Record<string, unknown>;
   return {
     designId: raw.designId,
     companyId: raw.companyId,
     name: raw.name,
-    sections: safeJsonParse(raw.sectionsJson, []),
-    gradeConfig: safeJsonParse(raw.gradeConfigJson, undefined),
+    sections: mapDesignSectionsFromApi(r),
+    gradeConfig: mapGradeConfigFromApi(r),
+    designVersion: raw.designVersion ?? undefined,
+    defaultTemplate: raw.defaultTemplate ?? undefined,
+    updatedAt: raw.updatedAt ?? undefined,
   };
 }
 
@@ -71,10 +149,19 @@ function mapResponse(raw: any): EvaluationResponse {
     responseId: raw.responseId,
     companyId: raw.companyId,
     seasonId: raw.seasonId ?? undefined,
+    seasonName: raw.seasonName ?? undefined,
+    seasonStatus: raw.seasonStatus ?? undefined,
+    seasonResultsPublishedAt: raw.seasonResultsPublishedAt ?? undefined,
     groupId: raw.groupId,
     designId: raw.designId ?? undefined,
     targetMemberId: raw.targetMemberId,
+    targetMemberName: raw.targetMemberName ?? undefined,
+    targetMemberDepartment: raw.targetMemberDepartment ?? undefined,
+    targetMemberProfileUrl: raw.targetMemberProfileUrl ?? undefined,
     evaluatorId: raw.evaluatorId,
+    evaluatorName: raw.evaluatorName ?? undefined,
+    evaluatorDepartment: raw.evaluatorDepartment ?? undefined,
+    evaluatorProfileUrl: raw.evaluatorProfileUrl ?? undefined,
     evaluationType: raw.evaluationType,
     status: raw.status,
     submittedAt: raw.submittedAt,
@@ -82,8 +169,10 @@ function mapResponse(raw: any): EvaluationResponse {
     answers: safeJsonParse(raw.answersJson, []),
     calibration: safeJsonParse(raw.calibrationJson, undefined),
     normalizedScore: raw.normalizedScore ?? undefined,
-    targetGoalIds: safeJsonParse(raw.targetGoalIdsJson, undefined),
+    // [D-5] targetGoalIds 제거 — goalSnapshot 배열에서 goalId 를 추출해 사용
     goalSnapshot: safeJsonParse(raw.goalSnapshotJson, undefined),
+    // [L-1] 섹션 채점 breakdown — 백엔드에서 객체로 내려옴
+    scoreBreakdown: raw.scoreBreakdown ?? undefined,
   };
 }
 
@@ -106,6 +195,138 @@ function normalizeArray<T>(payload: unknown, mapFn: (r: any) => T): T[] {
     }
   }
   return [];
+}
+
+/** 백엔드 `DesignQuestion.type` — 소문자 (text|scale|grade|gap) */
+const QUESTION_TYPE_UPPER_TO_LOWER: Record<string, string> = {
+  TEXT: 'text',
+  SCALE: 'scale',
+  GRADE: 'grade',
+  GAP: 'gap',
+};
+
+/**
+ * 라벨만 있는 등급 목록 → `GradeConfig.GradeBand[]` (goal-service `GradeConfig` 와 동일)
+ * 프론트가 `grades: ["S","A"]` 처럼 문자열 배열을 보내면 Jackson 이 GradeBand 로 변환하지 못해 400 발생함.
+ */
+function buildGradeBandsFromLabels(labels: string[]): {label: string; minScore: number; maxScore: number; color: string}[] {
+  const cleaned = labels.map((s) => s.trim()).filter(Boolean);
+  const n = cleaned.length;
+  if (n === 0) return [];
+  const colors = ['#22c55e', '#84cc16', '#eab308', '#fb923c', '#ef4444', '#64748b', '#94a3b8'];
+  return cleaned.map((label, i) => {
+    const minScore = Math.round((100 * i) / n);
+    const maxScore = i === n - 1 ? 100 : Math.round((100 * (i + 1)) / n);
+    return {label, minScore, maxScore, color: colors[Math.min(i, colors.length - 1)]};
+  });
+}
+
+/** `sectionsJson` — 문항 `text`→`title`, 문항 타입 대문자→소문자 (서버 DesignQuestion) */
+function normalizeSectionsJsonForBackend(sectionsJson: string): string {
+  try {
+    const parsed = JSON.parse(sectionsJson) as unknown;
+    if (!Array.isArray(parsed)) return sectionsJson;
+    const out = parsed.map((sec) => {
+      if (!sec || typeof sec !== 'object') return sec;
+      const s = sec as Record<string, unknown>;
+      const questionsRaw = s.questions;
+      const questions = Array.isArray(questionsRaw)
+        ? questionsRaw.map((q, idx) => {
+            if (!q || typeof q !== 'object') return q;
+            const qn = q as Record<string, unknown>;
+            const titleRaw = qn.title ?? qn.text;
+            const title = titleRaw != null ? String(titleRaw) : '';
+            const tr = String(qn.type ?? 'scale').toUpperCase();
+            const type = QUESTION_TYPE_UPPER_TO_LOWER[tr] ?? String(qn.type ?? 'scale').toLowerCase();
+            const row: Record<string, unknown> = {
+              id: qn.id != null ? String(qn.id) : `q-${idx}`,
+              type,
+              title,
+              required: qn.required !== false,
+            };
+            if (qn.description != null) row.description = String(qn.description);
+            if (qn.weight != null && qn.weight !== '') row.weight = Number(qn.weight);
+            if (qn.options && typeof qn.options === 'object') row.options = qn.options;
+            return row;
+          })
+        : [];
+      return {...s, questions};
+    });
+    return JSON.stringify(out);
+  } catch {
+    return sectionsJson;
+  }
+}
+
+/**
+ * `gradeConfigJson` — `type` 을 ABSOLUTE|RELATIVE 로, `grades` 를 GradeBand[], 분포는 비율(0~1)로.
+ */
+function normalizeGradeConfigJsonForBackend(gradeConfigJson: string): string {
+  try {
+    const g = JSON.parse(gradeConfigJson) as Record<string, unknown>;
+    const typeRaw = String(g.type ?? 'ABSOLUTE').toLowerCase();
+    const type = typeRaw === 'relative' ? 'RELATIVE' : 'ABSOLUTE';
+    const out: Record<string, unknown> = {type};
+
+    const gradesRaw = g.grades;
+    if (Array.isArray(gradesRaw) && gradesRaw.length > 0) {
+      const first = gradesRaw[0];
+      if (typeof first === 'string') {
+        out.grades = buildGradeBandsFromLabels(gradesRaw as string[]);
+      } else if (first && typeof first === 'object') {
+        const f = first as Record<string, unknown>;
+        if (f.label != null || f.minScore != null || f.maxScore != null) {
+          out.grades = gradesRaw.map((x) => {
+            const o = x as Record<string, unknown>;
+            return {
+              label: String(o.label ?? ''),
+              minScore: Number(o.minScore ?? 0),
+              maxScore: Number(o.maxScore ?? 100),
+              color: String(o.color ?? '#94a3b8'),
+            };
+          });
+        } else if ('grade' in f) {
+          const labels = (gradesRaw as Record<string, unknown>[]).map((x) => String(x.grade ?? ''));
+          out.grades = buildGradeBandsFromLabels(labels);
+        } else {
+          out.grades = [];
+        }
+      }
+    }
+
+    const td = g.targetDistribution;
+    if (td && typeof td === 'object' && !Array.isArray(td)) {
+      const next: Record<string, number> = {};
+      for (const [k, v] of Object.entries(td as Record<string, unknown>)) {
+        const num = typeof v === 'number' ? v : Number(v);
+        if (Number.isNaN(num)) continue;
+        next[k] = num > 1 ? num / 100 : num;
+      }
+      out.targetDistribution = next;
+    }
+
+    return JSON.stringify(out);
+  } catch {
+    return gradeConfigJson;
+  }
+}
+
+function normalizeCreateDesignBody(body: CreateDesignPayload): CreateDesignPayload {
+  return {
+    name: body.name.trim(),
+    sectionsJson: normalizeSectionsJsonForBackend(body.sectionsJson),
+    gradeConfigJson: body.gradeConfigJson
+      ? normalizeGradeConfigJsonForBackend(body.gradeConfigJson)
+      : undefined,
+  };
+}
+
+function normalizeUpdateDesignBody(body: UpdateDesignPayload): UpdateDesignPayload {
+  const o: UpdateDesignPayload = {...body};
+  if (o.name != null) o.name = o.name.trim();
+  if (o.sectionsJson != null) o.sectionsJson = normalizeSectionsJsonForBackend(o.sectionsJson);
+  if (o.gradeConfigJson != null) o.gradeConfigJson = normalizeGradeConfigJsonForBackend(o.gradeConfigJson);
+  return o;
 }
 
 // ── API ──
@@ -137,13 +358,9 @@ export const evaluationApi = {
     return mapSeason(unwrapApiResponse<any>(res.data));
   },
 
-  async closeSeason(seasonId: string): Promise<EvaluationSeason> {
-    const res = await httpClient.post(`/evaluation/evaluation-seasons/${seasonId}/close`);
-    return mapSeason(unwrapApiResponse<any>(res.data));
-  },
-
-  async transitionPhase(seasonId: string, next: string): Promise<EvaluationSeason> {
-    const res = await httpClient.post(`/evaluation/evaluation-seasons/${seasonId}/phase?next=${next}`);
+  async closeSeason(seasonId: string, opts?: {publishResults?: boolean}): Promise<EvaluationSeason> {
+    const qs = opts?.publishResults ? '?publishResults=true' : '';
+    const res = await httpClient.post(`/evaluation/evaluation-seasons/${seasonId}/close${qs}`);
     return mapSeason(unwrapApiResponse<any>(res.data));
   },
 
@@ -178,6 +395,7 @@ export const evaluationApi = {
     await httpClient.delete(`/evaluation/evaluation-seasons/${seasonId}/groups/${groupId}`);
   },
 
+  /** `basis`: goal-service `EvaluatorMapAutoReqDto` — `direct_leader` | `team_leader` | `job_grade` */
   async autoAssignEvaluators(
     seasonId: string,
     groupId: string,
@@ -209,7 +427,7 @@ export const evaluationApi = {
   },
 
   async createDesign(body: CreateDesignPayload): Promise<EvaluationDesign> {
-    const res = await httpClient.post('/evaluation/evaluation-designs', body);
+    const res = await httpClient.post('/evaluation/evaluation-designs', normalizeCreateDesignBody(body));
     return mapDesign(unwrapApiResponse<any>(res.data));
   },
 
@@ -219,14 +437,46 @@ export const evaluationApi = {
   },
 
   async updateDesign(designId: string, body: UpdateDesignPayload): Promise<EvaluationDesign> {
-    const res = await httpClient.patch(`/evaluation/evaluation-designs/${designId}`, body);
+    const res = await httpClient.patch(`/evaluation/evaluation-designs/${designId}`, normalizeUpdateDesignBody(body));
     return mapDesign(unwrapApiResponse<any>(res.data));
+  },
+
+  async duplicateDesign(designId: string): Promise<EvaluationDesign> {
+    const res = await httpClient.post(`/evaluation/evaluation-designs/${designId}/duplicate`);
+    return mapDesign(unwrapApiResponse<any>(res.data));
+  },
+
+  async deleteDesign(designId: string): Promise<void> {
+    await httpClient.delete(`/evaluation/evaluation-designs/${designId}`);
   },
 
   // ── Responses ──
   async listMyResponses(): Promise<EvaluationResponse[]> {
     const res = await httpClient.get('/evaluation/evaluation-responses');
     return normalizeArray(unwrapApiResponse<unknown>(res.data), mapResponse);
+  },
+
+  /** 본인이 피평가자인 평가 응답(결과 공개된 시즌만) — 전체 시즌 목록 */
+  async listMyReceivedResults(): Promise<EvaluationResponse[]> {
+    const res = await httpClient.get('/evaluation/evaluation-responses/me/received');
+    return normalizeArray(unwrapApiResponse<unknown>(res.data), mapResponse);
+  },
+
+  /** 특정 시즌에서 본인이 받은 평가 결과 (PUBLISHED 시즌만 접근 가능) */
+  async listMySeasonResult(seasonId: string): Promise<EvaluationResponse[]> {
+    const res = await httpClient.get(
+      `/evaluation/evaluation-responses/seasons/${seasonId}/my-result`,
+    );
+    return normalizeArray(unwrapApiResponse<unknown>(res.data), mapResponse);
+  },
+
+  /** 특정 시즌의 본인 평가 결과 PDF 리포트 다운로드 */
+  async downloadMyReport(seasonId: string): Promise<Blob> {
+    const res = await httpClient.get(
+      `/evaluation/evaluation-responses/seasons/${seasonId}/my-report`,
+      {responseType: 'blob'},
+    );
+    return res.data as Blob;
   },
 
   async getResponse(responseId: string): Promise<EvaluationResponse> {
@@ -252,6 +502,21 @@ export const evaluationApi = {
   /** 평가 응답에 포함된 목표 스냅샷 vs 현재 값 비교 요약 카드 */
   async getGoalSummaries(responseId: string): Promise<GoalSummaryCard[]> {
     const res = await httpClient.get(`/evaluation/evaluation-responses/${responseId}/goal-summaries`);
+    return normalizeArray(unwrapApiResponse<unknown>(res.data), mapGoalSummaryCard);
+  },
+
+  /**
+   * 피평가자 본인 — 시즌 기준 목표 요약(자기평가 스냅샷 또는 기간 폴백).
+   * GET `/evaluation/evaluation-responses/seasons/{seasonId}/my-goal-summaries`
+   */
+  async listMyGoalSummariesForSeason(
+    seasonId: string,
+    completedOnly = false,
+  ): Promise<GoalSummaryCard[]> {
+    const res = await httpClient.get(
+      `/evaluation/evaluation-responses/seasons/${seasonId}/my-goal-summaries`,
+      {params: {completedOnly}},
+    );
     return normalizeArray(unwrapApiResponse<unknown>(res.data), mapGoalSummaryCard);
   },
 
@@ -288,21 +553,11 @@ export const evaluationApi = {
     await httpClient.post(`/evaluation/evaluation-responses/seasons/${seasonId}/calibration/confirm`);
   },
 
-  // ── Progress & Anomalies ──
-  async getProgress(seasonId: string): Promise<EvaluationResponse[]> {
-    const res = await httpClient.get(`/evaluation/evaluation-responses/seasons/${seasonId}/progress`);
+  // ── Progress (서버 쿼리 `q`: 대상자 이름·부서 부분 검색) ──
+  async getProgress(seasonId: string, q?: string): Promise<EvaluationResponse[]> {
+    const res = await httpClient.get(`/evaluation/evaluation-responses/seasons/${seasonId}/progress`, {
+      params: q != null && q !== '' ? {q} : undefined,
+    });
     return normalizeArray(unwrapApiResponse<unknown>(res.data), mapResponse);
-  },
-
-  async listAnomalies(seasonId: string): Promise<EvaluationResponse[]> {
-    const res = await httpClient.get(`/evaluation/evaluation-responses/seasons/${seasonId}/anomalies`);
-    return normalizeArray(unwrapApiResponse<unknown>(res.data), mapResponse);
-  },
-
-  async requestReview(seasonId: string, responseId: string): Promise<EvaluationResponse> {
-    const res = await httpClient.post(
-      `/evaluation/evaluation-responses/seasons/${seasonId}/anomalies/${responseId}/request-review`,
-    );
-    return mapResponse(unwrapApiResponse<any>(res.data));
   },
 };

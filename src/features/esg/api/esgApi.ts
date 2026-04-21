@@ -289,9 +289,18 @@ function normalizeConfig(raw: unknown): EsgConfig | null {
 
 export const esgApi = {
   async getConfig(): Promise<EsgConfig | null> {
-    const response = await httpClient.get('/esg/config');
-    const unwrapped = unwrapApiResponse<unknown>(response.data);
-    return normalizeConfig(unwrapped);
+    try {
+      const response = await httpClient.get('/esg/config');
+      const unwrapped = unwrapApiResponse<unknown>(response.data);
+      return normalizeConfig(unwrapped);
+    } catch (error: any) {
+      const status = error?.response?.status;
+      // ESG 서비스 미연결/비활성 환경에서는 설정 API가 없을 수 있으므로 null로 폴백.
+      if (status === 404 || status === 403) {
+        return null;
+      }
+      throw error;
+    }
   },
 
   async updateConfig(payload: EsgConfigUpdatePayload) {

@@ -15,7 +15,6 @@ export const APP_MENU_LABEL: Record<string, string> = {
   '/app/approvals/department': '부서 문서함',
   '/app/payroll': '급여명세서',
   '/app/notifications': '알림',
-  '/app/member-chat/admin': '보안·컴플라이언스 조회',
   '/app/performance': '성과',
   '/app/evaluations': '평가',
   '/app/meetings': '미팅',
@@ -125,7 +124,6 @@ export function appHeaderTitleFromPath(
   if (/^\/app\/members\/[^/]+$/.test(pathname)) return '구성원 상세';
   if (pathname === '/app/approvals/department') return '부서 문서함';
   if (/^\/app\/meetings\/[^/]+$/.test(pathname)) return '면담 상세';
-  if (pathname === '/app/member-chat/admin') return '보안·컴플라이언스 조회';
   return APP_BRAND_NAME;
 }
 
@@ -458,20 +456,6 @@ export const EVALUATION_PAGE_KO = {
   progressLastAccess: '마지막 접속',
   progressLastRemind: '마지막 리마인드',
 
-  // Anomaly
-  anomalyTitle: '스마트 오류 감지',
-  anomalyCount: '감지 건수',
-  anomalyEvaluator: '평가자',
-  anomalyType: '이상 유형',
-  anomalyAction: '액션',
-  anomalyRequestReview: '검토 요청',
-  reviewRequested: '검토 요청이 접수되었습니다.',
-  anomalyDismiss: '무시',
-  anomalyAllSame: '모든 항목 동일 응답',
-  anomalyTooShort: '답변 너무 짧음',
-  anomalyInsincere: '의미 없는 반복 텍스트',
-  anomalyContradiction: '모순 응답 감지',
-
   // Calibration
   calibrationTitle: '등급 캘리브레이션',
   calibrationConfirm: '확정하기',
@@ -493,10 +477,16 @@ export const EVALUATION_PAGE_KO = {
   calibrationConfirmModal: '확정 후 수정 불가합니다.',
 
   // Analytics
-  analyticsTitle: '분포 분석',
-  analyticsItemDist: '조사항목 분포',
-  analyticsTeamSelf: '팀별 셀프 평가',
-  analyticsChartPlaceholder: '차트 준비 중',
+  analyticsTitle: '결과 분석',
+  analyticsGradeDist: '등급 분포',
+  analyticsScoreSummary: '점수 요약',
+  analyticsAvgScore: '평균 점수',
+  analyticsMaxScore: '최고 점수',
+  analyticsMinScore: '최저 점수',
+  analyticsSampleCount: '응답 수',
+  analyticsByType: '평가 유형별 평균',
+  analyticsNoGrade: '미부여',
+  analyticsEmpty: '아직 분석할 결과가 없습니다.',
 
   // Common
   save: '저장',

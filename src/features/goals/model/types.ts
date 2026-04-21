@@ -39,7 +39,28 @@ export type KpiTemplate = {
   requireApproval?: boolean;
   /** 세분화된 승인 정책. 서버가 항상 내려주며, 없으면 requireApproval 로부터 유도. */
   goalApprovalPolicy?: GoalApprovalPolicy;
+  /** 서버 `KpiTemplateResDto.kpis` — 구조화 배열 (우선). */
+  kpis?: unknown[] | null;
+  /** 레거시/직렬화용 — `kpis`만 올 때 API 레이어에서 JSON 문자열로도 채움 */
   kpisJson?: string | null;
+};
+
+/** GET `/goal` 쿼리 — `status`는 서버 `GoalHealthStatus` */
+export type ListGoalsParams = {
+  parentId?: string;
+  cycle?: KpiCycle;
+  ownerId?: string;
+  status?: GoalHealthStatus;
+  depth?: number;
+};
+
+/** `KpiTemplateGenerateReqDto` — POST `/goal/kpi-template/{id}/generate` (필드 모두 선택) */
+export type KpiTemplateGeneratePayload = {
+  periodStart?: string;
+  periodEnd?: string;
+  parentGoalId?: string;
+  ownerMapping?: Array<{ kpiIndex: number; ownerId: string; ownerType?: OwnerType }>;
+  approval?: { approverId: string };
 };
 
 /** goal-service `GoalStatus` — DB enum과 동일 */
@@ -261,6 +282,11 @@ export type GoalComment = {
 };
 
 export type CreateGoalCommentPayload = {
+  /** goal-service `GoalCommentReqDto.body` */
+  body: string;
+};
+
+export type UpdateGoalCommentPayload = {
   body: string;
 };
 

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Button, Card, Form, Input, Progress, Radio, Space, Tag, Typography, message, Spin, Divider, Badge,
+  App, Button, Card, Collapse, Form, Input, Progress, Radio, Space, Tag, Typography, Spin, Divider, Badge,
 } from 'antd';
 import {
   ArrowLeftOutlined, SaveOutlined, SendOutlined, InfoCircleOutlined, AimOutlined,
@@ -18,6 +18,7 @@ import { AppButton } from '@/shared/ui/AppButton';
 const { Text, Title, Paragraph } = Typography;
 
 export function EvaluationWritePage() {
+  const { message } = App.useApp();
   const { responseId } = useParams({ strict: false }) as { responseId: string };
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -47,6 +48,7 @@ export function EvaluationWritePage() {
     [designRaw],
   );
   const sections: DesignSection[] = design?.sections ?? [];
+  const editablePhases = new Set(['SELF_EVAL', 'PEER_EVAL', 'UPWARD_EVAL', 'DOWNWARD_EVAL']);
 
   // ── Local answer state ──
   const [answers, setAnswers] = useState<Record<string, Answer>>({});
@@ -84,6 +86,7 @@ export function EvaluationWritePage() {
     }).length;
   }, [requiredQuestions, answers]);
   const progressPct = requiredQuestions.length > 0 ? Math.round((answeredRequired / requiredQuestions.length) * 100) : 0;
+  const targetMemberLabel = response?.targetMemberName?.trim() || '평가 대상자';
 
   // ── Update answer ──
   const updateAnswer = useCallback((questionId: string, patch: Partial<Answer>) => {
@@ -100,6 +103,10 @@ export function EvaluationWritePage() {
       return evaluationApi.saveResponse(responseId, { answersJson: JSON.stringify(answerList) });
     },
     onSuccess: () => message.success(L.writeAutoSaved),
+    onError: (e: any) => {
+      const serverMessage = e?.message ?? e?.response?.data?.message ?? e?.response?.data?.error;
+      message.error(serverMessage || '평가 저장에 실패했습니다.');
+    },
   });
 
   // ── Submit mutation ──
@@ -115,11 +122,17 @@ export function EvaluationWritePage() {
       queryClient.invalidateQueries({ queryKey: ['eval-my-responses'] });
       navigate({ to: '/app/evaluations' });
     },
+    onError: (e: any) => {
+      const serverMessage = e?.message ?? e?.response?.data?.message ?? e?.response?.data?.error;
+      message.error(serverMessage || '평가 제출에 실패했습니다.');
+    },
   });
 
   // ── Auto-save ──
+  const isReadOnly = response?.status === 'SUBMITTED';
+
   useEffect(() => {
-    if (response?.status === 'SUBMITTED') return;
+    if (isReadOnly) return;
     autoSaveRef.current = setInterval(() => {
       if (Object.keys(answers).length > 0) {
         saveMut.mutate();
@@ -128,7 +141,7 @@ export function EvaluationWritePage() {
     return () => {
       if (autoSaveRef.current) clearInterval(autoSaveRef.current);
     };
-  }, [answers, response?.status]);
+  }, [answers, isReadOnly]);
 
   // ── Handle submit ──
   const handleSubmit = () => {
@@ -178,8 +191,6 @@ export function EvaluationWritePage() {
       </div>
     );
   }
-
-  const isReadOnly = response.status === 'SUBMITTED';
 
   // ── Question Renderer ──
   const renderQuestion = (q: DesignQuestion) => {
@@ -257,38 +268,50 @@ export function EvaluationWritePage() {
   };
 
   return (
-    <div className="tw-p-6 tw-max-w-screen-xl tw-mx-auto">
+    <div className="tw-mx-auto tw-w-full tw-max-w-[1400px] tw-space-y-6">
       {/* Header */}
-      <div className="tw-flex tw-items-center tw-gap-4 tw-mb-6">
-        <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate({ to: '/app/evaluations' })} />
-        <div className="tw-flex-1">
-          <Title level={4} className="tw-mb-0">{L.writeTitle}</Title>
-          <Text type="secondary">대상: {response.targetMemberId} · {({
+      <Card
+        className="tw-rounded-2xl tw-border tw-border-slate-200/80 tw-shadow-sm tw-shadow-slate-900/5"
+        styles={{ body: { padding: 20 } }}
+      >
+        <div className="tw-flex tw-items-center tw-gap-4">
+          <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate({ to: '/app/evaluations' })} />
+          <div className="tw-flex-1">
+            <Title level={4} className="!tw-m-0 !tw-text-[24px] !tw-font-bold !tw-leading-tight !tw-tracking-tight !tw-text-[#1e3a5f]">
+              {L.writeTitle}
+            </Title>
+            <Text type="secondary">대상: {targetMemberLabel} · {({
             SELF: L.evalTypeSelf, DOWNWARD: L.evalTypeDownward, UPWARD: L.evalTypeUpward, PEER: L.evalTypePeer,
           }[response.evaluationType] ?? response.evaluationType)} 평가</Text>
+          </div>
+          <div className="tw-flex tw-items-center tw-gap-2 tw-min-w-[220px]">
+            <Text type="secondary" className="tw-text-sm">{L.writeProgress}</Text>
+            <Progress
+              percent={progressPct}
+              size="small"
+              strokeColor={progressPct >= 80 ? '#22c55e' : progressPct >= 50 ? '#f59e0b' : '#ef4444'}
+              className="tw-flex-1"
+            />
+          </div>
         </div>
-        <div className="tw-flex tw-items-center tw-gap-2 tw-min-w-[200px]">
-          <Text type="secondary" className="tw-text-sm">{L.writeProgress}</Text>
-          <Progress
-            percent={progressPct}
-            size="small"
-            strokeColor={progressPct >= 80 ? '#22c55e' : progressPct >= 50 ? '#f59e0b' : '#ef4444'}
-            className="tw-flex-1"
-          />
-        </div>
-      </div>
+      </Card>
 
       {/* Main Content */}
-      <div className="tw-flex tw-gap-6">
+      <div className="tw-flex tw-items-start tw-gap-6">
         {/* Left: Questions */}
         <div className="tw-flex-1 tw-space-y-4">
           {sections.length > 0 ? sections.map((section, si) => (
-            <Card key={si} title={
-              <div className="tw-flex tw-justify-between tw-items-center">
-                <Text strong>{`${si + 1}. ${section.title}`}</Text>
-                <Tag color="blue">{L.designWeight} {section.weight}%</Tag>
-              </div>
-            }>
+            <Card
+              key={si}
+              className="tw-rounded-2xl tw-border tw-border-slate-200/80 tw-shadow-sm tw-shadow-slate-900/5"
+              styles={{ body: { padding: 20 } }}
+              title={
+                <div className="tw-flex tw-items-center tw-justify-between">
+                  <Text strong>{`${si + 1}. ${section.title}`}</Text>
+                  <Tag color="blue">{L.designWeight} {section.weight}%</Tag>
+                </div>
+              }
+            >
               {section.questions.map(renderQuestion)}
             </Card>
           )) : (
@@ -314,176 +337,176 @@ export function EvaluationWritePage() {
         </div>
 
         {/* Right: Reference Panel */}
-        <div className="tw-w-80 tw-flex-shrink-0">
-          <Card title={L.writeReferencePanel} size="small" className="tw-sticky tw-top-4">
-            <div className="tw-space-y-4">
-              {/* Member Info */}
-              <div>
-                <Text type="secondary" className="tw-text-xs tw-block tw-mb-1">평가 대상</Text>
-                <Text>{response.targetMemberId}</Text>
-              </div>
-              <Divider className="tw-my-2" />
-              {/* Evaluation Type */}
-              <div>
-                <Text type="secondary" className="tw-text-xs tw-block tw-mb-1">평가 유형</Text>
-                <Tag color="blue">{({
-                  SELF: L.evalTypeSelf, DOWNWARD: L.evalTypeDownward, UPWARD: L.evalTypeUpward, PEER: L.evalTypePeer,
-                }[response.evaluationType])}</Tag>
-              </div>
-              <Divider className="tw-my-2" />
-              {/* Status */}
-              <div>
-                <Text type="secondary" className="tw-text-xs tw-block tw-mb-1">상태</Text>
-                {response.status === 'SUBMITTED' ? (
-                  <Tag color="green">{L.statusSubmitted}</Tag>
-                ) : response.status === 'IN_PROGRESS' ? (
-                  <Tag color="gold">{L.statusInProgress}</Tag>
-                ) : (
-                  <Tag>{L.statusNotStarted}</Tag>
-                )}
-              </div>
-              {response.submittedAt && (
-                <>
-                  <Divider className="tw-my-2" />
-                  <div>
-                    <Text type="secondary" className="tw-text-xs tw-block tw-mb-1">제출 시각</Text>
-                    <Text className="tw-text-sm">{response.submittedAt}</Text>
-                  </div>
-                </>
-              )}
-            </div>
-          </Card>
-
-          {/* Criteria Panel */}
-          {design && (
-            <Card title={L.writeCriteriaPanel} size="small" className="tw-mt-4">
-              <div className="tw-space-y-2">
-                {sections.map((s, i) => (
-                  <div key={i} className="tw-flex tw-justify-between tw-text-sm">
-                    <Text>{s.title}</Text>
-                    <Text type="secondary">{s.weight}%</Text>
-                  </div>
-                ))}
-                <Divider className="tw-my-2" />
-                <div className="tw-flex tw-justify-between tw-text-sm tw-font-semibold">
-                  <Text>합계</Text>
-                  <Text>{sections.reduce((s, sec) => s + sec.weight, 0)}%</Text>
-                </div>
-              </div>
-            </Card>
-          )}
-
-          {/* ── 목표 현황 카드 — 평가 시즌 시작 시점 스냅샷 vs 현재 ── */}
-          {goalSummaries && goalSummaries.length > 0 && (
-            <Card
-              title={
-                <div className="tw-flex tw-items-center tw-gap-2">
-                  <AimOutlined />
-                  <span>목표 현황</span>
-                  <Tag color="blue" className="tw-text-xs">{goalSummaries.length}건</Tag>
-                  {goalSummaries.some((c: GoalSummaryCard) => c.changedSinceSnapshot) && (
-                    <Tag color="orange" className="tw-text-xs">
-                      {goalSummaries.filter((c: GoalSummaryCard) => c.changedSinceSnapshot).length}건 변경
-                    </Tag>
-                  )}
-                </div>
-              }
-              size="small"
-              className="tw-mt-4"
-            >
-              <div className="tw-space-y-3">
-                {goalSummaries.map((card: GoalSummaryCard) => {
-                  const snapshotPct = card.snapshot?.achievementPctAtSnapshot ?? null;
-                  const currentPct = card.current?.achievementPct ?? null;
-                  const delta = snapshotPct != null && currentPct != null ? currentPct - snapshotPct : null;
-                  const deltaColor = delta != null ? (delta > 0 ? 'tw-text-emerald-600' : delta < 0 ? 'tw-text-rose-600' : 'tw-text-slate-400') : '';
-                  const deltaSign = delta != null ? (delta > 0 ? '+' : '') : '';
-
-                  return (
-                    <div
-                      key={card.goalId}
-                      className={`tw-p-3 tw-rounded-xl tw-border ${
-                        card.changedSinceSnapshot ? 'tw-border-orange-200 tw-bg-orange-50/60' : 'tw-border-slate-100 tw-bg-slate-50/60'
-                      }`}
-                    >
-                      {/* 제목 + 변경 뱃지 */}
-                      <div className="tw-flex tw-items-start tw-justify-between tw-gap-2 tw-mb-2">
-                        <Text strong className="tw-text-sm tw-leading-tight">
-                          {card.snapshot?.title ?? card.current?.title ?? '(삭제됨)'}
-                        </Text>
-                        {card.changedSinceSnapshot && (
-                          <Badge
-                            count="변경됨"
-                            style={{ backgroundColor: '#fa8c16', fontSize: '10px' }}
-                          />
+        <div className="tw-w-80 tw-flex-shrink-0 tw-self-start tw-sticky tw-top-6 tw-max-h-[calc(100dvh-110px)] tw-overflow-y-auto">
+          <Card
+            size="small"
+            className="tw-rounded-2xl tw-border tw-border-slate-200/80 tw-shadow-sm tw-shadow-slate-900/5"
+            styles={{ body: { padding: 12 } }}
+          >
+            <Collapse
+              accordion
+              defaultActiveKey={['reference']}
+              ghost
+              items={[
+                {
+                  key: 'reference',
+                  label: L.writeReferencePanel,
+                  children: (
+                    <div className="tw-space-y-4">
+                      <div>
+                        <Text type="secondary" className="tw-text-xs tw-block tw-mb-1">평가 대상</Text>
+                        <Text>{targetMemberLabel}</Text>
+                      </div>
+                      <Divider className="tw-my-2" />
+                      <div>
+                        <Text type="secondary" className="tw-text-xs tw-block tw-mb-1">평가 유형</Text>
+                        <Tag color="blue">{({
+                          SELF: L.evalTypeSelf, DOWNWARD: L.evalTypeDownward, UPWARD: L.evalTypeUpward, PEER: L.evalTypePeer,
+                        }[response.evaluationType])}</Tag>
+                      </div>
+                      <Divider className="tw-my-2" />
+                      <div>
+                        <Text type="secondary" className="tw-text-xs tw-block tw-mb-1">상태</Text>
+                        {response.status === 'SUBMITTED' ? (
+                          <Tag color="green">{L.statusSubmitted}</Tag>
+                        ) : response.status === 'IN_PROGRESS' ? (
+                          <Tag color="gold">{L.statusInProgress}</Tag>
+                        ) : (
+                          <Tag>{L.statusNotStarted}</Tag>
                         )}
                       </div>
-
-                      {/* 달성률 비교 — 시각적 바 + 수치 */}
-                      <div className="tw-flex tw-items-center tw-gap-3 tw-text-xs">
-                        <div className="tw-flex tw-flex-col tw-items-center tw-gap-0.5">
-                          <span className="tw-text-[10px] tw-text-slate-400">시작 시점</span>
-                          <span className="tw-text-lg tw-font-bold tw-tabular-nums tw-text-slate-600">
-                            {snapshotPct != null ? `${Math.round(snapshotPct)}%` : '-'}
-                          </span>
-                        </div>
-                        <div className="tw-flex tw-flex-1 tw-flex-col tw-gap-1">
-                          <div className="tw-flex tw-items-center tw-gap-1">
-                            <div className="tw-h-1.5 tw-flex-1 tw-rounded-full tw-bg-slate-200">
-                              <div
-                                className="tw-h-full tw-rounded-full tw-bg-slate-400 tw-transition-[width]"
-                                style={{ width: `${Math.min(100, snapshotPct ?? 0)}%` }}
-                              />
-                            </div>
+                      {response.submittedAt && (
+                        <>
+                          <Divider className="tw-my-2" />
+                          <div>
+                            <Text type="secondary" className="tw-text-xs tw-block tw-mb-1">제출 시각</Text>
+                            <Text className="tw-text-sm">{response.submittedAt}</Text>
                           </div>
-                          <div className="tw-flex tw-items-center tw-gap-1">
-                            <div className="tw-h-1.5 tw-flex-1 tw-rounded-full tw-bg-slate-200">
-                              <div
-                                className="tw-h-full tw-rounded-full tw-bg-blue-500 tw-transition-[width]"
-                                style={{ width: `${Math.min(100, currentPct ?? 0)}%` }}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                        <div className="tw-flex tw-flex-col tw-items-center tw-gap-0.5">
-                          <span className="tw-text-[10px] tw-text-slate-400">현재</span>
-                          <span className="tw-text-lg tw-font-bold tw-tabular-nums tw-text-[#1e3a5f]">
-                            {currentPct != null ? `${Math.round(currentPct)}%` : '-'}
-                          </span>
-                        </div>
-                        {delta != null && (
-                          <div className="tw-flex tw-flex-col tw-items-center tw-gap-0.5">
-                            <span className="tw-text-[10px] tw-text-slate-400">변동</span>
-                            <span className={`tw-text-sm tw-font-bold tw-tabular-nums ${deltaColor}`}>
-                              {deltaSign}{Math.round(delta)}%p
-                            </span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* 변경점 태그 */}
-                      {card.changeSummary.length > 0 && (
-                        <div className="tw-flex tw-flex-wrap tw-gap-1 tw-mt-2">
-                          {card.changeSummary.map((c: string) => (
-                            <Tag key={c} color="orange" className="!tw-text-[10px] !tw-m-0 !tw-rounded-md">
-                              {{
-                                TITLE: '제목 변경',
-                                TARGET_VALUE: '목표치 변경',
-                                STATUS: '상태 변경',
-                                PERIOD: '기간 변경',
-                                PROGRESS: '진행률 변동',
-                                DELETED_OR_HIDDEN: '삭제/비공개',
-                              }[c] ?? c}
-                            </Tag>
-                          ))}
-                        </div>
+                        </>
                       )}
                     </div>
-                  );
-                })}
-              </div>
-            </Card>
-          )}
+                  ),
+                },
+                {
+                  key: 'criteria',
+                  label: L.writeCriteriaPanel,
+                  children: design ? (
+                    <div className="tw-space-y-2">
+                      {sections.map((s, i) => (
+                        <div key={i} className="tw-flex tw-justify-between tw-text-sm">
+                          <Text>{s.title}</Text>
+                          <Text type="secondary">{s.weight}%</Text>
+                        </div>
+                      ))}
+                      <Divider className="tw-my-2" />
+                      <div className="tw-flex tw-justify-between tw-text-sm tw-font-semibold">
+                        <Text>합계</Text>
+                        <Text>{sections.reduce((s, sec) => s + sec.weight, 0)}%</Text>
+                      </div>
+                    </div>
+                  ) : (
+                    <Text type="secondary">연결된 기준 명세가 없습니다.</Text>
+                  ),
+                },
+                {
+                  key: 'goals',
+                  label: (
+                    <div className="tw-inline-flex tw-items-center tw-gap-2">
+                      <AimOutlined />
+                      <span>목표 현황</span>
+                      <Tag color="blue" className="tw-text-xs">{goalSummaries?.length ?? 0}건</Tag>
+                    </div>
+                  ),
+                  children: goalSummaries && goalSummaries.length > 0 ? (
+                    <div className="tw-space-y-3">
+                      {goalSummaries.map((card: GoalSummaryCard) => {
+                        const snapshotPct = card.snapshot?.achievementPctAtSnapshot ?? null;
+                        const currentPct = card.current?.achievementPct ?? null;
+                        const delta = snapshotPct != null && currentPct != null ? currentPct - snapshotPct : null;
+                        const deltaColor = delta != null ? (delta > 0 ? 'tw-text-emerald-600' : delta < 0 ? 'tw-text-rose-600' : 'tw-text-slate-400') : '';
+                        const deltaSign = delta != null ? (delta > 0 ? '+' : '') : '';
+
+                        return (
+                          <div
+                            key={card.goalId}
+                            className={`tw-p-3 tw-rounded-xl tw-border ${
+                              card.changedSinceSnapshot ? 'tw-border-orange-200 tw-bg-orange-50/60' : 'tw-border-slate-100 tw-bg-slate-50/60'
+                            }`}
+                          >
+                            <div className="tw-flex tw-items-start tw-justify-between tw-gap-2 tw-mb-2">
+                              <Text strong className="tw-text-sm tw-leading-tight">
+                                {card.snapshot?.title ?? card.current?.title ?? '(삭제됨)'}
+                              </Text>
+                              {card.changedSinceSnapshot && (
+                                <Badge
+                                  count="변경됨"
+                                  style={{ backgroundColor: '#fa8c16', fontSize: '10px' }}
+                                />
+                              )}
+                            </div>
+                            <div className="tw-flex tw-items-center tw-gap-3 tw-text-xs">
+                              <div className="tw-flex tw-flex-col tw-items-center tw-gap-0.5">
+                                <span className="tw-text-[10px] tw-text-slate-400">시작 시점</span>
+                                <span className="tw-text-lg tw-font-bold tw-tabular-nums tw-text-slate-600">
+                                  {snapshotPct != null ? `${Math.round(snapshotPct)}%` : '-'}
+                                </span>
+                              </div>
+                              <div className="tw-flex tw-flex-1 tw-flex-col tw-gap-1">
+                                <div className="tw-h-1.5 tw-flex-1 tw-rounded-full tw-bg-slate-200">
+                                  <div
+                                    className="tw-h-full tw-rounded-full tw-bg-slate-400 tw-transition-[width]"
+                                    style={{ width: `${Math.min(100, snapshotPct ?? 0)}%` }}
+                                  />
+                                </div>
+                                <div className="tw-h-1.5 tw-flex-1 tw-rounded-full tw-bg-slate-200">
+                                  <div
+                                    className="tw-h-full tw-rounded-full tw-bg-blue-500 tw-transition-[width]"
+                                    style={{ width: `${Math.min(100, currentPct ?? 0)}%` }}
+                                  />
+                                </div>
+                              </div>
+                              <div className="tw-flex tw-flex-col tw-items-center tw-gap-0.5">
+                                <span className="tw-text-[10px] tw-text-slate-400">현재</span>
+                                <span className="tw-text-lg tw-font-bold tw-tabular-nums tw-text-[#1e3a5f]">
+                                  {currentPct != null ? `${Math.round(currentPct)}%` : '-'}
+                                </span>
+                              </div>
+                              {delta != null && (
+                                <div className="tw-flex tw-flex-col tw-items-center tw-gap-0.5">
+                                  <span className="tw-text-[10px] tw-text-slate-400">변동</span>
+                                  <span className={`tw-text-sm tw-font-bold tw-tabular-nums ${deltaColor}`}>
+                                    {deltaSign}{Math.round(delta)}%p
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                            {card.changeSummary.length > 0 && (
+                              <div className="tw-flex tw-flex-wrap tw-gap-1 tw-mt-2">
+                                {card.changeSummary.map((c: string) => (
+                                  <Tag key={c} color="orange" className="!tw-text-[10px] !tw-m-0 !tw-rounded-md">
+                                    {{
+                                      TITLE: '제목 변경',
+                                      TARGET_VALUE: '목표치 변경',
+                                      STATUS: '상태 변경',
+                                      PERIOD: '기간 변경',
+                                      PROGRESS: '진행률 변동',
+                                      DELETED_OR_HIDDEN: '삭제/비공개',
+                                    }[c] ?? c}
+                                  </Tag>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <Text type="secondary">표시할 목표 현황이 없습니다.</Text>
+                  ),
+                },
+              ]}
+            />
+          </Card>
         </div>
       </div>
     </div>
