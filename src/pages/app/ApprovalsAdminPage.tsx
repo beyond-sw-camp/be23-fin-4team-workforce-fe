@@ -54,6 +54,8 @@ type EditDocForm = {
 };
 
 const REQUEST_TYPES_DEFAULT_DEPT_HIDDEN: ReadonlySet<ApprovalRequestType> = new Set(['SALARY', 'HR_MOVEMENT']);
+const NAVY_BUTTON_CLASS =
+  '!tw-border-0 !tw-bg-[#1e3a5f] !tw-text-white hover:!tw-bg-[#152a45] hover:!tw-text-white disabled:!tw-opacity-60';
 
 type PolicyLineDraft = {
   key: string;
@@ -110,8 +112,9 @@ function validatePolicyLines(rows: PolicyLineDraft[]) {
 export function ApprovalsAdminPage() {
   const { message } = App.useApp();
   const qc = useQueryClient();
-  const { user } = useAuth();
   const { hasPermission } = usePermissions();
+  const { user } = useAuth();
+  const isSystemAdmin = user?.isSystemAdmin === true;
   const [createOpen, setCreateOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'documents' | 'policy-lines'>('documents');
   const [selectedDocumentId, setSelectedDocumentId] = useState<string>('');
@@ -401,14 +404,19 @@ export function ApprovalsAdminPage() {
 
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
-      {/* `destroyOnHidden` 모달이 닫히면 내부 Form이 제거되어 useForm 인스턴스가 끊긴다. */}
-      {!createOpen ? <Form form={form} preserve={false} className="tw-hidden" aria-hidden /> : null}
-      {!editOpen ? <Form form={editForm} preserve={false} className="tw-hidden" aria-hidden /> : null}
-      {canAccessAdminPage ? (
-        <Tabs
-          activeKey={activeTab}
-          onChange={(key) => setActiveTab(key as 'documents' | 'policy-lines')}
-          items={[
+      {!canRead ? (
+        <Alert type="warning" showIcon message="결재 관리자 화면을 보려면 조회 권한이 필요합니다." />
+      ) : (
+        <>
+          {/* destroyOnHidden 관련 설명 */}
+          {!createOpen ? <Form form={form} preserve={false} className="tw-hidden" aria-hidden /> : null}
+          {!editOpen ? <Form form={editForm} preserve={false} className="tw-hidden" aria-hidden /> : null}
+
+          {canAccessAdminPage ? (
+            <Tabs
+              activeKey={activeTab}
+              onChange={(key) => setActiveTab(key as 'documents' | 'policy-lines')}
+              items={[
             {
               key: 'documents',
               label: '결재 양식 관리',
@@ -423,7 +431,7 @@ export function ApprovalsAdminPage() {
                         새로고침
                       </Button>
                       {canCreate ? (
-                        <Button type="primary" icon={<PlusOutlined />} onClick={handleOpenCreate}>
+                        <Button type="primary" icon={<PlusOutlined />} className={NAVY_BUTTON_CLASS} onClick={handleOpenCreate}>
                           양식 추가
                         </Button>
                       ) : null}
@@ -433,7 +441,7 @@ export function ApprovalsAdminPage() {
                     rowKey="documentId"
                     loading={docsLoading}
                     dataSource={documents}
-                    pagination={false}
+                    pagination={{ pageSize: 5, showSizeChanger: false }}
                     columns={[
                       {
                         title: '양식명',
@@ -487,6 +495,7 @@ export function ApprovalsAdminPage() {
                           <Button
                             size="small"
                             type={value === 'Y' ? 'primary' : 'default'}
+                            className={value === 'Y' ? NAVY_BUTTON_CLASS : undefined}
                             disabled={!canUpdate || deptVisibleM.isPending}
                             onClick={() => {
                               if (value === 'Y') {
@@ -625,7 +634,7 @@ export function ApprovalsAdminPage() {
                       rowKey="key"
                       loading={policyLoading}
                       dataSource={[...policyDrafts].sort((a, b) => a.stepOrder - b.stepOrder)}
-                      pagination={false}
+                      pagination={{ pageSize: 5, showSizeChanger: false }}
                       columns={[
                         {
                           title: '순서',
@@ -725,7 +734,7 @@ export function ApprovalsAdminPage() {
                           rowKey={(row) => row.policyLineId}
                           size="small"
                           loading={candidatesLoading}
-                          pagination={false}
+                          pagination={{ pageSize: 5, showSizeChanger: false }}
                           dataSource={policyLineCandidates}
                           locale={{
                             emptyText: selectedDocumentId
@@ -784,7 +793,8 @@ export function ApprovalsAdminPage() {
       ) : (
         <Alert type="warning" showIcon message="결재 관리자 화면을 보려면 관리자 또는 인사팀 권한이 필요합니다." />
       )}
-
+    </>
+    )}
       <Modal
         title="결재 양식 추가"
         open={createOpen}

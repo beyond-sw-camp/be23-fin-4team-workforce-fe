@@ -157,9 +157,6 @@ export function AdminCompanyHolidaysPage() {
           <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
             회사 공휴일 관리
           </Typography.Title>
-          <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-sm">
-            <Typography.Text code>/company-holidays</Typography.Text> — 회사별 공휴일/임시 휴무일을 관리합니다.
-          </Typography.Paragraph>
         </div>
         <Button
           type="primary"

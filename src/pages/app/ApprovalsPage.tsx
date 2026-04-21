@@ -286,7 +286,7 @@ function PendingHomeApprovalLineStepIcon({ status }: { status: string }) {
   return <MinusOutlined className="!tw-text-lg tw-text-slate-400" />;
 }
 
-function PendingHomeApprovalLineStrip({ lines, visibleSlots = 0 }: { lines: ApprovalLine[]; visibleSlots?: number }) {
+function PendingHomeApprovalLineStrip({ lines }: { lines: ApprovalLine[] }) {
   const sorted = [...lines].sort((a, b) => a.stepOrder - b.stepOrder);
   if (sorted.length === 0) {
     return (
@@ -1104,11 +1104,12 @@ export function ApprovalsPage() {
   const [form] = Form.useForm();
 
   const { user } = useAuth();
+  /** 결재 양식 설정 탭: 시스템 관리자 + 인사팀(MEMBER 생성/수정) + 기존 승인관리 권한 */
   const canAdmin =
     user?.isSystemAdmin === true ||
     hasPermission(PERM.APPROVAL_AD_READ) ||
-    isHrTeamMember(hasPermission) ||
-    canAccessMemberDirectoryFromPermissionStrings(user?.permissions);
+    hasPermission(PERM.MEMBER_CREATE) ||
+    hasPermission(PERM.MEMBER_UPDATE);
   /** 결재 API·라인의 memberId와 동일해야 함 — JWT/로컬 저장 `X-User-UUID`로 보강 */
   const authMemberId =
     user?.id?.trim() || getRefreshIdentityHeaders()['X-User-UUID']?.trim() || undefined;
@@ -2636,7 +2637,7 @@ export function ApprovalsPage() {
           )
         ) : (
           <Typography.Text type="secondary" className="tw-text-xs">
-            이름·직위·부서로 검색한 결과를 클릭/드래그하거나, 트리에서 바로 클릭/드래그하세요.
+            이름·직위·부서로 검색한 결과를 드래그하거나, 트리에서 바로 드래그하세요.
           </Typography.Text>
         )}
       </Space>
@@ -3297,15 +3298,10 @@ export function ApprovalsPage() {
                         }
                   }
                 >
-                  <div className="tw-min-w-0 tw-flex-1">
-                    <div className="tw-flex tw-items-baseline tw-justify-between tw-gap-2">
-                      <Typography.Text strong className="!tw-block tw-min-w-0 tw-flex-1 tw-truncate">
-                        {getApprovalRequestSubjectLine(row) || row.documentName || '—'}
-                      </Typography.Text>
-                      <Typography.Text type="secondary" className="!tw-shrink-0 tw-text-xs">
-                        {row.documentName?.trim() || '—'}
-                      </Typography.Text>
-                    </div>
+                  <div className="tw-min-w-0">
+                    <Typography.Text strong className="!tw-block tw-truncate">
+                      {row.documentName || '—'}
+                    </Typography.Text>
                     <Typography.Text type="secondary" className="!tw-block tw-text-xs">
                       {(row.requesterName || '요청자 미상')} · {formatDateTime(row.updatedAt || row.createdAt)}
                     </Typography.Text>
@@ -4697,8 +4693,6 @@ export function ApprovalsPage() {
         okText={approvalAction?.mode === 'approve' ? '승인' : '반려'}
         cancelText="닫기"
         confirmLoading={approveM.isPending || rejectM.isPending}
-        style={{ top: 48 }}
-        styles={{ content: { resize: 'both', overflow: 'auto' } }}
       >
         <Input.TextArea
           rows={4}

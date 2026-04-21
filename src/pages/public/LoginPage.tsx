@@ -26,6 +26,10 @@ function LoginPage({ embedded = false }: LoginPageProps) {
         void navigate({ to: '/change-password', search: { forced: true } });
         return;
       }
+      if (session.user.flags?.onboardingRequired) {
+        void navigate({ to: '/app/onboarding', replace: true });
+        return;
+      }
       void navigate({ to: APP_POST_LOGIN_PATH, replace: true });
     } catch (e) {
       setError((e as { message?: string })?.message ?? '로그인에 실패했습니다.');

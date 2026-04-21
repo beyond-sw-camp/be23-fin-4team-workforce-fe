@@ -2,6 +2,7 @@ export type AccountStatus = 'ACTIVE' | 'BLOCKED' | 'DELETED';
 
 export type AuthFlags = {
   mustChangePassword?: boolean;
+  onboardingRequired?: boolean;
   emailVerificationRequired?: boolean;
   accountStatus?: AccountStatus;
 };

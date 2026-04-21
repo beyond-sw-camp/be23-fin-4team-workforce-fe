@@ -120,10 +120,16 @@ const APP_MENU_ICONS: Record<string, ReactNode> = {
     '/app/members': <TeamOutlined className="tw-text-lg"/>,
     '/app/organization': <ApartmentOutlined className="tw-text-lg"/>,
     '/app/attendance': <ClockCircleOutlined className="tw-text-lg"/>,
+    '/app/attendance/overtime': <ClockCircleOutlined className="tw-text-lg"/>,
+    '/app/attendance/schedules/my': <ScheduleOutlined className="tw-text-lg"/>,
+    '/app/attendance/overtime-policies': <ControlOutlined className="tw-text-lg"/>,
+    '/app/attendance/flexible-slots': <ScheduleOutlined className="tw-text-lg"/>,
     '/app/leave': <ScheduleOutlined className="tw-text-lg"/>,
     '/app/approvals': <FileDoneOutlined className="tw-text-lg"/>,
     '/app/approvals/department': <FolderOpenOutlined className="tw-text-lg"/>,
     '/app/payroll': <DollarOutlined className="tw-text-lg"/>,
+    '/app/payroll/allowances': <GiftOutlined className="tw-text-lg"/>,
+    '/app/payroll/allowances/admin': <GiftOutlined className="tw-text-lg"/>,
     '/app/notifications': <BellOutlined className="tw-text-lg"/>,
     '/app/member-chat/admin': <MessageOutlined className="tw-text-lg"/>,
     '/app/performance': <LineChartOutlined className="tw-text-lg"/>,
@@ -307,6 +313,18 @@ function buildAppShellMenuItems(
                             title: APP_MENU_LABEL['/app/attendance/monthly'],
                         },
                         {
+                            key: '/app/attendance/schedules/my',
+                            icon: APP_MENU_ICONS['/app/attendance/schedules/my'],
+                            label: APP_MENU_LABEL['/app/attendance/schedules/my'],
+                            title: APP_MENU_LABEL['/app/attendance/schedules/my'],
+                        },
+                        {
+                            key: '/app/attendance/overtime',
+                            icon: APP_MENU_ICONS['/app/attendance/overtime'],
+                            label: APP_MENU_LABEL['/app/attendance/overtime'],
+                            title: APP_MENU_LABEL['/app/attendance/overtime'],
+                        },
+                        {
                             key: '/app/work-trips',
                             icon: APP_MENU_ICONS['/app/work-trips'],
                             label: APP_MENU_LABEL['/app/work-trips'],
@@ -339,6 +357,18 @@ function buildAppShellMenuItems(
                             icon: <ScheduleOutlined className="tw-text-lg"/>,
                             label: APP_MENU_LABEL['/app/attendance/schedules'],
                             title: APP_MENU_LABEL['/app/attendance/schedules'],
+                        },
+                        {
+                            key: '/app/attendance/overtime-policies',
+                            icon: APP_MENU_ICONS['/app/attendance/overtime-policies'],
+                            label: APP_MENU_LABEL['/app/attendance/overtime-policies'],
+                            title: APP_MENU_LABEL['/app/attendance/overtime-policies'],
+                        },
+                        {
+                            key: '/app/attendance/flexible-slots',
+                            icon: APP_MENU_ICONS['/app/attendance/flexible-slots'],
+                            label: APP_MENU_LABEL['/app/attendance/flexible-slots'],
+                            title: APP_MENU_LABEL['/app/attendance/flexible-slots'],
                         },
                     );
                 }
@@ -447,7 +477,7 @@ function buildAppShellMenuItems(
                     key: PAYROLL_GROUP_KEY,
                     label: (
                         <SiderGroupedMenuLabel icon={<DollarOutlined className="tw-text-lg"/>}
-                                               text={APP_MENU_LABEL['/app/payroll'] ?? '급여'}/>
+                                               text="급여"/>
                     ),
                     children: [
                         {
@@ -474,15 +504,35 @@ function buildAppShellMenuItems(
                             label: APP_MENU_LABEL['/app/salary/settings'],
                             title: APP_MENU_LABEL['/app/salary/settings'],
                         },
+                        {
+                            key: '/app/payroll/allowances/admin',
+                            icon: APP_MENU_ICONS['/app/payroll/allowances/admin'],
+                            label: APP_MENU_LABEL['/app/payroll/allowances/admin'],
+                            title: APP_MENU_LABEL['/app/payroll/allowances/admin'],
+                        },
                     ],
                 });
             } else {
-                const leafLabel = APP_MENU_LABEL[path];
                 items.push({
-                    key: path,
-                    icon: APP_MENU_ICONS[path],
-                    label: leafLabel,
-                    title: leafLabel,
+                    key: PAYROLL_GROUP_KEY,
+                    label: (
+                        <SiderGroupedMenuLabel icon={<DollarOutlined className="tw-text-lg"/>}
+                                               text="급여"/>
+                    ),
+                    children: [
+                        {
+                            key: '/app/payroll',
+                            icon: APP_MENU_ICONS['/app/payroll'],
+                            label: APP_MENU_LABEL['/app/payroll'],
+                            title: APP_MENU_LABEL['/app/payroll'],
+                        },
+                        {
+                            key: '/app/payroll/allowances',
+                            icon: APP_MENU_ICONS['/app/payroll/allowances'],
+                            label: APP_MENU_LABEL['/app/payroll/allowances'],
+                            title: APP_MENU_LABEL['/app/payroll/allowances'],
+                        },
+                    ],
                 });
             }
             continue;
@@ -502,6 +552,7 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
     const {status, user} = useAuth();
     const isAdmin = user?.isSystemAdmin === true;
     const {hasPermission} = usePermissions();
+    /** 결재 양식 설정 메뉴: 시스템 관리자 + 인사팀 + 승인관리 권한 */
     const showApprovalFormSettings =
         user?.isSystemAdmin === true ||
         hasPermission(PERM.APPROVAL_AD_READ) ||
@@ -590,7 +641,7 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
         };
 
         if (esgMenuItem) {
-            return [...items, chatAdmin, esgMenuItem, doc];
+            return [...withApprovalSettings, chatAdmin, esgMenuItem, doc];
         }
         return [...items, chatAdmin, doc];
     }, [esgConfig, isAdmin, approvalOrgChart, meMember, showApprovalFormSettings, status, user?.permissions]);
@@ -948,7 +999,7 @@ function AppShellAccountMenu() {
     );
 }
 
-function AppShellHeader() {
+function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
     const {status} = useAuth();
     const queryClient = useQueryClient();
     const {openMemberChat} = useMemberChatOpener();
@@ -1010,73 +1061,75 @@ function AppShellHeader() {
     return (
         <Layout.Header
             className="tw-m-0 tw-flex tw-h-16 tw-shrink-0 tw-items-center tw-gap-3 tw-overflow-visible tw-border-0 tw-border-b tw-border-solid tw-border-slate-200 tw-bg-white tw-px-4 tw-leading-none tw-shadow-none md:tw-gap-6 md:tw-px-7">
-            <div className="tw-relative tw-flex tw-min-w-0 tw-flex-1 tw-justify-start">
-                <AppSearchField
-                    className="tw-max-w-2xl"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="메뉴, 동료, 문서 검색..."
-                    aria-label="메뉴, 동료, 문서 검색"
-                />
-                {showSearchPanel && (
-                    <div
-                        className="tw-absolute tw-left-0 tw-top-[calc(100%+8px)] tw-z-50 tw-w-full tw-max-w-2xl tw-overflow-hidden tw-rounded-2xl tw-border tw-border-slate-200 tw-bg-white tw-shadow-xl">
-                        {searchLoading ? (
-                            <div className="tw-flex tw-items-center tw-justify-center tw-p-6">
-                                <Spin size="small"/>
-                            </div>
-                        ) : list.length === 0 ? (
-                            <div className="tw-p-4">
-                                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="검색 결과가 없습니다."/>
-                            </div>
-                        ) : (
-                            <div className="tw-max-h-[420px] tw-overflow-y-auto tw-py-1">
-                                {list.map((row) => {
-                                    if (!row.memberId) return null;
-                                    return (
-                                        <div
-                                            key={row.memberId}
-                                            role="button"
-                                            tabIndex={0}
-                                            className="tw-flex tw-cursor-pointer tw-items-start tw-gap-3 tw-px-4 tw-py-3 hover:tw-bg-slate-50"
-                                            onClick={() => {
-                                                setHeaderDetailMemberId(row.memberId);
-                                                setSearch('');
-                                            }}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter' || e.key === ' ') {
-                                                    e.preventDefault();
+            {hideSearch ? <div className="tw-flex-1" /> : (
+                <div className="tw-relative tw-flex tw-min-w-0 tw-flex-1 tw-justify-start">
+                    <AppSearchField
+                        className="tw-max-w-2xl"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        placeholder="메뉴, 동료, 문서 검색..."
+                        aria-label="메뉴, 동료, 문서 검색"
+                    />
+                    {showSearchPanel && (
+                        <div
+                            className="tw-absolute tw-left-0 tw-top-[calc(100%+8px)] tw-z-50 tw-w-full tw-max-w-2xl tw-overflow-hidden tw-rounded-2xl tw-border tw-border-slate-200 tw-bg-white tw-shadow-xl">
+                            {searchLoading ? (
+                                <div className="tw-flex tw-items-center tw-justify-center tw-p-6">
+                                    <Spin size="small"/>
+                                </div>
+                            ) : list.length === 0 ? (
+                                <div className="tw-p-4">
+                                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="검색 결과가 없습니다."/>
+                                </div>
+                            ) : (
+                                <div className="tw-max-h-[420px] tw-overflow-y-auto tw-py-1">
+                                    {list.map((row) => {
+                                        if (!row.memberId) return null;
+                                        return (
+                                            <div
+                                                key={row.memberId}
+                                                role="button"
+                                                tabIndex={0}
+                                                className="tw-flex tw-cursor-pointer tw-items-start tw-gap-3 tw-px-4 tw-py-3 hover:tw-bg-slate-50"
+                                                onClick={() => {
                                                     setHeaderDetailMemberId(row.memberId);
                                                     setSearch('');
-                                                }
-                                            }}
-                                        >
-                                            <Avatar
-                                                src={row.profileUrl || undefined}
-                                                icon={!row.profileUrl ? <UserOutlined/> : undefined}
-                                                size={32}
-                                                className={row.profileUrl ? '[&_img]:tw-object-cover' : 'tw-bg-slate-100'}
-                                            />
-                                            <div className="tw-min-w-0 tw-flex-1">
-                                                <div
-                                                    className="tw-truncate tw-text-sm tw-font-semibold tw-text-slate-900">
-                                                    {row.name ?? '이름 없음'}
-                                                </div>
-                                                <div className="tw-truncate tw-text-xs tw-text-slate-500">
-                                                    {row.email ?? '—'}
-                                                </div>
-                                                <div className="tw-truncate tw-text-xs tw-text-slate-400">
-                                                    {[row.organizationName, row.jobTitleName, row.memberStatus].filter(Boolean).join(' · ') || '—'}
+                                                }}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' || e.key === ' ') {
+                                                        e.preventDefault();
+                                                        setHeaderDetailMemberId(row.memberId);
+                                                        setSearch('');
+                                                    }
+                                                }}
+                                            >
+                                                <Avatar
+                                                    src={row.profileUrl || undefined}
+                                                    icon={!row.profileUrl ? <UserOutlined/> : undefined}
+                                                    size={32}
+                                                    className={row.profileUrl ? '[&_img]:tw-object-cover' : 'tw-bg-slate-100'}
+                                                />
+                                                <div className="tw-min-w-0 tw-flex-1">
+                                                    <div
+                                                        className="tw-truncate tw-text-sm tw-font-semibold tw-text-slate-900">
+                                                        {row.name ?? '이름 없음'}
+                                                    </div>
+                                                    <div className="tw-truncate tw-text-xs tw-text-slate-500">
+                                                        {row.email ?? '—'}
+                                                    </div>
+                                                    <div className="tw-truncate tw-text-xs tw-text-slate-400">
+                                                        {[row.organizationName, row.jobTitleName, row.memberStatus].filter(Boolean).join(' · ') || '—'}
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        )}
-                    </div>
-                )}
-            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
 
             <HeaderSearchMemberDetailModal
                 open={headerDetailMemberId != null}
@@ -1114,10 +1167,14 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
     if (/^\/app\/meetings\/[^/]+$/.test(pathname)) return ['/app/meetings'];
     if (/^\/app\/performance\//.test(pathname)) return ['/app/performance'];
     if (pathname === '/app/attendance/monthly') return ['/app/attendance/monthly'];
+    if (pathname === '/app/attendance/schedules/my') return ['/app/attendance/schedules/my'];
+    if (pathname === '/app/attendance/overtime') return ['/app/attendance/overtime'];
     if (pathname === '/app/attendance/company/monthly') return ['/app/attendance/company/monthly'];
     if (pathname === '/app/attendance/company') return ['/app/attendance/company'];
     if (pathname === '/app/attendance/holidays') return ['/app/attendance/holidays'];
     if (pathname === '/app/attendance/schedules') return ['/app/attendance/schedules'];
+    if (pathname === '/app/attendance/overtime-policies') return ['/app/attendance/overtime-policies'];
+    if (pathname === '/app/attendance/flexible-slots') return ['/app/attendance/flexible-slots'];
     if (pathname === '/app/attendance') return ['/app/attendance'];
     if (pathname === '/app/work-trips') return ['/app/work-trips'];
     if (pathname === '/app/leave/grant') return ['/app/leave/grant'];
@@ -1125,6 +1182,8 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
     if (pathname === '/app/leave') return ['/app/leave'];
     if (pathname === '/app/salary/unused-leave') return ['/app/salary/unused-leave'];
     if (pathname === '/app/salary/settings') return ['/app/salary/settings'];
+    if (pathname === '/app/payroll/allowances') return ['/app/payroll/allowances'];
+    if (pathname === '/app/payroll/allowances/admin') return ['/app/payroll/allowances/admin'];
     if (pathname.startsWith('/app/payroll/admin')) return ['/app/payroll/admin'];
     if (pathname === '/app/payroll' || /^\/app\/payroll\/[^/]+$/.test(pathname)) return ['/app/payroll'];
     if (pathname.startsWith('/app/approvals')) {
@@ -1174,6 +1233,9 @@ function menuOpenKeysForPath(
             pathname === '/app/salary/unused-leave' ||
             pathname === '/app/salary/settings')
     ) {
+        keys.push(PAYROLL_GROUP_KEY);
+    }
+    if (!isSystemAdmin && (pathname === '/app/payroll' || pathname === '/app/payroll/allowances')) {
         keys.push(PAYROLL_GROUP_KEY);
     }
     if (pathname.startsWith('/app/esg')) keys.push(ESG_GROUP_KEY);
@@ -1263,6 +1325,23 @@ function AppShellLayout() {
                     <Outlet />
                 </Layout.Content>
             </Layout>
+        );
+    }
+
+    // 관리자 최초 로그인 온보딩은 독립 화면으로 표시(헤더만 노출, 사이드바/FAB 숨김)
+    if (pathname === '/app/onboarding') {
+        return (
+            <MemberChatProvider>
+                <Layout className="tw-flex tw-h-[100dvh] tw-min-h-0 tw-bg-slate-50">
+                    <Layout className="tw-flex tw-min-h-0 tw-min-w-0 tw-flex-1 tw-flex-col tw-bg-slate-50">
+                        <AppShellHeader hideSearch/>
+                        <Layout.Content
+                            className="wf-scrollbar tw-min-h-0 tw-flex-1 tw-overflow-y-auto tw-bg-transparent tw-p-6">
+                            <Outlet/>
+                        </Layout.Content>
+                    </Layout>
+                </Layout>
+            </MemberChatProvider>
         );
     }
 
