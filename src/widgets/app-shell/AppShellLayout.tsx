@@ -233,6 +233,7 @@ function buildAppShellMenuItems(
     isAdmin: boolean,
     approvalMenuChildren: NonNullable<MenuProps['items']> | undefined,
     canAccessMemberDirectory: boolean,
+    hrGroupExtraChildren?: NonNullable<MenuProps['items']>,
 ): NonNullable<MenuProps['items']> {
     const items: NonNullable<MenuProps['items']> = [];
     let hubInserted = false;
@@ -272,10 +273,19 @@ function buildAppShellMenuItems(
             continue;
         }
         if (ORG_HR_PATH_SET.has(path)) {
-            if (!canAccessMemberDirectory) {
-                continue;
-            }
             if (!orgInserted) {
+                const baseChildren: NonNullable<MenuProps['items']> = canAccessMemberDirectory
+                    ? ORG_HR_PATHS.map((p) => ({
+                          key: p,
+                          icon: APP_MENU_ICONS[p],
+                          label: APP_MENU_LABEL[p],
+                          title: APP_MENU_LABEL[p],
+                      }))
+                    : [];
+                const extras = hrGroupExtraChildren ?? [];
+                if (baseChildren.length === 0 && extras.length === 0) {
+                    continue;
+                }
                 orgInserted = true;
                 items.push({
                     key: ORG_HR_GROUP_KEY,
@@ -283,12 +293,7 @@ function buildAppShellMenuItems(
                         <SiderGroupedMenuLabel icon={<TeamOutlined className="tw-text-lg"/>}
                                                text={APP_MENU_ORG_HR_GROUP_LABEL}/>
                     ),
-                    children: ORG_HR_PATHS.map((p) => ({
-                        key: p,
-                        icon: APP_MENU_ICONS[p],
-                        label: APP_MENU_LABEL[p],
-                        title: APP_MENU_LABEL[p],
-                    })),
+                    children: [...baseChildren, ...extras],
                 });
             }
             continue;
@@ -589,20 +594,23 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
             isAdmin ||
             canAccessMemberDirectory(hasPermission) ||
             canAccessMemberDirectoryFromPermissionStrings(user?.permissions);
-        const items = buildAppShellMenuItems(isAdmin, approvalMenuChildren, showMemberDirectoryMenu);
+        const hrGroupExtraChildren: NonNullable<MenuProps['items']> | undefined = showApprovalFormSettings
+            ? [
+                  {
+                      key: encodeWfNavKey({to: '/app/approvals', search: {tab: 'admin'}}),
+                      icon: <SettingOutlined className="tw-text-lg"/>,
+                      label: '결재 양식 설정',
+                      title: '결재 양식 설정',
+                  },
+              ]
+            : undefined;
+        const items = buildAppShellMenuItems(
+            isAdmin,
+            approvalMenuChildren,
+            showMemberDirectoryMenu,
+            hrGroupExtraChildren,
+        );
 
-        const approvalFormSettingsItem = showApprovalFormSettings
-            ? {
-                  key: encodeWfNavKey({to: '/app/approvals', search: {tab: 'admin'}}),
-                  icon: <SettingOutlined className="tw-text-lg"/>,
-                  label: '결재 양식 설정',
-                  title: '결재 양식 설정',
-              }
-            : null;
-
-        const withApprovalSettings = approvalFormSettingsItem ? [...items, approvalFormSettingsItem] : items;
-
-        if (!isAdmin) return withApprovalSettings;
         const esgMenuItem =
             esgPaths.length > 0
                 ? {
@@ -619,7 +627,6 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
                   }
                 : null;
 
-        /** 직원: ESG를 메뉴 최하단에 배치 */
         if (!isAdmin) {
             return esgMenuItem ? [...items, esgMenuItem] : items;
         }
@@ -639,10 +646,10 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
         };
 
         if (esgMenuItem) {
-            return [...withApprovalSettings, chatAdmin, esgMenuItem, doc];
+            return [...items, chatAdmin, esgMenuItem, doc];
         }
-        return [...withApprovalSettings, chatAdmin, doc];
-    }, [esgConfig, isAdmin, approvalOrgChart, meMember, status, user?.permissions]);
+        return [...items, chatAdmin, doc];
+    }, [esgConfig, isAdmin, approvalOrgChart, meMember, status, user?.permissions, showApprovalFormSettings]);
 }
 
 const headerGhostIconClass =
@@ -1238,9 +1245,13 @@ function menuOpenKeysForPath(
     }
     if (pathname.startsWith('/app/esg')) keys.push(ESG_GROUP_KEY);
     if (pathname.startsWith('/app/approvals')) {
+        const approvalsTab = typeof search.tab === 'string' ? search.tab : undefined;
+        if (approvalsTab === 'admin') {
+            keys.push(ORG_HR_GROUP_KEY);
+        }
         keys.push(
             ...approvalSecondaryPanelOpenKeys(pathname, {
-                tab: typeof search.tab === 'string' ? search.tab : undefined,
+                tab: approvalsTab,
                 myStatus: typeof search.myStatus === 'string' ? search.myStatus : undefined,
                 compose: typeof search.compose === 'string' ? search.compose : undefined,
                 sideNav: typeof search.sideNav === 'string' ? search.sideNav : undefined,
