@@ -346,12 +346,6 @@ function buildAppShellMenuItems(
                             title: APP_MENU_LABEL['/app/attendance/company/monthly'],
                         },
                         {
-                            key: '/app/attendance/holidays',
-                            icon: <FlagOutlined className="tw-text-lg"/>,
-                            label: APP_MENU_LABEL['/app/attendance/holidays'],
-                            title: APP_MENU_LABEL['/app/attendance/holidays'],
-                        },
-                        {
                             key: '/app/attendance/schedules',
                             icon: <ScheduleOutlined className="tw-text-lg"/>,
                             label: APP_MENU_LABEL['/app/attendance/schedules'],
@@ -396,6 +390,12 @@ function buildAppShellMenuItems(
                 }
                 if (isAdmin) {
                     leaveChildren.push(
+                        {
+                            key: '/app/attendance/holidays',
+                            icon: <FlagOutlined className="tw-text-lg"/>,
+                            label: APP_MENU_LABEL['/app/attendance/holidays'],
+                            title: APP_MENU_LABEL['/app/attendance/holidays'],
+                        },
                         {
                             key: '/app/leave/grant',
                             icon: <GiftOutlined className="tw-text-lg"/>,
@@ -1217,12 +1217,12 @@ function menuOpenKeysForPath(
         keys.push(ORG_HR_GROUP_KEY);
     }
     if (
-        pathname.startsWith('/app/attendance') ||
+        (pathname.startsWith('/app/attendance') && pathname !== '/app/attendance/holidays') ||
         pathname === '/app/work-trips'
     ) {
         keys.push(WORK_GROUP_KEY);
     }
-    if (pathname.startsWith('/app/leave')) {
+    if (pathname.startsWith('/app/leave') || pathname === '/app/attendance/holidays') {
         keys.push(LEAVE_GROUP_KEY);
     }
     if (
