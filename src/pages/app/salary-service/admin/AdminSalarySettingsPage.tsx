@@ -407,14 +407,14 @@ function SalaryPolicyTab() {
             <Form.Item label="임금제 유형" name="wageSystemType" rules={[{ required: true }]}><Select style={{ width: 180 }} options={[{ value: 'COMPREHENSIVE', label: '포괄임금제' }, { value: 'NON_COMPREHENSIVE', label: '비포괄임금제' }]} /></Form.Item>
             <Form.Item noStyle shouldUpdate={(p, c) => p.wageSystemType !== c.wageSystemType}>
               {({ getFieldValue }) => getFieldValue('wageSystemType') === 'COMPREHENSIVE' ? (
-                <Form.Item label="고정 OT(분)" name="fixedOvertimeMinutes"><InputNumber min={0} style={{ width: 140 }} /></Form.Item>
+                <Form.Item label="고정 OT(분) - 20시간(1200분)" name="fixedOvertimeMinutes"><InputNumber min={0} style={{ width: 140 }} /></Form.Item>
               ) : null}
             </Form.Item>
           </Space>
-          <Form.Item label="OT 인정 단위(분)" name="overtimeRoundingMinutes"><InputNumber min={1} style={{ width: '100%' }} placeholder="예: 15" /></Form.Item>
+          <Form.Item label="연장근무시간 인정 단위(분) - 15분 또는 30분" name="overtimeRoundingMinutes"><InputNumber min={1} style={{ width: '100%' }} placeholder="예: 15" /></Form.Item>
           <Space className="tw-w-full" size={16}>
-            <Form.Item label="정산 시작" name="periodStartType" rules={[{ required: true }]}><Select style={{ width: 160 }} options={[{ value: 'FIRST', label: '1일' }, { value: 'SPECIFIC', label: '특정일' }]} /></Form.Item>
-            <Form.Item label="정산 종료" name="periodEndType" rules={[{ required: true }]}><Select style={{ width: 160 }} options={[{ value: 'LAST', label: '말일' }, { value: 'SPECIFIC', label: '특정일' }]} /></Form.Item>
+            <Form.Item label="정산 시작" name="periodStartType" rules={[{ required: true }]}><Select style={{ width: 160 }} options={[{ value: 'FIRST', label: '1일' }]} /></Form.Item>
+            <Form.Item label="정산 종료" name="periodEndType" rules={[{ required: true }]}><Select style={{ width: 160 }} options={[{ value: 'LAST', label: '말일' }]} /></Form.Item>
           </Space>
           <Form.Item label="적용 기간" name="effectiveRange" rules={[{ required: true }]}><DatePicker.RangePicker allowEmpty={[false, true]} format="YYYY-MM-DD" style={{ width: '100%' }} /></Form.Item>
         </Form>
@@ -622,10 +622,10 @@ export function AdminSalarySettingsPage() {
         <Tabs
           defaultActiveKey="salary"
           items={[
-            { key: 'salary', label: '급여 이력', children: <SalaryTab /> },
             { key: 'policy', label: '급여 정책', children: <SalaryPolicyTab /> },
             { key: 'tax', label: '세율', children: <TaxRateTab /> },
             { key: 'template', label: '항목 템플릿', children: <SalaryItemTemplateTab /> },
+            { key: 'salary', label: '급여 이력', children: <SalaryTab /> }
           ]}
         />
       </Card>
