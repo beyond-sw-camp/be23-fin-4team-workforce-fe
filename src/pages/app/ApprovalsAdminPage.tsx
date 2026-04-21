@@ -126,20 +126,15 @@ export function ApprovalsAdminPage() {
   const [editSchemaFields, setEditSchemaFields] = useState<FormFieldSchema[]>([]);
   const [editForm] = Form.useForm<EditDocForm>();
 
-  const canRead = hasPermission(PERM.APPROVAL_AD_READ);
-  const canAccessAdminPage =
-    user?.isSystemAdmin === true ||
-    canRead ||
-    isHrTeamMember(hasPermission) ||
-    canAccessMemberDirectoryFromPermissionStrings(user?.permissions);
-  const canCreate = hasPermission(PERM.APPROVAL_AD_CREATE);
-  const canUpdate = hasPermission(PERM.APPROVAL_AD_UPDATE);
-  const canDelete = hasPermission(PERM.APPROVAL_AD_DELETE);
+  const canRead = isSystemAdmin || hasPermission(PERM.APPROVAL_AD_READ);
+  const canCreate = isSystemAdmin || hasPermission(PERM.APPROVAL_AD_CREATE);
+  const canUpdate = isSystemAdmin || hasPermission(PERM.APPROVAL_AD_UPDATE);
+  const canDelete = isSystemAdmin || hasPermission(PERM.APPROVAL_AD_DELETE);
 
   const { data: documents = [], isFetching: docsLoading } = useQuery({
     queryKey: ['approval', 'documents', 'all'],
     queryFn: () => approvalApi.listDocuments(),
-    enabled: canAccessAdminPage,
+    enabled: canRead,
   });
 
   const { data: activeDocuments = [] } = useQuery({
@@ -407,16 +402,10 @@ export function ApprovalsAdminPage() {
       {!canRead ? (
         <Alert type="warning" showIcon message="결재 관리자 화면을 보려면 조회 권한이 필요합니다." />
       ) : (
-        <>
-          {/* destroyOnHidden 관련 설명 */}
-          {!createOpen ? <Form form={form} preserve={false} className="tw-hidden" aria-hidden /> : null}
-          {!editOpen ? <Form form={editForm} preserve={false} className="tw-hidden" aria-hidden /> : null}
-
-          {canAccessAdminPage ? (
-            <Tabs
-              activeKey={activeTab}
-              onChange={(key) => setActiveTab(key as 'documents' | 'policy-lines')}
-              items={[
+        <Tabs
+          activeKey={activeTab}
+          onChange={(key) => setActiveTab(key as 'documents' | 'policy-lines')}
+          items={[
             {
               key: 'documents',
               label: '결재 양식 관리',
@@ -790,11 +779,8 @@ export function ApprovalsAdminPage() {
             },
           ]}
         />
-      ) : (
-        <Alert type="warning" showIcon message="결재 관리자 화면을 보려면 관리자 또는 인사팀 권한이 필요합니다." />
       )}
-    </>
-    )}
+
       <Modal
         title="결재 양식 추가"
         open={createOpen}
