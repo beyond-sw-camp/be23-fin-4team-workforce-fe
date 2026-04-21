@@ -34,9 +34,13 @@ import { parseFormSchema, type FormFieldSchema } from '@/features/approvals/lib/
 import { parseApiError } from '@/shared/api/error-parser';
 import { flattenOrganizationsWithMeta } from '@/features/organization/lib/flattenOrganizationTree';
 import { organizationApi } from '@/features/organization/api/organizationApi';
-import { PERM } from '@/features/permissions/backend-permissions';
-import { usePermissions } from '@/features/permissions/usePermissionsHook';
 import { useAuth } from '@/features/auth/useAuth';
+import { PERM } from '@/features/permissions/backend-permissions';
+import {
+  canAccessMemberDirectoryFromPermissionStrings,
+  isHrTeamMember,
+} from '@/features/permissions/member-directory-access';
+import { usePermissions } from '@/features/permissions/usePermissionsHook';
 
 type DocForm = {
   documentName: string;
