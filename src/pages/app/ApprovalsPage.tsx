@@ -44,6 +44,7 @@ import {
   Form,
   Input,
   Modal,
+  Popconfirm,
   Progress,
   Select,
   Space,
@@ -64,6 +65,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   Fragment,
   useRef,
@@ -101,6 +103,7 @@ import {
   APPROVAL_REQUEST_STATUS,
   type ApprovalRequestStatus,
   approvalRequestApi,
+  canSendOfficialDocument,
   isPendingApprovalLineForProxyActor,
   requestIncludesMyProxyAct,
   type ApprovalLine,
@@ -119,6 +122,10 @@ import { APPROVAL_ORG_DRAG_MIME, ApprovalOrgDropZone } from '@/features/approval
 import { organizationApi, type OrgChartOrgNode } from '@/features/organization/api/organizationApi';
 import { findMemberOrganizationId } from '@/features/organization/lib/findMemberOrganizationInOrgChart';
 import { PERM } from '@/features/permissions/backend-permissions';
+import {
+  canAccessMemberDirectoryFromPermissionStrings,
+  isHrTeamMember,
+} from '@/features/permissions/member-directory-access';
 import { usePermissions } from '@/features/permissions/usePermissionsHook';
 import { ApprovalsAdminPage } from '@/pages/app/ApprovalsAdminPage';
 import {
@@ -288,8 +295,9 @@ function PendingHomeApprovalLineStrip({ lines }: { lines: ApprovalLine[] }) {
       </Typography.Text>
     );
   }
+  const viewportWidthClass = visibleSlots > 0 ? 'tw-w-[21rem]' : '';
   return (
-    <div className="tw-min-w-0 tw-overflow-x-auto wf-scrollbar tw-pr-0.5" aria-label="결재선">
+    <div className={clsx('tw-min-w-0 tw-overflow-x-auto wf-scrollbar tw-pr-0.5', viewportWidthClass)} aria-label="결재선">
       <div className="tw-inline-flex tw-min-w-max tw-items-stretch tw-gap-1">
         {sorted.map((line, i) => {
           const name =
@@ -1036,6 +1044,7 @@ export function ApprovalsPage() {
         box?: string;
         viewerSub?: string;
         embed?: string;
+        docId?: string;
       },
   });
   const isEmbedComposeModal = routeSearch.embed === APPROVAL_EMBED_QUERY;
@@ -1073,6 +1082,7 @@ export function ApprovalsPage() {
   const [officialRecipients, setOfficialRecipients] = useState<
     { recipientOrganizationId: string; recipientOrganizationName: string }[]
   >([]);
+  const [orgTreeExpandedKeys, setOrgTreeExpandedKeys] = useState<Key[]>([]);
   const [bookmarkedRequestIds, setBookmarkedRequestIds] = useState<string[]>(() => {
     try {
       const raw = localStorage.getItem(APPROVAL_HOME_BOOKMARKS_KEY);
@@ -1548,6 +1558,18 @@ export function ApprovalsPage() {
     onError: (e: Error) => message.error(e.message || '취소에 실패했습니다.'),
   });
 
+  const sendOfficialM = useMutation({
+    mutationFn: (requestId: string) => approvalRequestApi.sendOfficial(requestId),
+    onSuccess: async () => {
+      message.success('공문이 발송되었습니다.');
+      await Promise.all([
+        refreshUserQueries(),
+        qc.invalidateQueries({ queryKey: ['approval-user', 'official-received'] }),
+      ]);
+    },
+    onError: (e: Error) => message.error(e.message || '공문 발송에 실패했습니다.'),
+  });
+
   const approveM = useMutation({
     mutationFn: ({ approvalId, comment }: { approvalId: string; comment?: string }) =>
       approvalRequestApi.approve(approvalId, comment),
@@ -1598,6 +1620,21 @@ export function ApprovalsPage() {
     () => buildOrgTreeWithMemberLeaves(orgChart?.organizations ?? []),
     [orgChart],
   );
+  useEffect(() => {
+    const collectOrgKeys = (nodes: DataNode[]): Key[] => {
+      const out: Key[] = [];
+      const walk = (items: DataNode[]) => {
+        for (const n of items) {
+          const k = String(n.key);
+          if (!k.startsWith('member:')) out.push(n.key);
+          if (Array.isArray(n.children) && n.children.length) walk(n.children);
+        }
+      };
+      walk(nodes);
+      return out;
+    };
+    setOrgTreeExpandedKeys(collectOrgKeys(orgTreeDataWithMembers));
+  }, [orgTreeDataWithMembers]);
 
   const orgPickerSearchMembers = useMemo(
     () => flattenDirectMembersDeduped(orgChart?.organizations ?? []),
@@ -1653,12 +1690,20 @@ export function ApprovalsPage() {
     [composeEditingRequestId, qc],
   );
 
-  const handleApprovalFormSelectConfirm = useCallback(
-    (documentId: string, doc: ApprovalDocument) => {
-      setComposeFormSelectModalOpen(false);
-      setComposeFormSelectInitialId(undefined);
+  const initializeComposeForDocument = useCallback(
+    (
+      documentId: string,
+      doc: ApprovalDocument,
+      opts?: { closeFormSelectModal?: boolean; navigateCompose?: boolean },
+    ) => {
+      if (opts?.closeFormSelectModal ?? true) {
+        setComposeFormSelectModalOpen(false);
+        setComposeFormSelectInitialId(undefined);
+      }
       pushRecentApprovalForm(doc);
-      navigate({ to: '/app/approvals', search: { tab: 'compose', ...embedSearchSuffix }, replace: true });
+      if (opts?.navigateCompose ?? true) {
+        navigate({ to: '/app/approvals', search: { tab: 'compose', ...embedSearchSuffix }, replace: true });
+      }
       setComposeEditingRequestId(null);
       setApprovalLineDrafts([]);
       setOrgTreeSelectedKey(undefined);
@@ -1676,6 +1721,38 @@ export function ApprovalsPage() {
     },
     [applyPolicyLineDrafts, embedSearchSuffix, form, navigate],
   );
+
+  const handleApprovalFormSelectConfirm = useCallback(
+    (documentId: string, doc: ApprovalDocument) => {
+      initializeComposeForDocument(documentId, doc, {
+        closeFormSelectModal: true,
+        navigateCompose: true,
+      });
+    },
+    [initializeComposeForDocument],
+  );
+
+  const embedDocId = typeof routeSearch.docId === 'string' ? routeSearch.docId.trim() : '';
+  useEffect(() => {
+    if (!isEmbedComposeModal || tab !== 'compose') return;
+    if (!embedDocId) return;
+    if (!activeDocuments.length) return;
+    if (selectedDocumentId === embedDocId && composePhase === 'fill') return;
+    const doc = activeDocuments.find((d) => d.documentId === embedDocId);
+    if (!doc) return;
+    initializeComposeForDocument(embedDocId, doc, {
+      closeFormSelectModal: false,
+      navigateCompose: false,
+    });
+  }, [
+    isEmbedComposeModal,
+    tab,
+    embedDocId,
+    activeDocuments,
+    selectedDocumentId,
+    composePhase,
+    initializeComposeForDocument,
+  ]);
 
   const toggleBookmark = useCallback((requestId: string) => {
     setBookmarkedRequestIds((prev) => {
@@ -1943,6 +2020,20 @@ export function ApprovalsPage() {
     [selectedDocument, orgChart, message],
   );
 
+  const addFromOrgPickerByCurrentTab = useCallback(
+    async (payload: { kind: 'member'; memberId: string } | { kind: 'org'; organizationId: string }) => {
+      if (lineInfoTab === 'approval') {
+        if (payload.kind === 'member') await addApproverFromOrg(payload.memberId);
+        else await bulkAddApproversFromOrg(payload.organizationId);
+        return;
+      }
+      const viewerType: ViewerType = lineInfoTab === 'cc' ? 'CC' : 'CIRCULATION';
+      if (payload.kind === 'member') await addViewerFromOrg(payload.memberId, viewerType);
+      else await bulkAddViewersFromOrg(payload.organizationId, viewerType);
+    },
+    [addApproverFromOrg, addViewerFromOrg, bulkAddApproversFromOrg, bulkAddViewersFromOrg, lineInfoTab],
+  );
+
   const composeAttachmentAcceptAttr = useMemo(
     () => Array.from(APPROVAL_ATTACHMENT_ALLOWED_EXT).map((ext) => `.${ext}`).join(','),
     [],
@@ -2083,7 +2174,8 @@ export function ApprovalsPage() {
     const st = String(row.requestStatus).toUpperCase();
     const showResume = st === 'DRAFT';
     const showCancel = st === 'DRAFT' || st === 'WAIT' || st === 'PENDING';
-    if (!showResume && !showCancel) return null;
+    const showOfficialPreSendCancel = canSendOfficialDocument(row, authMemberId);
+    if (!showResume && !showCancel && !showOfficialPreSendCancel) return null;
     return (
       <Space size="small" wrap onClick={(e) => e.stopPropagation()}>
         {showResume ? (
@@ -2101,6 +2193,67 @@ export function ApprovalsPage() {
             취소
           </Button>
         ) : null}
+        {showOfficialPreSendCancel ? (
+          <Button type="link" size="small" danger onClick={() => setCancelTarget(row)}>
+            발송 취소
+          </Button>
+        ) : null}
+      </Space>
+    );
+  };
+
+  /** 공문 문서함(per-official) — 승인·미발송 시 관리 열을 `발송` / `취소` 버튼으로 표시 */
+  const renderOfficialInboxActions = (_: unknown, row: ApprovalRequestDetail) => {
+    if (canSendOfficialDocument(row, authMemberId)) {
+      const rid = row.requestId;
+      return (
+        <Space size="small" wrap onClick={(e) => e.stopPropagation()}>
+          <Popconfirm
+            title="수신 부서로 공문을 발송할까요?"
+            description="발송 후에는 문서를 취소할 수 없습니다."
+            okText="발송"
+            cancelText="닫기"
+            onConfirm={() => void sendOfficialM.mutateAsync(rid)}
+          >
+            <Button
+              type="primary"
+              size="small"
+              loading={sendOfficialM.isPending && sendOfficialM.variables === rid}
+              disabled={cancelRequestM.isPending}
+            >
+              발송
+            </Button>
+          </Popconfirm>
+          <Button
+            danger
+            size="small"
+            loading={cancelRequestM.isPending && cancelTarget?.requestId === rid}
+            disabled={sendOfficialM.isPending}
+            onClick={() => setCancelTarget(row)}
+          >
+            취소
+          </Button>
+        </Space>
+      );
+    }
+    return renderMyInboxActions(_, row);
+  };
+
+  const renderDraftInboxActions = (_: unknown, row: ApprovalRequestDetail) => {
+    const st = String(row.requestStatus).toUpperCase();
+    if (st !== 'DRAFT') return null;
+    return (
+      <Space size="small" wrap onClick={(e) => e.stopPropagation()}>
+        <Button
+          type="link"
+          size="small"
+          onClick={() => void openDraftForCompose(row.requestId)}
+        >
+          수정
+        </Button>
+        <Button type="link" size="small" danger onClick={() => setCancelTarget(row)}>
+          삭제
+        </Button>
       </Space>
     );
   };
@@ -2109,6 +2262,8 @@ export function ApprovalsPage() {
     {
       title: '제목',
       key: 'subject',
+      width: 320,
+      align: 'center' as const,
       ellipsis: true,
       render: (_: unknown, row: ApprovalRequestDetail) => getApprovalRequestSubjectLine(row) || '—',
     },
@@ -2116,6 +2271,7 @@ export function ApprovalsPage() {
       title: '양식',
       dataIndex: 'documentName',
       key: 'documentName',
+      align: 'center' as const,
       ellipsis: true,
       render: (name: string | undefined) => name?.trim() || '—',
     },
@@ -2124,8 +2280,9 @@ export function ApprovalsPage() {
       key: 'approvalLineStrip',
       width: 300,
       onCell: () => ({ className: '!tw-align-middle' }),
+      onHeaderCell: () => ({ className: '!tw-text-center' }),
       render: (_: unknown, row: ApprovalRequestDetail) => (
-        <PendingHomeApprovalLineStrip lines={row.approvalLines} />
+        <PendingHomeApprovalLineStrip lines={row.approvalLines} visibleSlots={3} />
       ),
     },
     {
@@ -2133,6 +2290,7 @@ export function ApprovalsPage() {
       dataIndex: 'requestStatus',
       key: 'requestStatus',
       width: 140,
+      align: 'center' as const,
       render: (status: string) => statusTag(status),
     },
     {
@@ -2140,12 +2298,14 @@ export function ApprovalsPage() {
       dataIndex: 'createdAt',
       key: 'createdAt',
       width: 180,
+      align: 'center' as const,
       render: (v: string) => formatDateTime(v),
     },
     {
       title: '관리',
       key: 'actions',
-      width: 200,
+      width: 140,
+      align: 'center' as const,
       render: renderMyInboxActions,
     },
   ];
@@ -2199,7 +2359,36 @@ export function ApprovalsPage() {
       title: '관리',
       key: 'actions',
       width: 240,
-      render: renderMyInboxActions,
+      render: renderOfficialInboxActions,
+    },
+  ];
+
+  const draftInboxColumns = [
+    {
+      title: '제목',
+      key: 'subject',
+      ellipsis: true,
+      render: (_: unknown, row: ApprovalRequestDetail) => getApprovalRequestSubjectLine(row) || '—',
+    },
+    {
+      title: '양식',
+      dataIndex: 'documentName',
+      key: 'documentName',
+      ellipsis: true,
+      render: (name: string | undefined) => name?.trim() || '—',
+    },
+    {
+      title: '최종 저장시간',
+      dataIndex: 'updatedAt',
+      key: 'updatedAt',
+      width: 180,
+      render: (v: string) => formatDateTime(v),
+    },
+    {
+      title: '관리',
+      key: 'actions',
+      width: 160,
+      render: renderDraftInboxActions,
     },
   ];
 
@@ -2288,7 +2477,23 @@ export function ApprovalsPage() {
   /** 참조(CC)·공람(CIRCULATION) 각각 — 채널 열 없음 */
   const viewerCcOnlyColumns: ColumnsType<ApprovalRequestDetail> = useMemo(
     () => [
-      { title: '양식', dataIndex: 'documentName', key: 'documentName' },
+      {
+        title: '제목',
+        key: 'subject',
+        ellipsis: true,
+        render: (_: unknown, row: ApprovalRequestDetail) => getApprovalRequestSubjectLine(row) || '—',
+      },
+      { title: '양식', dataIndex: 'documentName', key: 'documentName', ellipsis: true },
+      {
+        title: '기안자(부서)',
+        key: 'drafter',
+        ellipsis: true,
+        render: (_: unknown, row: ApprovalRequestDetail) => {
+          const name = row.requesterName?.trim() || '—';
+          const org = row.requesterOrganizationName?.trim() || '—';
+          return `${name} (${org})`;
+        },
+      },
       {
         title: '열람',
         key: 'read',
@@ -2297,14 +2502,7 @@ export function ApprovalsPage() {
           unreadViewerForMember(row, authMemberId) ? <Tag color="error">미열람</Tag> : <Tag>열람</Tag>,
       },
       {
-        title: '요청 상태',
-        dataIndex: 'requestStatus',
-        key: 'requestStatus',
-        width: 130,
-        render: (status: string) => statusTag(status),
-      },
-      {
-        title: '요청일',
+        title: '기안일',
         dataIndex: 'createdAt',
         key: 'createdAt',
         width: 180,
@@ -2354,16 +2552,27 @@ export function ApprovalsPage() {
           blockNode
           expandAction="click"
           treeData={orgTreeDataWithMembers}
+          expandedKeys={orgTreeExpandedKeys}
+          onExpand={(keys) => setOrgTreeExpandedKeys(keys)}
           selectedKeys={
             orgTreeSelectedKey && !String(orgTreeSelectedKey).startsWith('member:') ? [orgTreeSelectedKey] : []
           }
           onSelect={(keys) => {
             const key = typeof keys[0] === 'string' ? keys[0] : undefined;
-            if (!key || key.startsWith('member:')) {
+            if (!key) {
+              setOrgTreeSelectedKey(undefined);
+              return;
+            }
+            if (key.startsWith('member:')) {
+              const rest = key.slice('member:'.length);
+              const ci = rest.indexOf(':');
+              const memberId = ci === -1 ? '' : rest.slice(ci + 1);
+              if (memberId) void addFromOrgPickerByCurrentTab({ kind: 'member', memberId });
               setOrgTreeSelectedKey(undefined);
               return;
             }
             setOrgTreeSelectedKey(key);
+            void addFromOrgPickerByCurrentTab({ kind: 'org', organizationId: key });
           }}
           titleRender={(nodeData) => {
             const key = String(nodeData.key);
@@ -2392,7 +2601,7 @@ export function ApprovalsPage() {
         />
       </div>
       <Typography.Paragraph type="secondary" className="!tw-mb-2 !tw-mt-2 !tw-text-xs">
-        조직·멤버 노드를 오른쪽 목록으로 드래그해 추가하세요. 조직 이름을 클릭하면 하위 부서와 소속 멤버가 펼쳐집니다. 오른쪽에는 조직 단위로 표시되며, 제출 시 해당 조직(하위 부서 포함) 소속 멤버 전원에게 반영됩니다.
+        조직·멤버 노드를 클릭하거나 오른쪽 목록으로 드래그해 추가하세요. 조직 이름을 클릭하면 하위 부서와 소속 멤버가 펼쳐집니다. 오른쪽에는 조직 단위로 표시되며, 제출 시 해당 조직(하위 부서 포함) 소속 멤버 전원에게 반영됩니다.
       </Typography.Paragraph>
       <Divider className="!tw-my-3" />
       <Typography.Text type="secondary" className="tw-mb-2 tw-block tw-text-xs">
@@ -2412,6 +2621,7 @@ export function ApprovalsPage() {
                   );
                   e.dataTransfer.effectAllowed = 'copy';
                 }}
+                onClick={() => void addFromOrgPickerByCurrentTab({ kind: 'member', memberId: m.memberId })}
                 className="tw-flex tw-cursor-grab tw-select-none tw-items-center tw-rounded-lg tw-bg-slate-50/70 tw-px-2 tw-py-1.5 tw-transition-colors hover:tw-bg-slate-100/80"
               >
                 <span className="tw-truncate tw-pr-2 tw-text-sm">
@@ -2592,15 +2802,6 @@ export function ApprovalsPage() {
               새 작성
             </Button>
           ) : null}
-          <Button
-            type="text"
-            size="small"
-            icon={<EyeOutlined className="tw-text-[13px] tw-text-[#333]" />}
-            className={composeToolbarGhostBtn}
-            onClick={() => setComposePreviewOpen(true)}
-          >
-            미리보기
-          </Button>
         </Space>
         <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-x-3 tw-gap-y-2">
           {showTitle && selectedDocument ? (
@@ -2608,18 +2809,6 @@ export function ApprovalsPage() {
               {formatApprovalDocumentName(selectedDocument.documentName)}
             </Typography.Text>
           ) : null}
-          <Select
-            size="small"
-            value={composeAutosaveMode}
-            onChange={(v) => setComposeAutosaveMode(v)}
-            variant="borderless"
-            popupMatchSelectWidth={false}
-            className="!tw-min-w-0 [&_.ant-select-selector]:!tw-px-1 [&_.ant-select-selector]:!tw-text-sm [&_.ant-select-selection-item]:!tw-text-[#111827]"
-            options={[
-              { value: 'off', label: '자동저장안함' },
-              { value: '1m', label: '자동저장(1분)' },
-            ]}
-          />
           <Button type="text" size="small" className={composeToolbarGhostBtn} onClick={() => reloadPolicyApprovalLine()}>
             자동결재선
           </Button>
@@ -3225,7 +3414,7 @@ export function ApprovalsPage() {
           <col className="tw-w-[100px]" />
           <col />
           <col className="tw-w-24" />
-          <col className="tw-w-[min(22rem,40vw)]" />
+          <col className="tw-w-[min(15rem,28vw)]" />
           <col className="tw-w-[120px]" />
           <col className="tw-w-[140px]" />
         </colgroup>
@@ -3281,7 +3470,7 @@ export function ApprovalsPage() {
                   </Typography.Text>
                 </td>
                 <td className="tw-min-w-0 tw-overflow-hidden tw-px-2 tw-py-2 tw-text-left tw-align-middle">
-                  <PendingHomeApprovalLineStrip lines={row.approvalLines} />
+                  <PendingHomeApprovalLineStrip lines={row.approvalLines} visibleSlots={2} />
                 </td>
                 <td className="tw-px-2 tw-py-2.5 tw-align-middle">
                   <Typography.Text className="tw-text-center tw-text-xs tw-text-slate-500">
@@ -3436,14 +3625,16 @@ export function ApprovalsPage() {
           footer={null}
           width={1120}
           destroyOnHidden
+        style={{ top: 48 }}
           styles={{
             content: {
               height: 820,
               maxHeight: '90vh',
+              resize: 'both',
               display: 'flex',
               flexDirection: 'column',
               padding: 0,
-              overflow: 'hidden',
+              overflow: 'auto',
             },
             header: { flexShrink: 0, marginBottom: 0, padding: '12px 16px' },
             body: { flex: 1, minHeight: 0, padding: 0, overflow: 'hidden' },
@@ -3487,7 +3678,7 @@ export function ApprovalsPage() {
       className={clsx(
         'tw-w-full',
         isEmbedComposeModal
-          ? 'tw-flex tw-h-full tw-min-h-0 tw-flex-col tw-gap-4 tw-overflow-hidden'
+          ? 'tw-flex tw-h-full tw-min-h-0 tw-flex-col tw-gap-4 tw-overflow-y-auto'
           : 'tw-flex tw-flex-col tw-gap-4',
       )}
     >
@@ -3516,6 +3707,11 @@ export function ApprovalsPage() {
           {pageDescription}
         </Typography.Paragraph>
       </div>
+
+      {/* `Form.useForm()`은 항상 살아 있는데, 실제 <Form>은 작성 워크벤치(tab=compose·비허브)에서만 마운트되어 경고가 난다. 비표시 시 숨김 Form으로 인스턴스만 연결한다. */}
+      {!(tab === 'compose' && !isComposeHubEntry) ? (
+        <Form form={form} preserve={false} className="tw-hidden" aria-hidden />
+      ) : null}
 
       {tab === 'compose' && isComposeHubEntry ? (
         renderComposeHomeDashboard()
@@ -4158,10 +4354,16 @@ export function ApprovalsPage() {
                         size="small"
                         rowKey="requestId"
                         loading={myTableLoading}
-                        columns={guideBox === 'per-official' ? officialInboxColumns : myColumns}
+                        columns={
+                          guideBox === 'per-official'
+                            ? officialInboxColumns
+                            : guideBox === 'per-draft'
+                              ? draftInboxColumns
+                              : myColumns
+                        }
                         dataSource={myInboxRows}
                         pagination={{ pageSize: 10 }}
-                        scroll={{ x: 'max-content' }}
+                        scroll={guideBox === 'per-official' ? { x: 'max-content' } : undefined}
                         onRow={(record) => ({
                           onClick: () => setSelectedRequestId(record.requestId),
                           style: { cursor: 'pointer' },
@@ -4252,10 +4454,16 @@ export function ApprovalsPage() {
                     <Table<ApprovalRequestDetail>
                       rowKey="requestId"
                       loading={myTableLoading}
-                      columns={guideBox === 'per-official' ? officialInboxColumns : myColumns}
+                      columns={
+                        guideBox === 'per-official'
+                          ? officialInboxColumns
+                          : guideBox === 'per-draft'
+                            ? draftInboxColumns
+                            : myColumns
+                      }
                       dataSource={myInboxRows}
                       pagination={{ pageSize: 10 }}
-                      scroll={{ x: 'max-content' }}
+                      scroll={guideBox === 'per-official' ? { x: 'max-content' } : undefined}
                       onRow={(record) => ({
                         onClick: () => setSelectedRequestId(record.requestId),
                         style: { cursor: 'pointer' },
@@ -4384,6 +4592,8 @@ export function ApprovalsPage() {
           </Button>
         }
         width={720}
+        style={{ top: 48 }}
+        styles={{ content: { resize: 'both', overflow: 'auto' } }}
       >
         <Typography.Paragraph className="!tw-mb-2">
           <strong>{selectedDocument?.documentName}</strong>
@@ -4400,7 +4610,11 @@ export function ApprovalsPage() {
         }
         onCancel={() => setComposeApprovalInfoModalOpen(false)}
         width={1000}
-        styles={{ body: { maxHeight: 'min(72vh, 640px)', overflowY: 'auto', paddingTop: 8 } }}
+        style={{ top: 48 }}
+        styles={{
+          content: { resize: 'both', overflow: 'auto' },
+          body: { maxHeight: 'min(72vh, 640px)', overflowY: 'auto', paddingTop: 8 },
+        }}
         footer={
           <div className="tw-flex tw-w-full tw-justify-end tw-gap-2">
             <Button onClick={() => setComposeApprovalInfoModalOpen(false)}>취소</Button>
@@ -4420,7 +4634,11 @@ export function ApprovalsPage() {
       />
 
       <Modal
-        title="결재 취소"
+        title={
+          cancelTarget && canSendOfficialDocument(cancelTarget, authMemberId)
+            ? '공문 발송 취소'
+            : '결재 취소'
+        }
         open={cancelTarget != null}
         onCancel={() => {
           setCancelTarget(null);
@@ -4437,7 +4655,14 @@ export function ApprovalsPage() {
         okText="취소 확정"
         cancelText="닫기"
         confirmLoading={cancelRequestM.isPending}
+        style={{ top: 48 }}
+        styles={{ content: { resize: 'both', overflow: 'auto' } }}
       >
+        {cancelTarget && canSendOfficialDocument(cancelTarget, authMemberId) ? (
+          <Typography.Paragraph type="secondary" className="!tw-mb-2 !tw-text-sm">
+            승인된 공문이 수신 부서로 발송되기 전에만 취소할 수 있습니다.
+          </Typography.Paragraph>
+        ) : null}
         <Input.TextArea
           rows={4}
           value={cancelReason}

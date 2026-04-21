@@ -846,6 +846,9 @@ export function CalendarPage() {
 
       </div>
 
+      {/* `destroyOnHidden` 모달이 닫히면 Form이 제거되어 useForm 경고가 난다. */}
+      {!formOpen ? <Form form={form} preserve={false} className="tw-hidden" aria-hidden /> : null}
+
       <Modal
         title={editing ? '일정 수정' : '일정 추가'}
         open={formOpen}

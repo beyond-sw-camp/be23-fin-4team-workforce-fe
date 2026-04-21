@@ -1,11 +1,14 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { SendOutlined } from '@ant-design/icons';
 import {
   Alert,
   Button,
   Card,
   Descriptions,
+  Input,
   message,
   Modal,
+  Popconfirm,
   Space,
   Table,
   Tag,
@@ -13,7 +16,7 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   APPROVAL_REQUEST_TYPES,
   approvalApi,
@@ -22,6 +25,7 @@ import {
 import {
   approvalLineIsProxy,
   approvalRequestApi,
+  canSendOfficialDocument,
   type ApprovalLine,
   type ApprovalRequestStatus,
   type ApprovalViewer,
@@ -246,6 +250,61 @@ export function ApprovalRequestReadOnlyModal({
     onError: (e: Error) => message.error(e.message || '첨부 삭제에 실패했습니다.'),
   });
 
+  const sendOfficialM = useMutation({
+    mutationFn: () => approvalRequestApi.sendOfficial(requestId!),
+    onSuccess: async (detail) => {
+      message.success('공문이 발송되었습니다.');
+      qc.setQueryData(['approval-user', 'request-detail', requestId], detail);
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['approval-user', 'my-requests'] }),
+        qc.invalidateQueries({ queryKey: ['approval-user', 'official-received'] }),
+      ]);
+    },
+    onError: (e: unknown) => {
+      const msg =
+        e && typeof e === 'object' && 'message' in e && typeof (e as { message: unknown }).message === 'string'
+          ? (e as { message: string }).message
+          : '공문 발송에 실패했습니다.';
+      message.error(msg);
+    },
+  });
+
+  const [officialCancelOpen, setOfficialCancelOpen] = useState(false);
+  const [officialCancelReason, setOfficialCancelReason] = useState('');
+
+  const cancelOfficialBeforeSendM = useMutation({
+    mutationFn: (reason: string) => approvalRequestApi.cancelRequest(requestId!, reason),
+    onSuccess: async (detail) => {
+      message.success('공문 발송이 취소되었습니다.');
+      qc.setQueryData(['approval-user', 'request-detail', requestId], detail);
+      setOfficialCancelOpen(false);
+      setOfficialCancelReason('');
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['approval-user', 'my-requests'] }),
+        qc.invalidateQueries({ queryKey: ['approval-user', 'official-received'] }),
+      ]);
+    },
+    onError: (e: unknown) => {
+      const msg =
+        e && typeof e === 'object' && 'message' in e && typeof (e as { message: unknown }).message === 'string'
+          ? (e as { message: string }).message
+          : '취소 처리에 실패했습니다.';
+      message.error(msg);
+    },
+  });
+
+  useEffect(() => {
+    if (!open) {
+      setOfficialCancelOpen(false);
+      setOfficialCancelReason('');
+    }
+  }, [open]);
+
+  useEffect(() => {
+    setOfficialCancelOpen(false);
+    setOfficialCancelReason('');
+  }, [requestId]);
+
   const markViewerReadM = useMutation({
     mutationFn: (viewerId: string) => approvalRequestApi.markViewerRead(viewerId),
     onSuccess: async () => {
@@ -387,6 +446,12 @@ export function ApprovalRequestReadOnlyModal({
     return Boolean(drafter) && drafter === authMemberId.trim();
   }, [selectedRequestDetail, authMemberId]);
 
+  const canSendOfficial = useMemo(
+    () =>
+      selectedRequestDetail ? canSendOfficialDocument(selectedRequestDetail, authMemberId) : false,
+    [selectedRequestDetail, authMemberId],
+  );
+
   const attachmentColumns: ColumnsType<ApprovalAttachment> = useMemo(
     () => [
       {
@@ -443,13 +508,18 @@ export function ApprovalRequestReadOnlyModal({
   );
 
   return (
+    <>
     <Modal
       title={title}
       open={open}
       onCancel={onClose}
       footer={null}
       width={920}
-      styles={{ body: { maxHeight: 'min(85vh, 900px)', overflowY: 'auto' } }}
+      style={{ top: 48 }}
+      styles={{
+        content: { resize: 'both', overflow: 'auto' },
+        body: { maxHeight: 'min(85vh, 900px)', overflowY: 'auto' },
+      }}
       destroyOnHidden
     >
       {detailLoading || !selectedRequestDetail ? (
@@ -462,13 +532,53 @@ export function ApprovalRequestReadOnlyModal({
             <Descriptions.Item label="요청일">{formatDateTime(selectedRequestDetail.createdAt)}</Descriptions.Item>
             <Descriptions.Item label="수정일">{formatDateTime(selectedRequestDetail.updatedAt)}</Descriptions.Item>
             {normalizeApprovalRequestType(selectedRequestDetail.requestType) === 'OFFICIAL' ? (
-              <Descriptions.Item label="공문 번호" span={2}>
-                {selectedRequestDetail.documentNumber?.trim() ? (
-                  <Typography.Text strong>{selectedRequestDetail.documentNumber.trim()}</Typography.Text>
-                ) : (
-                  <Typography.Text type="secondary">발번 전 (최종 승인 후 부여)</Typography.Text>
-                )}
-              </Descriptions.Item>
+              <>
+                <Descriptions.Item label="공문 번호" span={2}>
+                  {selectedRequestDetail.documentNumber?.trim() ? (
+                    <Typography.Text strong>{selectedRequestDetail.documentNumber.trim()}</Typography.Text>
+                  ) : (
+                    <Typography.Text type="secondary">발번 전 (최종 승인 후 부여)</Typography.Text>
+                  )}
+                </Descriptions.Item>
+                {String(selectedRequestDetail.requestStatus).toUpperCase() === 'APPROVED' ? (
+                  <Descriptions.Item label="공문 발송" span={2}>
+                    {String(selectedRequestDetail.sendYn ?? '').toUpperCase() === 'Y' ? (
+                      <Tag color="success">발송 완료</Tag>
+                    ) : canSendOfficial ? (
+                      <Space wrap className="tw-w-full">
+                        <Popconfirm
+                          title="수신 부서로 공문을 발송할까요?"
+                          description="발송 후에는 문서를 취소할 수 없습니다."
+                          okText="발송"
+                          cancelText="닫기"
+                          onConfirm={() => {
+                            if (requestId) void sendOfficialM.mutateAsync();
+                          }}
+                        >
+                          <Button
+                            type="primary"
+                            icon={<SendOutlined />}
+                            loading={sendOfficialM.isPending}
+                            disabled={sendOfficialM.isPending || cancelOfficialBeforeSendM.isPending}
+                          >
+                            발송
+                          </Button>
+                        </Popconfirm>
+                        <Button
+                          danger
+                          loading={cancelOfficialBeforeSendM.isPending}
+                          disabled={sendOfficialM.isPending || cancelOfficialBeforeSendM.isPending}
+                          onClick={() => setOfficialCancelOpen(true)}
+                        >
+                          발송 취소
+                        </Button>
+                      </Space>
+                    ) : (
+                      <Typography.Text type="secondary">기안자 발송 대기 (미발송)</Typography.Text>
+                    )}
+                  </Descriptions.Item>
+                ) : null}
+              </>
             ) : null}
           </Descriptions>
           {normalizeApprovalRequestType(selectedRequestDetail.requestType) === 'OFFICIAL' &&
@@ -715,5 +825,38 @@ export function ApprovalRequestReadOnlyModal({
         </Space>
       )}
     </Modal>
+
+    <Modal
+      title="공문 발송 취소"
+      open={officialCancelOpen}
+      onCancel={() => {
+        setOfficialCancelOpen(false);
+        setOfficialCancelReason('');
+      }}
+      okText="취소 확정"
+      cancelText="닫기"
+      confirmLoading={cancelOfficialBeforeSendM.isPending}
+      destroyOnHidden
+      onOk={async () => {
+        if (!officialCancelReason.trim()) {
+          message.warning('취소 사유를 입력해 주세요.');
+          throw new Error('validation');
+        }
+        await cancelOfficialBeforeSendM.mutateAsync(officialCancelReason.trim());
+      }}
+    >
+      <Typography.Paragraph type="secondary" className="!tw-mb-2 !tw-text-sm">
+        승인된 공문이 수신 부서로 나가기 전에만 취소할 수 있습니다. 취소 사유는 결재·참조자에게 안내됩니다.
+      </Typography.Paragraph>
+      <Input.TextArea
+        rows={4}
+        value={officialCancelReason}
+        onChange={(e) => setOfficialCancelReason(e.target.value)}
+        placeholder="취소 사유를 입력하세요."
+        maxLength={2000}
+        showCount
+      />
+    </Modal>
+    </>
   );
 }

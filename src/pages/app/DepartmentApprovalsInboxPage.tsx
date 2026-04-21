@@ -9,6 +9,7 @@ import {
   approvalRequestApi,
   isDepartmentInboxMaskedPrivateRow,
 } from '@/features/approvals/api/approvalRequestApi';
+import { getApprovalRequestSubjectLine } from '@/features/approvals/lib/approvalFormSchema';
 import { ApprovalRequestReadOnlyModal } from '@/features/approvals/ui/ApprovalRequestReadOnlyModal';
 import { useAuth } from '@/features/auth/useAuth';
 import { memberApi } from '@/features/member/api/memberApi';
@@ -326,34 +327,34 @@ export function DepartmentApprovalsInboxPage() {
               deptView === 'received'
                 ? [
                     {
-                      title: '공문 번호',
-                      key: 'documentNumber',
-                      width: 140,
-                      render: (_: unknown, r: (typeof displayRows)[number]) =>
-                        r.documentNumber?.trim() || '—',
-                    },
-                    {
-                      title: '발신 부서',
-                      key: 'requesterOrg',
+                      title: '제목',
+                      key: 'subject',
                       ellipsis: true,
                       render: (_: unknown, r: (typeof displayRows)[number]) =>
-                        r.requesterOrganizationName?.trim() || '—',
+                        getApprovalRequestSubjectLine(r) || '—',
+                    },
+                    {
+                      title: '양식',
+                      dataIndex: 'documentName',
+                      key: 'documentName',
+                      ellipsis: true,
                     },
                     {
                       title: '기안자',
                       key: 'requester',
-                      width: 120,
+                      width: 180,
                       render: (_: unknown, r: (typeof displayRows)[number]) =>
-                        r.requesterName?.trim() || r.memberId || '—',
+                        `${r.requesterName?.trim() || r.memberId || '—'} (${r.requesterOrganizationName?.trim() || '—'})`,
                     },
                     {
-                      title: '수신 부서',
-                      key: 'recipients',
-                      ellipsis: true,
-                      render: (_: unknown, r: (typeof displayRows)[number]) => formatOfficialRecipientsLine(r),
+                      title: '상태',
+                      dataIndex: 'requestStatus',
+                      key: 'requestStatus',
+                      width: 100,
+                      render: (v: string) => requestStatusTag(v),
                     },
                     {
-                      title: '접수일',
+                      title: '작성일',
                       dataIndex: 'createdAt',
                       key: 'createdAt',
                       width: 160,
@@ -363,32 +364,34 @@ export function DepartmentApprovalsInboxPage() {
                 : deptView === 'sent'
                   ? [
                       {
-                        title: '공문 번호',
-                        key: 'documentNumber',
-                        width: 140,
-                        render: (_: unknown, r: (typeof displayRows)[number]) => r.documentNumber?.trim() || '—',
+                        title: '제목',
+                        key: 'subject',
+                        ellipsis: true,
+                        render: (_: unknown, r: (typeof displayRows)[number]) =>
+                          getApprovalRequestSubjectLine(r) || '—',
                       },
                       {
-                        title: '양식명',
+                        title: '양식',
                         dataIndex: 'documentName',
                         key: 'documentName',
                         ellipsis: true,
                       },
                       {
-                        title: '수신 부서',
-                        key: 'recipients',
-                        ellipsis: true,
-                        render: (_: unknown, r: (typeof displayRows)[number]) => formatOfficialRecipientsLine(r),
-                      },
-                      {
                         title: '기안자',
                         key: 'requester',
-                        width: 120,
+                        width: 180,
                         render: (_: unknown, r: (typeof displayRows)[number]) =>
-                          r.requesterName?.trim() || r.memberId || '—',
+                          `${r.requesterName?.trim() || r.memberId || '—'} (${r.requesterOrganizationName?.trim() || '—'})`,
                       },
                       {
-                        title: '발송일',
+                        title: '상태',
+                        dataIndex: 'requestStatus',
+                        key: 'requestStatus',
+                        width: 100,
+                        render: (v: string) => requestStatusTag(v),
+                      },
+                      {
+                        title: '작성일',
                         dataIndex: 'createdAt',
                         key: 'createdAt',
                         width: 160,
@@ -397,31 +400,24 @@ export function DepartmentApprovalsInboxPage() {
                     ]
                 : [
                     {
-                      title: '작성일',
-                      dataIndex: 'createdAt',
-                      key: 'createdAt',
-                      width: 160,
-                      render: (v: string) => formatDateTime(v),
-                    },
-                    {
-                      title: '작성자',
-                      key: 'requester',
-                      width: 120,
-                      render: (_: unknown, r: (typeof displayRows)[number]) =>
-                        r.requesterName?.trim() || r.memberId || '—',
-                    },
-                    {
-                      title: '작성자 소속',
-                      key: 'requesterOrg',
+                      title: '제목',
+                      key: 'subject',
                       ellipsis: true,
                       render: (_: unknown, r: (typeof displayRows)[number]) =>
-                        r.requesterOrganizationName?.trim() || '—',
+                        getApprovalRequestSubjectLine(r) || '—',
                     },
                     {
-                      title: '양식명',
+                      title: '양식',
                       dataIndex: 'documentName',
                       key: 'documentName',
                       ellipsis: true,
+                    },
+                    {
+                      title: '기안자',
+                      key: 'requester',
+                      width: 180,
+                      render: (_: unknown, r: (typeof displayRows)[number]) =>
+                        `${r.requesterName?.trim() || r.memberId || '—'} (${r.requesterOrganizationName?.trim() || '—'})`,
                     },
                     {
                       title: '상태',
@@ -429,6 +425,13 @@ export function DepartmentApprovalsInboxPage() {
                       key: 'requestStatus',
                       width: 100,
                       render: (v: string) => requestStatusTag(v),
+                    },
+                    {
+                      title: '작성일',
+                      dataIndex: 'createdAt',
+                      key: 'createdAt',
+                      width: 160,
+                      render: (v: string) => formatDateTime(v),
                     },
                   ]
             }

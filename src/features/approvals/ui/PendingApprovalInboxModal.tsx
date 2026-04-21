@@ -1,4 +1,3 @@
-import { EyeOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Button, Card, Spin, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
@@ -157,35 +156,6 @@ export function PendingApprovalInboxModalContent({
   const columns: ColumnsType<ApprovalRequestDetail> = useMemo(
     () => [
       {
-        title: '작성일',
-        dataIndex: 'createdAt',
-        key: 'createdAt',
-        width: 150,
-        render: (_: unknown, row) => (
-          <Typography.Text className="tw-text-xs tw-text-slate-600">{formatDateTime(row.createdAt)}</Typography.Text>
-        ),
-      },
-      {
-        title: '요청자',
-        key: 'requester',
-        width: 100,
-        ellipsis: true,
-        render: (_: unknown, row) => (
-          <Typography.Text className="tw-text-xs">{row.requesterName?.trim() || '—'}</Typography.Text>
-        ),
-      },
-      {
-        title: '작성자 소속',
-        key: 'org',
-        width: 120,
-        ellipsis: true,
-        render: (_: unknown, row) => (
-          <Typography.Text type="secondary" className="tw-text-xs">
-            {row.requesterOrganizationName?.trim() || '—'}
-          </Typography.Text>
-        ),
-      },
-      {
         title: '제목',
         key: 'subject',
         ellipsis: true,
@@ -196,7 +166,7 @@ export function PendingApprovalInboxModalContent({
         ),
       },
       {
-        title: '양식명',
+        title: '양식',
         key: 'documentName',
         ellipsis: true,
         render: (_: unknown, row) => (
@@ -206,29 +176,44 @@ export function PendingApprovalInboxModalContent({
         ),
       },
       {
-        title: '내 결재 상태',
-        key: 'mine',
-        width: 110,
+        title: '결재선',
+        key: 'approvalLine',
+        width: 180,
+        ellipsis: true,
+        render: (_: unknown, row) => (
+          <Typography.Text className="tw-text-xs">
+            {row.requesterName?.trim() || '—'} ({row.requesterOrganizationName?.trim() || '—'})
+          </Typography.Text>
+        ),
+      },
+      {
+        title: '상태',
+        key: 'status',
+        width: 120,
         align: 'center',
         render: (_: unknown, row) => (
           <div className="tw-flex tw-justify-center">{myTurnBadge(tab, row, lineOpts)}</div>
         ),
       },
       {
-        title: '결재 처리',
-        key: 'act',
-        width: 132,
+        title: '기안일',
+        dataIndex: 'createdAt',
+        key: 'createdAt',
+        width: 150,
+        render: (_: unknown, row) => (
+          <Typography.Text className="tw-text-xs tw-text-slate-600">{formatDateTime(row.createdAt)}</Typography.Text>
+        ),
+      },
+      {
+        title: '관리',
+        key: 'manage',
         align: 'center',
         render: (_: unknown, row) => {
-          if (tab === 'acted') {
-            return (
-              <Typography.Text type="secondary" className="tw-text-xs">
-                —
-              </Typography.Text>
-            );
-          }
-          const ok = canApproveRow(tab, row, lineOpts);
           const line = findMyInboxApprovalLine(row, lineOpts);
+          const ok = canApproveRow(tab, row, lineOpts);
+          if (tab === 'acted') {
+            return <Typography.Text type="secondary">—</Typography.Text>;
+          }
           return (
             <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-center tw-gap-2">
               <Button
@@ -251,21 +236,6 @@ export function PendingApprovalInboxModalContent({
             </div>
           );
         },
-      },
-      {
-        title: '상세',
-        key: 'detail',
-        width: 64,
-        align: 'center',
-        render: (_: unknown, row) => (
-          <Button
-            type="text"
-            size="small"
-            icon={<EyeOutlined />}
-            aria-label="상세 보기"
-            onClick={() => onOpenDetail(row.requestId)}
-          />
-        ),
       },
     ],
     [lineOpts, onOpenDetail, onStartApprove, onStartReject, tab],
@@ -333,6 +303,10 @@ export function PendingApprovalInboxModalContent({
                 rowKey="requestId"
                 columns={columns}
                 dataSource={pagedRows}
+                onRow={(record) => ({
+                  onClick: () => onOpenDetail(record.requestId),
+                  style: { cursor: 'pointer' },
+                })}
                 pagination={{
                   current: page,
                   pageSize,
