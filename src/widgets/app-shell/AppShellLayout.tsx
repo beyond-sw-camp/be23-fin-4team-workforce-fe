@@ -643,12 +643,18 @@ function useAppShellSiderMenuItems(currentPathname: string): NonNullable<MenuPro
 
         if (esgMenuItem) {
             return [...items, esgMenuItem, doc];
-            return [...items, chatAdmin, esgMenuItem, doc];
         }
         return [...items, doc];
-    }, [esgConfig, isAdmin, approvalOrgChart, meMember, status, user?.permissions, myDashboardProfile?.organizationName, user?.departmentName, showApprovalFormSettings]);
-        return [...items, chatAdmin, doc];
-    }, [esgConfig, isAdmin, approvalOrgChart, meMember, status, user?.permissions, showApprovalFormSettings]);
+    }, [
+        esgConfig,
+        isAdmin,
+        approvalOrgChart,
+        status,
+        user?.permissions,
+        myDashboardProfile?.organizationName,
+        user?.departmentName,
+        showApprovalFormSettings,
+    ]);
 }
 
 const headerGhostIconClass =
