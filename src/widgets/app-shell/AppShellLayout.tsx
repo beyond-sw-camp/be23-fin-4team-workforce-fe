@@ -55,6 +55,7 @@ import {memberApi} from '@/features/member/api/memberApi';
 import {
     canAccessMemberDirectory,
     canAccessMemberDirectoryFromPermissionStrings,
+    isHrTeamMember,
 } from '@/features/permissions/member-directory-access';
 import {
     APP_BRAND_NAME,
@@ -501,7 +502,11 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
     const {status, user} = useAuth();
     const isAdmin = user?.isSystemAdmin === true;
     const {hasPermission} = usePermissions();
-    const showApprovalFormSettings = hasPermission(PERM.APPROVAL_AD_READ);
+    const showApprovalFormSettings =
+        user?.isSystemAdmin === true ||
+        hasPermission(PERM.APPROVAL_AD_READ) ||
+        isHrTeamMember(hasPermission) ||
+        canAccessMemberDirectoryFromPermissionStrings(user?.permissions);
 
     const {data: esgConfig} = useQuery({
         queryKey: ['esg', 'config'],
@@ -588,7 +593,7 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
             return [...items, chatAdmin, esgMenuItem, doc];
         }
         return [...items, chatAdmin, doc];
-    }, [esgConfig, isAdmin, approvalOrgChart, meMember, status, user?.permissions]);
+    }, [esgConfig, isAdmin, approvalOrgChart, meMember, showApprovalFormSettings, status, user?.permissions]);
 }
 
 const headerGhostIconClass =

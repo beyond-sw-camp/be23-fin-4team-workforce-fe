@@ -34,8 +34,12 @@ import { parseFormSchema, type FormFieldSchema } from '@/features/approvals/lib/
 import { parseApiError } from '@/shared/api/error-parser';
 import { flattenOrganizationsWithMeta } from '@/features/organization/lib/flattenOrganizationTree';
 import { organizationApi } from '@/features/organization/api/organizationApi';
+import { useAuth } from '@/features/auth/useAuth';
 import { PERM } from '@/features/permissions/backend-permissions';
-import { PermissionGuard } from '@/features/permissions/permission-guard';
+import {
+  canAccessMemberDirectoryFromPermissionStrings,
+  isHrTeamMember,
+} from '@/features/permissions/member-directory-access';
 import { usePermissions } from '@/features/permissions/usePermissionsHook';
 
 type DocForm = {
@@ -106,6 +110,7 @@ function validatePolicyLines(rows: PolicyLineDraft[]) {
 export function ApprovalsAdminPage() {
   const { message } = App.useApp();
   const qc = useQueryClient();
+  const { user } = useAuth();
   const { hasPermission } = usePermissions();
   const [createOpen, setCreateOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'documents' | 'policy-lines'>('documents');
@@ -119,6 +124,11 @@ export function ApprovalsAdminPage() {
   const [editForm] = Form.useForm<EditDocForm>();
 
   const canRead = hasPermission(PERM.APPROVAL_AD_READ);
+  const canAccessAdminPage =
+    user?.isSystemAdmin === true ||
+    canRead ||
+    isHrTeamMember(hasPermission) ||
+    canAccessMemberDirectoryFromPermissionStrings(user?.permissions);
   const canCreate = hasPermission(PERM.APPROVAL_AD_CREATE);
   const canUpdate = hasPermission(PERM.APPROVAL_AD_UPDATE);
   const canDelete = hasPermission(PERM.APPROVAL_AD_DELETE);
@@ -126,7 +136,7 @@ export function ApprovalsAdminPage() {
   const { data: documents = [], isFetching: docsLoading } = useQuery({
     queryKey: ['approval', 'documents', 'all'],
     queryFn: () => approvalApi.listDocuments(),
-    enabled: canRead,
+    enabled: canAccessAdminPage,
   });
 
   const { data: activeDocuments = [] } = useQuery({
@@ -391,10 +401,10 @@ export function ApprovalsAdminPage() {
 
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
-      <PermissionGuard
-        required={PERM.APPROVAL_AD_READ}
-        fallback={<Alert type="warning" showIcon message="결재 관리자 화면을 보려면 조회 권한이 필요합니다." />}
-      >
+      {/* `destroyOnHidden` 모달이 닫히면 내부 Form이 제거되어 useForm 인스턴스가 끊긴다. */}
+      {!createOpen ? <Form form={form} preserve={false} className="tw-hidden" aria-hidden /> : null}
+      {!editOpen ? <Form form={editForm} preserve={false} className="tw-hidden" aria-hidden /> : null}
+      {canAccessAdminPage ? (
         <Tabs
           activeKey={activeTab}
           onChange={(key) => setActiveTab(key as 'documents' | 'policy-lines')}
@@ -771,7 +781,9 @@ export function ApprovalsAdminPage() {
             },
           ]}
         />
-      </PermissionGuard>
+      ) : (
+        <Alert type="warning" showIcon message="결재 관리자 화면을 보려면 관리자 또는 인사팀 권한이 필요합니다." />
+      )}
 
       <Modal
         title="결재 양식 추가"

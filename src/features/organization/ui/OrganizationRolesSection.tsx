@@ -342,6 +342,9 @@ export function OrganizationRolesSection() {
         </div>
       </PermissionGuard>
 
+      {/* `destroyOnHidden` 모달이 닫히면 Form이 제거되어 useForm 경고가 난다. */}
+      {roleModal === null ? <Form form={form} preserve={false} className="tw-hidden" aria-hidden /> : null}
+
       <Modal
         title={roleModal?.type === 'edit' ? '역할 수정' : '역할 추가'}
         open={roleModal != null}

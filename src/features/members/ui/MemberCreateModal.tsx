@@ -121,20 +121,22 @@ export function MemberCreateModal({ open, onClose }: Props) {
     .map((r) => ({ value: r.id, label: r.name }));
 
   return (
-    <Modal
-      title="직원 계정 생성"
-      open={open}
-      onCancel={onClose}
-      onOk={() => void handleOk()}
-      okText="생성"
-      cancelText="취소"
-      okButtonProps={{ className: membersCtaButtonClass }}
-      width={560}
-      destroyOnHidden
-      confirmLoading={createM.isPending}
-    >
-      
-      <Form<FormValues> form={form} layout="vertical" className="tw-pt-1">
+    <>
+      {/* `destroyOnHidden`으로 모달이 닫히면 Form이 제거되어 useForm 경고가 난다. */}
+      {!open ? <Form form={form} preserve={false} className="tw-hidden" aria-hidden /> : null}
+      <Modal
+        title="직원 계정 생성"
+        open={open}
+        onCancel={onClose}
+        onOk={() => void handleOk()}
+        okText="생성"
+        cancelText="취소"
+        okButtonProps={{ className: membersCtaButtonClass }}
+        width={560}
+        destroyOnHidden
+        confirmLoading={createM.isPending}
+      >
+        <Form<FormValues> form={form} layout="vertical" className="tw-pt-1">
         <Form.Item name="name" label="이름" rules={[{ required: true, message: '이름을 입력하세요.' }]}>
           <Input placeholder="홍길동" maxLength={80} />
         </Form.Item>
@@ -170,7 +172,8 @@ export function MemberCreateModal({ open, onClose }: Props) {
         <Form.Item name="roleId" label="역할" rules={[{ required: true, message: '역할을 선택하세요.' }]}>
           <Select showSearch optionFilterProp="label" options={roleOptions} placeholder="역할 선택" />
         </Form.Item>
-      </Form>
-    </Modal>
+        </Form>
+      </Modal>
+    </>
   );
 }

@@ -622,6 +622,10 @@ export default function MeetingDetailPage() {
           </>
         )}
       </Card>
+
+      {/* 면담 완료 후·액션 폼 접을 때 Form이 언마운트되어 useForm 인스턴스가 끊긴다. */}
+      {isCompleted ? <Form form={completeForm} preserve={false} className="tw-hidden" aria-hidden /> : null}
+      {!showActionForm ? <Form form={actionForm} preserve={false} className="tw-hidden" aria-hidden /> : null}
     </div>
   );
 }
