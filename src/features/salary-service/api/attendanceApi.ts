@@ -5,6 +5,16 @@ import type {
   CompanyHoliday,
   CompanyHolidayCreatePayload,
   CompanyHolidayUpdatePayload,
+  OvertimeRequest,
+  OvertimeRequestCreatePayload,
+  OvertimePolicy,
+  OvertimePolicyCreatePayload,
+  OvertimePolicyUpdatePayload,
+  FlexibleTimeSlot,
+  FlexibleTimeSlotCreatePayload,
+  FlexibleTimeSlotUpdatePayload,
+  MemberScheduleSelection,
+  MemberScheduleSelectionCreatePayload,
   DailyAttendance,
   LeavePolicy,
   LeavePolicyCreatePayload,
@@ -239,6 +249,156 @@ export const attendanceApi = {
 
     async delete(workTripDetailId: string): Promise<void> {
       await httpClient.delete(`${BASE}/work-trip/${encodeURIComponent(workTripDetailId)}`);
+    },
+  },
+
+  /** /attendance/overtime-requests — 연장근로 신청(사원) */
+  overtimeRequest: {
+    async createMy(payload: OvertimeRequestCreatePayload): Promise<OvertimeRequest> {
+      const { data } = await httpClient.post(`${BASE}/attendance/overtime-requests/my`, payload);
+      unwrapMessage(data);
+      return unwrapApiResponse<OvertimeRequest>(data);
+    },
+
+    async listMy(params?: { page?: number; size?: number }): Promise<SpringPage<OvertimeRequest>> {
+      const { data } = await httpClient.get(`${BASE}/attendance/overtime-requests/my`, {
+        params: { page: params?.page ?? 0, size: params?.size ?? 20 },
+      });
+      return unwrapApiResponse<SpringPage<OvertimeRequest>>(data);
+    },
+
+    async listMyByDate(date: string): Promise<OvertimeRequest[]> {
+      const { data } = await httpClient.get(`${BASE}/attendance/overtime-requests/my/by-date`, {
+        params: { date },
+      });
+      const unwrapped = unwrapApiResponse<OvertimeRequest[] | null>(data);
+      return Array.isArray(unwrapped) ? unwrapped : [];
+    },
+
+    async getById(overtimeRequestId: string): Promise<OvertimeRequest> {
+      const { data } = await httpClient.get(
+        `${BASE}/attendance/overtime-requests/${encodeURIComponent(overtimeRequestId)}`,
+      );
+      return unwrapApiResponse<OvertimeRequest>(data);
+    },
+
+    async updateApprovalLink(overtimeRequestId: string, approvalRequestId: string): Promise<void> {
+      await httpClient.put(
+        `${BASE}/attendance/overtime-requests/my/${encodeURIComponent(overtimeRequestId)}/approval-link`,
+        null,
+        { params: { approvalRequestId } },
+      );
+    },
+
+    async cancelMy(overtimeRequestId: string): Promise<void> {
+      await httpClient.delete(`${BASE}/attendance/overtime-requests/my/${encodeURIComponent(overtimeRequestId)}`);
+    },
+  },
+
+  /** /attendance/overtime-policies — 연장근로 정책(관리자) */
+  overtimePolicy: {
+    async create(payload: OvertimePolicyCreatePayload): Promise<OvertimePolicy> {
+      const { data } = await httpClient.post(`${BASE}/attendance/overtime-policies/create`, payload);
+      unwrapMessage(data);
+      return unwrapApiResponse<OvertimePolicy>(data);
+    },
+
+    async update(policyId: string, payload: OvertimePolicyUpdatePayload): Promise<OvertimePolicy> {
+      const { data } = await httpClient.put(
+        `${BASE}/attendance/overtime-policies/${encodeURIComponent(policyId)}`,
+        payload,
+      );
+      unwrapMessage(data);
+      return unwrapApiResponse<OvertimePolicy>(data);
+    },
+
+    async getCurrent(): Promise<OvertimePolicy> {
+      const { data } = await httpClient.get(`${BASE}/attendance/overtime-policies/current`);
+      return unwrapApiResponse<OvertimePolicy>(data);
+    },
+
+    async getById(policyId: string): Promise<OvertimePolicy> {
+      const { data } = await httpClient.get(
+        `${BASE}/attendance/overtime-policies/${encodeURIComponent(policyId)}`,
+      );
+      return unwrapApiResponse<OvertimePolicy>(data);
+    },
+
+    async list(): Promise<OvertimePolicy[]> {
+      const { data } = await httpClient.get(`${BASE}/attendance/overtime-policies`);
+      const unwrapped = unwrapApiResponse<OvertimePolicy[] | null>(data);
+      return Array.isArray(unwrapped) ? unwrapped : [];
+    },
+  },
+
+  /** /attendance/flexible-slots — 시차출퇴근 슬롯(관리자) */
+  flexibleSlot: {
+    async create(payload: FlexibleTimeSlotCreatePayload): Promise<FlexibleTimeSlot> {
+      const { data } = await httpClient.post(`${BASE}/attendance/flexible-slots`, payload);
+      unwrapMessage(data);
+      return unwrapApiResponse<FlexibleTimeSlot>(data);
+    },
+
+    async update(slotId: string, payload: FlexibleTimeSlotUpdatePayload): Promise<FlexibleTimeSlot> {
+      const { data } = await httpClient.put(
+        `${BASE}/attendance/flexible-slots/${encodeURIComponent(slotId)}`,
+        payload,
+      );
+      unwrapMessage(data);
+      return unwrapApiResponse<FlexibleTimeSlot>(data);
+    },
+
+    async delete(slotId: string): Promise<void> {
+      await httpClient.delete(`${BASE}/attendance/flexible-slots/${encodeURIComponent(slotId)}`);
+    },
+
+    async setDefault(slotId: string): Promise<FlexibleTimeSlot> {
+      const { data } = await httpClient.put(
+        `${BASE}/attendance/flexible-slots/${encodeURIComponent(slotId)}/default`,
+      );
+      unwrapMessage(data);
+      return unwrapApiResponse<FlexibleTimeSlot>(data);
+    },
+
+    async getById(slotId: string): Promise<FlexibleTimeSlot> {
+      const { data } = await httpClient.get(`${BASE}/attendance/flexible-slots/${encodeURIComponent(slotId)}`);
+      return unwrapApiResponse<FlexibleTimeSlot>(data);
+    },
+
+    async listByWorkSchedule(workScheduleId: string): Promise<FlexibleTimeSlot[]> {
+      const { data } = await httpClient.get(`${BASE}/attendance/flexible-slots`, {
+        params: { workScheduleId },
+      });
+      const unwrapped = unwrapApiResponse<FlexibleTimeSlot[] | null>(data);
+      return Array.isArray(unwrapped) ? unwrapped : [];
+    },
+  },
+
+  /** /attendance/schedule-selections — 직원 슬롯 선택 */
+  scheduleSelection: {
+    async createMy(payload: MemberScheduleSelectionCreatePayload): Promise<MemberScheduleSelection> {
+      const { data } = await httpClient.post(`${BASE}/attendance/schedule-selections/my`, payload);
+      unwrapMessage(data);
+      return unwrapApiResponse<MemberScheduleSelection>(data);
+    },
+
+    async cancelMy(selectionId: string): Promise<void> {
+      await httpClient.delete(`${BASE}/attendance/schedule-selections/my/${encodeURIComponent(selectionId)}`);
+    },
+
+    async getMyCurrent(yearMonth: string): Promise<MemberScheduleSelection | null> {
+      const { data } = await httpClient.get(`${BASE}/attendance/schedule-selections/my/current`, {
+        params: { yearMonth },
+      });
+      return unwrapApiResponse<MemberScheduleSelection | null>(data);
+    },
+
+    async getMyHistory(yearMonth: string): Promise<MemberScheduleSelection[]> {
+      const { data } = await httpClient.get(`${BASE}/attendance/schedule-selections/my/history`, {
+        params: { yearMonth },
+      });
+      const unwrapped = unwrapApiResponse<MemberScheduleSelection[] | null>(data);
+      return Array.isArray(unwrapped) ? unwrapped : [];
     },
   },
 };

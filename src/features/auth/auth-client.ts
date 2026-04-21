@@ -30,6 +30,7 @@ type LoginResponse = {
   permissions?: unknown;
   isSystemAdminYn?: 'Y' | 'N';
   isFirstLoginYn?: 'Y' | 'N' | 'YES' | 'NO';
+  isOnboardingYn?: 'Y' | 'N' | 'YES' | 'NO';
   isEmailVerifiedYn?: 'Y' | 'N' | 'YES' | 'NO';
   memberPositionId?: string;
   jobTitle?: string;
@@ -181,6 +182,8 @@ function mapMe(payload: Partial<LoginResponse> & Partial<Me>): Me {
     flags: {
       mustChangePassword:
         payload.isFirstLoginYn === undefined ? payload.flags?.mustChangePassword : isYnYes(payload.isFirstLoginYn),
+      onboardingRequired:
+        payload.isOnboardingYn === undefined ? payload.flags?.onboardingRequired : isYnYes(payload.isOnboardingYn),
       emailVerificationRequired: payload.flags?.emailVerificationRequired ?? emailVerificationRequired,
       accountStatus: payload.flags?.accountStatus ?? 'ACTIVE',
     },
@@ -281,6 +284,13 @@ function decodeMeFromAccessToken(): Me {
   const emailVerificationRequired = toBooleanMaybe(
     flagsFromToken?.emailVerificationRequired ?? jwtPayload.emailVerificationRequired,
   );
+  const onboardingRequired = (() => {
+    const fromFlags = toBooleanMaybe(flagsFromToken?.onboardingRequired ?? jwtPayload.onboardingRequired);
+    if (fromFlags !== undefined) return fromFlags;
+    const raw = jwtPayload.isOnboardingYn;
+    if (raw === undefined || raw === null) return undefined;
+    return isYnYes(String(raw));
+  })();
 
   const id =
     (typeof jwtPayload.id === 'string' && jwtPayload.id) ||
@@ -367,6 +377,7 @@ function decodeMeFromAccessToken(): Me {
     }),
     flags: {
       mustChangePassword,
+      onboardingRequired,
       emailVerificationRequired,
       accountStatus: (() => {
         const raw = flagsFromToken?.accountStatus;
@@ -440,6 +451,15 @@ export const authClient: AuthClient = {
         flags: {
           ...me.flags,
           mustChangePassword: isYnYes(payload.isFirstLoginYn),
+        },
+      };
+    }
+    if (payload.isOnboardingYn !== undefined) {
+      me = {
+        ...me,
+        flags: {
+          ...me.flags,
+          onboardingRequired: isYnYes(payload.isOnboardingYn),
         },
       };
     }

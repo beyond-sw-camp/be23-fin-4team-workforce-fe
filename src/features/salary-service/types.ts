@@ -3,6 +3,21 @@
  */
 
 export type AttendanceStatusCode = 'NORMAL' | 'ABSENT' | 'LEAVE' | 'HALF' | string;
+export type OvertimeRequestTypeCode = 'PRE' | 'POST' | string;
+export type OvertimeApprovalStatusCode =
+  | 'PENDING'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'CANCELLED'
+  | 'EXPIRED'
+  | string;
+export type AllowanceApprovalStatusCode =
+  | 'PENDING'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'CANCELLED'
+  | 'AUTO'
+  | string;
 
 export type EventTypeCode = 'CLOCK_IN' | 'CLOCK_OUT' | 'BREAK_START' | 'BREAK_END' | string;
 
@@ -47,6 +62,148 @@ export type AttendanceLogCreatePayload = {
   latitude?: number | null;
   longitude?: number | null;
   deviceId?: string | null;
+};
+
+export type OvertimeRequest = {
+  overtimeRequestId?: string;
+  memberId?: string;
+  targetDate?: string;
+  requestType?: OvertimeRequestTypeCode;
+  plannedStartTime?: string | null;
+  plannedEndTime?: string | null;
+  requestedMinutes?: number | null;
+  actualStartTime?: string | null;
+  actualEndTime?: string | null;
+  actualMinutes?: number | null;
+  reason?: string | null;
+  approvalStatus?: OvertimeApprovalStatusCode;
+  approvalRequestId?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+};
+
+export type OvertimeRequestCreatePayload = {
+  targetDate: string;
+  requestType: OvertimeRequestTypeCode;
+  plannedStartTime?: string | null;
+  plannedEndTime?: string | null;
+  requestedMinutes?: number | null;
+  actualStartTime?: string | null;
+  actualEndTime?: string | null;
+  actualMinutes?: number | null;
+  reason?: string | null;
+};
+
+export type ApprovalModeCode = 'PRE_ONLY' | 'POST_ONLY' | 'HYBRID' | string;
+
+export type OvertimePolicy = {
+  overtimePolicyId?: string;
+  companyId?: string;
+  overtimeRoundingMinutes?: number | null;
+  approvalMode?: ApprovalModeCode | null;
+  postApprovalDeadlineHours?: number | null;
+  weeklyOvertimeLimitMinutes?: number | null;
+  weeklyTotalLimitMinutes?: number | null;
+  dailyOvertimeLimitMinutes?: number | null;
+  monthlyOvertimeLimitMinutes?: number | null;
+  nightStartTime?: string | null;
+  nightEndTime?: string | null;
+  holidayWorkRequiresApproval?: boolean | null;
+  effectiveFrom?: string | null;
+  effectiveTo?: string | null;
+};
+
+export type OvertimePolicyCreatePayload = {
+  overtimeRoundingMinutes: number;
+  approvalMode: ApprovalModeCode;
+  postApprovalDeadlineHours?: number | null;
+  weeklyOvertimeLimitMinutes?: number | null;
+  weeklyTotalLimitMinutes?: number | null;
+  dailyOvertimeLimitMinutes?: number | null;
+  monthlyOvertimeLimitMinutes?: number | null;
+  nightStartTime?: string | null;
+  nightEndTime?: string | null;
+  holidayWorkRequiresApproval?: boolean | null;
+  effectiveFrom: string;
+  effectiveTo?: string | null;
+};
+
+export type OvertimePolicyUpdatePayload = Omit<OvertimePolicyCreatePayload, 'effectiveFrom'> & {
+  effectiveFrom?: string;
+};
+
+export type FlexibleTimeSlot = {
+  slotId?: string;
+  workScheduleId?: string;
+  slotCode?: string;
+  slotLabel?: string;
+  startTime?: string;
+  endTime?: string;
+  workMinutes?: number | null;
+  breakMinutes?: number | null;
+  isDefault?: boolean | null;
+  delYn?: string | null;
+};
+
+export type FlexibleTimeSlotCreatePayload = {
+  workScheduleId: string;
+  slotCode: string;
+  slotLabel: string;
+  startTime: string;
+  endTime: string;
+  workMinutes: number;
+  breakMinutes: number;
+  isDefault?: boolean;
+};
+
+export type FlexibleTimeSlotUpdatePayload = Partial<Omit<FlexibleTimeSlotCreatePayload, 'workScheduleId'>>;
+
+export type ScheduleApprovalStatusCode =
+  | 'PENDING'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'CANCELLED'
+  | 'AUTO'
+  | string;
+
+export type MemberScheduleSelection = {
+  selectionId?: string;
+  memberId?: string;
+  targetYearMonth?: string;
+  slotId?: string;
+  slotLabel?: string | null;
+  requestReason?: string | null;
+  approvalStatus?: ScheduleApprovalStatusCode;
+  approvalRequestId?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+};
+
+export type MemberScheduleSelectionCreatePayload = {
+  memberId?: string;
+  targetYearMonth: string;
+  slotId: string;
+  requestReason?: string | null;
+};
+
+export type MemberAllowance = {
+  memberAllowanceId?: string;
+  memberId?: string;
+  salaryItemTemplateId?: string;
+  amount?: number | null;
+  effectiveFrom?: string | null;
+  reason?: string | null;
+  approvalStatus?: AllowanceApprovalStatusCode;
+  approvalRequestId?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+};
+
+export type MemberAllowanceCreatePayload = {
+  salaryItemTemplateId: string;
+  amount: number;
+  effectiveFrom: string;
+  reason?: string | null;
 };
 
 export type BalanceTypeCode = 'ANNUAL' | 'MONTHLY' | 'CARRYOVER' | string;
