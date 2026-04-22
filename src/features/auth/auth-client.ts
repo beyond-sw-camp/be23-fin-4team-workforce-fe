@@ -8,6 +8,7 @@ import { mergePermissionStrings, rolePermissionItemsToCodes } from '@/features/p
 import { httpClient } from '@/shared/api/httpClient';
 import { unwrapApiResponse } from '@/shared/api/response';
 import { decodeJwtPayload, getTenantHeadersFromJwtPayload } from '@/shared/auth/jwtTenantClaims';
+import { setAuthRefreshInFlight } from '@/shared/stores/authRefreshInFlightStore';
 import { clearRefreshIdentity, setRefreshIdentity } from '@/shared/stores/authRefreshIdentityStore';
 import { clearAccessToken, getAccessToken, setAccessToken } from '@/shared/stores/authTokenStore';
 
@@ -500,6 +501,7 @@ export const authClient: AuthClient = {
   },
   /** POST /member/generate-at — 연장 버튼 전용. 401 시 httpClient 인터셉터가 스토어 정리 후 /login 이동. */
   async refreshSession() {
+    setAuthRefreshInFlight(true);
     try {
       const response = await httpClient.post('/member/generate-at');
       const payload = unwrapApiResponse<LoginResponse>(response.data);
@@ -525,6 +527,8 @@ export const authClient: AuthClient = {
     } catch {
       currentSession = null;
       return null;
+    } finally {
+      setAuthRefreshInFlight(false);
     }
   },
 };
