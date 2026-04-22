@@ -127,6 +127,12 @@ export function appHeaderTitleFromPath(
   return APP_BRAND_NAME;
 }
 
+/** 일정(/app/calendar) */
+export const CALENDAR_PAGE_KO = {
+  workspaceEyebrow: 'Schedules & availability planning',
+  pageTitle: '일정 관리',
+} as const;
+
 export const APP_GENERIC_PAGE_COPY: Record<string, { title: string; description: string }> = {
   '/approvals': {
     title: '결재',
@@ -187,8 +193,10 @@ export const MEMBER_HISTORY_CHANGE_TYPE_KO: Record<string, string> = {
 
 /** 성과(/app/performance) 화면 카피 */
 export const PERFORMANCE_PAGE_KO = {
+  /** 히어로 상단 영문 아이라인 */
+  workspaceEyebrow: 'Goals & outcomes workspace',
   /** 히어로 — 레퍼런스 스타일 상단 요약 */
-  heroTitle: '성과 요약',
+  heroTitle: '성과 관리',
   /** {pct}는 진행 중 평균 달성률로부터 계산한 “남은 비율”로 치환 */
   heroRemainBefore: '현재 목표 달성까지 ',
   heroRemainAfter: ' 남았습니다.',
@@ -339,6 +347,8 @@ export const PERFORMANCE_PAGE_KO = {
 
 /** 평가(/app/evaluations) 화면 */
 export const EVALUATION_PAGE_KO = {
+  /** 허브 상단 영문 아이라인 */
+  workspaceEyebrow: 'Reviews & calibration hub',
   // Page
   pageTitle: '평가 관리',
 
@@ -443,6 +453,20 @@ export const EVALUATION_PAGE_KO = {
   writeRequired: '필수',
   writeReferencePanel: '참고자료',
   writeCriteriaPanel: '기준 명세',
+
+  /** 나의 평가 작성 목록(허브 모달) */
+  myAssignmentsTitle: '나의 평가 작성 목록',
+  myAssignmentsSubtitle: '배정된 평가를 모두 확인하고, 미완료 건은 작성 화면으로 이동할 수 있습니다.',
+  myAssignmentsFilterAll: '전체',
+  myAssignmentsFilterTodo: '작성 필요',
+  myAssignmentsFilterDone: '제출 완료',
+  myAssignmentsColSeason: '시즌',
+  myAssignmentsColSubmittedAt: '제출일',
+  myAssignmentsActionStart: '작성 시작',
+  myAssignmentsActionContinue: '이어 작성',
+  myAssignmentsActionView: '제출 내역',
+  myAssignmentsEmpty: '표시할 평가가 없습니다.',
+  myAssignmentsEmptyTodo: '작성이 필요한 평가가 없습니다.',
 
   // Progress
   progressTitle: '진행도 관리',

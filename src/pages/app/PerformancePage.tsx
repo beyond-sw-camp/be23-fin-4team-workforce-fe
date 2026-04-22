@@ -31,6 +31,7 @@ import {
   Popconfirm,
   Popover,
   Progress,
+  Radio,
   Row,
   Segmented,
   Select,
@@ -71,6 +72,7 @@ import type {
 } from '@/features/goals/model/types';
 import { PERFORMANCE_PAGE_KO } from '@/app/locale/app-ko';
 import { AppButton } from '@/shared/ui/AppButton';
+import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import { AppModal } from '@/shared/ui/AppModal';
 import { AppSearchField } from '@/shared/ui/AppSearchField';
 import { goalApi } from '@/features/goals/api/goalApi';
@@ -1205,28 +1207,8 @@ function PerformancePage() {
       ? activateMutation.variables
       : null;
 
-  const summaryRemainPct =
-    progressAvg != null
-      ? Math.max(0, Math.min(100, 100 - Math.round(progressAvg)))
-      : null;
-
-  const heroPrimary = !companyId
-    ? ({ kind: 'none' } as const)
-    : summaryRemainPct != null && stats.active > 0
-      ? ({ kind: 'remain', pct: summaryRemainPct } as const)
-      : stats.active > 0
-        ? ({ kind: 'activeNoScore' } as const)
-        : stats.draft > 0 && stats.active === 0
-          ? ({ kind: 'draft' } as const)
-          : stats.total === 0
-            ? ({ kind: 'empty' } as const)
-            : ({ kind: 'idle' } as const);
-
-  const heroPrimaryClass =
-    '!tw-mb-0 !tw-max-w-2xl !tw-text-[15px] !tw-font-normal !tw-leading-relaxed !tw-text-slate-600';
-
   return (
-    <div className="tw-mx-auto tw-w-full tw-space-y-5">
+    <div className="tw-mx-auto tw-w-full tw-space-y-10">
       {!companyId ? (
         <Alert
           type="warning"
@@ -1239,172 +1221,132 @@ function PerformancePage() {
       {companyId ? (
         <>
         <section
-          className="tw-rounded-2xl tw-border tw-border-slate-200/80"
+          className=""
           aria-label={PERFORMANCE_PAGE_KO.heroTitle}
         >
-          <Typography.Title
-            level={3}
-            className="!tw-m-0 !tw-mb-3 !tw-text-[24px] !tw-font-bold !tw-leading-tight !tw-tracking-tight !tw-text-[#1e3a5f] sm:!tw-text-[26px]"
-          >
-            {PERFORMANCE_PAGE_KO.heroTitle}
-          </Typography.Title>
+          <AppWorkspacePageTitle
+            className="!tw-mb-2"
+            eyebrow={PERFORMANCE_PAGE_KO.workspaceEyebrow}
+            title={PERFORMANCE_PAGE_KO.heroTitle}
+          />
 
-          {heroPrimary.kind === 'remain' ? (
-            <Paragraph className={heroPrimaryClass}>
-              {PERFORMANCE_PAGE_KO.heroRemainBefore}
-              <span className="tw-font-semibold tw-tabular-nums tw-text-[#2563eb]">{heroPrimary.pct}%</span>
-              {PERFORMANCE_PAGE_KO.heroRemainAfter}
-            </Paragraph>
-          ) : heroPrimary.kind === 'activeNoScore' ? (
-            <Paragraph className={heroPrimaryClass}>{PERFORMANCE_PAGE_KO.heroActiveNoScore}</Paragraph>
-          ) : heroPrimary.kind === 'draft' ? (
-            <Paragraph className={heroPrimaryClass}>{PERFORMANCE_PAGE_KO.heroDraftOnly}</Paragraph>
-          ) : heroPrimary.kind === 'empty' ? (
-            <Paragraph className={heroPrimaryClass}>{PERFORMANCE_PAGE_KO.heroEmpty}</Paragraph>
-          ) : heroPrimary.kind === 'idle' ? (
-            <Paragraph className={heroPrimaryClass}>{PERFORMANCE_PAGE_KO.heroIdle}</Paragraph>
-          ) : null}
-
-          <Paragraph className="!tw-mb-0 !tw-mt-2 !tw-max-w-2xl !tw-text-xs !tw-leading-normal !tw-text-slate-500">
-            {canCreate ? PERFORMANCE_PAGE_KO.pageLeadWithCreate : PERFORMANCE_PAGE_KO.pageLeadMember}
-          </Paragraph>
-
-          <div className="tw-mt-6 tw-border-t tw-border-slate-100 tw-pt-6">
-            <div className="tw-flex tw-flex-col tw-gap-4">
-              <div className="tw-flex tw-w-full tw-min-w-0 tw-flex-col tw-gap-5 lg:tw-flex-row lg:tw-items-stretch lg:tw-gap-6 xl:tw-gap-8">
-                <div className="tw-flex tw-min-h-0 tw-min-w-0 tw-flex-1 tw-flex-col tw-gap-4 md:tw-gap-5 lg:tw-basis-0">
-                  <div className="tw-grid tw-w-full tw-grid-cols-2 tw-gap-3 sm:tw-gap-4 md:tw-grid-cols-4 md:tw-gap-4 xl:tw-gap-5">
-                    {(
-                      [
-                        {
-                          k: 't',
-                          label: PERFORMANCE_PAGE_KO.statAll,
-                          value: stats.total,
-                          icon: <BarChartOutlined className="tw-text-[15px] tw-text-slate-400" />,
-                        },
-                        {
-                          k: 'a',
-                          label: PERFORMANCE_PAGE_KO.statActive,
-                          value: stats.active,
-                          icon: <TeamOutlined className="tw-text-[15px] tw-text-slate-400" />,
-                        },
-                        {
-                          k: 'c',
-                          label: PERFORMANCE_PAGE_KO.statCompleted,
-                          value: stats.completed,
-                          icon: <CheckCircleOutlined className="tw-text-[15px] tw-text-slate-400" />,
-                        },
-                        {
-                          k: 'y',
-                          label: PERFORMANCE_PAGE_KO.statDelayed,
-                          value: stats.delayed,
-                          icon: <WarningOutlined className="tw-text-[15px] tw-text-amber-600/80" />,
-                        },
-                      ] as const
-                    ).map((m) => (
-                      <div
-                        key={m.k}
-                        className="tw-flex tw-h-full tw-min-h-[5rem] tw-min-w-0 tw-flex-col tw-justify-between tw-rounded-2xl tw-border tw-border-white/80 tw-bg-white tw-px-3 tw-py-3.5 tw-shadow-[0_1px_2px_rgba(15,23,42,0.05)] sm:tw-px-4 sm:tw-py-4"
-                      >
-                        <div className="tw-mb-1 tw-flex tw-min-w-0 tw-items-center tw-gap-1.5 tw-text-xs tw-font-medium tw-text-slate-500">
-                          {m.icon}
-                          <span className="tw-truncate">{m.label}</span>
-                        </div>
-                        <div className="tw-text-xl tw-font-semibold tw-tabular-nums tw-text-[#1e3a5f] sm:tw-text-2xl">{m.value}</div>
+          <div className="tw-mt-5 tw-space-y-4">
+            <div className="tw-grid tw-w-full tw-min-w-0 tw-grid-cols-1 tw-gap-4 lg:tw-grid-cols-3">
+              <div className="tw-rounded-3xl tw-border tw-border-slate-200 tw-bg-white tw-p-4 sm:tw-p-5">
+                <div className="tw-mb-3 tw-flex tw-items-center tw-gap-2">
+                  <BarChartOutlined className="tw-text-[14px] tw-text-blue-500" />
+                  <Text className="tw-text-[18px] tw-font-semibold tw-text-slate-900">성과 현황</Text>
+                </div>
+                <div className="tw-grid tw-grid-cols-2 tw-gap-2.5">
+                  {(
+                    [
+                      {
+                        k: 't',
+                        label: PERFORMANCE_PAGE_KO.statAll,
+                        value: stats.total,
+                        icon: <BarChartOutlined className="tw-text-[13px] tw-text-slate-400" />,
+                      },
+                      {
+                        k: 'a',
+                        label: PERFORMANCE_PAGE_KO.statActive,
+                        value: stats.active,
+                        icon: <TeamOutlined className="tw-text-[13px] tw-text-blue-500/80" />,
+                      },
+                      {
+                        k: 'c',
+                        label: PERFORMANCE_PAGE_KO.statCompleted,
+                        value: stats.completed,
+                        icon: <CheckCircleOutlined className="tw-text-[13px] tw-text-emerald-500/80" />,
+                      },
+                      {
+                        k: 'y',
+                        label: PERFORMANCE_PAGE_KO.statDelayed,
+                        value: stats.delayed,
+                        icon: <WarningOutlined className="tw-text-[13px] tw-text-amber-500/90" />,
+                      },
+                    ] as const
+                  ).map((m) => (
+                    <div
+                      key={m.k}
+                      className="tw-rounded-2xl tw-border tw-border-slate-100 tw-bg-slate-50/70 tw-px-3 tw-py-2.5"
+                    >
+                      <div className="tw-flex tw-items-center tw-gap-1.5 tw-text-[12px] tw-font-medium tw-text-slate-500">
+                        {m.icon}
+                        <span>{m.label}</span>
                       </div>
-                    ))}
-                  </div>
-
-                <div className="tw-space-y-1.5">
-                  <div className="tw-flex tw-items-center tw-gap-3">
-                    <Text className="tw-shrink-0 tw-text-xs tw-text-slate-500">{PERFORMANCE_PAGE_KO.avgAchievement}</Text>
-                    <div className="tw-h-2 tw-min-w-0 tw-flex-1 tw-rounded-full tw-bg-slate-200/80">
-                      <div
-                        className="tw-h-full tw-rounded-full tw-transition-[width] tw-bg-[#3b82f6]"
-                        style={{ width: `${Math.min(100, Math.max(0, progressAvg ?? 0))}%` }}
-                      />
+                      <div className="tw-mt-2 tw-text-[36px] tw-font-semibold tw-leading-none tw-tabular-nums tw-text-[#0f172a]">
+                        {m.value}
+                      </div>
                     </div>
-                    <Text className="tw-tabular-nums tw-text-sm tw-font-semibold tw-text-[#1e3a5f]">{progressAvg ?? 0}%</Text>
-                  </div>
-                  {progressAvg == null ? (
-                    <Text className="tw-block tw-text-[11px] tw-leading-snug tw-text-slate-400">
-                      {PERFORMANCE_PAGE_KO.avgAchievementUnavailable}
-                    </Text>
-                  ) : null}
+                  ))}
                 </div>
-                </div>
+              </div>
 
-              {/* ── 승인 현황 배너 (우측 열 · lg 미만에서는 통계 아래 전폭) ── */}
-              <div className="tw-flex tw-w-full tw-min-w-0 tw-flex-col tw-self-stretch lg:tw-flex-none lg:tw-shrink-0 lg:tw-basis-80 xl:tw-basis-96">
-            {(() => {
-              const pendingCount = pendingApprovalsQuery.data?.length ?? 0;
-              const myCount = approvalHistoryQuery.data?.length ?? 0;
-              const hasPending = pendingCount > 0;
-              return (
-                <div className={`tw-flex tw-h-full tw-min-h-0 tw-flex-col tw-justify-center tw-gap-2 tw-rounded-xl tw-border tw-px-3 tw-py-2.5 tw-shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:tw-flex-row sm:tw-flex-wrap sm:tw-items-center sm:tw-justify-between sm:tw-gap-3 sm:tw-px-4 sm:tw-py-3 lg:tw-flex-col lg:tw-items-stretch lg:tw-justify-center ${
-                  hasPending
-                    ? 'tw-border-amber-300/80 tw-bg-amber-50/70'
-                    : 'tw-border-slate-300/80 tw-bg-slate-50/70'
-                }`}>
-                  <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
-                    {hasPending ? (
-                      <span className="tw-flex tw-h-7 tw-w-7 tw-items-center tw-justify-center tw-rounded-lg tw-bg-amber-400 tw-text-white tw-text-xs tw-font-bold">
-                        {pendingCount}
-                      </span>
-                    ) : (
-                      <span className="tw-flex tw-h-7 tw-w-7 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-lg tw-bg-slate-400 tw-text-white">
-                        <FileDoneOutlined className="tw-text-[14px]" />
-                      </span>
-                    )}
-                    <div>
-                      <Text className="tw-text-xs tw-font-semibold sm:tw-text-sm" style={{ color: hasPending ? '#92400e' : '#1e293b' }}>
-                        {hasPending ? `승인 대기 ${pendingCount}건` : PERFORMANCE_PAGE_KO.approvalStripTitle}
+              <div className="tw-rounded-3xl tw-border tw-border-slate-200 tw-bg-white tw-p-4 sm:tw-p-5">
+                <div className="tw-mb-1 tw-flex tw-items-center tw-gap-2">
+                  <CheckCircleOutlined className="tw-text-[14px] tw-text-blue-500" />
+                  <Text className="tw-text-[18px] tw-font-semibold tw-text-slate-900">{PERFORMANCE_PAGE_KO.avgAchievement}</Text>
+                </div>
+                <Text className="tw-text-[12px] tw-text-slate-500">진행 중인 목표 기준</Text>
+                <div className="tw-flex tw-justify-center tw-py-3">
+                  <div
+                    className="tw-relative tw-grid tw-h-[120px] tw-w-[120px] tw-place-items-center tw-rounded-full"
+                    style={{
+                      background: `conic-gradient(#3182f6 ${Math.min(100, Math.max(0, progressAvg ?? 0)) * 3.6}deg, #e2e8f0 0deg)`,
+                    }}
+                  >
+                    <div className="tw-grid tw-h-[100px] tw-w-[100px] tw-place-items-center tw-rounded-full tw-bg-white">
+                      <span className="tw-text-[38px] tw-font-semibold tw-leading-none tw-tabular-nums tw-text-slate-800">{progressAvg ?? 0}%</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="tw-rounded-xl tw-bg-slate-50 tw-px-3 tw-py-2 tw-text-center tw-text-[11px] tw-leading-snug tw-text-slate-400">
+                  {PERFORMANCE_PAGE_KO.avgAchievementUnavailable}
+                </div>
+              </div>
+
+              {(() => {
+                const pendingCount = pendingApprovalsQuery.data?.length ?? 0;
+                const myCount = approvalHistoryQuery.data?.length ?? 0;
+                const hasPending = pendingCount > 0;
+                return (
+                  <div className="tw-flex tw-rounded-3xl tw-border tw-border-slate-200 tw-bg-white tw-p-4 sm:tw-p-5 tw-flex-col tw-justify-between">
+                    <div className="tw-mb-3 tw-flex tw-items-center tw-gap-2">
+                      <FileDoneOutlined className="tw-text-[14px] tw-text-blue-500" />
+                      <Text className="tw-text-[18px] tw-font-semibold tw-text-slate-900">
+                        {PERFORMANCE_PAGE_KO.approvalStripTitle}
                       </Text>
-                      {hasPending ? (
-                        <div className="tw-text-[11px] tw-text-amber-700/70">내가 승인해야 할 목표가 있습니다.</div>
-                      ) : (
-                        <div className="tw-text-[11px] tw-text-slate-600/80">{PERFORMANCE_PAGE_KO.approvalStripEmptyPending}</div>
-                      )}
                     </div>
-                  </div>
-                  <div className="tw-flex tw-min-w-0 tw-flex-wrap tw-items-center tw-gap-2 sm:tw-gap-3 lg:tw-w-full">
-                    {!hasPending ? (
-                      <>
-                        <div className="tw-flex tw-min-w-[7rem] tw-items-baseline tw-gap-1.5 tw-rounded-lg tw-border tw-border-slate-200/90 tw-bg-white tw-px-2.5 tw-py-1 sm:tw-px-3 sm:tw-py-1.5">
-                          <span className="tw-text-[11px] tw-text-slate-500 sm:tw-text-xs">{PERFORMANCE_PAGE_KO.approvalStripPendingShort}</span>
-                          <span className="tw-text-base tw-font-semibold tw-tabular-nums tw-text-[#1e3a5f] sm:tw-text-lg">0</span>
+                    <div className="tw-flex tw-min-h-[52px] tw-items-center tw-justify-center tw-text-center tw-text-[13px] tw-text-slate-500">
+                      {hasPending ? '내가 승인해야 할 목표가 있습니다.' : PERFORMANCE_PAGE_KO.approvalStripEmptyPending}
+                    </div>
+                    <div className="tw-grid tw-grid-cols-2 tw-gap-2.5">
+                      <div className="tw-rounded-xl tw-bg-slate-50 tw-py-2.5 tw-text-center">
+                        <div className="tw-text-[11px] tw-text-slate-500">{PERFORMANCE_PAGE_KO.approvalStripPendingShort}</div>
+                        <div className="tw-mt-1 tw-text-[32px] tw-font-semibold tw-leading-none tw-text-[#0f172a]">{pendingCount}</div>
+                      </div>
+                      <div className="tw-rounded-xl tw-bg-slate-50 tw-py-2.5 tw-text-center">
+                        <div className="tw-text-[11px] tw-text-slate-500">{PERFORMANCE_PAGE_KO.approvalStripMineShort}</div>
+                        <div className="tw-mt-1 tw-text-[32px] tw-font-semibold tw-leading-none tw-text-[#0f172a]">
+                          {approvalHistoryQuery.isPending ? '…' : myCount}
                         </div>
-                        <div className="tw-flex tw-min-w-[7rem] tw-items-baseline tw-gap-1.5 tw-rounded-lg tw-border tw-border-slate-200/90 tw-bg-white tw-px-2.5 tw-py-1 sm:tw-px-3 sm:tw-py-1.5">
-                          <span className="tw-text-[11px] tw-text-slate-500 sm:tw-text-xs">{PERFORMANCE_PAGE_KO.approvalStripMineShort}</span>
-                          <span className="tw-text-base tw-font-semibold tw-tabular-nums tw-text-[#1e3a5f] sm:tw-text-lg">
-                            {approvalHistoryQuery.isPending ? '…' : myCount}
-                          </span>
-                        </div>
-                      </>
-                    ) : null}
+                      </div>
+                    </div>
                     <Button
-                      type={hasPending ? 'primary' : 'default'}
-                      size="small"
+                      type="primary"
+                      size="large"
                       onClick={() => setApprovalHubOpen(true)}
-                      className={hasPending
-                        ? '!tw-rounded-lg !tw-bg-amber-500 hover:!tw-bg-amber-600 !tw-font-semibold !tw-border-amber-500'
-                        : '!tw-rounded-lg !tw-border-slate-300 !tw-bg-white !tw-font-semibold !tw-text-slate-700 hover:!tw-bg-slate-100 hover:!tw-border-slate-400'}
+                      className="!tw-mt-4 !tw-h-12 !tw-rounded-xl !tw-bg-[#3b5bdb] hover:!tw-bg-[#304ac7] !tw-font-semibold !tw-border-[#3b5bdb]"
                     >
                       {hasPending ? '지금 확인하기' : `${PERFORMANCE_PAGE_KO.approvalStripCenter} →`}
                     </Button>
                   </div>
-                </div>
-              );
-            })()}
-              </div>
+                );
+              })()}
             </div>
-
-              <div className="tw-rounded-lg tw-border tw-border-slate-100/80 tw-bg-slate-50/90 tw-px-3 tw-py-2">
-                <Text className="tw-text-[11px] tw-leading-normal tw-text-slate-500">
-                  {PERFORMANCE_PAGE_KO.statScopeNote}
-                </Text>
-              </div>
-            </div>
+            <Text className="tw-block tw-text-[11px] tw-leading-normal tw-text-slate-400">
+              * 집계 범위는 상단 탭별 설정(내 목표 / 전체)에 따라 실시간으로 반영됩니다.
+            </Text>
           </div>
         </section>
         <Modal
@@ -1965,12 +1907,13 @@ function PerformancePage() {
                 : '';
             if (parentTrim) payload.parentGoalId = parentTrim;
             const approverIdTrim = String(values.approverId ?? '').trim();
-            // 활성화 승인이 필요한 정책(ACTIVATION_ONLY / BOTH)일 때만 생성 시
-            // requireApproval=true + approverId 를 실어 ACTIVATION 번들을 만들게 한다.
-            // COMPLETION_ONLY 템플릿은 생성 시점엔 승인이 필요 없으므로 approverId/requireApproval 을
-            // 보내지 않는다. (보내면 서버가 "ACTIVATION 승인을 요구하지 않습니다"로 400을 낸다)
+            // approverId 는 정책 무관하게 payload 에 실어 보낸다.
+            // 서버는 이 값을 Goal.completionApproverId 로 저장해 완료 승인 요청 시 기본값으로 재사용.
+            //
+            // requireApproval=true 는 "생성 시점에 활성화 번들도 만들어라" 는 신호.
+            // ACTIVATION_ONLY / BOTH 정책에서만 true. COMPLETION_ONLY 는 완료 시점에만 번들이 필요하므로 false.
+            if (approverIdTrim) payload.approverId = approverIdTrim;
             if (policyRequiresActivation(goalFormPolicy)) {
-              if (approverIdTrim) payload.approverId = approverIdTrim;
               payload.requireApproval = true;
             }
             createGoalMutation.mutate(payload);
@@ -2088,9 +2031,12 @@ function PerformancePage() {
             tooltip={`${PERFORMANCE_PAGE_KO.goalOwnerTypeMemberHint} ${PERFORMANCE_PAGE_KO.goalOwnerTypeOrgHint}`}
             rules={[{ required: true }]}
           >
-            <Select
+            <Radio.Group
               options={OWNER_OPTIONS}
-              onChange={(v: OwnerType) => {
+              optionType="button"
+              buttonStyle="solid"
+              onChange={(e) => {
+                const v = e.target.value as OwnerType;
                 if (v === 'MEMBER') {
                   goalForm.setFieldValue('organizationOwnerId', undefined);
                   if (!String(goalForm.getFieldValue('memberOwnerId') ?? '').trim()) {
@@ -2232,7 +2178,7 @@ function PerformancePage() {
             <InputNumber className="tw-w-full" min={1} />
           </Form.Item>
           <Form.Item name="visibility" label="공개 범위" rules={[{ required: true }]}>
-            <Select options={VISIBILITY_OPTIONS} />
+            <Radio.Group options={VISIBILITY_OPTIONS} optionType="button" buttonStyle="solid" />
           </Form.Item>
 
           {/* ── 승인 정책 안내 + 승인자 지정 ── */}
@@ -2609,9 +2555,22 @@ function PerformancePage() {
             {modalNeedsApproval ? (
               <Form.Item
                 name="approverId"
-                label="완료 승인자"
+                label={
+                  <span className="tw-inline-flex tw-items-center tw-gap-2">
+                    완료 승인자
+                    {detailGoal.completionApproverId ? (
+                      <Tag color="blue" className="!tw-m-0 !tw-text-[10px]">
+                        목표 생성 시 지정됨
+                      </Tag>
+                    ) : null}
+                  </span>
+                }
                 rules={[{ required: true, message: '승인자를 선택해 주세요.' }]}
-                extra="완료 승인자는 본인 외 멤버로 지정해 주세요."
+                extra={
+                  detailGoal.completionApproverId
+                    ? '목표 생성 시 지정한 종료 승인자가 자동으로 채워져 있습니다. 필요한 경우 다른 사람으로 변경할 수 있습니다.'
+                    : '완료 승인자는 본인 외 멤버로 지정해 주세요.'
+                }
               >
                 <MemberRemoteSelect placeholder="검색하여 승인자를 선택" />
               </Form.Item>
@@ -2818,9 +2777,14 @@ function PerformancePage() {
                 const d = completionDraftMap[detailGoal.id];
                 const draftFiles = deserializeCompletionEvidence(d?.evidenceFiles ?? null);
                 const submittedFiles = deserializeCompletionEvidence(detailApprovalQuery.data?.completionEvidenceFiles ?? null);
+                // 승인자 프리필 우선순위:
+                //  1) 진행 중(PENDING) 번들의 approverId — 재요청/보완 재제출 상황
+                //  2) 목표 생성 시 저장된 completionApproverId — 정상 케이스
+                //  3) undefined — 사용자가 직접 선택
                 const existingApprover = detailApprovalQuery.data?.approverId?.trim();
+                const defaultApprover = detailGoal.completionApproverId?.trim();
                 completionSubmitForm.setFieldsValue({
-                  approverId: existingApprover || undefined,
+                  approverId: existingApprover || defaultApprover || undefined,
                   summary: d?.summary ?? '',
                   evidenceFileList: draftFiles.length > 0 ? draftFiles : submittedFiles,
                   checked1: false,

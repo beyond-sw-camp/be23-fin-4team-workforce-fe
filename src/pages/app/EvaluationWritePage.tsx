@@ -9,13 +9,25 @@ import { useNavigate, useParams } from '@tanstack/react-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EVALUATION_PAGE_KO as L } from '@/app/locale/app-ko';
 import { evaluationApi } from '@/features/evaluation/api/evaluationApi';
-import { normalizeEvaluationDesign } from '@/features/evaluation/lib/normalizeEvaluationDesign';
+import { alignAnswersWithDesign } from '@/features/evaluation/lib/alignAnswersWithDesign';
 import type {
   Answer, DesignSection, DesignQuestion, EvaluationDesign, GoalSummaryCard,
 } from '@/features/evaluation/model/types';
 import { AppButton } from '@/shared/ui/AppButton';
 
 const { Text, Title, Paragraph } = Typography;
+
+/** 저장·제출 JSON — 백엔드 `SectionScorer` 가 숫자 scaleValue 를 기대 (Radio 문자열 방지) */
+function answersForApiPayload(map: Record<string, Answer>): Answer[] {
+  return Object.values(map).map((a) => {
+    const next = { ...a };
+    if (next.scaleValue != null) {
+      const n = Number(next.scaleValue);
+      next.scaleValue = Number.isFinite(n) ? n : undefined;
+    }
+    return next;
+  });
+}
 
 export function EvaluationWritePage() {
   const { message } = App.useApp();
@@ -43,12 +55,9 @@ export function EvaluationWritePage() {
     enabled: !!response,
   });
 
-  const design: EvaluationDesign | undefined = useMemo(
-    () => (designRaw ? normalizeEvaluationDesign(designRaw) : undefined),
-    [designRaw],
-  );
+  /** `getDesign` → `mapDesign` 에서 이미 백엔드 VO 규칙으로 정규화됨 */
+  const design: EvaluationDesign | undefined = designRaw;
   const sections: DesignSection[] = design?.sections ?? [];
-  const editablePhases = new Set(['SELF_EVAL', 'PEER_EVAL', 'UPWARD_EVAL', 'DOWNWARD_EVAL']);
 
   // ── Local answer state ──
   const [answers, setAnswers] = useState<Record<string, Answer>>({});
@@ -59,17 +68,19 @@ export function EvaluationWritePage() {
     setAnswers({});
   }, [responseId]);
 
-  // Initialize answers from response
+  /** 응답 + 설계가 모두 있을 때만 답변 맵 구성(문항 id ↔ questionId 동기화) */
   useEffect(() => {
-    if (response && !initialized) {
-      const map: Record<string, Answer> = {};
-      for (const a of response.answers) {
-        map[a.questionId] = a;
-      }
-      setAnswers(map);
+    if (!response) return;
+    if (!response.designId) {
+      setAnswers({});
       setInitialized(true);
+      return;
     }
-  }, [response, initialized]);
+    if (!design) return;
+    if (initialized) return;
+    setAnswers(alignAnswersWithDesign(design.sections ?? [], response.answers ?? []));
+    setInitialized(true);
+  }, [response, design, responseId, initialized]);
   const allQuestions = useMemo(() => sections.flatMap(s => s.questions), [sections]);
   const requiredQuestions = useMemo(() => allQuestions.filter(q => q.required), [allQuestions]);
 
@@ -99,7 +110,7 @@ export function EvaluationWritePage() {
   // ── Save mutation ──
   const saveMut = useMutation({
     mutationFn: () => {
-      const answerList = Object.values(answers);
+      const answerList = answersForApiPayload(answers);
       return evaluationApi.saveResponse(responseId, { answersJson: JSON.stringify(answerList) });
     },
     onSuccess: () => message.success(L.writeAutoSaved),
@@ -112,8 +123,7 @@ export function EvaluationWritePage() {
   // ── Submit mutation ──
   const submitMut = useMutation({
     mutationFn: async () => {
-      // Save first
-      const answerList = Object.values(answers);
+      const answerList = answersForApiPayload(answers);
       await evaluationApi.saveResponse(responseId, { answersJson: JSON.stringify(answerList) });
       return evaluationApi.submitResponse(responseId);
     },
@@ -141,7 +151,7 @@ export function EvaluationWritePage() {
     return () => {
       if (autoSaveRef.current) clearInterval(autoSaveRef.current);
     };
-  }, [answers, isReadOnly]);
+  }, [answers, isReadOnly, responseId]);
 
   // ── Handle submit ──
   const handleSubmit = () => {
@@ -215,8 +225,12 @@ export function EvaluationWritePage() {
 
         {q.type === 'scale' && (
           <Radio.Group
-            value={a.scaleValue}
-            onChange={e => updateAnswer(q.id, { scaleValue: e.target.value })}
+            name={`eval-${responseId}-${q.id}-scale`}
+            value={a.scaleValue != null && Number.isFinite(Number(a.scaleValue)) ? Number(a.scaleValue) : undefined}
+            onChange={e => {
+              const n = Number((e.target as HTMLInputElement).value);
+              updateAnswer(q.id, { scaleValue: Number.isFinite(n) ? n : undefined });
+            }}
             disabled={isReadOnly}
           >
             <Space>
@@ -234,8 +248,9 @@ export function EvaluationWritePage() {
 
         {q.type === 'grade' && (
           <Radio.Group
+            name={`eval-${responseId}-${q.id}-grade`}
             value={a.gradeValue}
-            onChange={e => updateAnswer(q.id, { gradeValue: e.target.value })}
+            onChange={e => updateAnswer(q.id, { gradeValue: String((e.target as HTMLInputElement).value) })}
             disabled={isReadOnly}
           >
             <Space>
@@ -250,8 +265,12 @@ export function EvaluationWritePage() {
 
         {q.type === 'gap' && (
           <Radio.Group
-            value={a.scaleValue}
-            onChange={e => updateAnswer(q.id, { scaleValue: e.target.value })}
+            name={`eval-${responseId}-${q.id}-gap`}
+            value={a.scaleValue != null && Number.isFinite(Number(a.scaleValue)) ? Number(a.scaleValue) : undefined}
+            onChange={e => {
+              const n = Number((e.target as HTMLInputElement).value);
+              updateAnswer(q.id, { scaleValue: Number.isFinite(n) ? n : undefined });
+            }}
             disabled={isReadOnly}
           >
             <Space>

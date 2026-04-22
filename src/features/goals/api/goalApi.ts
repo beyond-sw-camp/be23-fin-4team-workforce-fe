@@ -250,6 +250,11 @@ function mapGoalFromApi(raw: unknown): Goal | null {
   if (Array.isArray(pm)) {
     g.participantMemberIds = pm.map((x) => String(x)).filter(Boolean);
   }
+  // 종료 승인자 — 완료 모달에서 기본값으로 사용
+  const capp = r.completionApproverId ?? r.completion_approver_id;
+  if (capp !== undefined && capp !== null && String(capp).trim() !== '') {
+    g.completionApproverId = String(capp).trim();
+  }
   return g;
 }
 

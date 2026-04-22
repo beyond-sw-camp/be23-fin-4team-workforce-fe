@@ -130,6 +130,11 @@ export type Goal = {
   healthStatus?: GoalHealthStatus;
   visibleTeamIds?: string[];
   participantMemberIds?: string[];
+  /**
+   * 목표 생성 시 지정된 "종료 승인자" — 완료 승인 요청 모달에서 기본값으로 사용.
+   * API `GoalResDto.completionApproverId` 와 매핑.
+   */
+  completionApproverId?: string;
 };
 
 export type CreateKpiTemplatePayload = {
@@ -297,8 +302,15 @@ export type AddGoalProgressUpdatePayload = {
   note?: string;
 };
 
+/**
+ * 완료 승인 요청 페이로드.
+ *
+ * `approverId` 는 선택:
+ *   - 없으면 서버가 `Goal.completionApproverId` 를 기본 사용
+ *   - 있으면 오버라이드 + Goal 엔티티에도 저장되어 다음 재요청 시 기본값으로 사용
+ */
 export type GoalCompletionSubmitPayload = {
-  approverId: string;
+  approverId?: string;
   summary?: string;
   evidenceFiles?: string;
 };

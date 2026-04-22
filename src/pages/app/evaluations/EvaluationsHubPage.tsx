@@ -1,7 +1,7 @@
 import {useMemo, useState} from 'react';
 import {useQuery, useQueryClient} from '@tanstack/react-query';
 import {useNavigate} from '@tanstack/react-router';
-import {App, Avatar, Button, Card, Dropdown, Empty, Space, Table, Tag, Typography} from 'antd';
+import {App, Avatar, Button, Card, Dropdown, Empty, Modal, Space, Table, Tag, Typography} from 'antd';
 import type {ColumnsType} from 'antd/es/table';
 import type {MenuProps} from 'antd';
 import {
@@ -32,9 +32,11 @@ import {
     seasonTypeBadge,
 } from '@/features/evaluation/lib/evaluationLabels';
 import {SeasonCreateModal} from '@/features/evaluation/ui/SeasonCreateModal';
+import {MyEvaluationAssignmentsContent} from '@/features/evaluation/ui/MyEvaluationAssignmentsContent';
 import {PERM} from '@/features/permissions/backend-permissions';
 import {usePermissions} from '@/features/permissions/usePermissionsHook';
 import {AppInlinePillButton} from '@/shared/ui/AppInlinePillButton';
+import {AppWorkspacePageTitle} from '@/shared/ui/AppWorkspacePageTitle';
 
 const {Text, Title, Paragraph} = Typography;
 
@@ -69,6 +71,7 @@ export function EvaluationsHubPage() {
     const canManage = canCreate || canUpdate || canRead;
 
     const [seasonCreateOpen, setSeasonCreateOpen] = useState(false);
+    const [assignmentsModalOpen, setAssignmentsModalOpen] = useState(false);
     const [seasonLimit, setSeasonLimit] = useState(SEASONS_PAGE_SIZE);
 
     const {data: myResponses = []} = useQuery({
@@ -218,18 +221,11 @@ export function EvaluationsHubPage() {
         <div className="tw-mx-auto tw-w-full tw-space-y-10">
             {/* 상단 히어로 영역: 2:1 그리드 */}
             <section className="tw-grid tw-grid-cols-1 tw-gap-6 lg:tw-grid-cols-3">
-                <div className="tw-space-y-1 lg:tw-col-span-3">
-                    <div className="tw-inline-flex tw-items-center tw-gap-1.5 tw-text-[11px] tw-font-semibold tw-uppercase tw-tracking-wide tw-text-slate-400">
-                            <span aria-hidden>✦</span>
-                            Unified Performance Management
-                    </div>
-                    <Title
-                        level={3}
-                        className="!tw-m-0 !tw-mb-3 !tw-text-[24px] !tw-font-bold !tw-leading-tight !tw-tracking-tight !tw-text-[#1e3a5f] sm:!tw-text-[26px]"
-                    >
-                        워크스페이스
-                    </Title>
-                </div>
+                <AppWorkspacePageTitle
+                    className="lg:tw-col-span-3"
+                    eyebrow={L.workspaceEyebrow}
+                    title={L.pageTitle}
+                />
 
                 {/* LEFT 2/3 — 작성 대기중인 평가 */}
                 <div className="tw-space-y-5 lg:tw-col-span-2">
@@ -243,7 +239,7 @@ export function EvaluationsHubPage() {
                                 params: {responseId: r.responseId},
                             })
                         }
-                        onViewAll={() => message.info('전체 목록 화면은 준비 중입니다.')}
+                        onViewAll={() => setAssignmentsModalOpen(true)}
                     />
                 </div>
 
@@ -355,6 +351,26 @@ export function EvaluationsHubPage() {
                 onClose={() => setSeasonCreateOpen(false)}
                 onCreated={invalidateSeasons}
             />
+
+            <Modal
+                title={L.myAssignmentsTitle}
+                open={assignmentsModalOpen}
+                onCancel={() => setAssignmentsModalOpen(false)}
+                footer={null}
+                width="min(96vw, 1040px)"
+                centered
+                destroyOnClose
+                maskClosable
+                styles={{
+                    body: {
+                        maxHeight: 'min(78vh, 720px)',
+                        overflowY: 'auto',
+                        paddingTop: 8,
+                    },
+                }}
+            >
+                <MyEvaluationAssignmentsContent onBeforeNavigateWrite={() => setAssignmentsModalOpen(false)} />
+            </Modal>
         </div>
     );
 }
@@ -380,7 +396,7 @@ function PendingEvaluationsCard({items, totalCount, onStart, onViewAll}: Pending
                         작성 대기중인 평가
                     </Text>
                 </div>
-                {totalCount > items.length && (
+                {totalCount > 0 && (
                     <AppInlinePillButton
                         onClick={onViewAll}
                         className="tw-px-3 tw-py-1 tw-text-xs tw-font-medium"

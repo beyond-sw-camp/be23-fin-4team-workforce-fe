@@ -980,32 +980,34 @@ function AppShellAccountMenu() {
     };
 
     return (
-        <Popover {...popoverCommon} placement="bottomRight" align={{offset: [0, 6]}}>
-            <div
-                className="tw-ml-1 tw-flex tw-min-w-0 tw-max-w-[min(100vw-96px,280px)] tw-shrink-0 tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-lg tw-border-0 tw-border-l tw-border-solid tw-border-slate-200 tw-py-1 tw-pl-3 tw-pr-1.5 tw-outline-none hover:tw-bg-slate-100/90 focus-visible:tw-ring-2 focus-visible:tw-ring-blue-500/30 md:tw-gap-2.5 md:tw-px-2.5"
-                role="button"
-                tabIndex={0}
-                aria-label="계정 정보"
-                aria-expanded={accountPopoverOpen}
-                aria-haspopup="dialog"
-                onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        setAccountPopoverOpen((o) => !o);
-                    }
-                }}
-            >
-                {avatar}
-                <div className="tw-hidden tw-min-w-0 tw-flex-1 md:tw-block">
-                    <div className="tw-truncate tw-text-left tw-text-sm tw-font-semibold tw-text-slate-900" title={name}>
-                        {name}
-                    </div>
-                    <div className="tw-truncate tw-text-left tw-text-xs tw-text-slate-500" title={orgLine}>
-                        {orgLine}
+        <div className="tw-relative tw-ml-1 tw-inline-flex tw-shrink-0 tw-pl-3 md:tw-pl-2.5 before:tw-pointer-events-none before:tw-absolute before:tw-left-0 before:tw-top-1/2 before:tw-z-0 before:tw-h-[22px] before:tw-w-px before:-tw-translate-y-1/2 before:tw-bg-slate-200 before:tw-content-['']">
+            <Popover {...popoverCommon} placement="bottomRight" align={{offset: [0, 6]}}>
+                <div
+                    className="tw-relative tw-z-[1] tw-flex tw-min-w-0 tw-max-w-[min(100vw-96px,280px)] tw-shrink-0 tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-lg tw-py-1 tw-pr-1.5 tw-outline-none hover:tw-bg-slate-100/90 focus-visible:tw-ring-2 focus-visible:tw-ring-blue-500/30 md:tw-gap-2.5 md:tw-pr-2.5"
+                    role="button"
+                    tabIndex={0}
+                    aria-label="계정 정보"
+                    aria-expanded={accountPopoverOpen}
+                    aria-haspopup="dialog"
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setAccountPopoverOpen((o) => !o);
+                        }
+                    }}
+                >
+                    {avatar}
+                    <div className="tw-hidden tw-min-w-0 tw-flex-1 md:tw-block">
+                        <div className="tw-truncate tw-text-left tw-text-sm tw-font-semibold tw-text-slate-900" title={name}>
+                            {name}
+                        </div>
+                        <div className="tw-truncate tw-text-left tw-text-xs tw-text-slate-500" title={orgLine}>
+                            {orgLine}
+                        </div>
                     </div>
                 </div>
-            </div>
-        </Popover>
+            </Popover>
+        </div>
     );
 }
 
@@ -1161,7 +1163,7 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
                         </button>
                     </Badge>
                 </Tooltip>
-                <Badge count={unreadCount} color="#EF4444" offset={[-2, 4]} showZero={false}>
+                <Badge count={unreadCount} color="#EF4444" offset={[-8, 8]} showZero={false} overflowCount={99}>
                     <Link to="/app/notifications" className={headerGhostIconClass} aria-label="알림">
                         <BellOutlined className="tw-text-[20px]"/>
                     </Link>
