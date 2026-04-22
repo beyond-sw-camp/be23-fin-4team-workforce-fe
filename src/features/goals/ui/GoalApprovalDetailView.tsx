@@ -104,6 +104,7 @@ export function GoalApprovalDetailView({
     onSuccess: () => {
       message.success('반려되었습니다.');
       void queryClient.invalidateQueries({ queryKey: ['goal-approval', requestId] });
+      void queryClient.invalidateQueries({ queryKey: ['goals'] });
       invalidateApprovalLists();
       onClose?.();
     },
@@ -120,7 +121,7 @@ export function GoalApprovalDetailView({
     return <Spin className="tw-w-full tw-py-16 tw-flex tw-justify-center" />;
   }
   if (detailQuery.isError || !d) {
-    return <Card>완료 제출 승인 요청을 불러올 수 없습니다.</Card>;
+    return <Card>목표 완료 승인 요청을 불러올 수 없습니다.</Card>;
   }
 
   return (
@@ -136,6 +137,11 @@ export function GoalApprovalDetailView({
                 const u = approvalStatusUi(d.status);
                 return <Tag color={u.color}>{u.text}</Tag>;
               })()}
+              {d.approvalKind && (
+                <Tag color={d.approvalKind === 'ACTIVATION' ? 'blue' : 'green'}>
+                  {d.approvalKind === 'ACTIVATION' ? '활성화 승인' : '종료 승인'}
+                </Tag>
+              )}
               <Text type="secondary">포함 목표 {d.goals.length}건</Text>
             </Space>
             {d.rejectionReason ? <Text type="danger">사유: {d.rejectionReason}</Text> : null}
@@ -153,7 +159,7 @@ export function GoalApprovalDetailView({
               columns={goalColumns((id) => labelFor(id) ?? MEMBER_DISPLAY_LABEL_UNKNOWN)}
             />
           </Card>
-          <Card title="완료 승인자" size="small">
+          <Card title={d.approvalKind === 'ACTIVATION' ? '활성화 승인자' : '승인자'} size="small">
             <List
               size="small"
               dataSource={d.approverId ? [d.approverId] : []}
@@ -215,7 +221,7 @@ export function GoalApprovalDetailView({
           </Card>
         ) : null}
 
-        {showDecisionActions && d.status === 'pending' ? (
+        {showDecisionActions && (d.status ?? '').toUpperCase() === 'PENDING' ? (
           <Card size="small">
             <Space wrap>
               <Button

@@ -27,8 +27,10 @@ import { MembersPage } from '@/pages/app/MembersPage';
 import { MemberDetailPage } from '@/pages/app/MemberDetailPage';
 import { MemberEditPage } from '@/pages/app/MemberEditPage';
 import { NotificationsPage } from '@/pages/app/NotificationsPage';
-import { MemberChatAdminPage } from '@/pages/app/MemberChatAdminPage';
-import EvaluationsPage from '@/pages/app/EvaluationsPage';
+import EvaluationsHubPage from '@/pages/app/evaluations/EvaluationsHubPage';
+import EvaluationSeasonDetailPage from '@/pages/app/evaluations/EvaluationSeasonDetailPage';
+import MyEvaluationResultPage from '@/pages/app/evaluations/MyEvaluationResultPage';
+import MyEvaluationResultsListPage from '@/pages/app/evaluations/MyEvaluationResultsListPage';
 import { EvaluationWritePage } from '@/pages/app/EvaluationWritePage';
 import PerformancePage from '@/pages/app/PerformancePage';
 import { GoalApprovalDetailPage } from '@/pages/app/GoalApprovalDetailPage';
@@ -253,17 +255,6 @@ const notificationsRoute = createRoute({
   path: '/notifications',
   component: NotificationsPage,
 });
-const memberChatAdminRoute = createRoute({
-  getParentRoute: () => appBaseRoute,
-  path: '/member-chat/admin',
-  component: MemberChatAdminPage,
-  beforeLoad: ({ context }) => {
-    if (!context.auth.user?.isSystemAdmin) {
-      throw redirect({ to: '/403' });
-    }
-  },
-});
-
 const performanceRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/performance',
@@ -330,13 +321,46 @@ const absenceProxyRoute = createRoute({
 const evaluationsRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/evaluations',
-  component: EvaluationsPage,
+  component: EvaluationsHubPage,
 });
 
 const evaluationWriteRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/evaluations/$responseId/write',
   component: EvaluationWritePage,
+});
+
+const evaluationSeasonDetailRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/evaluations/seasons/$seasonId',
+  validateSearch: z.object({
+    tab: z.enum(['progress', 'groups', 'design', 'calibration', 'results']).optional(),
+  }),
+  component: EvaluationSeasonDetailPage,
+  beforeLoad: ({ context }) => {
+    // 시즌 상세는 평가 관리 권한(EVALUATION READ/UPDATE/CREATE 중 하나) 필요.
+    // 권한이 없으면 허브로 리다이렉트.
+    const canManage =
+      context.permissions.hasPermission(PERM.EVALUATION_READ) ||
+      context.permissions.hasPermission(PERM.EVALUATION_UPDATE) ||
+      context.permissions.hasPermission(PERM.EVALUATION_CREATE);
+    if (!canManage) {
+      throw redirect({ to: '/app/evaluations' });
+    }
+  },
+});
+
+// 본인이 받은 평가 결과 — 별도 권한 불요(피평가자 본인 접근)
+const myEvaluationResultRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/evaluations/seasons/$seasonId/my-result',
+  component: MyEvaluationResultPage,
+});
+
+const myEvaluationResultsRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/evaluations/my-results',
+  component: MyEvaluationResultsListPage,
 });
 
 const organizationSearchSchema = z.object({
@@ -623,7 +647,6 @@ const routeTree = rootRoute.addChildren([
       memberDetailRoute,
       memberEditRoute,
       notificationsRoute,
-      memberChatAdminRoute,
       performanceRoute,
       approvalsAdminRoute,
       absenceProxyRoute,
@@ -631,6 +654,9 @@ const routeTree = rootRoute.addChildren([
       goalApprovalsListRoute,
       goalApprovalDetailRoute,
       evaluationsRoute,
+      evaluationSeasonDetailRoute,
+      myEvaluationResultRoute,
+      myEvaluationResultsRoute,
       evaluationWriteRoute,
       organizationRoute,
       rolesRoute,

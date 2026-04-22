@@ -130,7 +130,6 @@ const APP_MENU_ICONS: Record<string, ReactNode> = {
     '/app/payroll/allowances': <GiftOutlined className="tw-text-lg"/>,
     '/app/payroll/allowances/admin': <GiftOutlined className="tw-text-lg"/>,
     '/app/notifications': <BellOutlined className="tw-text-lg"/>,
-    '/app/member-chat/admin': <MessageOutlined className="tw-text-lg"/>,
     '/app/performance': <LineChartOutlined className="tw-text-lg"/>,
     '/app/evaluations': <StarOutlined className="tw-text-lg"/>,
     '/app/meetings': <VideoCameraOutlined className="tw-text-lg"/>,
@@ -552,7 +551,7 @@ function buildAppShellMenuItems(
     return items;
 }
 
-function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
+function useAppShellSiderMenuItems(currentPathname: string): NonNullable<MenuProps['items']> {
     const {status, user} = useAuth();
     const isAdmin = user?.isSystemAdmin === true;
     const {hasPermission} = usePermissions();
@@ -561,19 +560,22 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
       isAdmin ||
       hasPermission(PERM.APPROVAL_AD_READ) ||
       canAccessMemberDirectory(hasPermission);
+    const shouldQueryEsgConfig =
+        status === 'authenticated' && currentPathname.startsWith('/app/esg');
 
     const {data: esgConfig} = useQuery({
         queryKey: ['esg', 'config'],
         queryFn: () => esgApi.getConfig(),
-        enabled: status === 'authenticated',
+        enabled: shouldQueryEsgConfig,
         retry: false,
         staleTime: 60_000,
     });
 
-    const {data: meMember} = useQuery({
-        queryKey: ['member', 'me', user?.id],
-        queryFn: () => memberApi.detail(user!.id!),
-        enabled: status === 'authenticated' && !!user?.id,
+    const {data: myDashboardProfile} = useQuery({
+        queryKey: ['member', 'dashboard-profile'],
+        queryFn: () => memberApi.dashboardProfile(),
+        enabled: status === 'authenticated',
+        retry: false,
         staleTime: 300_000,
     });
 
@@ -587,8 +589,8 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
     return useMemo(() => {
         const esgPaths = ESG_MENU_PATH_ORDER.filter((p) => shouldShowEsgMenuItem(p, esgConfig ?? null, isAdmin));
         const approvalMenuChildren = buildApprovalMenuGroupChildren(approvalOrgChart?.organizations ?? [], {
-            myOrganizationId: meMember?.organizationId,
-            myOrganizationName: meMember?.organizationName,
+            myOrganizationId: undefined,
+            myOrganizationName: myDashboardProfile?.organizationName ?? user?.departmentName,
         });
         const showMemberDirectoryMenu =
             isAdmin ||
@@ -631,13 +633,7 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
             return esgMenuItem ? [...items, esgMenuItem] : items;
         }
 
-        /** 시스템 관리자: 보안 조회 다음 · HR 정책 문서 바로 위에 ESG */
-        const chatAdmin = {
-            key: '/app/member-chat/admin',
-            icon: <MessageOutlined className="tw-text-lg"/>,
-            label: '보안·컴플라이언스 조회',
-            title: '보안·컴플라이언스 조회',
-        };
+        /** 시스템 관리자: HR 정책 문서 바로 위에 ESG */
         const doc = {
             key: '/app/ai-documents',
             icon: <RobotOutlined className="tw-text-lg"/>,
@@ -646,10 +642,19 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
         };
 
         if (esgMenuItem) {
-            return [...items, chatAdmin, esgMenuItem, doc];
+            return [...items, esgMenuItem, doc];
         }
-        return [...items, chatAdmin, doc];
-    }, [esgConfig, isAdmin, approvalOrgChart, meMember, status, user?.permissions, showApprovalFormSettings]);
+        return [...items, doc];
+    }, [
+        esgConfig,
+        isAdmin,
+        approvalOrgChart,
+        status,
+        user?.permissions,
+        myDashboardProfile?.organizationName,
+        user?.departmentName,
+        showApprovalFormSettings,
+    ]);
 }
 
 const headerGhostIconClass =
@@ -912,10 +917,11 @@ function AppShellAccountMenu() {
     const [accountPopoverOpen, setAccountPopoverOpen] = useState(false);
     const memberId = user?.id?.trim();
 
-    const {data: member} = useQuery({
-        queryKey: ['member', 'detail', memberId],
-        queryFn: () => memberApi.detail(memberId!),
+    const {data: memberProfile} = useQuery({
+        queryKey: ['member', 'dashboard-profile', memberId],
+        queryFn: () => memberApi.dashboardProfile(),
         enabled: Boolean(memberId),
+        retry: false,
     });
 
     const handleLogout = async () => {
@@ -925,16 +931,16 @@ function AppShellAccountMenu() {
 
     const name = user?.name?.trim() || '사용자';
     const jobTitle =
-        member?.jobTitleName?.trim() || member?.jobGradeName?.trim() || user?.jobTitle?.trim() || '';
+        memberProfile?.jobTitleName?.trim() || memberProfile?.jobGradeName?.trim() || user?.jobTitle?.trim() || '';
     const nameLine = jobTitle ? `${name} ${jobTitle}` : name;
     const orgLine =
-        member?.organizationName?.trim() ||
+        memberProfile?.organizationName?.trim() ||
         user?.departmentName?.trim() ||
         user?.companyName?.trim() ||
         '—';
-    const emailLine = member?.email?.trim() || user?.email?.trim() || '—';
+    const emailLine = user?.email?.trim() || '—';
     const profileSrc =
-        member?.profileUrl?.trim() || user?.profileImageUrl?.trim() || undefined;
+        memberProfile?.profileUrl?.trim() || user?.profileImageUrl?.trim() || undefined;
 
     const avatar = (
         <Avatar
@@ -976,7 +982,7 @@ function AppShellAccountMenu() {
     return (
         <Popover {...popoverCommon} placement="bottomRight" align={{offset: [0, 6]}}>
             <div
-                className="tw-flex tw-min-w-0 tw-max-w-[min(100vw-96px,280px)] tw-shrink-0 tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-lg tw-py-1 tw-pl-1 tw-pr-1.5 tw-outline-none hover:tw-bg-slate-100/90 focus-visible:tw-ring-2 focus-visible:tw-ring-blue-500/30 md:tw-gap-2.5 md:tw-px-2"
+                className="tw-ml-1 tw-flex tw-min-w-0 tw-max-w-[min(100vw-96px,280px)] tw-shrink-0 tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-lg tw-border-0 tw-border-l tw-border-solid tw-border-slate-200 tw-py-1 tw-pl-3 tw-pr-1.5 tw-outline-none hover:tw-bg-slate-100/90 focus-visible:tw-ring-2 focus-visible:tw-ring-blue-500/30 md:tw-gap-2.5 md:tw-px-2.5"
                 role="button"
                 tabIndex={0}
                 aria-label="계정 정보"
@@ -998,7 +1004,6 @@ function AppShellAccountMenu() {
                         {orgLine}
                     </div>
                 </div>
-                <MoreOutlined className="tw-shrink-0 tw-text-base tw-text-slate-500"/>
             </div>
         </Popover>
     );
@@ -1205,7 +1210,6 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
     const menuPaths = new Set<string>([
         ...APP_MENU_PATH_ORDER,
         ...ESG_MENU_PATH_ORDER,
-        '/app/member-chat/admin',
         '/app/ai-documents',
     ]);
     if (menuPaths.has(pathname)) return [pathname];
@@ -1278,7 +1282,7 @@ function AppShellLayout() {
     const {user} = useAuth();
     const isSystemAdmin = user?.isSystemAdmin === true;
     const menuSelectedKey = useMemo(() => menuSelectedKeyFromPath(pathname, search), [pathname, search]);
-    const appShellMenuItems = useAppShellSiderMenuItems();
+    const appShellMenuItems = useAppShellSiderMenuItems(pathname);
     const [orgChartModalOpen, setOrgChartModalOpen] = useState(false);
 
     const [siderCollapsed, setSiderCollapsed] = useState(() => {

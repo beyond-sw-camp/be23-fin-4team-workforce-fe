@@ -1,21 +1,10 @@
 // ── Enums ──
 export type SeasonType = 'ANNUAL' | 'HALF_YEAR' | 'QUARTER';
 export type SeasonStatus = 'DRAFT' | 'ACTIVE' | 'CLOSED';
-export type SeasonPhase =
-  | 'NOT_STARTED'
-  | 'SELF_EVAL'
-  | 'PEER_EVAL'
-  | 'UPWARD_EVAL'
-  | 'DOWNWARD_EVAL'
-  | 'CALIBRATION'
-  | 'CONFIRMED'
-  | 'PUBLISHED';
 export type EvalType = 'SELF' | 'DOWNWARD' | 'UPWARD' | 'PEER';
 export type EvaluationStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'SUBMITTED';
 export type GradeType = 'ABSOLUTE' | 'RELATIVE';
 export type QuestionType = 'text' | 'scale' | 'grade' | 'gap';
-export type AnomalyType = 'all_same' | 'too_short' | 'insincere' | 'contradiction';
-export type AnomalySeverity = 'info' | 'warning' | 'critical';
 
 // ── Schedule ──
 export type EvalSchedule = {
@@ -34,9 +23,9 @@ export type EvaluationSeason = {
   startDate: string;
   endDate: string;
   status: SeasonStatus;
-  phase: SeasonPhase;
-  phaseUpdatedAt?: string;
   resultPublishDate?: string;
+  /** 결과 공개 시각 — null 이면 비공개 상태 */
+  resultsPublishedAt?: string;
   schedule?: EvalSchedule;
 };
 
@@ -95,10 +84,19 @@ export type DesignQuestion = {
   options?: QuestionOption;
 };
 
+// [L-1] 섹션 유형 — 서버 enum SectionType 과 매칭
+export type SectionType = 'MANUAL' | 'KPI_SCORE' | 'PEER_FEEDBACK';
+
 export type DesignSection = {
   title: string;
   weight: number;
   questions: DesignQuestion[];
+  /** [L-1] 섹션 유형 — 기본 MANUAL */
+  type?: SectionType;
+  /** [L-1] KPI_SCORE 섹션의 집계 범위 (ALL / TEMPLATE_ONLY / kpiTemplateId) */
+  kpiFilter?: string;
+  /** 섹션 식별자 — 서버 저장 시 채워질 수 있음 */
+  sectionId?: string;
 };
 
 export type GradeConfig = {
@@ -113,6 +111,12 @@ export type EvaluationDesign = {
   name: string;
   sections: DesignSection[];
   gradeConfig?: GradeConfig;
+  /** 화면 표시용 버전 라벨 (예: v2) */
+  designVersion?: string;
+  /** 기본 템플릿 여부 */
+  defaultTemplate?: boolean;
+  /** 최근 수정 시각 */
+  updatedAt?: string;
 };
 
 export type CreateDesignPayload = {
@@ -129,9 +133,6 @@ export type Answer = {
   textValue?: string;
   scaleValue?: number;
   gradeValue?: string;
-  flagged?: boolean;
-  anomalyType?: AnomalyType;
-  anomalySeverity?: AnomalySeverity;
 };
 
 export type Calibration = {
@@ -141,16 +142,42 @@ export type Calibration = {
   confirmedAt?: string;
 };
 
+// ── [L-1] Score Breakdown ──
+export type SectionScoreType = 'MANUAL' | 'KPI_SCORE' | 'PEER_FEEDBACK';
+
+export type SectionScore = {
+  sectionId?: string;
+  title?: string;
+  type?: SectionScoreType;
+  weight?: number;
+  score?: number;
+  skipped?: boolean;
+  reason?: string;
+  sampleSize?: number;
+};
+
+export type ScoreBreakdown = {
+  totalScore?: number;
+  sections?: SectionScore[];
+};
+
 export type EvaluationResponse = {
   responseId: string;
   companyId: string;
-  /** 그룹이 속한 평가 시즌 */
   seasonId?: string;
+  seasonName?: string;
+  seasonStatus?: SeasonStatus;
+  seasonResultsPublishedAt?: string;
   groupId: string;
-  /** 그룹에 연결된 평가 설계 ID — 작성 화면에서 문항 로드 */
   designId?: string;
   targetMemberId: string;
+  targetMemberName?: string;
+  targetMemberDepartment?: string;
+  targetMemberProfileUrl?: string;
   evaluatorId: string;
+  evaluatorName?: string;
+  evaluatorDepartment?: string;
+  evaluatorProfileUrl?: string;
   evaluationType: EvalType;
   status: EvaluationStatus;
   submittedAt?: string;
@@ -158,7 +185,51 @@ export type EvaluationResponse = {
   answers: Answer[];
   calibration?: Calibration;
   normalizedScore?: number;
-  targetGoalIds?: string[];
+  goalSnapshot?: GoalSnapshotItem[];
+  scoreBreakdown?: ScoreBreakdown;
+};
+
+// ── Goal Snapshot (평가 시점 목표 캡처) ──
+export type GoalSnapshotItem = {
+  goalId: string;
+  title: string;
+  description?: string;
+  goalKind?: string;
+  statusAtSnapshot?: string;
+  cycle?: string;
+  measureType?: string;
+  unitType?: string;
+  unitLabel?: string;
+  baseline?: number;
+  targetValue?: number;
+  actualValueAtSnapshot?: number;
+  achievementPctAtSnapshot?: number;
+  rolledAchievementPctAtSnapshot?: number;
+  weightPct?: number;
+  contributionPct?: number;
+  startDate?: string;
+  endDate?: string;
+  ownerId?: string;
+  kpiTemplateId?: string;
+  snapshotTakenAt?: string;
+};
+
+// ── Goal Summary Card (스냅샷 vs 현재 비교) ──
+export type GoalSummaryCard = {
+  goalId: string;
+  snapshot?: GoalSnapshotItem;
+  current?: {
+    title: string;
+    status: string;
+    targetValue?: number;
+    actualValue?: number;
+    achievementPct?: number;
+    rolledAchievementPct?: number;
+    weightPct?: number;
+    unitLabel?: string;
+  };
+  changedSinceSnapshot: boolean;
+  changeSummary: string[];
 };
 
 export type SaveResponsePayload = {
