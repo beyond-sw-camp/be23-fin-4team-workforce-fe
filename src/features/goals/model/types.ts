@@ -135,6 +135,11 @@ export type Goal = {
    * API `GoalResDto.completionApproverId` 와 매핑.
    */
   completionApproverId?: string;
+  /**
+   * [TEAM 목표 책임자] ownerType === 'TEAM' 일 때만 의미 있는 값.
+   * 완료 승인 요청/진행률 편집 권한 판정에 사용.
+   */
+  responsibleMemberId?: string;
 };
 
 export type CreateKpiTemplatePayload = {
@@ -160,6 +165,8 @@ export type CreateGoalPayload = {
   rollupPolicy?: RollupPolicy;
   ownerType: OwnerType;
   ownerId: string;
+  /** ownerType === 'TEAM' 일 때 필수 — 팀 목표 책임자 memberId. */
+  responsibleMemberId?: string;
   title: string;
   description?: string;
   cycle?: KpiCycle;
@@ -274,6 +281,8 @@ export type UpdateGoalPayload = {
   healthStatus?: GoalHealthStatus;
   visibleTeamIds?: string[];
   memberIds?: string[];
+  /** TEAM 목표 책임자 교체 — GOAL:UPDATE 권한 필요. MEMBER 목표에 들어오면 서버에서 무시됨. */
+  responsibleMemberId?: string;
 };
 
 export type GoalComment = {

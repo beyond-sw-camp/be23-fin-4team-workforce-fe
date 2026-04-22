@@ -17,7 +17,7 @@ export const APP_MENU_LABEL: Record<string, string> = {
   '/app/notifications': '알림',
   '/app/performance': '성과',
   '/app/evaluations': '평가',
-  '/app/meetings': '미팅',
+  '/app/meetings': '면담',
   '/app/settings': '설정',
   '/app/ai-documents': 'HR 정책 문서',
   '/app/work-trips': '출장 신청/이력',
@@ -79,7 +79,7 @@ export const APP_MENU_ORG_HR_GROUP_LABEL = '인사 관리';
 
 /** 사이드바 전용 — 라우트 없음, 조직도 모달 트리거 */
 export const APP_MENU_ORG_CHART_SIDEBAR_KEY = '__wf_org_chart__';
-export const APP_MENU_ORG_CHART_LABEL = '조직도';
+export const APP_MENU_ORG_CHART_LABEL = '전체 조직도';
 
 /** ESG 하위 화면 묶음 */
 export const APP_MENU_ESG_GROUP_LABEL = 'ESG';
@@ -143,7 +143,7 @@ export const APP_GENERIC_PAGE_COPY: Record<string, { title: string; description:
     description: '내부 메일·알림 연동 기능을 준비 중입니다.',
   },
   '/meetings': {
-    title: '미팅',
+    title: '면담',
     description: '1:1·팀 미팅 일정·기록 기능을 준비 중입니다.',
   },
   '/ai-assistant': {

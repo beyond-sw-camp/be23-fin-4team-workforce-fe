@@ -1187,6 +1187,7 @@ function PerformancePage() {
       organizationOwnerId: undefined,
       memberOwnerId: memberId,
       ownerType: 'MEMBER',
+      responsibleMemberId: undefined,
       measureType: 'HIGHER_BETTER',
       unitType: 'NUMBER',
       unitLabel: fixedUnitLabelForType('NUMBER'),
@@ -1232,9 +1233,9 @@ function PerformancePage() {
 
           <div className="tw-mt-5 tw-space-y-4">
             <div className="tw-grid tw-w-full tw-min-w-0 tw-grid-cols-1 tw-gap-4 lg:tw-grid-cols-3">
-              <div className="tw-rounded-3xl tw-border tw-border-slate-200 tw-bg-white tw-p-4 sm:tw-p-5">
+              <div className="tw-rounded-3xl tw-border tw-border-slate-200/80 tw-bg-white tw-p-4 tw-shadow-[0_1px_2px_rgba(15,23,42,0.05)] sm:tw-p-5">
                 <div className="tw-mb-3 tw-flex tw-items-center tw-gap-2">
-                  <BarChartOutlined className="tw-text-[14px] tw-text-blue-500" />
+                  <BarChartOutlined className="tw-text-[14px] tw-text-slate-400" />
                   <Text className="tw-text-[18px] tw-font-semibold tw-text-slate-900">성과 현황</Text>
                 </div>
                 <div className="tw-grid tw-grid-cols-2 tw-gap-2.5">
@@ -1250,19 +1251,19 @@ function PerformancePage() {
                         k: 'a',
                         label: PERFORMANCE_PAGE_KO.statActive,
                         value: stats.active,
-                        icon: <TeamOutlined className="tw-text-[13px] tw-text-blue-500/80" />,
+                        icon: <TeamOutlined className="tw-text-[13px] tw-text-slate-400" />,
                       },
                       {
                         k: 'c',
                         label: PERFORMANCE_PAGE_KO.statCompleted,
                         value: stats.completed,
-                        icon: <CheckCircleOutlined className="tw-text-[13px] tw-text-emerald-500/80" />,
+                        icon: <CheckCircleOutlined className="tw-text-[13px] tw-text-slate-400" />,
                       },
                       {
                         k: 'y',
                         label: PERFORMANCE_PAGE_KO.statDelayed,
                         value: stats.delayed,
-                        icon: <WarningOutlined className="tw-text-[13px] tw-text-amber-500/90" />,
+                        icon: <WarningOutlined className="tw-text-[13px] tw-text-slate-400" />,
                       },
                     ] as const
                   ).map((m) => (
@@ -1282,9 +1283,9 @@ function PerformancePage() {
                 </div>
               </div>
 
-              <div className="tw-rounded-3xl tw-border tw-border-slate-200 tw-bg-white tw-p-4 sm:tw-p-5">
+              <div className="tw-rounded-3xl tw-border tw-border-slate-200/80 tw-bg-white tw-p-4 tw-shadow-[0_1px_2px_rgba(15,23,42,0.05)] sm:tw-p-5">
                 <div className="tw-mb-1 tw-flex tw-items-center tw-gap-2">
-                  <CheckCircleOutlined className="tw-text-[14px] tw-text-blue-500" />
+                  <CheckCircleOutlined className="tw-text-[14px] tw-text-slate-400" />
                   <Text className="tw-text-[18px] tw-font-semibold tw-text-slate-900">{PERFORMANCE_PAGE_KO.avgAchievement}</Text>
                 </div>
                 <Text className="tw-text-[12px] tw-text-slate-500">진행 중인 목표 기준</Text>
@@ -1310,9 +1311,11 @@ function PerformancePage() {
                 const myCount = approvalHistoryQuery.data?.length ?? 0;
                 const hasPending = pendingCount > 0;
                 return (
-                  <div className="tw-flex tw-rounded-3xl tw-border tw-border-slate-200 tw-bg-white tw-p-4 sm:tw-p-5 tw-flex-col tw-justify-between">
+                  <div
+                    className="tw-flex tw-rounded-3xl tw-border tw-border-slate-200/80 tw-bg-white tw-p-4 tw-shadow-[0_1px_2px_rgba(15,23,42,0.05)] sm:tw-p-5 tw-flex-col tw-justify-between"
+                  >
                     <div className="tw-mb-3 tw-flex tw-items-center tw-gap-2">
-                      <FileDoneOutlined className="tw-text-[14px] tw-text-blue-500" />
+                      <FileDoneOutlined className="tw-text-[14px] tw-text-slate-400" />
                       <Text className="tw-text-[18px] tw-font-semibold tw-text-slate-900">
                         {PERFORMANCE_PAGE_KO.approvalStripTitle}
                       </Text>
@@ -1333,10 +1336,9 @@ function PerformancePage() {
                       </div>
                     </div>
                     <Button
-                      type="primary"
                       size="large"
                       onClick={() => setApprovalHubOpen(true)}
-                      className="!tw-mt-4 !tw-h-12 !tw-rounded-xl !tw-bg-[#3b5bdb] hover:!tw-bg-[#304ac7] !tw-font-semibold !tw-border-[#3b5bdb]"
+                      className="!tw-mt-4 !tw-h-12 !tw-rounded-xl !tw-bg-[#3b5bdb] hover:!tw-bg-[#304ac7] !tw-font-semibold !tw-border-[#3b5bdb] !tw-text-white"
                     >
                       {hasPending ? '지금 확인하기' : `${PERFORMANCE_PAGE_KO.approvalStripCenter} →`}
                     </Button>
@@ -1872,6 +1874,15 @@ function PerformancePage() {
               message.error(PERFORMANCE_PAGE_KO.goalOrganizationOwnerRequired);
               return;
             }
+            // [TEAM 목표 책임자] ORGANIZATION 목표는 책임자(responsibleMemberId) 필수.
+            const responsibleMemberIdTrim =
+              values.responsibleMemberId !== undefined && values.responsibleMemberId !== null
+                ? String(values.responsibleMemberId).trim()
+                : '';
+            if (values.ownerType === 'ORGANIZATION' && !responsibleMemberIdTrim) {
+              message.error('조직 목표는 책임자를 지정해 주세요.');
+              return;
+            }
             const payload: CreateGoalPayload = {
               kpiTemplateId: values.kpiTemplateId,
               companyId,
@@ -1888,6 +1899,9 @@ function PerformancePage() {
               capPct: Math.trunc(Number(values.capPct)),
               visibility: values.visibility,
             };
+            if (values.ownerType === 'ORGANIZATION' && responsibleMemberIdTrim) {
+              payload.responsibleMemberId = responsibleMemberIdTrim;
+            }
             const rp = values.rollupPolicy as RollupPolicy | undefined;
             if (rp === 'CHILDREN_AVG' || rp === 'CHILDREN_WEIGHTED') {
               payload.rollupPolicy = rp;
@@ -2063,29 +2077,44 @@ function PerformancePage() {
             </Form.Item>
           ) : null}
           {goalOwnerType === 'ORGANIZATION' ? (
-            <Form.Item
-              name="organizationOwnerId"
-              label={PERFORMANCE_PAGE_KO.goalOrganizationOwnerLabel}
-              rules={[{ required: true, message: PERFORMANCE_PAGE_KO.goalOrganizationOwnerRequired }]}
-              extra={
-                goalOrganizationOptions.length === 0 ? (
-                  <Text type="warning">{PERFORMANCE_PAGE_KO.goalOrganizationListEmpty}</Text>
-                ) : undefined
-              }
-            >
-              <Select
-                showSearch
-                optionFilterProp="label"
-                allowClear
-                placeholder={PERFORMANCE_PAGE_KO.goalOrganizationOwnerPlaceholder}
-                options={goalOrganizationOptions}
-                loading={organizationsQuery.isFetching}
-                disabled={goalOrganizationOptions.length === 0}
-                getPopupContainer={(triggerNode) =>
-                  (triggerNode.closest('.ant-modal-content') as HTMLElement | null) ?? document.body
+            <>
+              <Form.Item
+                name="organizationOwnerId"
+                label={PERFORMANCE_PAGE_KO.goalOrganizationOwnerLabel}
+                rules={[{ required: true, message: PERFORMANCE_PAGE_KO.goalOrganizationOwnerRequired }]}
+                extra={
+                  goalOrganizationOptions.length === 0 ? (
+                    <Text type="warning">{PERFORMANCE_PAGE_KO.goalOrganizationListEmpty}</Text>
+                  ) : undefined
                 }
-              />
-            </Form.Item>
+              >
+                <Select
+                  showSearch
+                  optionFilterProp="label"
+                  allowClear
+                  placeholder={PERFORMANCE_PAGE_KO.goalOrganizationOwnerPlaceholder}
+                  options={goalOrganizationOptions}
+                  loading={organizationsQuery.isFetching}
+                  disabled={goalOrganizationOptions.length === 0}
+                  getPopupContainer={(triggerNode) =>
+                    (triggerNode.closest('.ant-modal-content') as HTMLElement | null) ?? document.body
+                  }
+                />
+              </Form.Item>
+              <Form.Item
+                name="responsibleMemberId"
+                label="목표 책임자"
+                rules={[{ required: true, message: '조직 목표는 책임자를 지정해 주세요.' }]}
+                extra="이 조직 목표의 완료 승인 요청을 주도하고 진행률 편집을 주도할 사원입니다. 팀장이 일반적이지만 담당자 지정 가능."
+              >
+                <MemberRemoteSelect
+                  placeholder="책임자로 지정할 사원을 검색"
+                  getPopupContainer={(triggerNode) =>
+                    (triggerNode.closest('.ant-modal-content') as HTMLElement | null) ?? document.body
+                  }
+                />
+              </Form.Item>
+            </>
           ) : null}
           <Row gutter={12}>
             <Col span={12}>
@@ -2728,16 +2757,24 @@ function PerformancePage() {
             const detailGoalStatus = goalStatusNorm(detailGoal.status);
             const approvalFlowStatus = String(detailGoal.approvalStatus ?? detailApprovalQuery.data?.approvalStatus ?? 'NOT_REQUESTED').toUpperCase();
             const isDetailOwner = detailGoal.ownerType === 'MEMBER' && detailGoal.ownerId === memberId;
+            // [TEAM 목표] 책임자 또는 참여자면 "본인 목표처럼" 편집·완료요청 가능
+            const isTeamResponsible =
+              detailGoal.ownerType === 'ORGANIZATION' && detailGoal.responsibleMemberId === memberId;
+            const isTeamParticipant =
+              detailGoal.ownerType === 'ORGANIZATION'
+              && (detailGoal.participantMemberIds ?? []).includes(memberId ?? '');
+            const isTeamMember = isTeamResponsible || isTeamParticipant;
             // 활성화: 목표 수정 권한이 있어야 상태를 바꿀 수 있음 (이전: canCreate — 생성 권한과 혼재)
             const canDetailActivate = canUpdate && detailGoalStatus === 'DRAFT';
             const canDetailProgressUpdate =
-              (isDetailOwner || canUpdate) && detailGoalStatus === 'ACTIVE' && detailGoal.autoUpdate === false;
-            const canDetailToggleAuto = (isDetailOwner || canUpdate) && detailGoalStatus === 'ACTIVE';
+              (isDetailOwner || isTeamMember || canUpdate) && detailGoalStatus === 'ACTIVE' && detailGoal.autoUpdate === false;
+            const canDetailToggleAuto = (isDetailOwner || isTeamResponsible || canUpdate) && detailGoalStatus === 'ACTIVE';
             const detailChildGoals = goalsList.filter((g) => String(g.parentGoalId ?? '').trim() === detailGoal.id);
             const detailEndDayDiff = dayjs(detailGoal.endDate).startOf('day').diff(dayjs().startOf('day'), 'day');
             // 취소: COMPLETED·CANCELLED 상태에서는 불가 (취소는 DRAFT·ACTIVE만)
             const canDetailCancel = canUpdate && (detailGoalStatus === 'DRAFT' || detailGoalStatus === 'ACTIVE');
-            const canSubmitCompletion = (isDetailOwner || canUpdate) && detailGoalStatus === 'ACTIVE';
+            // 완료 승인 요청: MEMBER 목표 본인, TEAM 목표 책임자/참여자, 운영 우회(canUpdate)
+            const canSubmitCompletion = (isDetailOwner || isTeamMember || canUpdate) && detailGoalStatus === 'ACTIVE';
             const detailPolicy = resolveGoalApprovalPolicy(detailGoal, templates);
             const needsActivationApproval = policyRequiresActivation(detailPolicy);
             const needsCompletionApproval = policyRequiresCompletion(detailPolicy);
