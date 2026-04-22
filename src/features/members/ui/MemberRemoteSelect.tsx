@@ -87,7 +87,7 @@ export const MemberRemoteSelect = forwardRef<RefSelectProps, MemberRemoteSelectP
       async (keyword: string) => {
         setLoading(true);
         try {
-          const res = await membersApi.list({ page: 1, pageSize: 40, keyword: keyword || undefined });
+          const res = await membersApi.search({ page: 1, pageSize: 40, keyword: keyword || undefined });
           const next = mapItems(res.items);
           setOptions((prev) => mergeOptions(next, prev, selectedIds));
         } finally {

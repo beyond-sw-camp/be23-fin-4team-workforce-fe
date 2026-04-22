@@ -15,6 +15,8 @@ import type {
   CalibrationBaselinePayload,
   QuestionType,
   DesignQuestion,
+  DesignSection,
+  SectionType,
 } from '@/features/evaluation/model/types';
 import { httpClient } from '@/shared/api/httpClient';
 import { unwrapApiResponse } from '@/shared/api/response';
@@ -27,6 +29,21 @@ function safeJsonParse<T>(json: unknown, fallback: T): T {
   } catch {
     return fallback;
   }
+}
+
+/** 백엔드 `SectionScorer` 와 동일: 배열 또는 `{ items: [...] }` */
+function parseAnswersJsonToArray(json: unknown): unknown[] {
+  if (!json || typeof json !== 'string') return [];
+  try {
+    const p = JSON.parse(json) as unknown;
+    if (Array.isArray(p)) return p;
+    if (p && typeof p === 'object' && Array.isArray((p as {items?: unknown}).items)) {
+      return (p as {items: unknown[]}).items;
+    }
+  } catch {
+    /* ignore */
+  }
+  return [];
 }
 
 function mapSeason(raw: any): EvaluationSeason {
@@ -71,30 +88,16 @@ function mapGroup(raw: any): EvaluationGroup {
   };
 }
 
-/** 백엔드 VO(EvaluationSection) 또는 JSON 문자열 모두 수용 */
+/** 백엔드 VO(EvaluationSection) 또는 `sectionsJson` 문자열 — 동일 규칙으로 정규화 */
 function mapDesignSectionsFromApi(raw: Record<string, unknown>): EvaluationDesign['sections'] {
+  const usedQuestionIds = new Set<string>();
   const vo = raw.sections;
   if (Array.isArray(vo)) {
-    return vo.map((sec: any) => ({
-      sectionId: sec.sectionId,
-      title: String(sec.title ?? ''),
-      weight: Number(sec.weight ?? 0),
-      type: sec.type,
-      kpiFilter: sec.kpiFilter,
-      questions: Array.isArray(sec.questions)
-        ? sec.questions.map((q: any) => ({
-            id: String(q.id ?? ''),
-            type: String(q.type ?? 'text') as QuestionType,
-            title: String(q.title ?? ''),
-            description: q.description != null ? String(q.description) : undefined,
-            required: Boolean(q.required),
-            weight: Number(q.weight ?? 0),
-            options: q.options as DesignQuestion['options'],
-          }))
-        : [],
-    }));
+    return vo.map((sec, si) => mapApiSection(sec, si, usedQuestionIds));
   }
-  return safeJsonParse(typeof raw.sectionsJson === 'string' ? raw.sectionsJson : '[]', []);
+  const parsed = safeJsonParse<unknown[]>(typeof raw.sectionsJson === 'string' ? raw.sectionsJson : '[]', []);
+  if (!Array.isArray(parsed)) return [];
+  return parsed.map((sec, si) => mapApiSection(sec, si, usedQuestionIds));
 }
 
 function mapGradeConfigFromApi(raw: Record<string, unknown>): EvaluationDesign['gradeConfig'] {
@@ -166,7 +169,7 @@ function mapResponse(raw: any): EvaluationResponse {
     status: raw.status,
     submittedAt: raw.submittedAt,
     lastRemindedAt: raw.lastRemindedAt,
-    answers: safeJsonParse(raw.answersJson, []),
+    answers: parseAnswersJsonToArray(raw.answersJson) as EvaluationResponse['answers'],
     calibration: safeJsonParse(raw.calibrationJson, undefined),
     normalizedScore: raw.normalizedScore ?? undefined,
     // [D-5] targetGoalIds 제거 — goalSnapshot 배열에서 goalId 를 추출해 사용
@@ -205,6 +208,108 @@ const QUESTION_TYPE_UPPER_TO_LOWER: Record<string, string> = {
   GAP: 'gap',
 };
 
+/** goal-service `DesignQuestion` + 레거시 JSON(text / SCALE 등) 통합 */
+function normalizeEvalQuestionType(raw: unknown): QuestionType {
+  const u = String(raw ?? 'text').trim().toUpperCase();
+  if (QUESTION_TYPE_UPPER_TO_LOWER[u]) return QUESTION_TYPE_UPPER_TO_LOWER[u] as QuestionType;
+  const l = String(raw ?? 'text').trim().toLowerCase();
+  if (l === 'text' || l === 'scale' || l === 'grade' || l === 'gap') return l as QuestionType;
+  return 'text';
+}
+
+function parseQuestionOptions(raw: unknown): DesignQuestion['options'] | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const o = raw as Record<string, unknown>;
+  const scaleMinRaw = o.scaleMin ?? o.scale_min;
+  const scaleMaxRaw = o.scaleMax ?? o.scale_max;
+  const scaleMin = scaleMinRaw != null ? Number(scaleMinRaw) : undefined;
+  const scaleMax = scaleMaxRaw != null ? Number(scaleMaxRaw) : undefined;
+  const gl = o.gradeLabels ?? o.grade_labels;
+  let gradeLabels: string[] | undefined;
+  if (Array.isArray(gl)) {
+    gradeLabels = gl
+      .map((x) => (typeof x === 'string' ? x : x != null && typeof x === 'object' && 'label' in x ? String((x as {label?: unknown}).label ?? '') : String(x ?? '')))
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+  if (
+    (scaleMin != null && Number.isFinite(scaleMin)) ||
+    (scaleMax != null && Number.isFinite(scaleMax)) ||
+    (gradeLabels && gradeLabels.length > 0)
+  ) {
+    const opts: NonNullable<DesignQuestion['options']> = {};
+    if (scaleMin != null && Number.isFinite(scaleMin)) opts.scaleMin = scaleMin;
+    if (scaleMax != null && Number.isFinite(scaleMax)) opts.scaleMax = scaleMax;
+    if (gradeLabels && gradeLabels.length > 0) opts.gradeLabels = gradeLabels;
+    return opts;
+  }
+  return undefined;
+}
+
+/**
+ * 단일 문항 — `id` 는 서버 값 우선, 없으면 `s{sectionIndex}-q{questionIndex}`.
+ * 설계 JSON 에 동일 id 가 여러 번 나오면(레거시) 전역 `usedQuestionIds` 기준으로 `__2` 접미사 부여.
+ */
+function mapApiQuestion(
+  q: unknown,
+  sectionIndex: number,
+  questionIndex: number,
+  usedQuestionIds: Set<string>,
+): DesignQuestion {
+  const qn = (q && typeof q === 'object' ? q : {}) as Record<string, unknown>;
+  const idRaw = qn.id ?? qn.questionId;
+  const idStr = idRaw != null ? String(idRaw).trim() : '';
+  let id =
+    idStr !== '' && idStr !== 'null' && idStr !== 'undefined'
+      ? idStr
+      : `s${sectionIndex}-q${questionIndex}`;
+  if (usedQuestionIds.has(id)) {
+    let n = 2;
+    while (usedQuestionIds.has(`${id}__${n}`)) n += 1;
+    id = `${id}__${n}`;
+  }
+  usedQuestionIds.add(id);
+  const titleRaw = qn.title ?? qn.text;
+  const title = titleRaw != null && String(titleRaw).trim() !== '' ? String(titleRaw).trim() : '(문항)';
+  const type = normalizeEvalQuestionType(qn.type);
+  const required = qn.required !== false;
+  let weight = 0;
+  if (typeof qn.weight === 'number' && Number.isFinite(qn.weight)) weight = qn.weight;
+  else if (qn.weight != null) weight = Number(qn.weight) || 0;
+  const description = qn.description != null && String(qn.description).trim() !== '' ? String(qn.description) : undefined;
+  const options = parseQuestionOptions(qn.options);
+  return {
+    id,
+    type,
+    title,
+    description,
+    required,
+    weight,
+    options,
+  };
+}
+
+function mapApiSection(sec: unknown, sectionIndex: number, usedQuestionIds: Set<string>): DesignSection {
+  const s = (sec && typeof sec === 'object' ? sec : {}) as Record<string, unknown>;
+  const questionsRaw = s.questions;
+  const questions = Array.isArray(questionsRaw)
+    ? questionsRaw.map((q, qi) => mapApiQuestion(q, sectionIndex, qi, usedQuestionIds))
+    : [];
+  const typeRaw = s.type;
+  const typeStr = typeRaw != null ? String(typeRaw).trim().toUpperCase() : '';
+  const type: SectionType | undefined =
+    typeStr === 'MANUAL' || typeStr === 'KPI_SCORE' || typeStr === 'PEER_FEEDBACK' ? (typeStr as SectionType) : undefined;
+  const kpiFilterRaw = s.kpiFilter ?? s.kpi_filter;
+  return {
+    sectionId: s.sectionId != null && String(s.sectionId).trim() !== '' ? String(s.sectionId) : undefined,
+    title: String(s.title ?? ''),
+    weight: typeof s.weight === 'number' && Number.isFinite(s.weight) ? s.weight : Number(s.weight ?? 0) || 0,
+    type,
+    kpiFilter: kpiFilterRaw != null && String(kpiFilterRaw).trim() !== '' ? String(kpiFilterRaw) : undefined,
+    questions,
+  };
+}
+
 /**
  * 라벨만 있는 등급 목록 → `GradeConfig.GradeBand[]` (goal-service `GradeConfig` 와 동일)
  * 프론트가 `grades: ["S","A"]` 처럼 문자열 배열을 보내면 Jackson 이 GradeBand 로 변환하지 못해 400 발생함.
@@ -226,7 +331,8 @@ function normalizeSectionsJsonForBackend(sectionsJson: string): string {
   try {
     const parsed = JSON.parse(sectionsJson) as unknown;
     if (!Array.isArray(parsed)) return sectionsJson;
-    const out = parsed.map((sec) => {
+    const usedIds = new Set<string>();
+    const out = parsed.map((sec, secIdx) => {
       if (!sec || typeof sec !== 'object') return sec;
       const s = sec as Record<string, unknown>;
       const questionsRaw = s.questions;
@@ -238,8 +344,20 @@ function normalizeSectionsJsonForBackend(sectionsJson: string): string {
             const title = titleRaw != null ? String(titleRaw) : '';
             const tr = String(qn.type ?? 'scale').toUpperCase();
             const type = QUESTION_TYPE_UPPER_TO_LOWER[tr] ?? String(qn.type ?? 'scale').toLowerCase();
+            const idRaw = qn.id ?? qn.questionId;
+            const idStr = idRaw != null ? String(idRaw).trim() : '';
+            let id =
+              idStr !== '' && idStr !== 'null' && idStr !== 'undefined'
+                ? idStr
+                : `s${secIdx}-q${idx}`;
+            if (usedIds.has(id)) {
+              let n = 2;
+              while (usedIds.has(`${id}__${n}`)) n += 1;
+              id = `${id}__${n}`;
+            }
+            usedIds.add(id);
             const row: Record<string, unknown> = {
-              id: qn.id != null ? String(qn.id) : `q-${idx}`,
+              id,
               type,
               title,
               required: qn.required !== false,
