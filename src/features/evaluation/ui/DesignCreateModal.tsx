@@ -11,6 +11,7 @@ import {
     Modal,
     Row,
     Select,
+    Tag,
     Tooltip,
     Typography,
 } from 'antd';
@@ -189,6 +190,35 @@ export function DesignCreateModal({open, onClose, onCreated, initialDesign = nul
                                     key={key}
                                     size="small"
                                     className="tw-mb-3"
+                                    title={
+                                        <Form.Item
+                                            noStyle
+                                            shouldUpdate={(prev, cur) =>
+                                                prev?.sections?.[name]?.type !== cur?.sections?.[name]?.type
+                                                || prev?.sections?.[name]?.title !== cur?.sections?.[name]?.title
+                                            }
+                                        >
+                                            {({getFieldValue}) => {
+                                                const t = (getFieldValue(['sections', name, 'type']) ?? 'MANUAL') as
+                                                    'MANUAL' | 'KPI_SCORE' | 'PEER_FEEDBACK';
+                                                const title = getFieldValue(['sections', name, 'title']) as string | undefined;
+                                                const meta: Record<string, {label: string; color: string}> = {
+                                                    MANUAL: {label: '수동', color: 'default'},
+                                                    KPI_SCORE: {label: 'KPI', color: 'geekblue'},
+                                                    PEER_FEEDBACK: {label: '동료', color: 'purple'},
+                                                };
+                                                const m = meta[t];
+                                                return (
+                                                    <span className="tw-flex tw-items-center tw-gap-2">
+                                                        <Tag color={m.color} className="!tw-m-0">{m.label}</Tag>
+                                                        <span className="tw-text-sm tw-font-medium">
+                                                            {title?.trim() || '섹션'}
+                                                        </span>
+                                                    </span>
+                                                );
+                                            }}
+                                        </Form.Item>
+                                    }
                                     extra={
                                         <Button
                                             type="text"

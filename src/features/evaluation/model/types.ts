@@ -145,6 +145,17 @@ export type Calibration = {
 // ── [L-1] Score Breakdown ──
 export type SectionScoreType = 'MANUAL' | 'KPI_SCORE' | 'PEER_FEEDBACK';
 
+/** [L-1] KPI_SCORE 섹션 전용 — 개별 목표가 얼마나 점수에 기여했는지. */
+export type KpiContribution = {
+  goalId?: string;
+  title?: string;
+  /** 0~100 (또는 capPct 까지) */
+  achievement?: number;
+  weight?: number;
+  /** 섹션 내에서 이 목표가 차지한 비율(0~100) */
+  contributionPct?: number;
+};
+
 export type SectionScore = {
   sectionId?: string;
   title?: string;
@@ -154,6 +165,8 @@ export type SectionScore = {
   skipped?: boolean;
   reason?: string;
   sampleSize?: number;
+  /** KPI_SCORE 섹션 전용 — 개별 목표별 기여도 드릴다운. */
+  kpiContributions?: KpiContribution[];
 };
 
 export type ScoreBreakdown = {

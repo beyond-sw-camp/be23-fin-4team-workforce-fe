@@ -2,7 +2,7 @@ import {useMutation, useQuery} from '@tanstack/react-query';
 import {App, Avatar, Button, Checkbox, Form, Input, Modal, Select, Space, Spin, Tag, Tree, Typography} from 'antd';
 import type {DataNode} from 'antd/es/tree';
 import {RightOutlined, SearchOutlined, TeamOutlined} from '@ant-design/icons';
-import {useMemo, useState} from 'react';
+import {useEffect, useMemo, useState} from 'react';
 import {EVALUATION_PAGE_KO as L} from '@/app/locale/app-ko';
 import {evaluationApi} from '@/features/evaluation/api/evaluationApi';
 import type {CreateGroupPayload, EvaluationDesign} from '@/features/evaluation/model/types';
@@ -187,6 +187,16 @@ function collectMemberIdsFromRoots(orgs: OrgChartOrgNode[]): string[] {
     return ids;
 }
 
+function collectOrgNodeKeys(orgs: OrgChartOrgNode[]): string[] {
+    const keys: string[] = [];
+    const walk = (node: OrgChartOrgNode) => {
+        keys.push(`o${KS}${node.organizationId}`);
+        for (const c of node.children) walk(c);
+    };
+    for (const org of orgs) walk(org);
+    return keys;
+}
+
 type OrgMemberPickerModalProps = {
     open: boolean;
     onClose: () => void;
@@ -197,6 +207,7 @@ type OrgMemberPickerModalProps = {
 function OrgMemberPickerModal({open, onClose, initialSelectedIds, onApply}: OrgMemberPickerModalProps) {
     const [keyword, setKeyword] = useState('');
     const [selected, setSelected] = useState<Set<string>>(new Set());
+    const [expandedOrgKeys, setExpandedOrgKeys] = useState<string[]>([]);
 
     const {data, isLoading, isError} = useQuery({
         queryKey: ['organization', 'org-chart', 'group-create-member-picker'],
@@ -211,6 +222,13 @@ function OrgMemberPickerModal({open, onClose, initialSelectedIds, onApply}: OrgM
     }, [data?.organizations, keyword]);
 
     const allVisibleMemberIds = useMemo(() => collectMemberIdsFromRoots(filteredRoots), [filteredRoots]);
+    const allVisibleOrgKeys = useMemo(() => collectOrgNodeKeys(filteredRoots), [filteredRoots]);
+
+    useEffect(() => {
+        if (!open) return;
+        // 조직도에서 대상 선택 시 항상 펼쳐진 상태로 시작/유지
+        setExpandedOrgKeys(allVisibleOrgKeys);
+    }, [open, allVisibleOrgKeys]);
 
     const treeData: DataNode[] = useMemo(() => {
         if (!data) return [];
@@ -356,7 +374,9 @@ function OrgMemberPickerModal({open, onClose, initialSelectedIds, onApply}: OrgM
                         <div className="tw-max-h-[52vh] tw-overflow-auto tw-rounded-xl tw-border tw-border-slate-200 tw-bg-white tw-p-2">
                             <Tree
                                 blockNode
-                                defaultExpandAll
+                                expandedKeys={expandedOrgKeys}
+                                autoExpandParent
+                                onExpand={(keys) => setExpandedOrgKeys(keys.map(String))}
                                 selectable={false}
                                 showLine={{showLeafIcon: false}}
                                 treeData={treeData}

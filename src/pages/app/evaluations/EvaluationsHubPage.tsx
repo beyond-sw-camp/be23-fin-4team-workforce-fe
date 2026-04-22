@@ -387,7 +387,7 @@ type PendingProps = {
 function PendingEvaluationsCard({items, totalCount, onStart, onViewAll}: PendingProps) {
     return (
         <Card
-            className="tw-rounded-2xl tw-border tw-border-slate-200/90 tw-shadow-sm tw-shadow-slate-900/5"
+            className="tw-min-h-[288px] tw-rounded-2xl tw-border tw-border-slate-200/90 tw-shadow-sm tw-shadow-slate-900/5"
             styles={{body: {padding: 20}}}
         >
             <div className="tw-mb-4 tw-flex tw-items-center tw-justify-between">
@@ -494,12 +494,9 @@ function CurrentStandingCard({result, onDownload}: StandingProps) {
             className="tw-relative tw-overflow-hidden tw-rounded-3xl tw-p-6 tw-text-white tw-shadow-lg tw-shadow-indigo-500/20"
             style={{background: gradient}}
         >
-            <div className="tw-flex tw-items-center tw-justify-between">
+            <div>
                 <div className="tw-text-[11px] tw-font-semibold tw-uppercase tw-tracking-wider tw-text-white/80">
                     Current Standing
-                </div>
-                <div className="tw-flex tw-size-9 tw-items-center tw-justify-center tw-rounded-xl tw-bg-white/15 tw-backdrop-blur">
-                    <AppstoreOutlined className="tw-text-white"/>
                 </div>
             </div>
 

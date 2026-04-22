@@ -3,17 +3,16 @@ import {Avatar, Button, Dropdown, Empty, Space, Typography} from 'antd';
 import type {MenuProps} from 'antd';
 import {
     AimOutlined,
-    DownOutlined,
     EllipsisOutlined,
     FileTextOutlined,
     PlusOutlined,
     TeamOutlined,
-    UpOutlined,
     UserAddOutlined,
 } from '@ant-design/icons';
 import type {EvalType, EvaluationDesign, EvaluationGroup, EvaluatorMap} from '@/features/evaluation/model/types';
 import {evalTypeLabel} from '@/features/evaluation/lib/evaluationLabels';
 import {useMemberDisplayNames} from '@/features/members/hooks/useMemberDisplayNames';
+import {AppExpandToggleButton} from '@/shared/ui/AppExpandToggleButton';
 import {
     EvaluatorAssignDrawer,
     type AssignDrawerState,
@@ -164,14 +163,7 @@ function GroupCard({group, designName, expanded, onToggle, onAssign, labelFor}: 
         <div className="tw-overflow-hidden tw-rounded-2xl tw-border tw-border-slate-200/60 tw-bg-white tw-shadow-sm tw-shadow-slate-900/5">
             {/* 헤더 */}
             <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-4 tw-px-5 tw-py-4">
-                <button
-                    type="button"
-                    onClick={onToggle}
-                    aria-label={expanded ? '접기' : '펼치기'}
-                    className="tw-flex tw-size-9 tw-items-center tw-justify-center tw-rounded-xl tw-border tw-border-solid tw-border-slate-300 tw-bg-slate-50 tw-text-slate-500 tw-transition-colors hover:tw-border-slate-400 hover:tw-bg-slate-100"
-                >
-                    {expanded ? <UpOutlined/> : <DownOutlined/>}
-                </button>
+                <AppExpandToggleButton expanded={expanded} onToggle={onToggle} />
                 <div className="tw-min-w-0 tw-flex-1">
                     <div className="tw-truncate tw-text-[17px] tw-font-bold tw-text-slate-900">
                         {group.name}
