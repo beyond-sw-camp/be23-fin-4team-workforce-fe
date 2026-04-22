@@ -44,6 +44,8 @@ export type OrgChartMember = {
   jobGradeName: string;
   /** 있으면 재직만 보기 필터에 사용 */
   memberStatus?: string;
+  /** 구성원 프로필 이미지 URL(백엔드 org-chart 응답 등) */
+  profileUrl?: string;
 };
 
 export type OrgChartJobGrade = {
@@ -114,11 +116,24 @@ function normalizeOrgChartMember(raw: unknown): OrgChartMember | null {
       'title',
     ]) || '—';
   const memberStatus = pickStr(o, ['memberStatus', 'member_status', 'status', 'employmentStatus', 'employment_status']);
+  const profileUrl = pickStr(o, [
+    'profileUrl',
+    'profile_url',
+    'profileImageUrl',
+    'profile_image_url',
+    'avatarUrl',
+    'avatar_url',
+    'photoUrl',
+    'photo_url',
+    'imageUrl',
+    'image_url',
+  ]);
   return {
     memberId,
     name,
     jobGradeName,
     ...(memberStatus ? { memberStatus } : {}),
+    ...(profileUrl ? { profileUrl } : {}),
   };
 }
 
