@@ -661,6 +661,15 @@ export const memberApi = {
     return normalizeMemberDetailResponse(raw);
   },
 
+  /** 403·404 등 — 결재 상세 등에서 타인 프로필 조회가 막힐 때 스냅샷·직위 API로만 표시 */
+  async detailOrNull(memberId: string): Promise<MemberDetail | null> {
+    try {
+      return await this.detail(memberId);
+    } catch {
+      return null;
+    }
+  },
+
   /** GET /member/dashboard-profile */
   async dashboardProfile() {
     const response = await httpClient.get('/member/dashboard-profile');

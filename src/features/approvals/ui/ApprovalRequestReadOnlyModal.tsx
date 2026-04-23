@@ -107,6 +107,32 @@ type PositionLookupRow = {
   pending: boolean;
 };
 
+function detailMemberLookupFromStrings(
+  name?: string,
+  organizationName?: string,
+  jobTitleName?: string,
+): DetailMemberLookupRow {
+  return {
+    name: (name ?? '').trim(),
+    organizationName: (organizationName ?? '').trim(),
+    jobTitleName: (jobTitleName ?? '').trim(),
+    pending: false,
+  };
+}
+
+function mergeDetailMemberRows(a: DetailMemberLookupRow, b: DetailMemberLookupRow): DetailMemberLookupRow {
+  return {
+    name: a.name || b.name,
+    organizationName: a.organizationName || b.organizationName,
+    jobTitleName: a.jobTitleName || b.jobTitleName,
+    pending: false,
+  };
+}
+
+function snapshotHasMemberLabel(row: DetailMemberLookupRow | undefined): boolean {
+  return Boolean(row?.name || row?.organizationName || row?.jobTitleName);
+}
+
 /** UUID 맵 키가 하이픈·대소문자만 다를 때 매칭 */
 function normalizeUuidMapKey(s: string): string {
   return s.replace(/-/g, '').trim().toLowerCase();
@@ -357,11 +383,47 @@ export function ApprovalRequestReadOnlyModal({
     return [...ids];
   }, [open, selectedRequestDetail]);
 
+  /** 결재 응답 스냅샷만으로 표시 가능하면 GET /member/detail 호출을 생략(일반 직원 403 방지) */
+  const approvalDetailMemberSnapshotLookup = useMemo(() => {
+    const map = new Map<string, DetailMemberLookupRow>();
+    if (!selectedRequestDetail) return map;
+    const mergeInto = (memberId: string | null | undefined, row: DetailMemberLookupRow) => {
+      const id = memberId?.trim();
+      if (!id) return;
+      const prev = map.get(id);
+      map.set(id, prev ? mergeDetailMemberRows(row, prev) : row);
+    };
+    for (const l of selectedRequestDetail.approvalLines) {
+      mergeInto(
+        l.approverMemberId,
+        detailMemberLookupFromStrings(l.approverName, l.approverOrganizationName, l.approverJobTitleName),
+      );
+      mergeInto(
+        l.actualApproverMemberId,
+        detailMemberLookupFromStrings(
+          l.actualApproverName,
+          l.actualApproverOrganizationName,
+          l.actualApproverJobTitleName,
+        ),
+      );
+    }
+    for (const v of selectedRequestDetail.viewers ?? []) {
+      mergeInto(
+        v.viewerMemberId,
+        detailMemberLookupFromStrings(v.viewerName, v.viewerOrganizationName, v.viewerJobTitleName),
+      );
+    }
+    return map;
+  }, [selectedRequestDetail]);
+
   const approvalDetailMemberQueries = useQueries({
     queries: detailMemberIds.map((memberId) => ({
       queryKey: ['member', 'detail', memberId],
-      queryFn: () => memberApi.detail(memberId),
-      enabled: open && Boolean(memberId),
+      queryFn: () => memberApi.detailOrNull(memberId),
+      enabled:
+        open &&
+        Boolean(memberId) &&
+        !snapshotHasMemberLabel(approvalDetailMemberSnapshotLookup.get(memberId)),
       staleTime: 5 * 60_000,
     })),
   });
@@ -369,16 +431,30 @@ export function ApprovalRequestReadOnlyModal({
   const approvalDetailMemberLookup = useMemo(() => {
     const map = new Map<string, DetailMemberLookupRow>();
     detailMemberIds.forEach((id, i) => {
+      const snap = approvalDetailMemberSnapshotLookup.get(id);
       const q = approvalDetailMemberQueries[i];
-      map.set(id, {
-        name: q?.data?.name?.trim() ?? '',
-        organizationName: q?.data?.organizationName?.trim() ?? '',
-        jobTitleName: q?.data?.jobTitleName?.trim() ?? '',
-        pending: Boolean(q && (q.isPending || q.isFetching) && !q.data),
-      });
+      const apiRow: DetailMemberLookupRow | null = q?.data
+        ? {
+            name: q.data.name?.trim() ?? '',
+            organizationName: q.data.organizationName?.trim() ?? '',
+            jobTitleName: q.data.jobTitleName?.trim() ?? '',
+            pending: false,
+          }
+        : null;
+      const merged = mergeDetailMemberRows(
+        snap ?? { name: '', organizationName: '', jobTitleName: '', pending: false },
+        apiRow ?? { name: '', organizationName: '', jobTitleName: '', pending: false },
+      );
+      const pending = Boolean(
+        q &&
+          (q.isPending || q.isFetching) &&
+          !snapshotHasMemberLabel(snap) &&
+          !apiRow,
+      );
+      map.set(id, { ...merged, pending });
     });
     return map;
-  }, [detailMemberIds, approvalDetailMemberQueries]);
+  }, [detailMemberIds, approvalDetailMemberSnapshotLookup, approvalDetailMemberQueries]);
 
   const detailPositionIds = useMemo(() => {
     if (!open || !selectedRequestDetail) return [] as string[];
@@ -418,10 +494,25 @@ export function ApprovalRequestReadOnlyModal({
     return map;
   }, [detailPositionIds, approvalPositionInternalQueries]);
 
+  const drafterSnapshotRow = useMemo(
+    () =>
+      selectedRequestDetail
+        ? detailMemberLookupFromStrings(
+            selectedRequestDetail.requesterName,
+            selectedRequestDetail.requesterOrganizationName,
+            undefined,
+          )
+        : undefined,
+    [selectedRequestDetail],
+  );
+
   const { data: requestDetailDrafter } = useQuery({
     queryKey: ['member', 'detail', 'approval-detail-drafter', selectedRequestDetail?.memberId],
-    queryFn: () => memberApi.detail(selectedRequestDetail!.memberId),
-    enabled: open && Boolean(selectedRequestDetail?.memberId?.trim()),
+    queryFn: () => memberApi.detailOrNull(selectedRequestDetail!.memberId),
+    enabled:
+      open &&
+      Boolean(selectedRequestDetail?.memberId?.trim()) &&
+      !snapshotHasMemberLabel(drafterSnapshotRow),
     staleTime: 60_000,
   });
 
@@ -609,8 +700,12 @@ export function ApprovalRequestReadOnlyModal({
                   const detail = selectedRequestDetail;
                   const doc = requestDetailDocument;
                   const content = parseDetailContentJson(detail);
-                  const dName = requestDetailDrafter?.name?.trim() || '—';
-                  const dOrg = requestDetailDrafter?.organizationName?.trim() || '—';
+                  const dName =
+                    requestDetailDrafter?.name?.trim() || detail.requesterName?.trim() || '—';
+                  const dOrg =
+                    requestDetailDrafter?.organizationName?.trim() ||
+                    detail.requesterOrganizationName?.trim() ||
+                    '—';
                   const dTitle = requestDetailDrafter?.jobTitleName?.trim();
                   const lines = [...detail.approvalLines].sort((a, b) => a.stepOrder - b.stepOrder);
                   const approvers = lines.map((l) => {

@@ -1,7 +1,8 @@
-import { FileTextOutlined, FolderOutlined, SearchOutlined } from '@ant-design/icons';
+import { FileAddOutlined, FileTextOutlined, FolderOutlined, SearchOutlined } from '@ant-design/icons';
 import { Button, Empty, Input, Modal, Spin, Tree, Typography } from 'antd';
+import type { TreeProps } from 'antd';
 import type { DataNode } from 'antd/es/tree';
-import { useCallback, useEffect, useMemo, useState, type Key as ReactKey } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { APPROVAL_REQUEST_TYPES, type ApprovalDocument, type ApprovalRequestType } from '@/features/approvals/api/approvalApi';
 function normalizeRequestType(raw: string | undefined): ApprovalRequestType {
   const u = String(raw ?? '')
@@ -17,31 +18,28 @@ function formatDocTitle(name?: string | null): string {
   return raw || '—';
 }
 
-function isHiddenDocName(doc: ApprovalDocument): boolean {
-  const compact = String(doc.documentName ?? '').replace(/\s+/g, '');
-  return compact === '연차신청서';
-}
+/** 타입별 폴더 표시 순서 (양식 선택 UX용) */
+const REQUEST_TYPE_FOLDER_ORDER: readonly ApprovalRequestType[] = [
+  'GENERAL',
+  'OFFICIAL',
+  'VACATION',
+  'ATTENDANCE',
+  'HR_MOVEMENT',
+  'SALARY',
+  'CONTRACT',
+  'CERTIFICATE',
+] as const;
 
-const TREE_GROUPS: { key: string; title: string; match: (t: ApprovalRequestType) => boolean }[] = [
-  { key: 'gen', title: '일반', match: (t) => t === 'GENERAL' },
-  {
-    key: 'sup',
-    title: '지원',
-    match: (t) =>
-      ['VACATION', 'ATTENDANCE', 'HR_MOVEMENT', 'CERTIFICATE', 'CONTRACT'].includes(t),
-  },
-  { key: 'exp', title: '지출결의', match: (t) => t === 'SALARY' },
-  { key: 'off', title: '공문', match: (t) => t === 'OFFICIAL' },
-  { key: 'misc', title: '기타', match: () => true },
-];
-
-function groupKeyForType(t: ApprovalRequestType): string {
-  for (const g of TREE_GROUPS) {
-    if (g.key === 'misc') continue;
-    if (g.match(t)) return g.key;
-  }
-  return 'misc';
-}
+const REQUEST_TYPE_FOLDER_LABEL: Record<ApprovalRequestType, string> = {
+  VACATION: '휴가',
+  ATTENDANCE: '근태',
+  HR_MOVEMENT: '부서이동',
+  SALARY: '급여',
+  GENERAL: '일반기안',
+  CONTRACT: '전자계약',
+  CERTIFICATE: '문서발급',
+  OFFICIAL: '공문',
+};
 
 export type ApprovalFormSelectModalProps = {
   open: boolean;
@@ -81,7 +79,6 @@ export function ApprovalFormSelectModal({
   const filteredDocs = useMemo(() => {
     const kw = search.trim().toLowerCase();
     return documents.filter((d) => {
-      if (isHiddenDocName(d)) return false;
       if (!kw) return true;
       const title = formatDocTitle(d.documentName).toLowerCase();
       return title.includes(kw) || String(d.documentName ?? '').toLowerCase().includes(kw);
@@ -89,58 +86,34 @@ export function ApprovalFormSelectModal({
   }, [documents, search]);
 
   const treeData: DataNode[] = useMemo(() => {
-    const byGroup = new Map<string, ApprovalDocument[]>();
-    for (const g of TREE_GROUPS) {
-      if (g.key !== 'misc') byGroup.set(g.key, []);
+    const byType = new Map<ApprovalRequestType, ApprovalDocument[]>();
+    for (const t of APPROVAL_REQUEST_TYPES) {
+      byType.set(t, []);
     }
-    byGroup.set('misc', []);
-
     for (const doc of filteredDocs) {
       const t = normalizeRequestType(doc.requestType);
-      const gk = groupKeyForType(t);
-      const list = byGroup.get(gk);
-      if (list) list.push(doc);
-      else byGroup.get('misc')!.push(doc);
+      byType.get(t)?.push(doc);
     }
 
     const nodes: DataNode[] = [];
-    for (const g of TREE_GROUPS) {
-      if (g.key === 'misc') continue;
-      const list = byGroup.get(g.key) ?? [];
+    for (const requestType of REQUEST_TYPE_FOLDER_ORDER) {
+      const list = (byType.get(requestType) ?? []).slice().sort((a, b) => {
+        const na = formatDocTitle(a.documentName);
+        const nb = formatDocTitle(b.documentName);
+        return na.localeCompare(nb, 'ko');
+      });
       if (list.length === 0) continue;
+      const folderLabel = REQUEST_TYPE_FOLDER_LABEL[requestType] ?? requestType;
       nodes.push({
-        key: `grp-${g.key}`,
+        key: `grp-${requestType}`,
         title: (
-          <span className="tw-inline-flex tw-items-center tw-gap-1.5">
-            <FolderOutlined className="tw-text-amber-600" />
-            <span>{g.title}</span>
+          <span className="tw-inline-flex tw-min-w-0 tw-items-center tw-gap-1.5">
+            <FolderOutlined className="tw-shrink-0 tw-text-amber-600" />
+            <span className="tw-truncate">{folderLabel}</span>
           </span>
         ),
         selectable: false,
         children: list.map((doc) => ({
-          key: `doc-${doc.documentId}`,
-          isLeaf: true,
-          title: (
-            <span className="tw-inline-flex tw-items-center tw-gap-1.5">
-              <FileTextOutlined className="tw-text-slate-500" />
-              <span className="tw-truncate">{formatDocTitle(doc.documentName)}</span>
-            </span>
-          ),
-        })),
-      });
-    }
-    const misc = byGroup.get('misc') ?? [];
-    if (misc.length > 0) {
-      nodes.push({
-        key: 'grp-misc',
-        title: (
-          <span className="tw-inline-flex tw-items-center tw-gap-1.5">
-            <FolderOutlined className="tw-text-amber-600" />
-            <span>기타</span>
-          </span>
-        ),
-        selectable: false,
-        children: misc.map((doc) => ({
           key: `doc-${doc.documentId}`,
           isLeaf: true,
           title: (
@@ -162,15 +135,15 @@ export function ApprovalFormSelectModal({
     return `/app/approvals?tab=compose&embed=compose-modal&docId=${encodeURIComponent(composeDocId)}`;
   }, [composeDocId]);
 
-  const handleTreeSelect = useCallback((keys: ReactKey[]) => {
-    const last = keys[keys.length - 1];
-    const key = typeof last === 'string' ? last : String(last ?? '');
-    if (key.startsWith('doc-')) {
-      const nextId = key.slice(4);
-      setSelectedId(nextId);
-      setComposeDocId(nextId);
-      setDocListSidebarCollapsed(true);
-    }
+  /** 동일 노드 재클릭 시 Ant Design Tree가 keys를 비우는 경우가 있어 info.node.key를 사용 */
+  const handleTreeSelect = useCallback<TreeProps['onSelect']>((_keys, info) => {
+    const raw = info.node?.key;
+    const key = typeof raw === 'string' ? raw : String(raw ?? '');
+    if (!key.startsWith('doc-')) return;
+    const nextId = key.slice(4);
+    setSelectedId(nextId);
+    setComposeDocId(nextId);
+    setDocListSidebarCollapsed(true);
   }, []);
 
   const handleOk = () => {
@@ -238,8 +211,64 @@ export function ApprovalFormSelectModal({
                   목록 접기
                 </Button>
               </div>
-              <div className="tw-min-h-0 tw-flex-1 tw-overflow-auto tw-bg-slate-50/40 tw-px-4 tw-py-4">
-                <Typography.Text type="secondary">결재 양식을 선택해 주세요.</Typography.Text>
+              <div className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-items-center tw-justify-center tw-overflow-auto tw-bg-gradient-to-b tw-from-slate-50 tw-to-slate-100/70 tw-px-6 tw-py-10 sm:tw-px-10">
+                <div className="tw-flex tw-w-full tw-max-w-lg tw-flex-col tw-items-center tw-text-center">
+                  <div
+                    className="tw-mb-5 tw-flex tw-h-[4.5rem] tw-w-[4.5rem] tw-items-center tw-justify-center tw-rounded-2xl tw-bg-white tw-shadow-md tw-ring-1 tw-ring-slate-200/80"
+                    aria-hidden
+                  >
+                    <FileAddOutlined className="tw-text-[2.25rem] tw-text-[#1e3a5f]" />
+                  </div>
+                  <Typography.Title level={4} className="!tw-mb-2 !tw-mt-0 !tw-text-slate-900">
+                    결재 양식을 선택해 주세요
+                  </Typography.Title>
+                  <Typography.Paragraph type="secondary" className="!tw-mb-8 !tw-max-w-md !tw-text-sm !tw-leading-relaxed">
+                    왼쪽에서 타입별 폴더를 펼친 뒤 작성할 양식을 누르면 이곳에 미리보기가 열립니다. 목록이 길면 상단 검색으로
+                    이름을 찾을 수 있습니다.
+                  </Typography.Paragraph>
+                  <div className="tw-w-full tw-rounded-xl tw-border tw-border-slate-200/90 tw-bg-white/95 tw-p-5 tw-text-left tw-shadow-sm tw-ring-1 tw-ring-slate-100">
+                    <Typography.Text strong className="tw-text-xs tw-tracking-wide tw-text-slate-600">
+                      시작 순서
+                    </Typography.Text>
+                    <ul className="tw-mb-0 tw-mt-3 tw-list-none tw-space-y-3 tw-p-0">
+                      <li className="tw-flex tw-gap-3">
+                        <span className="tw-flex tw-h-7 tw-w-7 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-lg tw-bg-[#1e3a5f]/10 tw-text-xs tw-font-bold tw-text-[#1e3a5f]">
+                          1
+                        </span>
+                        <span className="tw-min-w-0 tw-pt-0.5 tw-text-sm tw-text-slate-600">
+                          <FolderOutlined className="tw-mr-1 tw-text-amber-600" aria-hidden />
+                          타입 폴더에서 양식을 선택합니다.
+                        </span>
+                      </li>
+                      <li className="tw-flex tw-gap-3">
+                        <span className="tw-flex tw-h-7 tw-w-7 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-lg tw-bg-[#1e3a5f]/10 tw-text-xs tw-font-bold tw-text-[#1e3a5f]">
+                          2
+                        </span>
+                        <span className="tw-min-w-0 tw-pt-0.5 tw-text-sm tw-text-slate-600">
+                          <FileTextOutlined className="tw-mr-1 tw-text-slate-500" aria-hidden />
+                          오른쪽에서 내용을 확인한 뒤 하단{' '}
+                          <Typography.Text strong className="tw-text-slate-800">
+                            이 양식으로 작성
+                          </Typography.Text>
+                          을 누릅니다.
+                        </span>
+                      </li>
+                      <li className="tw-flex tw-gap-3">
+                        <span className="tw-flex tw-h-7 tw-w-7 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-lg tw-bg-slate-100 tw-text-xs tw-font-bold tw-text-slate-600">
+                          3
+                        </span>
+                        <span className="tw-min-w-0 tw-pt-0.5 tw-text-sm tw-text-slate-600">
+                          <SearchOutlined className="tw-mr-1 tw-text-slate-400" aria-hidden />
+                          양식이 많으면 왼쪽 상단 검색으로 이름을 좁혀 보세요. 오른쪽 영역을 넓히려면 상단{' '}
+                          <Typography.Text strong className="tw-text-slate-800">
+                            목록 접기
+                          </Typography.Text>
+                          를 이용하면 됩니다.
+                        </span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
               </div>
               <div className="tw-flex tw-shrink-0 tw-items-center tw-justify-end tw-gap-2 tw-border-t tw-border-slate-200 tw-bg-slate-50/80 tw-px-4 tw-py-3">
                 <Button onClick={onCancel}>취소</Button>
