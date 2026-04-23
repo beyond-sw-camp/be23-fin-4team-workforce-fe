@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  App, Button, Card, Collapse, Form, Input, Progress, Radio, Space, Tag, Typography, Spin, Divider, Badge,
+  App, Card, Collapse, Input, Progress, Radio, Space, Tag, Typography, Spin, Divider, Badge,
 } from 'antd';
 import {
-  ArrowLeftOutlined, SaveOutlined, SendOutlined, InfoCircleOutlined, AimOutlined,
+  SaveOutlined, SendOutlined, InfoCircleOutlined, AimOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -14,8 +14,9 @@ import type {
   Answer, DesignSection, DesignQuestion, EvaluationDesign, GoalSummaryCard,
 } from '@/features/evaluation/model/types';
 import { AppButton } from '@/shared/ui/AppButton';
+import { DetailPageHeader } from '@/shared/ui/DetailPageHeader';
 
-const { Text, Title, Paragraph } = Typography;
+const { Text, Paragraph } = Typography;
 
 /** 저장·제출 JSON — 백엔드 `SectionScorer` 가 숫자 scaleValue 를 기대 (Radio 문자열 방지) */
 function answersForApiPayload(map: Record<string, Answer>): Answer[] {
@@ -191,7 +192,13 @@ export function EvaluationWritePage() {
   if (!response.designId) {
     return (
       <div className="tw-p-6 tw-max-w-screen-xl tw-mx-auto">
-        <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate({ to: '/app/evaluations' })} className="tw-mb-4" />
+        <DetailPageHeader
+          backTo="/app/evaluations"
+          backLabel="평가 허브"
+          title={L.writeTitle}
+          subtitle="이 평가 응답에 연결된 설계가 없습니다."
+          showShare={false}
+        />
         <Card>
           <div className="tw-text-center tw-py-12 tw-text-gray-500">
             <InfoCircleOutlined className="tw-text-3xl tw-mb-2" />
@@ -286,32 +293,31 @@ export function EvaluationWritePage() {
     );
   };
 
+  const evalTypeLine = ({
+    SELF: L.evalTypeSelf, DOWNWARD: L.evalTypeDownward, UPWARD: L.evalTypeUpward, PEER: L.evalTypePeer,
+  }[response.evaluationType] ?? response.evaluationType);
+
   return (
     <div className="tw-mx-auto tw-w-full tw-max-w-[1400px] tw-space-y-6">
-      {/* Header */}
+      <DetailPageHeader
+        backTo="/app/evaluations"
+        backLabel="평가 허브"
+        title={L.writeTitle}
+        subtitle={`대상: ${targetMemberLabel} · ${evalTypeLine} 평가`}
+        showShare={false}
+      />
       <Card
         className="tw-rounded-2xl tw-border tw-border-slate-200/80 tw-shadow-sm tw-shadow-slate-900/5"
         styles={{ body: { padding: 20 } }}
       >
         <div className="tw-flex tw-items-center tw-gap-4">
-          <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate({ to: '/app/evaluations' })} />
-          <div className="tw-flex-1">
-            <Title level={4} className="!tw-m-0 !tw-text-[24px] !tw-font-bold !tw-leading-tight !tw-tracking-tight !tw-text-[#1e3a5f]">
-              {L.writeTitle}
-            </Title>
-            <Text type="secondary">대상: {targetMemberLabel} · {({
-            SELF: L.evalTypeSelf, DOWNWARD: L.evalTypeDownward, UPWARD: L.evalTypeUpward, PEER: L.evalTypePeer,
-          }[response.evaluationType] ?? response.evaluationType)} 평가</Text>
-          </div>
-          <div className="tw-flex tw-items-center tw-gap-2 tw-min-w-[220px]">
-            <Text type="secondary" className="tw-text-sm">{L.writeProgress}</Text>
-            <Progress
-              percent={progressPct}
-              size="small"
-              strokeColor={progressPct >= 80 ? '#22c55e' : progressPct >= 50 ? '#f59e0b' : '#ef4444'}
-              className="tw-flex-1"
-            />
-          </div>
+          <Text type="secondary" className="tw-shrink-0 tw-text-sm">{L.writeProgress}</Text>
+          <Progress
+            percent={progressPct}
+            size="small"
+            strokeColor={progressPct >= 80 ? '#22c55e' : progressPct >= 50 ? '#f59e0b' : '#ef4444'}
+            className="tw-min-w-0 tw-flex-1"
+          />
         </div>
       </Card>
 
@@ -322,7 +328,7 @@ export function EvaluationWritePage() {
           {sections.length > 0 ? sections.map((section, si) => {
             const sType = (section.type ?? 'MANUAL') as 'MANUAL' | 'KPI_SCORE' | 'PEER_FEEDBACK';
             const isAuto = sType === 'KPI_SCORE' || sType === 'PEER_FEEDBACK';
-            const typeMeta: Record<string, {label: string; color: string; hint: string}> = {
+            const typeMeta: Record<'MANUAL' | 'KPI_SCORE' | 'PEER_FEEDBACK', {label: string; color: string; hint: string}> = {
               MANUAL: {
                 label: '수동 입력',
                 color: 'default',
@@ -339,7 +345,7 @@ export function EvaluationWritePage() {
                 hint: '이 섹션은 동료 평가자들의 응답을 평균 내어 자동 집계됩니다. 본 화면에서는 응답하지 않습니다.',
               },
             };
-            const meta = typeMeta[sType];
+            const meta = typeMeta[sType] ?? typeMeta.MANUAL;
             return (
               <Card
                 key={si}

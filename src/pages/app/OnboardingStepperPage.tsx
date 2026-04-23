@@ -204,6 +204,9 @@ export default function OnboardingStepperPage() {
   });
 
   const currentStep = ONBOARDING_STEPS[current];
+  if (!currentStep) {
+    return null;
+  }
   const isLast = current === ONBOARDING_STEPS.length - 1;
 
   const markCurrent = (status: StepStatus) => {
@@ -778,7 +781,7 @@ export default function OnboardingStepperPage() {
         title={
           <Space>
             <span>{`${current + 1}. ${currentStep.title}`}</span>
-            {stepTag(statuses[current])}
+            {stepTag(statuses[current] ?? 'pending')}
           </Space>
         }
       >

@@ -10,7 +10,6 @@ import {
   FilterOutlined,
   MessageOutlined,
   PlusOutlined,
-  TeamOutlined,
   ThunderboltOutlined,
   WarningOutlined,
 } from '@ant-design/icons';
@@ -793,7 +792,7 @@ function PerformancePage() {
     mutationFn: (vars: {
       goalId: string;
       body: {
-        approverId: string;
+        approverId?: string;
         summary?: string;
         evidenceFiles?: string;
       };
@@ -1142,12 +1141,7 @@ function PerformancePage() {
     const active = scoped.filter((g) => st(g.status) === 'ACTIVE').length;
     const draft = scoped.filter((g) => st(g.status) === 'DRAFT').length;
     const completed = scoped.filter((g) => st(g.status) === 'COMPLETED').length;
-    const today = dayjs().startOf('day');
-    const delayed = scoped.filter((g) => {
-      if (st(g.status) !== 'ACTIVE') return false;
-      return today.isAfter(dayjs(g.endDate), 'day');
-    }).length;
-    return { total: scoped.length, active, draft, completed, delayed };
+    return { total: scoped.length, active, draft, completed };
   }, [goalsAfterOwnerQuickPick]);
 
   const progressAvg = useMemo(() => {
@@ -1233,116 +1227,89 @@ function PerformancePage() {
 
           <div className="tw-mt-5 tw-space-y-4">
             <div className="tw-grid tw-w-full tw-min-w-0 tw-grid-cols-1 tw-gap-4 lg:tw-grid-cols-3">
-              <div className="tw-rounded-3xl tw-border tw-border-slate-200/80 tw-bg-white tw-p-4 tw-shadow-[0_1px_2px_rgba(15,23,42,0.05)] sm:tw-p-5">
+              <Card className="tw-rounded-3xl tw-border-slate-200/80 tw-bg-white tw-shadow-[0_1px_2px_rgba(15,23,42,0.05)] [&_.ant-card-body]:tw-p-5">
                 <div className="tw-mb-3 tw-flex tw-items-center tw-gap-2">
-                  <BarChartOutlined className="tw-text-[14px] tw-text-slate-400" />
-                  <Text className="tw-text-[18px] tw-font-semibold tw-text-slate-900">성과 현황</Text>
+                  <BarChartOutlined className="tw-text-slate-500" />
+                  <Text className="tw-text-lg tw-font-semibold tw-text-slate-900">성과 현황</Text>
                 </div>
-                <div className="tw-grid tw-grid-cols-2 tw-gap-2.5">
-                  {(
-                    [
-                      {
-                        k: 't',
-                        label: PERFORMANCE_PAGE_KO.statAll,
-                        value: stats.total,
-                        icon: <BarChartOutlined className="tw-text-[13px] tw-text-slate-400" />,
-                      },
-                      {
-                        k: 'a',
-                        label: PERFORMANCE_PAGE_KO.statActive,
-                        value: stats.active,
-                        icon: <TeamOutlined className="tw-text-[13px] tw-text-slate-400" />,
-                      },
-                      {
-                        k: 'c',
-                        label: PERFORMANCE_PAGE_KO.statCompleted,
-                        value: stats.completed,
-                        icon: <CheckCircleOutlined className="tw-text-[13px] tw-text-slate-400" />,
-                      },
-                      {
-                        k: 'y',
-                        label: PERFORMANCE_PAGE_KO.statDelayed,
-                        value: stats.delayed,
-                        icon: <WarningOutlined className="tw-text-[13px] tw-text-slate-400" />,
-                      },
-                    ] as const
-                  ).map((m) => (
-                    <div
-                      key={m.k}
-                      className="tw-rounded-2xl tw-border tw-border-slate-100 tw-bg-slate-50/70 tw-px-3 tw-py-2.5"
-                    >
-                      <div className="tw-flex tw-items-center tw-gap-1.5 tw-text-[12px] tw-font-medium tw-text-slate-500">
-                        {m.icon}
-                        <span>{m.label}</span>
-                      </div>
-                      <div className="tw-mt-2 tw-text-[36px] tw-font-semibold tw-leading-none tw-tabular-nums tw-text-[#0f172a]">
-                        {m.value}
-                      </div>
-                    </div>
-                  ))}
+                <div className="tw-space-y-2.5">
+                  <div className="tw-flex tw-items-center tw-justify-between tw-rounded-2xl tw-border tw-border-slate-200/80 tw-bg-white tw-px-4 tw-py-3">
+                    <span className="tw-text-slate-600">{PERFORMANCE_PAGE_KO.statAll}</span>
+                    <span className="tw-text-2xl tw-font-semibold tw-tabular-nums tw-text-slate-800">{stats.total}</span>
+                  </div>
+                  <div className="tw-flex tw-items-center tw-justify-between tw-rounded-2xl tw-border tw-border-slate-200/80 tw-bg-white tw-px-4 tw-py-3">
+                    <span className="tw-text-slate-600">{PERFORMANCE_PAGE_KO.statActive}</span>
+                    <span className="tw-text-2xl tw-font-semibold tw-tabular-nums tw-text-blue-600">{stats.active}</span>
+                  </div>
+                  <div className="tw-flex tw-items-center tw-justify-between tw-rounded-2xl tw-border tw-border-slate-200/80 tw-bg-white tw-px-4 tw-py-3">
+                    <span className="tw-text-slate-600">{PERFORMANCE_PAGE_KO.statCompleted}</span>
+                    <span className="tw-text-2xl tw-font-semibold tw-tabular-nums tw-text-emerald-600">{stats.completed}</span>
+                  </div>
                 </div>
-              </div>
+              </Card>
 
-              <div className="tw-rounded-3xl tw-border tw-border-slate-200/80 tw-bg-white tw-p-4 tw-shadow-[0_1px_2px_rgba(15,23,42,0.05)] sm:tw-p-5">
+              <Card className="tw-rounded-3xl tw-border-slate-200/80 tw-bg-white tw-shadow-[0_1px_2px_rgba(15,23,42,0.05)] [&_.ant-card-body]:tw-p-5">
                 <div className="tw-mb-1 tw-flex tw-items-center tw-gap-2">
-                  <CheckCircleOutlined className="tw-text-[14px] tw-text-slate-400" />
-                  <Text className="tw-text-[18px] tw-font-semibold tw-text-slate-900">{PERFORMANCE_PAGE_KO.avgAchievement}</Text>
+                  <ThunderboltOutlined className="tw-text-slate-500" />
+                  <Text className="tw-text-lg tw-font-semibold tw-text-slate-900">{PERFORMANCE_PAGE_KO.avgAchievement}</Text>
                 </div>
-                <Text className="tw-text-[12px] tw-text-slate-500">진행 중인 목표 기준</Text>
-                <div className="tw-flex tw-justify-center tw-py-3">
+                <Text className="tw-text-xs tw-text-slate-500">진행 중인 목표 기준</Text>
+                <div className="tw-flex tw-justify-center tw-py-4">
                   <div
-                    className="tw-relative tw-grid tw-h-[120px] tw-w-[120px] tw-place-items-center tw-rounded-full"
+                    className="tw-relative tw-grid tw-h-[124px] tw-w-[124px] tw-place-items-center tw-rounded-full"
                     style={{
                       background: `conic-gradient(#3182f6 ${Math.min(100, Math.max(0, progressAvg ?? 0)) * 3.6}deg, #e2e8f0 0deg)`,
                     }}
                   >
-                    <div className="tw-grid tw-h-[100px] tw-w-[100px] tw-place-items-center tw-rounded-full tw-bg-white">
-                      <span className="tw-text-[38px] tw-font-semibold tw-leading-none tw-tabular-nums tw-text-slate-800">{progressAvg ?? 0}%</span>
+                    <div className="tw-grid tw-h-[104px] tw-w-[104px] tw-place-items-center tw-rounded-full tw-bg-white">
+                      <span className="tw-text-[36px] tw-font-semibold tw-leading-none tw-tabular-nums tw-text-slate-800">{progressAvg ?? 0}%</span>
                     </div>
                   </div>
                 </div>
-                <div className="tw-rounded-xl tw-bg-slate-50 tw-px-3 tw-py-2 tw-text-center tw-text-[11px] tw-leading-snug tw-text-slate-400">
+                <div className="tw-rounded-xl tw-border tw-border-slate-200/80 tw-bg-white tw-px-3 tw-py-2 tw-text-center tw-text-xs tw-text-slate-500">
                   {PERFORMANCE_PAGE_KO.avgAchievementUnavailable}
                 </div>
-              </div>
+              </Card>
 
               {(() => {
                 const pendingCount = pendingApprovalsQuery.data?.length ?? 0;
                 const myCount = approvalHistoryQuery.data?.length ?? 0;
                 const hasPending = pendingCount > 0;
                 return (
-                  <div
-                    className="tw-flex tw-rounded-3xl tw-border tw-border-slate-200/80 tw-bg-white tw-p-4 tw-shadow-[0_1px_2px_rgba(15,23,42,0.05)] sm:tw-p-5 tw-flex-col tw-justify-between"
-                  >
-                    <div className="tw-mb-3 tw-flex tw-items-center tw-gap-2">
-                      <FileDoneOutlined className="tw-text-[14px] tw-text-slate-400" />
-                      <Text className="tw-text-[18px] tw-font-semibold tw-text-slate-900">
+                  <Card className="tw-h-full tw-rounded-3xl tw-border-slate-200/80 tw-bg-white tw-shadow-[0_1px_2px_rgba(15,23,42,0.05)] [&_.ant-card-body]:tw-p-5">
+                    <div className="tw-mb-1 tw-flex tw-items-center tw-gap-2">
+                      <FileDoneOutlined className="tw-text-slate-500" />
+                      <Text className="tw-text-lg tw-font-semibold tw-text-slate-900">
                         {PERFORMANCE_PAGE_KO.approvalStripTitle}
                       </Text>
                     </div>
-                    <div className="tw-flex tw-min-h-[52px] tw-items-center tw-justify-center tw-text-center tw-text-[13px] tw-text-slate-500">
+                    <Text className="tw-text-xs tw-text-slate-500">
                       {hasPending ? '내가 승인해야 할 목표가 있습니다.' : PERFORMANCE_PAGE_KO.approvalStripEmptyPending}
-                    </div>
-                    <div className="tw-grid tw-grid-cols-2 tw-gap-2.5">
-                      <div className="tw-rounded-xl tw-bg-slate-50 tw-py-2.5 tw-text-center">
-                        <div className="tw-text-[11px] tw-text-slate-500">{PERFORMANCE_PAGE_KO.approvalStripPendingShort}</div>
-                        <div className="tw-mt-1 tw-text-[32px] tw-font-semibold tw-leading-none tw-text-[#0f172a]">{pendingCount}</div>
-                      </div>
-                      <div className="tw-rounded-xl tw-bg-slate-50 tw-py-2.5 tw-text-center">
-                        <div className="tw-text-[11px] tw-text-slate-500">{PERFORMANCE_PAGE_KO.approvalStripMineShort}</div>
-                        <div className="tw-mt-1 tw-text-[32px] tw-font-semibold tw-leading-none tw-text-[#0f172a]">
-                          {approvalHistoryQuery.isPending ? '…' : myCount}
+                    </Text>
+                    <div className="tw-mt-5 tw-space-y-4">
+                      <div className="tw-grid tw-w-full tw-grid-cols-2 tw-gap-2.5">
+                        <div className="tw-rounded-xl tw-bg-slate-50 tw-py-2.5 tw-text-center">
+                          <div className="tw-text-[11px] tw-text-slate-500">{PERFORMANCE_PAGE_KO.approvalStripPendingShort}</div>
+                          <div className="tw-mt-1 tw-text-[32px] tw-font-semibold tw-leading-none tw-tabular-nums tw-text-[#0f172a]">
+                            {pendingCount}
+                          </div>
+                        </div>
+                        <div className="tw-rounded-xl tw-bg-slate-50 tw-py-2.5 tw-text-center">
+                          <div className="tw-text-[11px] tw-text-slate-500">{PERFORMANCE_PAGE_KO.approvalStripMineShort}</div>
+                          <div className="tw-mt-1 tw-text-[32px] tw-font-semibold tw-leading-none tw-tabular-nums tw-text-[#0f172a]">
+                            {approvalHistoryQuery.isPending ? '…' : myCount}
+                          </div>
                         </div>
                       </div>
+                      <Button
+                        size="large"
+                        onClick={() => setApprovalHubOpen(true)}
+                        className="!tw-h-12 !tw-w-full !tw-rounded-xl !tw-border-[#3b5bdb] !tw-bg-[#3b5bdb] !tw-font-semibold !tw-text-white hover:!tw-border-[#304ac7] hover:!tw-bg-[#304ac7]"
+                      >
+                        {hasPending ? '지금 확인하기' : `${PERFORMANCE_PAGE_KO.approvalStripCenter} →`}
+                      </Button>
                     </div>
-                    <Button
-                      size="large"
-                      onClick={() => setApprovalHubOpen(true)}
-                      className="!tw-mt-4 !tw-h-12 !tw-rounded-xl !tw-bg-[#3b5bdb] hover:!tw-bg-[#304ac7] !tw-font-semibold !tw-border-[#3b5bdb] !tw-text-white"
-                    >
-                      {hasPending ? '지금 확인하기' : `${PERFORMANCE_PAGE_KO.approvalStripCenter} →`}
-                    </Button>
-                  </div>
+                  </Card>
                 );
               })()}
             </div>
@@ -1351,48 +1318,6 @@ function PerformancePage() {
             </Text>
           </div>
         </section>
-        <Modal
-          title={
-            <div className="tw-flex tw-items-center tw-gap-2.5">
-              <span className="tw-flex tw-h-9 tw-w-9 tw-items-center tw-justify-center tw-rounded-xl tw-bg-[#eff6ff] tw-text-[#2563eb]">
-                <FileDoneOutlined className="tw-text-[18px]" />
-              </span>
-              <div>
-                <div className="tw-text-base tw-font-semibold tw-leading-tight tw-text-[#0f172a]">
-                  {PERFORMANCE_PAGE_KO.approvalStripCenter}
-                </div>
-                <div className="tw-mt-0.5 tw-text-xs tw-font-normal tw-text-slate-500">
-                  {PERFORMANCE_PAGE_KO.approvalStripCenterHint}
-                </div>
-              </div>
-            </div>
-          }
-          open={approvalHubOpen}
-          onCancel={() => setApprovalHubOpen(false)}
-          footer={null}
-          width="min(720px, calc(100vw - 24px))"
-          centered
-          destroyOnHidden
-          classNames={{ content: '!tw-rounded-2xl !tw-overflow-hidden' }}
-          styles={{
-            header: {
-              marginBottom: 0,
-              paddingBottom: 16,
-              borderBottom: '1px solid rgb(241 245 249)',
-            },
-            body: {
-              maxHeight: 'min(78vh, 720px)',
-              overflowY: 'auto',
-              paddingTop: 20,
-              paddingBottom: 20,
-              background: 'linear-gradient(180deg, rgb(248 250 252) 0%, rgb(255 255 255) 48px)',
-            },
-            mask: { backdropFilter: 'blur(2px)' },
-          }}
-          zIndex={1050}
-        >
-          <GoalApprovalCenterPanel showIntro={false} embeddedInModal />
-        </Modal>
         </>
       ) : null}
 
@@ -1670,6 +1595,22 @@ function PerformancePage() {
           ]}
         />
       </Card>
+
+      {companyId ? (
+        <Modal
+          title={PERFORMANCE_PAGE_KO.approvalStripCenter}
+          open={approvalHubOpen}
+          onCancel={() => setApprovalHubOpen(false)}
+          footer={null}
+          width="min(720px, calc(100vw - 24px))"
+          centered
+          destroyOnHidden
+          styles={{ body: { maxHeight: 'min(78vh, 720px)', overflowY: 'auto' } }}
+          zIndex={1050}
+        >
+          <GoalApprovalCenterPanel showIntro={false} embeddedInModal />
+        </Modal>
+      ) : null}
 
       <AppModal
         title="KPI 템플릿 등록"
@@ -2557,14 +2498,19 @@ function PerformancePage() {
                 );
                 if (!ok) return;
               }
+              if (modalNeedsApproval && !approverId) {
+                message.warning('완료 승인자를 선택해 주세요.');
+                return;
+              }
               try {
+                const completionBody = {
+                  ...(modalNeedsApproval ? { approverId } : {}),
+                  summary: String(values.summary ?? '').trim() || undefined,
+                  evidenceFiles: evidenceFilesSerialized,
+                };
                 await completionSubmitMutation.mutateAsync({
                   goalId: detailGoal.id,
-                  body: {
-                    approverId: modalNeedsApproval ? approverId : undefined,
-                    summary: String(values.summary ?? '').trim() || undefined,
-                    evidenceFiles: evidenceFilesSerialized,
-                  },
+                  body: completionBody,
                 });
               } catch {
                 // 에러 메시지는 mutation onError에서 처리

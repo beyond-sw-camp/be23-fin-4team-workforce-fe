@@ -234,8 +234,6 @@ export const PERFORMANCE_PAGE_KO = {
   statActive: '진행 중',
   statDraft: '진행 전',
   statCompleted: '완료',
-  /** 기간 만료일이 지났는데도 진행 중인 목표 */
-  statDelayed: '지연',
   statScopeNote: '집계 범위는 상단 「내 목표 / 전체」 선택과 동일합니다.',
   approvalStripTitle: '완료 제출 승인',
   approvalStripCenter: '승인 센터',

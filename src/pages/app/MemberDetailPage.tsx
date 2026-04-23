@@ -1,7 +1,22 @@
-import { Alert, Card, Descriptions, Modal, Space, Spin, Table, Tag, Typography } from 'antd';
-import { useParams, Link } from '@tanstack/react-router';
+import {
+  BankOutlined,
+  CalendarOutlined,
+  CarryOutOutlined,
+  EditOutlined,
+  HistoryOutlined,
+  IdcardOutlined,
+  MailOutlined,
+  PauseCircleOutlined,
+  RiseOutlined,
+  SafetyCertificateOutlined,
+  TeamOutlined,
+  UnlockOutlined,
+} from '@ant-design/icons';
+import { Alert, Avatar, Card, Modal, Spin, Table, Tag, Typography } from 'antd';
+import { Link, useParams } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
+import type { ReactNode } from 'react';
 import { useState } from 'react';
 import {
   ACCOUNT_STATUS_KO,
@@ -10,10 +25,13 @@ import {
   MEMBER_STATUS_KO,
 } from '@/app/locale/app-ko';
 import { memberApi, type MemberHistoryItem } from '@/features/member/api/memberApi';
+import { DetailPageHeader } from '@/shared/ui/DetailPageHeader';
+import { membersCtaButtonClass } from '@/features/members/ui/membersCtaButtonClass';
 import { PERM } from '@/features/permissions/backend-permissions';
 import { PermissionGuard } from '@/features/permissions/permission-guard';
 import { usePermissions } from '@/features/permissions/usePermissionsHook';
 import { AppButton } from '@/shared/ui/AppButton';
+import { twMerge } from 'tailwind-merge';
 
 function memberStatusLabel(code: string | undefined): string {
   if (!code?.trim()) return '—';
@@ -27,13 +45,65 @@ function accountStatusLabel(code: string | undefined): string {
   return ACCOUNT_STATUS_KO[k] ?? code;
 }
 
+function initialsFromName(name: string): string {
+  const t = name.trim();
+  if (!t) return '?';
+  if (t.length >= 2) return t.slice(0, 2);
+  return t.slice(0, 2).toUpperCase();
+}
+
+function memberStatusDotClass(code: string | undefined): string {
+  const u = code?.trim().toUpperCase();
+  if (u === 'ACTIVE') return 'tw-bg-emerald-500';
+  if (u === 'DORMANT') return 'tw-bg-amber-400';
+  if (u === 'LEAVE') return 'tw-bg-slate-400';
+  return 'tw-bg-slate-300';
+}
+
+function ProfileInfoRow({
+  icon,
+  label,
+  value,
+  valueTitle,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: ReactNode;
+  valueTitle?: string;
+}) {
+  return (
+    <div className="tw-flex tw-items-start tw-justify-between tw-gap-4 tw-py-2.5 tw-text-sm">
+      <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2.5 tw-text-slate-500">
+        <span className="tw-flex tw-size-4 tw-shrink-0 tw-items-center tw-justify-center tw-text-[15px] tw-leading-none tw-text-slate-400">
+          {icon}
+        </span>
+        <span className="tw-shrink-0">{label}</span>
+      </div>
+      <div
+        className="tw-min-w-0 tw-max-w-[70%] tw-break-words tw-text-right tw-text-sm tw-font-semibold tw-text-slate-900"
+        title={valueTitle}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function SectionBlock({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="tw-pt-1">
+      <div className="tw-mb-2 tw-text-xs tw-font-bold tw-tracking-wide tw-text-slate-500">{title}</div>
+      <div className="tw-divide-y tw-divide-slate-100">{children}</div>
+    </div>
+  );
+}
+
 export function MemberDetailPage() {
   const { memberId } = useParams({ strict: false }) as { memberId: string };
   const queryClient = useQueryClient();
   const [historyOpen, setHistoryOpen] = useState(false);
   const { hasPermission } = usePermissions();
 
-  /** 직원 이력: MEMBER:READ 없이 생성·수정만 있어도 버튼 표시(인사팀) */
   const canOpenMemberHistory =
     hasPermission(PERM.MEMBER_READ) ||
     hasPermission(PERM.MEMBER_CREATE) ||
@@ -66,109 +136,164 @@ export function MemberDetailPage() {
   });
 
   if (isLoading) {
-    return <Typography.Text type="secondary">불러오는 중…</Typography.Text>;
+    return (
+      <div className="tw-flex tw-w-full tw-min-h-[40vh] tw-items-center tw-justify-center tw-rounded-2xl tw-border tw-border-slate-200 tw-bg-white tw-shadow-sm">
+        <Spin size="large" />
+      </div>
+    );
   }
 
   if (!member) {
-    return <Alert type="warning" showIcon message="구성원 정보를 찾을 수 없습니다." />;
+    return (
+      <Alert type="warning" showIcon message="구성원 정보를 찾을 수 없습니다." className="tw-w-full tw-rounded-2xl" />
+    );
   }
 
+  const orgTitleLine =
+    member.organizationName || member.jobTitleName
+      ? [member.organizationName, member.jobTitleName].filter(Boolean).join(' \u2022 ')
+      : null;
+  const profileSrc = member.profileUrl?.trim() || undefined;
+
   return (
-    <Space direction="vertical" className="tw-w-full" size={16}>
-      <div className="tw-flex tw-flex-wrap tw-items-start tw-justify-between tw-gap-3">
-        <div>
-          <Link
-            to="/app/members"
-            className="tw-mb-2 tw-inline-block tw-text-sm tw-text-slate-400 tw-no-underline hover:tw-text-slate-500 hover:tw-underline"
+    <div className="tw-w-full">
+      <DetailPageHeader shareTitle={`${member.name} — 구성원 상세`} shareText={member.email} />
+
+      <div className="tw-flex tw-w-full tw-flex-col tw-gap-6 lg:tw-flex-row lg:tw-items-start lg:tw-gap-8">
+        <aside className="tw-w-full tw-shrink-0 lg:tw-sticky lg:tw-top-4 lg:tw-w-[min(100%,560px)]">
+          <div className="tw-overflow-hidden tw-rounded-2xl tw-border tw-border-slate-200 tw-bg-white tw-shadow-sm">
+            <div className="tw-border-b tw-border-slate-100 tw-bg-slate-50/40 tw-px-5 tw-pb-5 tw-pt-4">
+              <div className="tw-flex tw-flex-col tw-items-center tw-px-1 tw-pt-2">
+                <div className="tw-relative tw-mb-4">
+                  <Avatar
+                    shape="square"
+                    size={88}
+                    src={profileSrc}
+                    className={
+                      profileSrc
+                        ? '[&_img]:tw-object-cover !tw-rounded-3xl tw-shadow-sm'
+                        : '!tw-rounded-3xl !tw-bg-sky-100 !tw-text-[22px] !tw-font-bold !tw-text-blue-600 tw-shadow-sm'
+                    }
+                  >
+                    {initialsFromName(member.name)}
+                  </Avatar>
+                  <span
+                    className={`tw-pointer-events-none tw-absolute tw-bottom-0.5 tw-right-0.5 tw-size-4 tw-rounded-full tw-border-[3px] tw-border-white tw-shadow-sm ${memberStatusDotClass(member.memberStatus)}`}
+                    aria-hidden
+                  />
+                </div>
+                <div className="tw-flex tw-w-full tw-flex-wrap tw-items-center tw-justify-center tw-gap-2">
+                  <h2 className="tw-m-0 tw-text-center tw-text-xl tw-font-bold tw-leading-tight tw-tracking-tight tw-text-slate-900">
+                    {member.name}
+                  </h2>
+                  {member.jobGradeName ? (
+                    <span className="tw-rounded-md tw-bg-slate-100 tw-px-2 tw-py-0.5 tw-text-xs tw-font-medium tw-text-slate-600">
+                      {member.jobGradeName}
+                    </span>
+                  ) : null}
+                </div>
+                {orgTitleLine ? (
+                  <div className="tw-mt-2 tw-flex tw-max-w-full tw-items-start tw-justify-center tw-gap-1.5 tw-text-center tw-text-sm tw-text-slate-500">
+                    <BankOutlined className="tw-mt-0.5 tw-shrink-0 tw-text-slate-400" />
+                    <span className="tw-leading-snug">{orgTitleLine}</span>
+                  </div>
+                ) : null}
+                <p className="tw-mb-0 tw-mt-2 tw-text-center tw-text-xs tw-text-slate-500">
+                  {memberStatusLabel(member.memberStatus)} · 계정 {accountStatusLabel(member.accountStatus)}
+                </p>
+              </div>
+            </div>
+
+            <div className="tw-space-y-6 tw-px-6 tw-py-5">
+              <SectionBlock title="기본 정보">
+                <ProfileInfoRow icon={<IdcardOutlined />} label="사번" value={member.sabun || '—'} />
+                <ProfileInfoRow icon={<CalendarOutlined />} label="입사일" value={member.joinDate} />
+                <ProfileInfoRow
+                  icon={<CarryOutOutlined />}
+                  label="고용 형태"
+                  value={EMPLOYMENT_TYPE_KO[member.employmentType] ?? member.employmentType}
+                />
+                <ProfileInfoRow icon={<BankOutlined />} label="조직" value={member.organizationName ?? '—'} />
+                <ProfileInfoRow icon={<RiseOutlined />} label="직급" value={member.jobGradeName ?? '—'} />
+                <ProfileInfoRow icon={<TeamOutlined />} label="직책" value={member.jobTitleName ?? '—'} />
+                <ProfileInfoRow icon={<SafetyCertificateOutlined />} label="역할" value={member.roleName ?? '—'} />
+              </SectionBlock>
+
+              <SectionBlock title="연락·식별">
+                <ProfileInfoRow icon={<MailOutlined />} label="이메일" value={member.email} valueTitle={member.email} />
+              </SectionBlock>
+            </div>
+
+            {(canOpenMemberHistory || hasPermission(PERM.MEMBER_UPDATE)) ? (
+              <div className="tw-space-y-2 tw-border-t tw-border-slate-100 tw-bg-slate-50/30 tw-px-6 tw-py-5">
+                <PermissionGuard required={PERM.MEMBER_UPDATE}>
+                  <Link
+                    to="/app/members/$memberId/edit"
+                    params={{ memberId }}
+                    className={twMerge(
+                      membersCtaButtonClass,
+                      'tw-box-border tw-flex tw-w-full tw-items-center tw-justify-center tw-gap-2 tw-text-[15px] tw-font-semibold tw-text-white tw-no-underline hover:tw-text-white',
+                    )}
+                  >
+                    <EditOutlined />
+                    인사 정보 수정
+                  </Link>
+                </PermissionGuard>
+                {canOpenMemberHistory ? (
+                  <AppButton
+                    variant="secondary"
+                    className="tw-w-full !tw-font-bold"
+                    icon={<HistoryOutlined />}
+                    onClick={() => setHistoryOpen(true)}
+                  >
+                    직원 이력 보기
+                  </AppButton>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        </aside>
+
+        <main className="tw-min-w-0 tw-flex-1">
+          <Card
+            className="tw-overflow-hidden tw-rounded-2xl tw-border-slate-200 tw-shadow-sm"
+            title={<span className="tw-text-base tw-font-bold tw-text-slate-900">계정·인사 조치</span>}
+            styles={{ body: { paddingTop: 16 } }}
           >
-            ← 뒤로가기
-          </Link>
-          <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
-            구성원 상세
-          </Typography.Title>
-        </div>
-        <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
-          {canOpenMemberHistory ? (
-            <AppButton variant="secondary" onClick={() => setHistoryOpen(true)}>
-              직원 이력
-            </AppButton>
-          ) : null}
-          <PermissionGuard required={PERM.MEMBER_UPDATE}>
-            <Link to="/app/members/$memberId/edit" params={{ memberId }} className="tw-inline-block">
-              <AppButton variant="secondary">인사 정보 수정</AppButton>
-            </Link>
-          </PermissionGuard>
-        </div>
+            <div className="tw-flex tw-flex-wrap tw-gap-2">
+              <AppButton
+                variant="secondary"
+                loading={unlockMutation.isPending}
+                disabled={member.accountStatus?.toUpperCase() !== 'BLOCKED'}
+                icon={<UnlockOutlined />}
+                onClick={() => void unlockMutation.mutateAsync()}
+              >
+                잠금 해제
+              </AppButton>
+              <AppButton
+                variant="secondary"
+                loading={dormantMutation.isPending}
+                disabled={member.memberStatus?.toUpperCase() !== 'ACTIVE'}
+                icon={<PauseCircleOutlined className="tw-text-amber-600" />}
+                onClick={() => void dormantMutation.mutateAsync()}
+              >
+                휴직 처리
+              </AppButton>
+              <AppButton
+                variant="secondary"
+                loading={returnMutation.isPending}
+                disabled={member.memberStatus?.toUpperCase() !== 'DORMANT'}
+                onClick={() => void returnMutation.mutateAsync()}
+              >
+                복직 처리
+              </AppButton>
+            </div>
+            <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-4 !tw-text-xs tw-leading-relaxed">
+              휴직 또는 복직 처리 시 해당 구성원의 서비스 접속 권한이 즉시 변경됩니다.
+            </Typography.Paragraph>
+          </Card>
+        </main>
       </div>
-      <Card className="tw-border-slate-200/80 tw-shadow-sm">
-        <Descriptions bordered column={1} size="small">
-          <Descriptions.Item label="이름">{member.name}</Descriptions.Item>
-          <Descriptions.Item label="이메일">{member.email}</Descriptions.Item>
-          <Descriptions.Item label="사번">{member.sabun}</Descriptions.Item>
-          <Descriptions.Item label="입사일">{member.joinDate}</Descriptions.Item>
-          <Descriptions.Item label="고용 형태">
-            {EMPLOYMENT_TYPE_KO[member.employmentType] ?? member.employmentType}
-          </Descriptions.Item>
-          <Descriptions.Item label="재직 상태">
-            <Tag
-              color={
-                member.memberStatus?.toUpperCase() === 'ACTIVE'
-                  ? 'green'
-                  : member.memberStatus?.toUpperCase() === 'DORMANT'
-                    ? 'gold'
-                    : 'volcano'
-              }
-            >
-              {memberStatusLabel(member.memberStatus)}
-            </Tag>
-          </Descriptions.Item>
-          <Descriptions.Item label="계정 상태">
-            <Tag
-              color={
-                member.accountStatus?.toUpperCase() === 'ACTIVE'
-                  ? 'green'
-                  : member.accountStatus?.toUpperCase() === 'BLOCKED'
-                    ? 'red'
-                    : 'default'
-              }
-            >
-              {accountStatusLabel(member.accountStatus)}
-            </Tag>
-          </Descriptions.Item>
-          <Descriptions.Item label="조직">{member.organizationName ?? '—'}</Descriptions.Item>
-          <Descriptions.Item label="직급">{member.jobGradeName ?? '—'}</Descriptions.Item>
-          <Descriptions.Item label="직책">{member.jobTitleName ?? '—'}</Descriptions.Item>
-          <Descriptions.Item label="역할">{member.roleName ?? '—'}</Descriptions.Item>
-        </Descriptions>
-      </Card>
-      <Card className="tw-border-slate-200/80 tw-shadow-sm" title="계정·인사 조치">
-        <Space wrap>
-          <AppButton
-            variant="secondary"
-            loading={unlockMutation.isPending}
-            disabled={member.accountStatus?.toUpperCase() !== 'BLOCKED'}
-            onClick={() => void unlockMutation.mutateAsync()}
-          >
-            잠금 해제
-          </AppButton>
-          <AppButton
-            variant="secondary"
-            loading={dormantMutation.isPending}
-            disabled={member.memberStatus?.toUpperCase() !== 'ACTIVE'}
-            onClick={() => void dormantMutation.mutateAsync()}
-          >
-            휴직 처리
-          </AppButton>
-          <AppButton
-            variant="secondary"
-            loading={returnMutation.isPending}
-            disabled={member.memberStatus?.toUpperCase() !== 'DORMANT'}
-            onClick={() => void returnMutation.mutateAsync()}
-          >
-            복직 처리
-          </AppButton>
-        </Space>
-      </Card>
 
       <Modal
         title={
@@ -232,8 +357,7 @@ export function MemberDetailPage() {
                 title: '적용 종료',
                 dataIndex: 'effectiveTo',
                 width: 108,
-                render: (v: string | null) =>
-                  v == null || v === '' ? <Tag color="processing">현재</Tag> : v,
+                render: (v: string | null) => (v == null || v === '' ? <Tag color="processing">현재</Tag> : v),
               },
               {
                 title: '승진일',
@@ -254,6 +378,6 @@ export function MemberDetailPage() {
           />
         )}
       </Modal>
-    </Space>
+    </div>
   );
 }

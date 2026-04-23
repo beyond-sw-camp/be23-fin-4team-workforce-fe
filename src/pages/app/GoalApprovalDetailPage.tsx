@@ -2,6 +2,7 @@ import { useNavigate, useParams } from '@tanstack/react-router';
 import { Modal, Typography } from 'antd';
 import { PERFORMANCE_PAGE_KO } from '@/app/locale/app-ko';
 import { GoalApprovalDetailView } from '@/features/goals/ui/GoalApprovalDetailView';
+import { DetailPageHeader } from '@/shared/ui/DetailPageHeader';
 
 const { Text } = Typography;
 
@@ -12,8 +13,8 @@ export function GoalApprovalDetailPage() {
   const { requestId } = useParams({ strict: false }) as { requestId: string };
   const navigate = useNavigate();
 
-  const goApprovals = () => {
-    void navigate({ to: '/app/performance/approvals' });
+  const goPerformance = () => {
+    void navigate({ to: '/app/performance' });
   };
 
   if (!requestId) {
@@ -22,18 +23,25 @@ export function GoalApprovalDetailPage() {
 
   return (
     <div className="tw-min-h-[30vh] tw-p-4">
+      <DetailPageHeader
+        backTo="/app/performance"
+        backLabel="실적·목표"
+        title={PERFORMANCE_PAGE_KO.approvalStripTitle}
+        subtitle="목표 완료 제출에 대한 승인·반려를 처리합니다."
+        showShare={false}
+      />
       <Modal
         open
         centered
         width="min(960px, calc(100vw - 32px))"
-        title={PERFORMANCE_PAGE_KO.approvalStripTitle}
+        title={null}
         footer={null}
-        onCancel={goApprovals}
+        onCancel={goPerformance}
         destroyOnHidden
         maskClosable
         styles={{ body: { maxHeight: 'min(80vh, 720px)', overflowY: 'auto', paddingTop: 8 } }}
       >
-        <GoalApprovalDetailView requestId={requestId} onClose={goApprovals} />
+        <GoalApprovalDetailView requestId={requestId} onClose={goPerformance} />
       </Modal>
     </div>
   );

@@ -322,7 +322,7 @@ function buildGradeBandsFromLabels(labels: string[]): {label: string; minScore: 
   return cleaned.map((label, i) => {
     const minScore = Math.round((100 * i) / n);
     const maxScore = i === n - 1 ? 100 : Math.round((100 * (i + 1)) / n);
-    return {label, minScore, maxScore, color: colors[Math.min(i, colors.length - 1)]};
+    return {label, minScore, maxScore, color: colors[Math.min(i, colors.length - 1)] ?? '#64748b'};
   });
 }
 

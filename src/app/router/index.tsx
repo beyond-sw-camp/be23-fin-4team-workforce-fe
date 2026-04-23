@@ -34,7 +34,6 @@ import MyEvaluationResultsListPage from '@/pages/app/evaluations/MyEvaluationRes
 import { EvaluationWritePage } from '@/pages/app/EvaluationWritePage';
 import PerformancePage from '@/pages/app/PerformancePage';
 import { GoalApprovalDetailPage } from '@/pages/app/GoalApprovalDetailPage';
-import { GoalApprovalsListPage } from '@/pages/app/GoalApprovalsListPage';
 import { ApprovalsPage } from '@/pages/app/ApprovalsPage';
 import { AbsenceProxyPage } from '@/pages/app/AbsenceProxyPage';
 import { DepartmentApprovalsInboxPage } from '@/pages/app/DepartmentApprovalsInboxPage';
@@ -259,12 +258,6 @@ const performanceRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/performance',
   component: PerformancePage,
-});
-
-const goalApprovalsListRoute = createRoute({
-  getParentRoute: () => appBaseRoute,
-  path: '/performance/approvals',
-  component: GoalApprovalsListPage,
 });
 
 const goalApprovalDetailRoute = createRoute({
@@ -651,7 +644,6 @@ const routeTree = rootRoute.addChildren([
       approvalsAdminRoute,
       absenceProxyRoute,
       departmentApprovalsInboxRoute,
-      goalApprovalsListRoute,
       goalApprovalDetailRoute,
       evaluationsRoute,
       evaluationSeasonDetailRoute,

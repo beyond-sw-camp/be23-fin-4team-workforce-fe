@@ -202,12 +202,12 @@ export function DesignCreateModal({open, onClose, onCreated, initialDesign = nul
                                                 const t = (getFieldValue(['sections', name, 'type']) ?? 'MANUAL') as
                                                     'MANUAL' | 'KPI_SCORE' | 'PEER_FEEDBACK';
                                                 const title = getFieldValue(['sections', name, 'title']) as string | undefined;
-                                                const meta: Record<string, {label: string; color: string}> = {
+                                                const meta: Record<'MANUAL' | 'KPI_SCORE' | 'PEER_FEEDBACK', {label: string; color: string}> = {
                                                     MANUAL: {label: '수동', color: 'default'},
                                                     KPI_SCORE: {label: 'KPI', color: 'geekblue'},
                                                     PEER_FEEDBACK: {label: '동료', color: 'purple'},
                                                 };
-                                                const m = meta[t];
+                                                const m = meta[t] ?? meta.MANUAL;
                                                 return (
                                                     <span className="tw-flex tw-items-center tw-gap-2">
                                                         <Tag color={m.color} className="!tw-m-0">{m.label}</Tag>
