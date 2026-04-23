@@ -96,11 +96,12 @@ export function OrgChartModal({ open, onClose }: { open: boolean; onClose: () =>
             selectedMemberId={memberSelection?.id ?? null}
           />
         </div>
-        <aside className="tw-flex tw-w-[min(100%,300px)] tw-shrink-0 tw-flex-col tw-overflow-y-auto tw-border-l tw-border-slate-200 tw-pl-4">
+        <aside className="tw-flex tw-w-[min(100%,320px)] tw-shrink-0 tw-flex-col tw-overflow-y-auto tw-border-l tw-border-slate-200 tw-bg-slate-50/40 tw-pl-5 tw-pr-4 tw-pt-1">
           <OrgChartMemberSidePanel
             memberId={memberSelection?.id ?? null}
             chartMemberStatus={memberSelection?.chartMemberStatus}
             onOpenMessenger={(targetMemberId) => openMemberChat({ directMemberId: targetMemberId })}
+            onClose={onClose}
           />
         </aside>
       </div>
