@@ -319,21 +319,53 @@ export function EvaluationWritePage() {
       <div className="tw-flex tw-items-start tw-gap-6">
         {/* Left: Questions */}
         <div className="tw-flex-1 tw-space-y-4">
-          {sections.length > 0 ? sections.map((section, si) => (
-            <Card
-              key={si}
-              className="tw-rounded-2xl tw-border tw-border-slate-200/80 tw-shadow-sm tw-shadow-slate-900/5"
-              styles={{ body: { padding: 20 } }}
-              title={
-                <div className="tw-flex tw-items-center tw-justify-between">
-                  <Text strong>{`${si + 1}. ${section.title}`}</Text>
-                  <Tag color="blue">{L.designWeight} {section.weight}%</Tag>
-                </div>
-              }
-            >
-              {section.questions.map(renderQuestion)}
-            </Card>
-          )) : (
+          {sections.length > 0 ? sections.map((section, si) => {
+            const sType = (section.type ?? 'MANUAL') as 'MANUAL' | 'KPI_SCORE' | 'PEER_FEEDBACK';
+            const isAuto = sType === 'KPI_SCORE' || sType === 'PEER_FEEDBACK';
+            const typeMeta: Record<string, {label: string; color: string; hint: string}> = {
+              MANUAL: {
+                label: '수동 입력',
+                color: 'default',
+                hint: '문항에 응답한 점수가 그대로 섹션 점수에 반영됩니다.',
+              },
+              KPI_SCORE: {
+                label: 'KPI 자동',
+                color: 'geekblue',
+                hint: '이 섹션은 대상자의 목표 달성률이 자동으로 반영됩니다. 수동 응답은 필요하지 않습니다.',
+              },
+              PEER_FEEDBACK: {
+                label: '동료 집계',
+                color: 'purple',
+                hint: '이 섹션은 동료 평가자들의 응답을 평균 내어 자동 집계됩니다. 본 화면에서는 응답하지 않습니다.',
+              },
+            };
+            const meta = typeMeta[sType];
+            return (
+              <Card
+                key={si}
+                className="tw-rounded-2xl tw-border tw-border-slate-200/80 tw-shadow-sm tw-shadow-slate-900/5"
+                styles={{ body: { padding: 20 } }}
+                title={
+                  <div className="tw-flex tw-items-center tw-justify-between">
+                    <Text strong>{`${si + 1}. ${section.title}`}</Text>
+                    <span className="tw-flex tw-items-center tw-gap-1">
+                      <Tag color={meta.color}>{meta.label}</Tag>
+                      <Tag color="blue">{L.designWeight} {section.weight}%</Tag>
+                    </span>
+                  </div>
+                }
+              >
+                {/* 자동 섹션(KPI/PEER) 안내 배너 */}
+                {isAuto && (
+                  <div className="tw-mb-3 tw-rounded-lg tw-border tw-border-blue-200/70 tw-bg-blue-50/60 tw-px-3 tw-py-2 tw-text-xs tw-text-slate-700">
+                    <InfoCircleOutlined className="tw-mr-1 tw-text-blue-500" />
+                    {meta.hint}
+                  </div>
+                )}
+                {section.questions.map(renderQuestion)}
+              </Card>
+            );
+          }) : (
             <Card>
               <div className="tw-text-center tw-py-12 tw-text-gray-400">
                 <InfoCircleOutlined className="tw-text-3xl tw-mb-2" />

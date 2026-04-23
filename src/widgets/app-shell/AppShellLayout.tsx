@@ -61,7 +61,6 @@ import {
     APP_MENU_ESG_GROUP_LABEL,
     APP_MENU_LABEL,
     APP_MENU_ORG_CHART_LABEL,
-    APP_MENU_ORG_CHART_SIDEBAR_KEY,
     APP_MENU_ORG_HR_GROUP_LABEL,
     APP_MENU_PATH_ORDER,
     APP_MENU_TALENT_HUB_LABEL,
@@ -238,20 +237,10 @@ function buildAppShellMenuItems(
     let hubInserted = false;
     let orgInserted = false;
     let approvalInserted = false;
-    let orgChartInserted = false;
     let workInserted = false;
     let leaveInserted = false;
 
     for (const path of APP_MENU_PATH_ORDER) {
-        if (path === '/app/members' && !orgChartInserted) {
-            orgChartInserted = true;
-            items.push({
-                key: APP_MENU_ORG_CHART_SIDEBAR_KEY,
-                icon: <PartitionOutlined className="tw-text-lg"/>,
-                label: APP_MENU_ORG_CHART_LABEL,
-                title: APP_MENU_ORG_CHART_LABEL,
-            });
-        }
         if (TALENT_HUB_PATH_SET.has(path)) {
             if (!hubInserted) {
                 hubInserted = true;
@@ -726,9 +715,11 @@ function SessionAccessTimer() {
 function SiderBrandHeader({
                               collapsed,
                               onClick,
+                              onToggleSider,
                           }: {
     collapsed?: boolean;
     onClick?: () => void;
+    onToggleSider?: () => void;
 }) {
     const {user, status} = useAuth();
     const {data: companyInfo} = useQuery({
@@ -772,16 +763,31 @@ function SiderBrandHeader({
     );
 
     if (collapsed) {
+        const slotClass = 'tw-absolute tw-inset-0 tw-flex tw-items-center tw-justify-center tw-rounded-xl tw-transition-opacity tw-duration-200 tw-ease-out';
         return (
             <Tooltip title={companyName} placement="right">
-                <button
-                    type="button"
-                    className="tw-flex tw-w-full tw-cursor-pointer tw-justify-center tw-border-0 tw-bg-transparent tw-px-1 tw-py-0"
-                    onClick={onClick}
-                    aria-label="대시보드로 이동"
-                >
-                    {avatar}
-                </button>
+                <div className="tw-group tw-relative tw-mx-auto tw-flex tw-size-10 tw-shrink-0 tw-items-center tw-justify-center">
+                    <button
+                        type="button"
+                        className={`${slotClass} tw-z-[1] tw-cursor-pointer tw-border-0 tw-bg-transparent tw-opacity-100 tw-pointer-events-auto group-hover:tw-pointer-events-none group-hover:tw-opacity-0`}
+                        onClick={onClick}
+                        aria-label="대시보드로 이동"
+                    >
+                        {avatar}
+                    </button>
+                    <button
+                        type="button"
+                        aria-label="사이드바 펼치기"
+                        className={`${slotClass} tw-z-[2] tw-cursor-pointer tw-border-0 tw-bg-slate-100 tw-text-slate-600 tw-opacity-0 tw-pointer-events-none group-hover:tw-pointer-events-auto group-hover:tw-opacity-100 hover:tw-bg-slate-200`}
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onToggleSider?.();
+                        }}
+                    >
+                        <SiderPanelToggleIcon className="tw-text-[20px]"/>
+                    </button>
+                </div>
             </Tooltip>
         );
     }
@@ -1385,7 +1391,20 @@ function AppShellLayout() {
                             onClick={() => {
                                 window.location.assign('/app/dashboard');
                             }}
+                            onToggleSider={() => setSiderCollapsed((c) => !c)}
                         />
+                        {!siderCollapsed && (
+                            <Tooltip title="사이드바 접기" placement="top">
+                                <button
+                                    type="button"
+                                    aria-label="사이드바 접기"
+                                    className="tw-ml-auto tw-flex tw-size-8 tw-items-center tw-justify-center tw-rounded-lg tw-border-0 tw-bg-slate-50 tw-text-slate-600 tw-transition-colors hover:tw-bg-slate-100 hover:tw-text-slate-800"
+                                    onClick={() => setSiderCollapsed(true)}
+                                >
+                                    <SiderPanelToggleIcon className="tw-text-lg"/>
+                                </button>
+                            </Tooltip>
+                        )}
                     </div>
                     <div
                         className="wf-scrollbar tw-min-h-0 tw-w-full tw-flex-1 tw-overflow-y-auto tw-overflow-x-hidden">
@@ -1457,13 +1476,6 @@ function AppShellLayout() {
                                     }
                                     return;
                                 }
-                                if (key === APP_MENU_ORG_CHART_SIDEBAR_KEY) {
-                                    setOrgChartModalOpen(true);
-                                    if (siderCollapsed) {
-                                        setMenuOpenKeys([]);
-                                    }
-                                    return;
-                                }
                                 if (siderCollapsed) {
                                     setMenuOpenKeys([]);
                                 }
@@ -1472,23 +1484,22 @@ function AppShellLayout() {
                         />
                     </div>
                     <div className="tw-flex tw-shrink-0 tw-border-t tw-border-slate-100 tw-px-2 tw-py-1.5">
-                        <Tooltip
-                            title={siderCollapsed ? '사이드바 펼치기' : '사이드바 접기'}
-                            placement={siderCollapsed ? 'right' : 'top'}
-                        >
+                        <Tooltip title={APP_MENU_ORG_CHART_LABEL} placement={siderCollapsed ? 'right' : 'top'}>
                             <Button
                                 type="text"
                                 block
                                 className="!tw-flex !tw-h-auto !tw-min-h-9 !tw-w-full !items-center !justify-center !tw-rounded-lg !tw-bg-slate-50 !tw-py-2 !tw-text-slate-600 hover:!tw-bg-slate-100 hover:!tw-text-slate-800"
-                                onClick={() => setSiderCollapsed((c) => !c)}
-                                aria-label={siderCollapsed ? '사이드바 펼치기' : '사이드바 접기'}
+                                onClick={() => setOrgChartModalOpen(true)}
+                                aria-label={APP_MENU_ORG_CHART_LABEL}
                             >
-                <span className="tw-flex tw-w-full tw-items-center tw-justify-center tw-gap-2">
-                  <SiderPanelToggleIcon className="tw-shrink-0 tw-text-lg"/>
-                    {siderCollapsed ? null : (
-                        <span className="tw-truncate tw-text-sm tw-font-medium tw-text-slate-600">사이드바 접기</span>
-                    )}
-                </span>
+                                <span className="tw-flex tw-w-full tw-items-center tw-justify-center tw-gap-2">
+                                    <PartitionOutlined className="tw-shrink-0 tw-text-lg"/>
+                                    {siderCollapsed ? null : (
+                                        <span className="tw-truncate tw-text-sm tw-font-medium tw-text-slate-600">
+                                            {APP_MENU_ORG_CHART_LABEL}
+                                        </span>
+                                    )}
+                                </span>
                             </Button>
                         </Tooltip>
                     </div>

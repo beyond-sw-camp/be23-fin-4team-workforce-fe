@@ -255,6 +255,11 @@ function mapGoalFromApi(raw: unknown): Goal | null {
   if (capp !== undefined && capp !== null && String(capp).trim() !== '') {
     g.completionApproverId = String(capp).trim();
   }
+  // TEAM 목표 책임자
+  const resp = r.responsibleMemberId ?? r.responsible_member_id;
+  if (resp !== undefined && resp !== null && String(resp).trim() !== '') {
+    g.responsibleMemberId = String(resp).trim();
+  }
   return g;
 }
 

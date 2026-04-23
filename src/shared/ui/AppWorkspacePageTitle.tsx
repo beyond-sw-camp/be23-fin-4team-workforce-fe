@@ -26,7 +26,7 @@ export type AppWorkspacePageTitleProps = {
 };
 
 /**
- * 탤런트 허브(성과·평가·미팅) 공통 — ✦ + 영문 아이라인 + 메인 타이틀.
+ * 탤런트 허브(성과·평가·면담) 공통 — ✦ + 영문 아이라인 + 메인 타이틀.
  */
 export function AppWorkspacePageTitle({
   eyebrow,

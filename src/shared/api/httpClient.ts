@@ -3,6 +3,7 @@ import type { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { env } from '@/app/config/env';
 import { parseApiError } from '@/shared/api/error-parser';
 import { decodeJwtPayload, getTenantHeadersFromToken, isSystemAdminFromJwtPayload } from '@/shared/auth/jwtTenantClaims';
+import { isAuthRefreshInFlight } from '@/shared/stores/authRefreshInFlightStore';
 import { clearRefreshIdentity, getRefreshIdentityHeaders } from '@/shared/stores/authRefreshIdentityStore';
 import { clearAccessToken, getAccessToken } from '@/shared/stores/authTokenStore';
 
@@ -13,11 +14,23 @@ export const httpClient = axios.create({
   withCredentials: true,
 });
 
+function isRefreshEndpoint(url?: string) {
+  if (!url) return false;
+  return url.includes('/member/generate-at');
+}
+
 httpClient.interceptors.request.use((config) => {
   const token = getAccessToken();
+  const requestUrl = config.url ?? '';
+  const isRefreshCall = isRefreshEndpoint(requestUrl);
   config.headers = config.headers ?? {};
   const trimmedToken = token?.trim() || null;
-  if (trimmedToken) {
+  /**
+   * 세션 연장 API(`/member/generate-at`)는 RT(HttpOnly 쿠키) 기반으로 동작합니다.
+   * 여기에 만료된 AT를 Authorization으로 같이 보내면 게이트웨이에서 401을 먼저 반환할 수 있어
+   * "연장 버튼 클릭 -> 즉시 로그아웃" 현상이 발생합니다.
+   */
+  if (trimmedToken && !isRefreshCall) {
     /** `Bearer` + 공백 1개 + 토큰 (RFC 관례). 토큰 앞뒤 공백은 제거 */
     config.headers.Authorization = `Bearer ${trimmedToken}`;
   }
@@ -40,7 +53,7 @@ httpClient.interceptors.request.use((config) => {
   if (refreshIdentity['X-User-MemberPositionId']) {
     config.headers['X-User-MemberPositionId'] = refreshIdentity['X-User-MemberPositionId'];
   }
-  if (trimmedToken) {
+  if (trimmedToken && !isRefreshCall) {
     const payload = decodeJwtPayload(trimmedToken);
     /** member-service `PermissionAspect`: YES면 Redis 권한 없이 통과, NO면 Redis ESG:READ 등 필요 */
     config.headers['X-User-IsSystemAdmin'] =
@@ -71,6 +84,7 @@ httpClient.interceptors.response.use(
     if (
       parsed.status === 401 &&
       !isPublicAuthCall &&
+      !isAuthRefreshInFlight() &&
       typeof window !== 'undefined' &&
       !window.location.pathname.startsWith('/login')
     ) {

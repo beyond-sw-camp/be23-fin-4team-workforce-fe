@@ -242,28 +242,75 @@ export function EvaluationSeasonDetailPage() {
         },
     });
 
-    // ── Progress columns (신규 디자인: Avatar + 이름/부서, pill 상태) ──
-    const progressCols: ColumnsType<EvaluationResponse> = [
+    // ── [진행도 관리] 평가자별 집계 뷰 ──
+    // 한 평가자가 여러 응답(대상자 × 유형) 을 가질 수 있고 리마인드는 평가자 단위로 1회 발송되므로
+    // 행 주체를 "평가자" 로 집계. 하위 응답은 expandable 로 드릴다운.
+    type EvaluatorGroup = {
+        evaluatorId: string;
+        evaluatorName?: string;
+        evaluatorDepartment?: string;
+        evaluatorProfileUrl?: string;
+        responses: EvaluationResponse[];
+        total: number;
+        submitted: number;
+        pending: number;
+        lastReminderAt?: string;
+    };
+
+    const evaluatorGroups: EvaluatorGroup[] = useMemo(() => {
+        const map = new Map<string, EvaluatorGroup>();
+        for (const r of progressData) {
+            const id = r.evaluatorId;
+            const g = map.get(id) ?? {
+                evaluatorId: id,
+                evaluatorName: r.evaluatorName,
+                evaluatorDepartment: r.evaluatorDepartment,
+                evaluatorProfileUrl: r.evaluatorProfileUrl,
+                responses: [],
+                total: 0,
+                submitted: 0,
+                pending: 0,
+                lastReminderAt: undefined,
+            };
+            g.responses.push(r);
+            g.total += 1;
+            if (r.status === 'SUBMITTED') g.submitted += 1;
+            else g.pending += 1;
+            if (r.lastRemindedAt) {
+                if (!g.lastReminderAt || dayjs(r.lastRemindedAt).isAfter(g.lastReminderAt)) {
+                    g.lastReminderAt = r.lastRemindedAt;
+                }
+            }
+            map.set(id, g);
+        }
+        return Array.from(map.values()).sort((a, b) => {
+            // 미제출 많은 평가자가 먼저 (관리자 주의 유도)
+            if (a.pending !== b.pending) return b.pending - a.pending;
+            return (a.evaluatorName ?? '').localeCompare(b.evaluatorName ?? '');
+        });
+    }, [progressData]);
+
+    const progressCols: ColumnsType<EvaluatorGroup> = [
         {
-            title: <span className="tw-text-xs tw-font-medium tw-uppercase tw-tracking-wider tw-text-slate-500">구성원</span>,
+            title: <span className="tw-text-xs tw-font-medium tw-uppercase tw-tracking-wider tw-text-slate-500">평가자</span>,
             key: 'evaluator',
-            render: (_: unknown, r: EvaluationResponse) => {
-                const name = r.targetMemberName ?? `#${r.targetMemberId.slice(0, 8)}`;
+            render: (_: unknown, g: EvaluatorGroup) => {
+                const name = g.evaluatorName ?? `#${g.evaluatorId.slice(0, 8)}`;
                 const initial = name.trim().charAt(0);
                 return (
                     <div className="tw-flex tw-items-center tw-gap-3">
                         <Avatar
                             size={36}
-                            src={r.targetMemberProfileUrl}
+                            src={g.evaluatorProfileUrl}
                             style={{backgroundColor: '#EEF2FF', color: '#6366F1', fontWeight: 600}}
                         >
                             {initial}
                         </Avatar>
                         <div className="tw-min-w-0">
                             <div className="tw-truncate tw-text-sm tw-font-semibold tw-text-slate-900">{name}</div>
-                            {r.targetMemberDepartment && (
+                            {g.evaluatorDepartment && (
                                 <div className="tw-truncate tw-text-xs tw-text-slate-500">
-                                    {r.targetMemberDepartment}
+                                    {g.evaluatorDepartment}
                                 </div>
                             )}
                         </div>
@@ -272,25 +319,43 @@ export function EvaluationSeasonDetailPage() {
             },
         },
         {
-            title: <span className="tw-text-xs tw-font-medium tw-uppercase tw-tracking-wider tw-text-slate-500">평가 유형</span>,
-            dataIndex: 'evaluationType',
-            key: 'type',
-            width: 120,
-            render: (t: EvalType) => <span className="tw-text-sm tw-text-slate-700">{evalTypeLabel(t)}</span>,
+            title: <span className="tw-text-xs tw-font-medium tw-uppercase tw-tracking-wider tw-text-slate-500">진행률</span>,
+            key: 'progress',
+            width: 220,
+            render: (_: unknown, g: EvaluatorGroup) => {
+                const pct = g.total > 0 ? Math.round((g.submitted / g.total) * 100) : 0;
+                return (
+                    <div>
+                        <div className="tw-text-sm tw-text-slate-700 tw-mb-1">
+                            {g.submitted} / {g.total} 제출 · {pct}%
+                        </div>
+                        <Progress
+                            percent={pct}
+                            size="small"
+                            showInfo={false}
+                            strokeColor={pct === 100 ? '#10B981' : '#6366F1'}
+                        />
+                    </div>
+                );
+            },
         },
         {
             title: <span className="tw-text-xs tw-font-medium tw-uppercase tw-tracking-wider tw-text-slate-500">상태</span>,
-            dataIndex: 'status',
             key: 'status',
-            width: 110,
-            render: (s: EvaluationStatus) => progressStatusPill(s),
+            width: 120,
+            render: (_: unknown, g: EvaluatorGroup) =>
+                g.pending === 0 ? (
+                    <Tag color="green">전체 완료</Tag>
+                ) : (
+                    <Tag color="blue">{g.pending}건 미제출</Tag>
+                ),
         },
         {
             title: <span className="tw-text-xs tw-font-medium tw-uppercase tw-tracking-wider tw-text-slate-500">마지막 리마인드</span>,
-            dataIndex: 'lastRemindedAt',
+            dataIndex: 'lastReminderAt',
             key: 'remind',
             width: 180,
-            render: (v: string) => (
+            render: (v?: string) => (
                 <span className="tw-text-sm tw-text-slate-500">
                     {v ? dayjs(v).format('YYYY-MM-DD HH:mm') : '-'}
                 </span>
@@ -299,14 +364,14 @@ export function EvaluationSeasonDetailPage() {
         {
             title: '',
             key: 'action',
-            width: 130,
-            render: (_: unknown, r: EvaluationResponse) =>
-                r.status !== 'SUBMITTED' ? (
+            width: 150,
+            render: (_: unknown, g: EvaluatorGroup) =>
+                g.pending > 0 ? (
                     <AppInlinePillButton
-                        onClick={() => sendOneReminderMut.mutate(r.evaluatorId)}
+                        onClick={() => sendOneReminderMut.mutate(g.evaluatorId)}
                         className="tw-px-3 tw-py-1 tw-text-sm tw-font-medium tw-text-[#6366F1] hover:tw-bg-indigo-50"
                     >
-                        <SendOutlined/> 개별 발송
+                        <SendOutlined/> 리마인드 발송
                     </AppInlinePillButton>
                 ) : null,
         },
@@ -642,16 +707,52 @@ export function EvaluationSeasonDetailPage() {
                                     )}
                                 </div>
                                 <div className="tw-mt-5">
-                                    <Table<EvaluationResponse>
+                                    <Table<EvaluatorGroup>
                                         columns={progressCols}
-                                        dataSource={progressData}
-                                        rowKey="responseId"
+                                        dataSource={evaluatorGroups}
+                                        rowKey="evaluatorId"
                                         size="middle"
                                         pagination={{
                                             pageSize: 10,
                                             showTotal: (total, range) =>
                                                 `PAGE ${Math.ceil(range[0] / 10)} OF ${Math.max(1, Math.ceil(total / 10))}`,
                                             showSizeChanger: false,
+                                        }}
+                                        expandable={{
+                                            // 평가자의 하위 응답(대상자 × 유형) 드릴다운.
+                                            // 디자인 기준: AntD Table 의 기본 +/- expand 아이콘 (별도 오버라이드 없음).
+                                            rowExpandable: (g) => g.responses.length > 0,
+                                            expandedRowRender: (g) => (
+                                                <div className="tw-px-6 tw-py-2 tw-bg-slate-50/60 tw-space-y-2 tw-rounded">
+                                                    {g.responses.map((r) => {
+                                                        const isSelf = r.evaluatorId === r.targetMemberId;
+                                                        const targetName = r.targetMemberName ?? `#${r.targetMemberId.slice(0, 8)}`;
+                                                        return (
+                                                            <div
+                                                                key={r.responseId}
+                                                                className="tw-flex tw-items-center tw-justify-between tw-gap-3 tw-py-1.5 tw-px-3 tw-rounded-md tw-bg-white tw-border tw-border-slate-100"
+                                                            >
+                                                                <div className="tw-flex tw-items-center tw-gap-3 tw-min-w-0">
+                                                                    <Tag color="blue" className="!tw-m-0">
+                                                                        {evalTypeLabel(r.evaluationType)}
+                                                                    </Tag>
+                                                                    <span className="tw-text-sm tw-text-slate-700 tw-truncate">
+                                                                        {isSelf ? '자기 평가' : `→ ${targetName} 평가`}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="tw-flex tw-items-center tw-gap-4 tw-flex-shrink-0">
+                                                                    <span className="tw-text-xs tw-text-slate-400">
+                                                                        {r.lastRemindedAt
+                                                                            ? `리마인드 ${dayjs(r.lastRemindedAt).format('MM-DD HH:mm')}`
+                                                                            : ''}
+                                                                    </span>
+                                                                    {progressStatusPill(r.status)}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            ),
                                         }}
                                     />
                                 </div>

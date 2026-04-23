@@ -137,50 +137,70 @@ export const notificationApi = {
     if (!token || !userUuid) {
       return () => undefined;
     }
-    const lastEventId = readLastEventId();
-    const makeEventSource = (path: string) =>
-      new EventSourcePolyfill(`${env.VITE_API_BASE_URL}${path}`, {
+
+    /**
+     * SSE 연결 관리자.
+     * 주의:
+     *   - EventSourcePolyfill 은 자체 자동 재연결을 지원한다.
+     *   - onerror 에서 close() 를 호출하면 readyState=CLOSED 로 고정되어 영구 끊김.
+     *     (네트워크 일시 단절 · 브라우저 절전 · 프록시 idle timeout 에서도 발생)
+     *   - 따라서 onerror 에선 close() 를 하지 않고, 폴리필의 내부 재시도에 맡긴다.
+     *   - fallback 경로(/api prefix) 는 "첫 연결" 이 실패한 경우에만 1회 전환.
+     *   - unsubscribe 시에만 명시적으로 close().
+     */
+    let fallbackTried = false;
+    let closed = false;
+    let activeEs: EventSourcePolyfill | null = null;
+
+    const attach = (path: string): EventSourcePolyfill => {
+      // 재연결 시 최신 lastEventId 를 매번 새로 읽어 Last-Event-ID 헤더로 전송.
+      const lastEventId = readLastEventId();
+      const es = new EventSourcePolyfill(`${env.VITE_API_BASE_URL}${path}`, {
         withCredentials: true,
         headers: {
           Authorization: `Bearer ${token}`,
           'X-User-UUID': userUuid,
           ...(lastEventId ? { 'Last-Event-ID': lastEventId } : {}),
         },
+        // 서버 heartbeat 주기(30s) 에 대비해 여유 있게 설정.
+        // 이 시간 내 heartbeat 가 없으면 폴리필이 재연결을 시도한다.
+        heartbeatTimeout: 120_000,
       });
-    let eventSource = makeEventSource('/notification/subscribe');
-    let fallbackTried = false;
 
-    eventSource.addEventListener('connect', (event) => {
-      writeLastEventId((event as MessageEvent).lastEventId);
-    });
-    eventSource.addEventListener('heartbeat', (event) => {
-      writeLastEventId((event as MessageEvent).lastEventId);
-    });
-    eventSource.addEventListener('notification', (event) => {
-      writeLastEventId((event as MessageEvent).lastEventId);
-      onNotification();
-    });
-    eventSource.onerror = () => {
-      // 일부 환경에서는 /api prefix로만 노출됨.
-      if (!fallbackTried) {
-        fallbackTried = true;
-        eventSource.close();
-        eventSource = makeEventSource('/api/notification/subscribe');
-        eventSource.addEventListener('connect', (event) => {
-          writeLastEventId((event as MessageEvent).lastEventId);
-        });
-        eventSource.addEventListener('heartbeat', (event) => {
-          writeLastEventId((event as MessageEvent).lastEventId);
-        });
-        eventSource.addEventListener('notification', (event) => {
-          writeLastEventId((event as MessageEvent).lastEventId);
-          onNotification();
-        });
-        eventSource.onerror = () => eventSource.close();
-        return;
-      }
-      eventSource.close();
+      es.addEventListener('connect', (event) => {
+        writeLastEventId((event as MessageEvent).lastEventId);
+      });
+      es.addEventListener('heartbeat', (event) => {
+        writeLastEventId((event as MessageEvent).lastEventId);
+      });
+      es.addEventListener('notification', (event) => {
+        writeLastEventId((event as MessageEvent).lastEventId);
+        onNotification();
+      });
+
+      es.onerror = (err) => {
+        if (closed) return;
+        // 첫 연결이 실패했을 때만 /api prefix 경로로 fallback.
+        if (!fallbackTried && es.readyState === EventSourcePolyfill.CLOSED) {
+          fallbackTried = true;
+          try { es.close(); } catch { /* noop */ }
+          activeEs = attach('/api/notification/subscribe');
+          return;
+        }
+        // 그 외 모든 에러는 폴리필의 자동 재연결에 맡긴다. close() 하지 않는다.
+        if (typeof console !== 'undefined') {
+          console.warn('[notification SSE] 일시 에러 — 자동 재연결 대기', err);
+        }
+      };
+
+      return es;
     };
-    return () => eventSource.close();
+
+    activeEs = attach('/notification/subscribe');
+
+    return () => {
+      closed = true;
+      try { activeEs?.close(); } catch { /* noop */ }
+    };
   },
 };
