@@ -100,6 +100,33 @@ export const membersApi = {
     };
   },
 
+  /** /member/search (QueryDSL + pageable) 기반 구성원 검색 */
+  async search(params: MembersSearch): Promise<ListResponse<Member>> {
+    const page = Math.max(1, params.page ?? 1);
+    const pageSize = Math.max(1, params.pageSize ?? 20);
+    const response = await httpClient.get('/member/search', {
+      params: {
+        keyword: params.keyword?.trim() || undefined,
+        page: page - 1,
+        size: pageSize,
+      },
+    });
+    const payload = unwrapApiResponse<unknown>(response.data);
+    if (!payload || typeof payload !== 'object') {
+      return { items: [], total: 0, page, pageSize };
+    }
+    const p = payload as Record<string, unknown>;
+    const content = Array.isArray(p.content) ? p.content : [];
+    const items = content.map(mapRowToMember).filter((m) => Boolean(m.id));
+    const total =
+      typeof p.totalElements === 'number'
+        ? p.totalElements
+        : typeof p.total === 'number'
+          ? p.total
+          : items.length;
+    return { items, total, page, pageSize };
+  },
+
   async detail(memberId: string): Promise<Member | null> {
     const response = await httpClient.get(`/member/detail/${memberId}`);
     const payload = unwrapApiResponse<unknown>(response.data);

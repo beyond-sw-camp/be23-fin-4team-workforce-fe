@@ -1,5 +1,7 @@
 import type {
   AddGoalProgressUpdatePayload,
+  BundleApprovalKind,
+  GoalApprovalPolicy,
   GoalCompletionSubmitPayload,
   CreateGoalCommentPayload,
   CreateGoalPayload,
@@ -16,8 +18,11 @@ import type {
   GoalProgressUpdate,
   KpiCycle,
   KpiTemplate,
+  KpiTemplateGeneratePayload,
+  ListGoalsParams,
   MeasureType,
   UnitType,
+  UpdateGoalCommentPayload,
   UpdateGoalPayload,
 } from '@/features/goals/model/types';
 import { httpClient } from '@/shared/api/httpClient';
@@ -42,25 +47,6 @@ function normalizeArray<T>(payload: unknown, keys = ['items', 'content', 'goals'
     }
   }
   return [];
-}
-
-async function requestWithApiPrefixFallback(path: string, method: 'get' | 'post', body?: unknown): Promise<any> {
-  try {
-    if (method === 'get') {
-      return await httpClient.get(path);
-    }
-    return await httpClient.post(path, body ?? {});
-  } catch (e: unknown) {
-    const status = (e as ApiError).status;
-    if (status === 404 && !path.startsWith('/api/')) {
-      const fallback = `/api${path}`;
-      if (method === 'get') {
-        return await httpClient.get(fallback);
-      }
-      return await httpClient.post(fallback, body ?? {});
-    }
-    throw e;
-  }
 }
 
 /** 백엔드가 `id` / `kpiTemplateId` 등 다른 키로 내려줄 수 있어 단일 형태로 맞춤 */
@@ -101,7 +87,20 @@ function mapKpiTemplateFromApi(raw: unknown): KpiTemplate | null {
       : typeof r.require_approval === 'boolean'
         ? r.require_approval
         : undefined;
-  const kpisJson = r.kpisJson != null ? String(r.kpisJson) : r.kpis_json != null ? String(r.kpis_json) : null;
+  const kpisArray = Array.isArray(r.kpis) ? (r.kpis as unknown[]) : null;
+  const kpisJsonFromField =
+    r.kpisJson != null
+      ? String(r.kpisJson)
+      : r.kpis_json != null
+        ? String(r.kpis_json)
+        : kpisArray && kpisArray.length > 0
+          ? JSON.stringify(kpisArray)
+          : null;
+  const goalApprovalPolicyRaw = r.goalApprovalPolicy ?? r.goal_approval_policy;
+  const goalApprovalPolicy: GoalApprovalPolicy | undefined =
+    goalApprovalPolicyRaw != null && String(goalApprovalPolicyRaw).trim() !== ''
+      ? (String(goalApprovalPolicyRaw).trim() as GoalApprovalPolicy)
+      : undefined;
   return {
     id,
     companyId,
@@ -115,7 +114,9 @@ function mapKpiTemplateFromApi(raw: unknown): KpiTemplate | null {
     specCycleType: specCycleType != null ? String(specCycleType) : undefined,
     targetTeamId: targetTeamId != null && String(targetTeamId).trim() !== '' ? String(targetTeamId) : null,
     requireApproval,
-    kpisJson,
+    goalApprovalPolicy,
+    kpis: kpisArray ?? undefined,
+    kpisJson: kpisJsonFromField,
   };
 }
 
@@ -249,6 +250,16 @@ function mapGoalFromApi(raw: unknown): Goal | null {
   if (Array.isArray(pm)) {
     g.participantMemberIds = pm.map((x) => String(x)).filter(Boolean);
   }
+  // 종료 승인자 — 완료 모달에서 기본값으로 사용
+  const capp = r.completionApproverId ?? r.completion_approver_id;
+  if (capp !== undefined && capp !== null && String(capp).trim() !== '') {
+    g.completionApproverId = String(capp).trim();
+  }
+  // TEAM 목표 책임자
+  const resp = r.responsibleMemberId ?? r.responsible_member_id;
+  if (resp !== undefined && resp !== null && String(resp).trim() !== '') {
+    g.responsibleMemberId = String(resp).trim();
+  }
   return g;
 }
 
@@ -374,10 +385,14 @@ function mapGoalApprovalSummaryFromApi(raw: unknown): GoalApprovalSummary | null
         })
         .filter((x): x is { memberId: string } => x !== null)
     : undefined;
+  const approvalKindRaw = r.approvalKind ?? r.approval_kind;
   return {
     goalId,
     requestId: requestIdRaw != null && String(requestIdRaw).trim() !== '' ? String(requestIdRaw).trim() : undefined,
     approvalStatus,
+    approvalKind: approvalKindRaw != null && String(approvalKindRaw).trim() !== ''
+      ? (String(approvalKindRaw).trim() as BundleApprovalKind)
+      : undefined,
     approverId: approverIdRaw != null && String(approverIdRaw).trim() !== '' ? String(approverIdRaw).trim() : undefined,
     decision: decisionRaw != null && String(decisionRaw).trim() !== '' ? String(decisionRaw).trim() : undefined,
     decidedAt: decidedAtRaw != null && String(decidedAtRaw).trim() !== '' ? String(decidedAtRaw).trim() : null,
@@ -488,12 +503,18 @@ export const goalApi = {
     await httpClient.patch(`/goal/kpi-template/${kpiTemplateId}/deactivate`);
   },
 
-  async generateGoalsFromTemplate(kpiTemplateId: string): Promise<void> {
-    await httpClient.post(`/goal/kpi-template/${kpiTemplateId}/generate`);
+  async generateGoalsFromTemplate(
+    kpiTemplateId: string,
+    payload: KpiTemplateGeneratePayload = {},
+  ): Promise<Goal[]> {
+    const response = await httpClient.post(`/goal/kpi-template/${kpiTemplateId}/generate`, payload);
+    const raw = unwrapApiResponse<unknown>(response.data);
+    const rows = normalizeArray<unknown>(raw, ['items', 'content', 'goals', 'data', 'list', 'results']);
+    return rows.map(mapGoalFromApi).filter((x): x is Goal => x !== null);
   },
 
-  async listGoals(): Promise<Goal[]> {
-    const response = await httpClient.get('/goal');
+  async listGoals(params?: ListGoalsParams): Promise<Goal[]> {
+    const response = await httpClient.get('/goal', {params});
     const raw = unwrapApiResponse<unknown>(response.data);
     const rows = normalizeArray<unknown>(raw, [
       'items',
@@ -658,7 +679,8 @@ export const goalApi = {
     return c;
   },
 
-  async updateComment(goalId: string, commentId: string, body: { content: string }): Promise<GoalComment> {
+  async updateComment(goalId: string, commentId: string, body: UpdateGoalCommentPayload): Promise<GoalComment> {
+    /** 백엔드 `GoalCommentReqDto` 필드명은 `body` (content 아님) */
     const response = await httpClient.patch(`/goal/${goalId}/comments/${commentId}`, body);
     const raw = unwrapApiResponse<unknown>(response.data);
     const c = mapGoalCommentFromApi(raw);
@@ -765,9 +787,13 @@ function mapApprovalBundleSummaryFromApi(raw: unknown): GoalApprovalBundleSummar
   const id = r.requestId ?? r.request_id ?? r.bundleId ?? r.bundle_id;
   if (id == null || String(id).trim() === '') return null;
   const goalCount = typeof r.goalCount === 'number' ? r.goalCount : Number(r.goal_count) || 0;
+  const akRaw = r.approvalKind ?? r.approval_kind;
   return {
     requestId: String(id).trim(),
     status: String(r.status ?? 'pending'),
+    approvalKind: akRaw != null && String(akRaw).trim() !== ''
+      ? (String(akRaw).trim() as BundleApprovalKind)
+      : undefined,
     goalCount,
     requestedAt:
       r.requestedAt != null ? String(r.requestedAt) : r.requested_at != null ? String(r.requested_at) : undefined,
@@ -811,9 +837,13 @@ function mapApprovalBundleDetailFromApi(raw: unknown): GoalApprovalBundleDetail 
         })
         .filter((x): x is { memberId: string } => x !== null)
     : undefined;
+  const detailAkRaw = r.approvalKind ?? r.approval_kind;
   return {
     requestId: String(rid).trim(),
     status: String(r.status ?? ''),
+    approvalKind: detailAkRaw != null && String(detailAkRaw).trim() !== ''
+      ? (String(detailAkRaw).trim() as BundleApprovalKind)
+      : undefined,
     rejectionReason: r.rejectionReason != null ? String(r.rejectionReason) : null,
     goals,
     approverId: approverIdRaw != null && String(approverIdRaw).trim() !== '' ? String(approverIdRaw).trim() : undefined,

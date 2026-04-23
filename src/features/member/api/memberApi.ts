@@ -344,6 +344,16 @@ function pickDetailString(r: Record<string, unknown>, keys: readonly string[]): 
   return undefined;
 }
 
+/** 사번 등 문자열 또는 숫자로 올 수 있는 필드 */
+function pickDetailScalar(r: Record<string, unknown>, keys: readonly string[]): string | undefined {
+  for (const k of keys) {
+    const v = r[k];
+    if (typeof v === 'string' && v.trim()) return v.trim();
+    if (typeof v === 'number' && Number.isFinite(v)) return String(v);
+  }
+  return undefined;
+}
+
 function normalizeMemberDetailResponse(raw: unknown): MemberDetail {
   if (!raw || typeof raw !== 'object') {
     return raw as MemberDetail;
@@ -361,8 +371,22 @@ function normalizeMemberDetailResponse(raw: unknown): MemberDetail {
   const jobGradeId = asTextMemberField(r.jobGradeId ?? r.job_grade_id);
   const jobTitleId = asTextMemberField(r.jobTitleId ?? r.job_title_id);
   const roleId = asTextMemberField(r.roleId ?? r.role_id);
+  const memberIdResolved =
+    asTextMemberField(r.memberId ?? r.member_id) || asTextMemberField(base.memberId as unknown);
+  const sabunResolved =
+    pickDetailScalar(r, [
+      'sabun',
+      'employeeNumber',
+      'employee_number',
+      'empNo',
+      'emp_no',
+      'staffNumber',
+      'staff_number',
+    ]) ?? asTextMemberField(base.sabun as unknown);
   return {
     ...base,
+    memberId: memberIdResolved,
+    sabun: sabunResolved,
     ...(memberStatus ? { memberStatus: memberStatus as MemberDetail['memberStatus'] } : {}),
     ...(accountStatus ? { accountStatus: accountStatus as MemberDetail['accountStatus'] } : {}),
     phonePublicYn: phone !== undefined ? phone : normalizeYnFlag(base.phonePublicYn as unknown) ?? base.phonePublicYn,

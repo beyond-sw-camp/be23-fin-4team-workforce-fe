@@ -8,7 +8,8 @@ import {
 import { Button, Progress, Spin, Tag, Tooltip, Typography } from 'antd';
 import dayjs from 'dayjs';
 import { useEffect, useMemo, useState } from 'react';
-import type { Goal, Visibility } from '@/features/goals/model/types';
+import type { Goal, GoalApprovalPolicy, KpiTemplate, Visibility } from '@/features/goals/model/types';
+import { GoalWorkflowSteps } from '@/features/goals/ui/GoalWorkflowSteps';
 import {
   filterRowsByCollapsedParents,
   goalTreeOrderedWithDepth,
@@ -88,6 +89,19 @@ function progressVisual(displayRaw: number | null): {
   };
 }
 
+/** 목표→KpiTemplate에서 승인 정책 조회 */
+function resolvePolicy(goal: Goal, templates: KpiTemplate[]): GoalApprovalPolicy {
+  if (!goal.kpiTemplateId) return 'NONE';
+  const tpl = templates.find((t) => t.id === goal.kpiTemplateId);
+  if (!tpl) return 'NONE';
+  if (tpl.goalApprovalPolicy) return tpl.goalApprovalPolicy;
+  return tpl.requireApproval ? 'BOTH' : 'NONE';
+}
+
+function policyRequiresActivation(p: GoalApprovalPolicy): boolean {
+  return p === 'ACTIVATION_ONLY' || p === 'BOTH';
+}
+
 export type GoalsListCardsProps = {
   goals: Goal[];
   loading?: boolean;
@@ -102,6 +116,8 @@ export type GoalsListCardsProps = {
   activatingGoalId: string | null;
   pageSize?: number;
   pageSizeOptions?: number[];
+  /** KPI 템플릿 목록 — 카드에 승인 정책 스텝 표시 */
+  templates?: KpiTemplate[];
 };
 
 export function GoalsListCards({
@@ -117,6 +133,7 @@ export function GoalsListCards({
   activatingGoalId,
   pageSize: defaultPageSize = 12,
   pageSizeOptions = [12, 24, 48],
+  templates = [],
 }: GoalsListCardsProps) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(defaultPageSize);
@@ -220,7 +237,16 @@ export function GoalsListCards({
                       </span>
                     </Tooltip>
                   ) : null}
-                  {statusTagUi(goal.status, goal.approvalStatus)}
+                  {templates.length > 0 ? (
+                    <GoalWorkflowSteps
+                      goalStatus={(goal.status ?? 'DRAFT').toUpperCase()}
+                      approvalFlowStatus={(goal.approvalStatus ?? 'NOT_REQUESTED').toUpperCase()}
+                      approvalPolicy={resolvePolicy(goal, templates)}
+                      compact
+                    />
+                  ) : (
+                    statusTagUi(goal.status, goal.approvalStatus)
+                  )}
                   {goal.visibility === 'PRIVATE' ? (
                     <Tooltip title="비공개 목표">
                       <EyeInvisibleOutlined className="tw-text-slate-400 tw-text-xs" />
@@ -238,11 +264,15 @@ export function GoalsListCards({
                 {/* 액션 버튼 — 필요한 경우에만 표시 */}
                 {canActivate ? (
                   <div className="tw-mt-1.5 tw-flex tw-gap-1.5" style={indentPx > 0 ? { paddingLeft: indentPx + 20 + 6 } : { paddingLeft: 26 }}>
-                    {canActivate ? (
-                      <Button type="primary" size="small" loading={activating} onClick={() => onActivate(goal.id)} className="!tw-rounded !tw-text-[11px] !tw-h-6 !tw-px-2 !tw-bg-[#1e3a5f] hover:!tw-bg-[#152a45]">
-                        진행 시작
-                      </Button>
-                    ) : null}
+                    {(() => {
+                      const policy = resolvePolicy(goal, templates);
+                      const needsApproval = policyRequiresActivation(policy);
+                      return (
+                        <Button type="primary" size="small" loading={activating} onClick={() => onActivate(goal.id)} className="!tw-rounded !tw-text-[11px] !tw-h-6 !tw-px-2 !tw-bg-[#1e3a5f] hover:!tw-bg-[#152a45]">
+                          {needsApproval ? '승인 요청' : '진행 시작'}
+                        </Button>
+                      );
+                    })()}
                   </div>
                 ) : null}
               </div>

@@ -1,5 +1,6 @@
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { Modal, Typography } from 'antd';
+import { PERFORMANCE_PAGE_KO } from '@/app/locale/app-ko';
 import { GoalApprovalDetailView } from '@/features/goals/ui/GoalApprovalDetailView';
 
 const { Text } = Typography;
@@ -25,7 +26,7 @@ export function GoalApprovalDetailPage() {
         open
         centered
         width="min(960px, calc(100vw - 32px))"
-        title="완료 제출 승인"
+        title={PERFORMANCE_PAGE_KO.approvalStripTitle}
         footer={null}
         onCancel={goApprovals}
         destroyOnHidden

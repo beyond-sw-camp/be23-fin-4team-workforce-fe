@@ -338,7 +338,7 @@ export function MemberChatPanel({
   useEffect(() => {
     const el = panelRootRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
-    const COMPACT_PANEL_WIDTH = 980;
+    const COMPACT_PANEL_WIDTH = 780;
     const applyCompact = (width: number) => {
       const compact = width < COMPACT_PANEL_WIDTH;
       setIsCompactLayout(compact);
