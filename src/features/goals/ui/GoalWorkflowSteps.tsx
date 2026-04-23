@@ -134,7 +134,14 @@ export function GoalWorkflowSteps({ goalStatus, approvalFlowStatus, approvalPoli
   }
 
   if (compact) {
-    const activeStep = steps.find((s) => s.status === 'current' || s.status === 'waiting') ?? steps[steps.length - 1];
+    const activeStep =
+      steps.find((s) => s.status === 'current' || s.status === 'waiting') ??
+      steps[steps.length - 1] ?? {
+        key: 'fallback',
+        label: '대기',
+        hint: '',
+        status: 'pending' as const,
+      };
     const toneClass =
       activeStep.status === 'done'
         ? 'tw-bg-emerald-50 tw-text-emerald-700 tw-border-emerald-200'

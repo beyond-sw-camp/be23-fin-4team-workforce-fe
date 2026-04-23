@@ -21,9 +21,9 @@ import {
     Tooltip,
     Typography,
 } from 'antd';
+import type {MenuProps} from 'antd';
 import type {ColumnsType} from 'antd/es/table';
 import {
-    ArrowLeftOutlined,
     BarChartOutlined,
     CalendarOutlined,
     CheckCircleOutlined,
@@ -64,10 +64,11 @@ import {PERM} from '@/features/permissions/backend-permissions';
 import {usePermissions} from '@/features/permissions/usePermissionsHook';
 import {AppButton} from '@/shared/ui/AppButton';
 import {AppInlinePillButton} from '@/shared/ui/AppInlinePillButton';
+import {DetailPageHeader} from '@/shared/ui/DetailPageHeader';
 import {parseApiError} from '@/shared/api/error-parser';
 import dayjs from 'dayjs';
 
-const {Text, Title, Paragraph} = Typography;
+const {Text, Title} = Typography;
 
 type TabKey = 'progress' | 'groups' | 'design' | 'calibration' | 'results';
 
@@ -474,9 +475,13 @@ export function EvaluationSeasonDetailPage() {
     if (!season) {
         return (
             <div className="tw-mx-auto tw-w-full tw-space-y-4">
-                <Button icon={<ArrowLeftOutlined />} type="link" onClick={() => navigate({to: '/app/evaluations'})}>
-                    시즌 목록으로
-                </Button>
+                <DetailPageHeader
+                    backTo="/app/evaluations"
+                    backLabel="평가 허브"
+                    title="시즌 상세"
+                    subtitle="시즌 정보를 불러오는 중이거나 접근 권한이 없습니다."
+                    showShare={false}
+                />
                 <Card>
                     <Text type="secondary">시즌 정보를 불러오는 중이거나 접근 권한이 없습니다.</Text>
                 </Card>
@@ -486,51 +491,53 @@ export function EvaluationSeasonDetailPage() {
 
     return (
         <div className="tw-mx-auto tw-w-full tw-space-y-5">
-            <Button
-                icon={<ArrowLeftOutlined />}
-                type="link"
-                onClick={() => navigate({to: '/app/evaluations'})}
-                className="!tw-p-0 !tw-text-slate-500 hover:!tw-text-slate-800"
-            >
-                시즌 목록
-            </Button>
+            <DetailPageHeader
+                backTo="/app/evaluations"
+                backLabel="평가 허브"
+                title="시즌 상세"
+                subtitle="시즌 설정과 진행 현황, 결과를 한곳에서 관리합니다."
+                showShare={true}
+            />
 
-            {/* 히어로 카드: 좌측 정보·액션 + 우측 진행률 */}
+            {/* 히어로 카드: 레퍼런스와 유사한 좌(배지·제목·메타·액션) / 우(진행률) */}
             <Card
                 className="tw-rounded-3xl tw-border tw-border-slate-200/80 tw-shadow-sm tw-shadow-slate-900/5"
-                styles={{body: {padding: 24}}}
+                styles={{body: {padding: '28px 28px 26px'}}}
             >
-                <div className="tw-flex tw-flex-col tw-gap-6 lg:tw-flex-row lg:tw-items-start lg:tw-justify-between">
-                    <div className="tw-min-w-0 tw-flex-1">
-                        <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-3">
-                            <Title
-                                level={2}
-                                className="!tw-m-0 !tw-text-[26px] !tw-font-bold !tw-leading-tight !tw-tracking-tight !tw-text-slate-900"
-                            >
-                                {season.name}
-                            </Title>
-                            <span className="tw-inline-flex tw-items-center tw-rounded-full tw-bg-slate-100 tw-px-2.5 tw-py-0.5 tw-text-xs tw-font-medium tw-text-slate-700">
-                                {seasonTypeLabel(season.type)}
-                            </span>
+                <div className="tw-flex tw-flex-col tw-gap-8 lg:tw-flex-row lg:tw-items-stretch lg:tw-gap-0">
+                    <div className="tw-flex tw-min-h-0 tw-min-w-0 tw-flex-1 tw-flex-col tw-gap-4 lg:tw-pr-10">
+                        <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
                             {seasonStatusTag(season.status)}
                             {resultsPublishedTag(season.resultsPublishedAt)}
                         </div>
 
-                        <div className="tw-mt-2 tw-flex tw-flex-wrap tw-items-center tw-gap-x-5 tw-gap-y-1 tw-text-sm tw-text-slate-500">
+                        <Title
+                            level={2}
+                            className="!tw-m-0 !tw-text-[26px] !tw-font-bold !tw-leading-tight !tw-tracking-tight !tw-text-slate-900 sm:!tw-text-[28px]"
+                        >
+                            {season.name}
+                        </Title>
+
+                        <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-x-6 tw-gap-y-2 tw-text-sm tw-text-slate-500">
                             <span className="tw-inline-flex tw-items-center tw-gap-1.5">
-                                <CalendarOutlined/>
-                                기간: {season.startDate} ~ {season.endDate}
+                                <CalendarOutlined className="tw-text-base tw-text-slate-400" aria-hidden />
+                                기간 {season.startDate} ~ {season.endDate}
                             </span>
-                            {season.resultPublishDate && (
-                                <span className="tw-inline-flex tw-items-center tw-gap-1.5">
-                                    <FileDoneOutlined/>
-                                    결과 공개: {season.resultPublishDate}
+                            <span className="tw-inline-flex tw-items-center tw-gap-1.5 tw-text-slate-500">
+                                <span className="tw-rounded-md tw-bg-slate-100 tw-px-2 tw-py-0.5 tw-text-xs tw-font-medium tw-text-slate-600">
+                                    {seasonTypeLabel(season.type)}
                                 </span>
-                            )}
+                            </span>
+                            {season.resultPublishDate ? (
+                                <span className="tw-inline-flex tw-items-center tw-gap-1.5">
+                                    <SoundOutlined className="tw-text-base tw-text-slate-400" aria-hidden />
+                                    결과 공개 예정 {season.resultPublishDate}
+                                </span>
+                            ) : null}
                         </div>
 
                         {canUpdate && (
-                            <div className="tw-mt-5 tw-flex tw-flex-wrap tw-gap-2">
+                            <div className="tw-mt-auto tw-flex tw-flex-wrap tw-gap-2 tw-pt-4">
                                 {season.status === 'DRAFT' && (
                             <Popconfirm
                                 title={L.seasonStartConfirm}
@@ -638,24 +645,39 @@ export function EvaluationSeasonDetailPage() {
                         )}
                     </div>
 
-                    {/* 우측 진행률 위젯 */}
-                    <div className="tw-w-full tw-shrink-0 lg:tw-w-[320px]">
-                        <div className="tw-rounded-2xl tw-bg-slate-50 tw-p-5">
-                            <div className="tw-flex tw-items-baseline tw-justify-between">
-                                <span className="tw-text-[11px] tw-font-semibold tw-uppercase tw-tracking-wider tw-text-slate-500">
-                                    Overall Progress
+                    <div
+                        className="tw-h-px tw-w-full tw-shrink-0 tw-bg-slate-200 lg:tw-mx-0 lg:tw-h-auto lg:tw-w-px lg:tw-self-stretch"
+                        aria-hidden
+                    />
+
+                    {/* 우측 진행률 (레퍼런스: 큰 %, 바, 완료/전체) */}
+                    <div className="tw-flex tw-w-full tw-shrink-0 tw-flex-col tw-justify-center lg:tw-w-[min(100%,300px)] lg:tw-min-w-[260px] lg:tw-pl-10">
+                        <div className="tw-rounded-2xl tw-border tw-border-slate-100 tw-bg-slate-50/80 tw-p-6 lg:tw-border-0 lg:tw-bg-transparent lg:tw-p-0">
+                            <div className="tw-text-[11px] tw-font-semibold tw-uppercase tw-tracking-[0.14em] tw-text-slate-400">
+                                Progress
+                            </div>
+                            <div className="tw-mt-2 tw-flex tw-items-end tw-gap-1">
+                                <span className="tw-text-[48px] tw-font-bold tw-leading-none tw-tracking-tight tw-text-[#4F46E5] sm:tw-text-[52px]">
+                                    {progressPct}
                                 </span>
-                                <span className="tw-text-xl tw-font-bold tw-text-[#6366F1]">{progressPct}%</span>
+                                <span className="tw-mb-2 tw-text-2xl tw-font-bold tw-text-[#6366F1]">%</span>
                             </div>
                             <Progress
                                 percent={progressPct}
                                 showInfo={false}
-                                strokeColor="#6366F1"
+                                strokeColor={{from: '#818CF8', to: '#4F46E5'}}
                                 trailColor="#E2E8F0"
-                                className="tw-mt-3"
+                                strokeLinecap="round"
+                                className="!tw-m-0 tw-mt-5 [&_.ant-progress-inner]:!tw-rounded-full [&_.ant-progress-bg]:!tw-rounded-full"
+                                size={['100%', 10]}
                             />
-                            <div className="tw-mt-2 tw-text-center tw-text-xs tw-text-slate-500">
-                                완료 {completedProgress} / 전체 {totalProgress}명
+                            <div className="tw-mt-4 tw-inline-flex tw-items-center tw-gap-2 tw-text-sm tw-font-medium tw-text-slate-600">
+                                <CheckCircleOutlined className="tw-text-lg tw-text-emerald-500" aria-hidden />
+                                <span>
+                                    완료 <span className="tw-text-slate-900">{completedProgress}</span>
+                                    <span className="tw-text-slate-400"> / </span>
+                                    전체 <span className="tw-text-slate-900">{totalProgress}</span>명
+                                </span>
                             </div>
                         </div>
                     </div>
@@ -822,7 +844,7 @@ export function EvaluationSeasonDetailPage() {
                                             const gradeLabel = design.gradeConfig
                                                 ? (design.gradeConfig.type === 'ABSOLUTE' ? L.gradeAbsolute : L.gradeRelative)
                                                 : '미설정';
-                                            const menuItems: import('antd').MenuProps['items'] = [
+                                            const menuItems: MenuProps['items'] = [
                                                 {
                                                     key: 'edit',
                                                     icon: <SettingOutlined/>,

@@ -1,10 +1,9 @@
 import {useMemo} from 'react';
 import {useQuery} from '@tanstack/react-query';
-import {useNavigate, useParams} from '@tanstack/react-router';
+import {useParams} from '@tanstack/react-router';
 import {
     Alert,
     Avatar,
-    Button,
     Card,
     Empty,
     Space,
@@ -12,7 +11,6 @@ import {
     Typography,
 } from 'antd';
 import {
-    ArrowLeftOutlined,
     BarChartOutlined,
     MessageOutlined,
     TeamOutlined,
@@ -29,20 +27,9 @@ import type {
 } from '@/features/evaluation/model/types';
 import {evalTypeLabel} from '@/features/evaluation/lib/evaluationLabels';
 import {parseApiError} from '@/shared/api/error-parser';
+import {DetailPageHeader} from '@/shared/ui/DetailPageHeader';
 
-const {Text, Title, Paragraph} = Typography;
-
-/** 결재 등급 태그 색상 */
-function gradeTagColor(grade?: string): string {
-    if (!grade) return 'default';
-    const upper = grade.toUpperCase();
-    if (upper.startsWith('S') || upper.startsWith('A+')) return 'gold';
-    if (upper.startsWith('A')) return 'green';
-    if (upper.startsWith('B')) return 'blue';
-    if (upper.startsWith('C')) return 'orange';
-    if (upper.startsWith('D') || upper.startsWith('F')) return 'red';
-    return 'default';
-}
+const {Text, Title} = Typography;
 
 /** 한 응답의 주관식(코멘트) 답변만 추출 */
 function extractComments(answers: Answer[]): Array<{questionId: string; text: string}> {
@@ -52,7 +39,6 @@ function extractComments(answers: Answer[]): Array<{questionId: string; text: st
 }
 
 export function MyEvaluationResultPage() {
-    const navigate = useNavigate();
     const {seasonId} = useParams({strict: false}) as {seasonId: string};
 
     const {
@@ -115,15 +101,16 @@ export function MyEvaluationResultPage() {
         }));
     }, [othersResponses]);
 
-    const goBack = () => navigate({to: '/app/evaluations'});
-
     if (isError) {
         const parsed = parseApiError(error);
         return (
             <div className="tw-mx-auto tw-w-full tw-space-y-4">
-                <Button icon={<ArrowLeftOutlined />} type="link" onClick={goBack} className="!tw-p-0">
-                    평가 목록으로
-                </Button>
+                <DetailPageHeader
+                    backTo="/app/evaluations/my-results"
+                    backLabel="평가 결과 목록"
+                    title="내 평가 결과"
+                    showShare={false}
+                />
                 <Alert
                     type="warning"
                     showIcon
@@ -137,9 +124,12 @@ export function MyEvaluationResultPage() {
     if (!isLoading && responses.length === 0) {
         return (
             <div className="tw-mx-auto tw-w-full tw-space-y-4">
-                <Button icon={<ArrowLeftOutlined />} type="link" onClick={goBack} className="!tw-p-0">
-                    평가 목록으로
-                </Button>
+                <DetailPageHeader
+                    backTo="/app/evaluations/my-results"
+                    backLabel="평가 결과 목록"
+                    title="내 평가 결과"
+                    showShare={false}
+                />
                 <Card>
                     <Empty description="이 시즌에는 회원님에 대한 평가 결과가 없습니다." />
                 </Card>
@@ -149,21 +139,13 @@ export function MyEvaluationResultPage() {
 
     return (
         <div className="tw-mx-auto tw-w-full tw-space-y-4">
-            <Button icon={<ArrowLeftOutlined />} type="link" onClick={goBack} className="!tw-p-0 !tw-mb-1">
-                평가 목록으로
-            </Button>
-
-            <div>
-                <Title
-                    level={3}
-                    className="!tw-m-0 !tw-text-[22px] !tw-font-bold !tw-tracking-tight !tw-text-[#1e3a5f] sm:!tw-text-[24px]"
-                >
-                    내 평가 결과 — {seasonName}
-                </Title>
-                <Paragraph className="!tw-mb-0 !tw-text-[14px] !tw-text-slate-600">
-                    나를 대상으로 진행된 평가의 최종 결과입니다.
-                </Paragraph>
-            </div>
+            <DetailPageHeader
+                backTo="/app/evaluations/my-results"
+                backLabel="평가 결과 목록"
+                title={`내 평가 결과 — ${seasonName}`}
+                subtitle="나를 대상으로 진행된 평가의 최종 결과입니다."
+                showShare={false}
+            />
 
             <section className="tw-grid tw-grid-cols-1 tw-gap-5 lg:tw-grid-cols-[minmax(0,1fr)_280px]">
                 <div

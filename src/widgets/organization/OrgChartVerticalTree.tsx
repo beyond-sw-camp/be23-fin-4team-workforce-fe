@@ -31,7 +31,9 @@ function childColumnCentersPx(org: OrgChartOrgNode): number[] {
   const centers: number[] = [];
   let x = 0;
   for (let i = 0; i < org.children.length; i++) {
-    const w = subtreeLayoutWidth(org.children[i]);
+    const child = org.children[i];
+    if (!child) continue;
+    const w = subtreeLayoutWidth(child);
     centers.push(x + w / 2);
     x += w + (i < org.children.length - 1 ? ORG_CHILD_GAP_PX : 0);
   }

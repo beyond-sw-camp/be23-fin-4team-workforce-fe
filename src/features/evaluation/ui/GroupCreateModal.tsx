@@ -101,7 +101,6 @@ export function GroupCreateModal({open, onClose, onCreated, seasonId, designs}: 
                         <div className="tw-flex tw-justify-end">
                             <AppButton
                                 variant="secondary"
-                                type="button"
                                 icon={<TeamOutlined/>}
                                 className="!tw-h-9 !tw-rounded-full !tw-px-3 !tw-text-xs !tw-font-semibold"
                                 onClick={() => setOrgPickerOpen(true)}

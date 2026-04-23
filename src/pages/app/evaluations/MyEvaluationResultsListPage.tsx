@@ -2,11 +2,12 @@ import {useMemo} from 'react';
 import {useQuery} from '@tanstack/react-query';
 import {useNavigate} from '@tanstack/react-router';
 import {Button, Card, Empty, List, Tag, Typography} from 'antd';
-import {ArrowLeftOutlined, CalendarOutlined} from '@ant-design/icons';
+import {CalendarOutlined} from '@ant-design/icons';
 import dayjs from 'dayjs';
 import {evaluationApi} from '@/features/evaluation/api/evaluationApi';
+import {DetailPageHeader} from '@/shared/ui/DetailPageHeader';
 
-const {Text, Title} = Typography;
+const {Text} = Typography;
 
 export function MyEvaluationResultsListPage() {
     const navigate = useNavigate();
@@ -37,15 +38,13 @@ export function MyEvaluationResultsListPage() {
 
     return (
         <div className="tw-mx-auto tw-w-full tw-space-y-4">
-            <Button icon={<ArrowLeftOutlined/>} type="link" onClick={() => navigate({to: '/app/evaluations'})} className="!tw-p-0">
-                평가 허브로
-            </Button>
-            <div>
-                <Title level={3} className="!tw-m-0 !tw-text-[24px] !tw-font-bold !tw-text-[#1e3a5f]">
-                    공개된 평가 결과 목록
-                </Title>
-                <Text type="secondary">공개된 시즌별로 내 평가 결과를 확인할 수 있습니다.</Text>
-            </div>
+            <DetailPageHeader
+                backTo="/app/evaluations"
+                backLabel="평가 허브"
+                title="공개된 평가 결과 목록"
+                subtitle={<Text type="secondary">공개된 시즌별로 내 평가 결과를 확인할 수 있습니다.</Text>}
+                showShare={false}
+            />
 
             <Card className="tw-rounded-2xl tw-border tw-border-slate-200/90 tw-shadow-sm tw-shadow-slate-900/5">
                 {seasons.length === 0 && !isLoading ? (

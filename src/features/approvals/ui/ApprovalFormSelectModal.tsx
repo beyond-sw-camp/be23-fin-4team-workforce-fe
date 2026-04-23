@@ -136,7 +136,7 @@ export function ApprovalFormSelectModal({
   }, [composeDocId]);
 
   /** 동일 노드 재클릭 시 Ant Design Tree가 keys를 비우는 경우가 있어 info.node.key를 사용 */
-  const handleTreeSelect = useCallback<TreeProps['onSelect']>((_keys, info) => {
+  const handleTreeSelect = useCallback<NonNullable<TreeProps['onSelect']>>((_keys, info) => {
     const raw = info.node?.key;
     const key = typeof raw === 'string' ? raw : String(raw ?? '');
     if (!key.startsWith('doc-')) return;
