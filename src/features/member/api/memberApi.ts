@@ -127,6 +127,7 @@ export type DashboardProfile = {
   memberId: string;
   name: string;
   profileUrl?: string | null;
+  organizationId?: string | null;
   organizationName?: string | null;
   jobGradeName?: string | null;
   jobTitleName?: string | null;
@@ -151,6 +152,7 @@ function normalizeDashboardProfile(raw: unknown): DashboardProfile | null {
     memberId,
     name,
     profileUrl: typeof profileRaw === 'string' && profileRaw.trim() ? profileRaw.trim() : null,
+    organizationId: asTextMemberField(r.organizationId ?? r.organization_id) || null,
     organizationName: asTextMemberField(r.organizationName ?? r.organization_name) || null,
     jobGradeName: asTextMemberField(r.jobGradeName ?? r.job_grade_name) || null,
     jobTitleName: asTextMemberField(r.jobTitleName ?? r.job_title_name) || null,

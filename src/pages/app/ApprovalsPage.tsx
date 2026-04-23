@@ -237,11 +237,11 @@ type ComposeHomeEmbedPanel = 'my-all' | 'viewers' | 'department' | 'official' | 
 function composeHomeEmbedPanelUrl(panel: ComposeHomeEmbedPanel): string {
   switch (panel) {
     case 'my-all':
-      return buildApprovalEmbedUrl('/app/approvals', { tab: 'my', box: 'per-all' });
+      return buildApprovalEmbedUrl('/app/approvals/my-requests', {});
     case 'viewers':
       return buildApprovalEmbedUrl('/app/approvals', { tab: 'my', box: 'per-viewers' });
     case 'department':
-      return buildApprovalEmbedUrl('/app/approvals/department', { deptView: 'draft' });
+      return buildApprovalEmbedUrl('/app/approvals/department', {});
     case 'official':
       return buildApprovalEmbedUrl('/app/approvals', { tab: 'my', box: 'per-official' });
     case 'draft':
@@ -295,6 +295,7 @@ function PendingHomeApprovalLineStrip({
 }: {
   lines: ApprovalLine[];
   /** 0보다 크면 결재선 가로 영역에 고정 폭 클래스를 붙입니다(카드·테이블 셀 레이아웃용). */
+
   visibleSlots?: number;
 }) {
   const sorted = [...lines].sort((a, b) => a.stepOrder - b.stepOrder);
@@ -3252,6 +3253,7 @@ export function ApprovalsPage() {
       actionLabel?: string;
       onAction?: (row: ApprovalRequestDetail) => void;
       cardClassName?: string;
+      onFullClick?: () => void;
       /** 「전체」모달 iframe — 해당 카드에 맞는 문서함만 로드 */
       fullListEmbed: { panel: ComposeHomeEmbedPanel };
     },
@@ -3266,6 +3268,10 @@ export function ApprovalsPage() {
             type="link"
             size="small"
             onClick={() => {
+              if (options?.onFullClick) {
+                options.onFullClick();
+                return;
+              }
               if (!options?.fullListEmbed) return;
               setComposeHomeMoreModal({ kind: 'iframe', panel: options.fullListEmbed.panel });
             }}
