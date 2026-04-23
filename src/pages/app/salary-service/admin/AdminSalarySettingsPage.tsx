@@ -243,7 +243,10 @@ function SalaryTab() {
   });
 
   const policyOptions = useMemo(
-    () => (policiesQ.data ?? []).map((p) => ({ value: p.salaryPolicyId!, label: `${p.policyName} (${PAY_TYPE_KO[p.payType ?? ''] ?? p.payType})` })),
+    () =>
+      (policiesQ.data ?? [])
+        .filter((p) => p.payType === 'MONTHLY')
+        .map((p) => ({ value: p.salaryPolicyId!, label: `${p.policyName} (${PAY_TYPE_KO[p.payType ?? ''] ?? p.payType})` })),
     [policiesQ.data],
   );
 
@@ -537,9 +540,9 @@ function SalaryPolicyTab() {
     <>
       <div className="tw-flex tw-justify-end tw-mb-3"><Button type="primary" onClick={() => { setEditing(null); form.resetFields(); form.setFieldsValue({ payType: 'MONTHLY', payDay: 25, usePayGradeYn: 'N', overtimeRoundingMinutes: 15, wageSystemType: 'NON_COMPREHENSIVE', payDayShiftRule: 'BEFORE', effectiveRange: [dayjs(), null] }); setOpen(true); }}>정책 등록</Button></div>
       <Table<SalaryPolicy> rowKey={(r) => r.salaryPolicyId ?? Math.random().toString()} loading={listQ.isLoading} dataSource={listQ.data ?? []} columns={cols} pagination={{ pageSize: 10 }} locale={{ emptyText: '등록된 정책이 없습니다.' }} />
-      <Modal open={open} onCancel={() => { setOpen(false); setEditing(null); form.resetFields(); }} onOk={() => form.submit()} confirmLoading={createM.isPending || updateM.isPending} okText={editing ? '수정' : '등록'} cancelText="취소" title={editing ? '정책 수정' : '정책 등록'} destroyOnClose width={600}>
+      <Modal open={open} onCancel={() => { setOpen(false); setEditing(null); form.resetFields(); }} onOk={() => form.submit()} confirmLoading={createM.isPending || updateM.isPending} okText={editing ? '수정' : '등록'} cancelText="취소" title={editing ? '급여 정책 수정' : '급여 정책 등록'} destroyOnClose width={600}>
         <Form<PolicyFormValues> form={form} layout="vertical" onFinish={(v) => editing?.salaryPolicyId ? updateM.mutate({ id: editing.salaryPolicyId, v }) : createM.mutate(v)}>
-          <Form.Item label="정책명" name="policyName" rules={[{ required: true }]}><Input maxLength={60} /></Form.Item>
+          <Form.Item label="정책명" name="policyName" rules={[{ required: true }]}><Input maxLength={60} placeholder="예: ㅇㅇ컴퍼니 급여정책" /></Form.Item>
           <Space className="tw-w-full" size={16}>
             <Form.Item label="지급 유형" name="payType" rules={[{ required: true }]}><Select style={{ width: 160 }} options={[{ value: 'MONTHLY', label: '월급' }, { value: 'BONUS', label: '보너스' }, { value: 'SEVERANCE', label: '퇴직금' }]} /></Form.Item>
             <Form.Item label="지급일 (1~31)" name="payDay" rules={[{ required: true }]}><InputNumber min={1} max={31} style={{ width: 120 }} /></Form.Item>
@@ -583,7 +586,7 @@ function SalaryPolicyTab() {
             <Form.Item label="임금제 유형" name="wageSystemType" rules={[{ required: true }]}><Select style={{ width: 180 }} options={[{ value: 'COMPREHENSIVE', label: '포괄임금제' }, { value: 'NON_COMPREHENSIVE', label: '비포괄임금제' }]} /></Form.Item>
             <Form.Item noStyle shouldUpdate={(p, c) => p.wageSystemType !== c.wageSystemType}>
               {({ getFieldValue }) => getFieldValue('wageSystemType') === 'COMPREHENSIVE' ? (
-                <Form.Item label="고정 OT(분) - 20시간(1200분)" name="fixedOvertimeMinutes"><InputNumber min={0} style={{ width: 140 }} /></Form.Item>
+                <Form.Item label="기본 초과근무시간(분), ex) 20시간(1200분)" name="fixedOvertimeMinutes"><InputNumber min={0} style={{ width: 140 }} /></Form.Item>
               ) : null}
             </Form.Item>
           </Space>
@@ -982,7 +985,7 @@ export function AdminSalarySettingsPage() {
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
       <div>
-        <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
+        <Typography.Title level={1} className="!tw-m-0 !tw-text-slate-900">
           급여 설정
         </Typography.Title>
         <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-sm">
@@ -991,7 +994,7 @@ export function AdminSalarySettingsPage() {
       </div>
       <Card>
         <Tabs
-          defaultActiveKey="salary"
+          defaultActiveKey="policy"
           items={[
             { key: 'policy', label: '급여 정책', children: <SalaryPolicyTab /> },
             { key: 'tax', label: '세율', children: <TaxRateTab /> },
