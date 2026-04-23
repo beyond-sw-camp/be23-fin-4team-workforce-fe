@@ -280,6 +280,8 @@ export type SalaryItemTemplate = {
   itemType?: ItemTypeCode;
   displayOrder?: number | null;
   isTaxableYn?: string | null;
+  /** 시스템 기본 항목 여부. true 면 삭제 불가, 일부 필드 수정 제한 */
+  isSystemDefault?: boolean | null;
   delYn?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
@@ -371,6 +373,8 @@ export type WorkTrip = {
   destination?: string | null;
   destinationLat?: number | null;
   destinationLng?: number | null;
+  /** 출장지 허용 반경 (미터). 미지정 시 서버 기본값 200m */
+  destinationRadiusMeters?: number | null;
   purpose?: string | null;
   expenseAmount?: number | null;
   expenseType?: ExpenseTypeCode | null;
@@ -384,6 +388,7 @@ export type WorkTripCreatePayload = {
   destination?: string | null;
   destinationLat?: number | null;
   destinationLng?: number | null;
+  destinationRadiusMeters?: number | null;
   purpose?: string | null;
   expenseAmount?: number | null;
   expenseType?: ExpenseTypeCode | null;
@@ -394,6 +399,7 @@ export type WorkTripUpdatePayload = {
   destination?: string | null;
   destinationLat?: number | null;
   destinationLng?: number | null;
+  destinationRadiusMeters?: number | null;
   purpose?: string | null;
   expenseAmount?: number | null;
   expenseType?: ExpenseTypeCode | null;
@@ -410,6 +416,8 @@ export type Salary = {
   companyId?: string;
   salaryPolicyId?: string;
   baseSalary?: number | null;
+  /** 호봉 (호봉제 정책일 때만 사용) */
+  step?: number | null;
   jobGradeName?: string | null;
   jobTitleName?: string | null;
   effectiveFrom?: string;
@@ -421,7 +429,10 @@ export type Salary = {
 export type SalaryCreatePayload = {
   memberId: string;
   salaryPolicyId: string;
-  baseSalary: number;
+  /** 호봉제면 생략, 연봉제면 필수 */
+  baseSalary?: number | null;
+  /** 호봉제일 때만 지정, 서버가 호봉표에서 baseSalary 조회 */
+  step?: number | null;
   jobGradeName?: string | null;
   jobTitleName?: string | null;
   effectiveFrom: string;
@@ -448,6 +459,8 @@ export type PayTypeCode = 'MONTHLY' | 'BONUS' | 'SEVERANCE' | string;
 export type WageSystemTypeCode = 'COMPREHENSIVE' | 'NON_COMPREHENSIVE' | string;
 export type PeriodStartTypeCode = 'FIRST' | 'SPECIFIC' | string;
 export type PeriodEndTypeCode = 'LAST' | 'SPECIFIC' | string;
+/** 지급일이 주말/공휴일일 때 조정 규칙. BEFORE=직전 영업일(실무 표준), AFTER=직후 영업일, NONE=해당일 그대로 */
+export type PayDayShiftRuleCode = 'NONE' | 'BEFORE' | 'AFTER' | string;
 
 export type SalaryPolicy = {
   salaryPolicyId?: string;
@@ -455,11 +468,15 @@ export type SalaryPolicy = {
   policyName?: string;
   payType?: PayTypeCode;
   payDay?: number | null;
+  /** 호봉제 사용 여부, Y/N */
+  usePayGradeYn?: string | null;
   overtimeRoundingMinutes?: number | null;
   wageSystemType?: WageSystemTypeCode;
   fixedOvertimeMinutes?: number | null;
   periodStartType?: PeriodStartTypeCode;
   periodEndType?: PeriodEndTypeCode;
+  /** 지급일 주말/공휴일 조정 규칙 (기본 BEFORE) */
+  payDayShiftRule?: PayDayShiftRuleCode | null;
   effectiveFrom?: string;
   effectiveTo?: string | null;
   createdAt?: string | null;
@@ -470,11 +487,15 @@ export type SalaryPolicyCreatePayload = {
   policyName: string;
   payType: PayTypeCode;
   payDay: number;
+  /** 호봉제 사용 여부, Y/N. 기본 N */
+  usePayGradeYn: string;
   overtimeRoundingMinutes?: number | null;
   wageSystemType: WageSystemTypeCode;
   fixedOvertimeMinutes?: number | null;
   periodStartType: PeriodStartTypeCode;
   periodEndType: PeriodEndTypeCode;
+  /** 지급일 주말/공휴일 조정 규칙, 기본 BEFORE */
+  payDayShiftRule: PayDayShiftRuleCode;
   effectiveFrom: string;
   effectiveTo?: string | null;
 };
@@ -498,6 +519,10 @@ export type TaxRate = {
   rate?: number | null;
   applyYear?: number | null;
   employerRate?: number | null;
+  /** 기준소득 상한 (월, 원). 국민연금/건강보험만 적용 */
+  incomeCeiling?: number | null;
+  /** 기준소득 하한 (월, 원). 국민연금/건강보험만 적용 */
+  incomeFloor?: number | null;
   createdAt?: string | null;
   updatedAt?: string | null;
 };
@@ -507,9 +532,17 @@ export type TaxRateCreatePayload = {
   rate: number;
   applyYear: number;
   employerRate?: number | null;
+  incomeCeiling?: number | null;
+  incomeFloor?: number | null;
 };
 
 export type TaxRateUpdatePayload = TaxRateCreatePayload;
+
+/** 상/하한 적용 가능한 세금 유형 */
+export const TAX_CAP_SUPPORTED_TYPES: ReadonlySet<TaxTypeCode> = new Set([
+  'NATIONAL_PENSION',
+  'HEALTH_INSURANCE',
+]);
 
 /* ──────────────────────────────────────────────
  * 미사용 연차수당 (UnusedLeavePayout)
@@ -582,3 +615,144 @@ export type SalaryItemTemplateCreatePayload = {
 };
 
 export type SalaryItemTemplateUpdatePayload = SalaryItemTemplateCreatePayload;
+
+/** 회사 휴가 종류 (CompanyLeaveType) */
+export type CompanyLeaveType = {
+  companyLeaveTypeId?: string;
+  code?: string;
+  name?: string;
+  balanceType?: BalanceTypeCode | null;
+  daysPerUse?: number | null;
+  isSystemDefault?: boolean | null;
+  isPaidYn?: string | null;
+  maxDaysPerYear?: number | null;
+  requireEvidenceYn?: string | null;
+  /** 사유 발생일(eventDate) 기준 사용 마감 일수, null 이면 기한 없음 (경조/출산 등) */
+  usageDeadlineDays?: number | null;
+  displayOrder?: number | null;
+};
+
+export type CompanyLeaveTypeCreatePayload = {
+  code: string;
+  name: string;
+  balanceType?: BalanceTypeCode | null;
+  daysPerUse: number;
+  isPaidYn: string;
+  maxDaysPerYear?: number | null;
+  requireEvidenceYn: string;
+  usageDeadlineDays?: number | null;
+  displayOrder: number;
+};
+
+export type CompanyLeaveTypeUpdatePayload = {
+  name: string;
+  balanceType?: BalanceTypeCode | null;
+  daysPerUse?: number | null;
+  isPaidYn?: string | null;
+  maxDaysPerYear?: number | null;
+  requireEvidenceYn?: string | null;
+  usageDeadlineDays?: number | null;
+  displayOrder: number;
+};
+
+/** 주간 근무시간 요약, 본인 주 52시간 자가 체크 */
+export type WorkTimeSummary = {
+  weekStart?: string | null;
+  weekEnd?: string | null;
+  totalWorkedMinutes?: number | null;
+  totalLimitMinutes?: number | null;
+  totalUsagePercent?: number | null;
+  overtimeApprovedMinutes?: number | null;
+  overtimeLimitMinutes?: number | null;
+  overtimeUsagePercent?: number | null;
+  /** 근기법 55조 주휴수당 자격, 주 15시간 이상 + 개근 */
+  weeklyHolidayEligible?: boolean | null;
+  weeklyHolidayMinRequiredMinutes?: number | null;
+  weeklyAbsentDays?: number | null;
+  weeklyHolidayReason?: string | null;
+};
+
+/** 휴직 (Member Leave of Absence) */
+export type LeaveOfAbsenceTypeCode =
+  | 'MATERNITY'
+  | 'PATERNAL'
+  | 'SICK'
+  | 'UNPAID'
+  | 'STUDY'
+  | 'MILITARY'
+  | string;
+
+export type LeaveOfAbsenceApprovalStatusCode =
+  | 'REQUESTED'
+  | 'ACTIVE'
+  | 'ENDED'
+  | 'REJECTED'
+  | 'CANCELLED'
+  | string;
+
+export type LeaveOfAbsence = {
+  leaveOfAbsenceId?: string;
+  memberId?: string;
+  companyId?: string;
+  type?: LeaveOfAbsenceTypeCode;
+  startDate?: string | null;
+  endDate?: string | null;
+  actualEndDate?: string | null;
+  isPaidYn?: string | null;
+  reason?: string | null;
+  evidenceFileUrl?: string | null;
+  approvalRequestId?: string | null;
+  status?: LeaveOfAbsenceApprovalStatusCode;
+  requestedAt?: string | null;
+  decidedAt?: string | null;
+  decidedBy?: string | null;
+  decisionNote?: string | null;
+};
+
+/** 회사 허용 IP 화이트리스트 */
+export type CompanyIpWhitelist = {
+  companyIpWhitelistId?: string;
+  cidr?: string;
+  label?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+};
+
+export type CompanyIpWhitelistCreatePayload = {
+  cidr: string;
+  label?: string | null;
+};
+
+export type CompanyIpWhitelistUpdatePayload = CompanyIpWhitelistCreatePayload;
+
+/** 호봉표 (PayGradeTable), 호봉 → 기본급 (직급 무관) */
+export type PayGradeTable = {
+  payGradeTableId?: string;
+  step?: number;
+  baseSalary?: number;
+  effectiveFrom?: string | null;
+  /** null 이면 현재 활성 */
+  effectiveTo?: string | null;
+  description?: string | null;
+};
+
+export type PayGradeTableCreatePayload = {
+  step: number;
+  baseSalary: number;
+  effectiveFrom: string;
+  description?: string | null;
+};
+
+export type PayGradeTableUpdatePayload = {
+  baseSalary: number;
+  description?: string | null;
+};
+
+export type PayGradeTableBulkCreatePayload = {
+  effectiveFrom: string;
+  entries: Array<{
+    step: number;
+    baseSalary: number;
+    description?: string | null;
+  }>;
+};

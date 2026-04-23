@@ -42,8 +42,12 @@ import { AdminAttendanceDailyPage } from '@/pages/app/salary-service/admin/Admin
 import { AdminAllowanceRequestsPage } from '@/pages/app/salary-service/admin/AdminAllowanceRequestsPage';
 import { AdminAttendanceMonthlyPage } from '@/pages/app/salary-service/admin/AdminAttendanceMonthlyPage';
 import { AdminCompanyHolidaysPage } from '@/pages/app/salary-service/admin/AdminCompanyHolidaysPage';
+import { AdminCompanyIpWhitelistPage } from '@/pages/app/salary-service/admin/AdminCompanyIpWhitelistPage';
 import { AdminFlexibleSlotsPage } from '@/pages/app/salary-service/admin/AdminFlexibleSlotsPage';
 import { AdminLeaveGrantPage } from '@/pages/app/salary-service/admin/AdminLeaveGrantPage';
+import { AdminCompanyLeaveTypesPage } from '@/pages/app/salary-service/admin/AdminCompanyLeaveTypesPage';
+import { AdminLeaveOfAbsencePage } from '@/pages/app/salary-service/admin/AdminLeaveOfAbsencePage';
+import { AdminPayGradeTablePage } from '@/pages/app/salary-service/admin/AdminPayGradeTablePage';
 import { AdminLeavePoliciesPage } from '@/pages/app/salary-service/admin/AdminLeavePoliciesPage';
 import { AdminOvertimePoliciesPage } from '@/pages/app/salary-service/admin/AdminOvertimePoliciesPage';
 import { AdminPayrollManagePage } from '@/pages/app/salary-service/admin/AdminPayrollManagePage';
@@ -57,6 +61,7 @@ import { MyLeavePage } from '@/pages/app/salary-service/my/MyLeavePage';
 import { MyOvertimeRequestsPage } from '@/pages/app/salary-service/my/MyOvertimeRequestsPage';
 import { MyPayrollPage } from '@/pages/app/salary-service/my/MyPayrollPage';
 import { MyScheduleSelectionsPage } from '@/pages/app/salary-service/my/MyScheduleSelectionsPage';
+import { MyWorkTimePage } from '@/pages/app/salary-service/my/MyWorkTimePage';
 import { MyWorkTripsPage } from '@/pages/app/salary-service/my/MyWorkTripsPage';
 import { MyAllowancesPage } from '@/pages/app/salary-service/my/MyAllowancesPage';
 import { PayrollDetailPage } from '@/pages/app/salary-service/my/PayrollDetailPage';
@@ -413,6 +418,12 @@ const myOvertimeRequestsRoute = createRoute({
   component: MyOvertimeRequestsPage,
 });
 
+const myWorkTimeRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/attendance/work-time',
+  component: MyWorkTimePage,
+});
+
 const adminAttendanceMonthlyRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/attendance/company/monthly',
@@ -439,6 +450,17 @@ const adminCompanyHolidaysRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/attendance/holidays',
   component: AdminCompanyHolidaysPage,
+  beforeLoad: ({ context }) => {
+    if (!context.auth.user?.isSystemAdmin) {
+      throw redirect({ to: '/app/attendance' });
+    }
+  },
+});
+
+const adminCompanyIpWhitelistRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/attendance/ip-whitelist',
+  component: AdminCompanyIpWhitelistPage,
   beforeLoad: ({ context }) => {
     if (!context.auth.user?.isSystemAdmin) {
       throw redirect({ to: '/app/attendance' });
@@ -500,6 +522,28 @@ const adminLeavePoliciesRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/leave/policies',
   component: AdminLeavePoliciesPage,
+  beforeLoad: ({ context }) => {
+    if (!context.auth.user?.isSystemAdmin) {
+      throw redirect({ to: '/app/leave' });
+    }
+  },
+});
+
+const adminLeaveOfAbsenceRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/leave/absence',
+  component: AdminLeaveOfAbsencePage,
+  beforeLoad: ({ context }) => {
+    if (!context.auth.user?.isSystemAdmin) {
+      throw redirect({ to: '/app/leave' });
+    }
+  },
+});
+
+const adminCompanyLeaveTypesRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/leave/types',
+  component: AdminCompanyLeaveTypesPage,
   beforeLoad: ({ context }) => {
     if (!context.auth.user?.isSystemAdmin) {
       throw redirect({ to: '/app/leave' });
@@ -575,6 +619,17 @@ const adminSalarySettingsRoute = createRoute({
   },
 });
 
+const adminPayGradeTableRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/salary/pay-grade-table',
+  component: AdminPayGradeTablePage,
+  beforeLoad: ({ context }) => {
+    if (!context.auth.user?.isSystemAdmin) {
+      throw redirect({ to: '/app/payroll' });
+    }
+  },
+});
+
 const adminUnusedLeavePayoutRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/salary/unused-leave',
@@ -641,15 +696,19 @@ const routeTree = rootRoute.addChildren([
       myAttendanceMonthlyRoute,
       myScheduleSelectionsRoute,
       myOvertimeRequestsRoute,
+      myWorkTimeRoute,
       adminAttendanceMonthlyRoute,
       adminAttendanceDailyRoute,
       adminCompanyHolidaysRoute,
+      adminCompanyIpWhitelistRoute,
       adminWorkSchedulesRoute,
       adminOvertimePoliciesRoute,
       adminFlexibleSlotsRoute,
       myLeaveRoute,
       adminLeaveGrantRoute,
       adminLeavePoliciesRoute,
+      adminLeaveOfAbsenceRoute,
+      adminCompanyLeaveTypesRoute,
       myWorkTripsRoute,
       payrollAdminManageRoute,
       payrollAdminRoute,
@@ -658,6 +717,7 @@ const routeTree = rootRoute.addChildren([
       myAllowancesRoute,
       adminAllowanceRequestsRoute,
       adminSalarySettingsRoute,
+      adminPayGradeTableRoute,
       adminUnusedLeavePayoutRoute,
       ...genericRoutes,
     ]),

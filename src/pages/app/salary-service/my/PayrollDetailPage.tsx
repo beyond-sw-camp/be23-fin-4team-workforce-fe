@@ -3,8 +3,9 @@
  * 본인 급여만 조회. 남 대장이면 관리자 아닐 때 /app/payroll 로 돌려보냄.
  */
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
-import { useQuery } from '@tanstack/react-query';
-import { Card, Descriptions, Space, Table, Tag, Typography } from 'antd';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { App, Button, Card, Descriptions, Space, Table, Tag, Typography } from 'antd';
+import { DownloadOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { useEffect, useMemo } from 'react';
 import { useAuth } from '@/features/auth/useAuth';
@@ -31,6 +32,7 @@ export function PayrollDetailPage() {
   const { payrollId } = useParams({ strict: false }) as { payrollId: string };
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { message } = App.useApp();
 
   const payrollQ = useQuery({
     queryKey: ['salary', 'payroll', payrollId],
@@ -48,6 +50,27 @@ export function PayrollDetailPage() {
     queryFn: () => salaryApi.payroll.listItems(payrollId),
     enabled: Boolean(payrollId) && canViewPayroll,
   });
+
+  const pdfMut = useMutation({
+    mutationFn: () => salaryApi.payroll.downloadPayslipPdf(payrollId),
+    onSuccess: (blob) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `payslip-${payrollId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    },
+    onError: () => {
+      void message.error('급여명세서 다운로드에 실패했습니다.');
+    },
+  });
+
+  const canDownload =
+    canViewPayroll &&
+    (payroll?.payrollStatus === 'CONFIRMED' || payroll?.payrollStatus === 'PAID');
 
   useEffect(() => {
     if (!payroll || !user?.id) return;
@@ -93,6 +116,17 @@ export function PayrollDetailPage() {
         <Link to="/app/payroll" className="tw-text-sm tw-text-[#2563EB]">
           ← 급여 목록
         </Link>
+        <div className="tw-ml-auto">
+          <Button
+            type="primary"
+            icon={<DownloadOutlined />}
+            disabled={!canDownload}
+            loading={pdfMut.isPending}
+            onClick={() => pdfMut.mutate()}
+          >
+            급여명세서 PDF
+          </Button>
+        </div>
       </div>
 
       <Card className="tw-border-slate-200/80 tw-shadow-sm" title="급여대장 요약" loading={payrollQ.isLoading}>

@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   App,
+  Alert,
   Button,
   Card,
   Form,
@@ -34,6 +35,15 @@ type FormValues = {
 
 const QK = ['salary', 'leave-policies'] as const;
 
+function apiErrorMessage(e: unknown): string {
+  if (typeof e === 'object' && e !== null && 'message' in e) {
+    const m = (e as { message?: unknown }).message;
+    if (typeof m === 'string' && m.trim()) return m;
+  }
+  if (e instanceof Error) return e.message;
+  return '요청에 실패했습니다.';
+}
+
 const ACCRUAL_KO: Record<string, string> = {
   FISCAL: '회계연도',
   HIRE_DATE: '입사일',
@@ -57,6 +67,8 @@ export function AdminLeavePoliciesPage() {
   const listQ = useQuery({
     queryKey: QK,
     queryFn: () => attendanceApi.leavePolicy.list(),
+    /** 정책 목록은 자주 바뀌지 않음 — 탭 이동 시 불필요한 재요청 감소 */
+    staleTime: 60_000,
   });
 
   const buildPayload = (v: FormValues) => ({
@@ -73,35 +85,20 @@ export function AdminLeavePoliciesPage() {
 
   const createM = useMutation({
     mutationFn: (v: FormValues) => attendanceApi.leavePolicy.create(buildPayload(v)),
-    onSuccess: () => {
-      message.success('정책이 등록되었습니다.');
-      setOpen(false);
-      form.resetFields();
-      void qc.invalidateQueries({ queryKey: QK });
-    },
-    onError: (e: Error) => message.error(e.message || '등록에 실패했습니다.'),
   });
 
   const updateM = useMutation({
     mutationFn: (input: { id: string; v: FormValues }) =>
       attendanceApi.leavePolicy.update(input.id, buildPayload(input.v)),
-    onSuccess: () => {
-      message.success('수정되었습니다.');
-      setOpen(false);
-      setEditing(null);
-      form.resetFields();
-      void qc.invalidateQueries({ queryKey: QK });
-    },
-    onError: (e: Error) => message.error(e.message || '수정에 실패했습니다.'),
   });
 
   const deleteM = useMutation({
     mutationFn: (id: string) => attendanceApi.leavePolicy.delete(id),
-    onSuccess: () => {
+    onSuccess: (_void, deletedId) => {
       message.success('삭제되었습니다.');
-      void qc.invalidateQueries({ queryKey: QK });
+      qc.setQueryData<LeavePolicy[]>(QK, (old) => (old ?? []).filter((p) => p.policyId !== deletedId));
     },
-    onError: (e: Error) => message.error(e.message || '삭제에 실패했습니다.'),
+    onError: (e: unknown) => message.error(apiErrorMessage(e) || '삭제에 실패했습니다.'),
   });
 
   const columns = useMemo<ColumnsType<LeavePolicy>>(
@@ -199,6 +196,49 @@ export function AdminLeavePoliciesPage() {
     [deleteM, form],
   );
 
+  const MSG_KEY = 'leave-policy-save';
+
+  const handlePolicyModalOk = () =>
+    form.validateFields().then(async (v) => {
+      if (editing?.policyId) {
+        message.loading({ content: '수정 중…', key: MSG_KEY, duration: 0 });
+        try {
+          const updated = await updateM.mutateAsync({ id: editing.policyId, v });
+          qc.setQueryData<LeavePolicy[]>(QK, (old) => {
+            const prev = old ?? [];
+            const id = updated.policyId;
+            if (!id) return [...prev, updated];
+            return prev.map((p) => (p.policyId === id ? { ...p, ...updated } : p));
+          });
+          setOpen(false);
+          setEditing(null);
+          form.resetFields();
+          message.success({ content: '수정되었습니다.', key: MSG_KEY });
+        } catch (e) {
+          message.error({ content: apiErrorMessage(e) || '수정에 실패했습니다.', key: MSG_KEY });
+        }
+        return;
+      }
+
+      /** 등록: 모달을 먼저 닫고 상단 로딩으로 진행 표시 — 서버가 느려도 “멈춤”처럼 보이지 않게 */
+      setOpen(false);
+      const snapshot = { ...v };
+      form.resetFields();
+      setEditing(null);
+      message.loading({ content: '정책 등록 중…', key: MSG_KEY, duration: 0 });
+      try {
+        const created = await createM.mutateAsync(snapshot);
+        qc.setQueryData<LeavePolicy[]>(QK, (old) => [...(old ?? []), created]);
+        message.success({ content: '정책이 등록되었습니다.', key: MSG_KEY });
+      } catch (e) {
+        message.error({ content: apiErrorMessage(e) || '등록에 실패했습니다.', key: MSG_KEY });
+        setOpen(true);
+        window.setTimeout(() => {
+          form.setFieldsValue(snapshot);
+        }, 0);
+      }
+    });
+
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
       <div className="tw-flex tw-items-end tw-justify-between">
@@ -230,11 +270,20 @@ export function AdminLeavePoliciesPage() {
         </Button>
       </div>
 
+      {listQ.isError ? (
+        <Alert
+          type="error"
+          showIcon
+          message="연차 정책 목록을 불러오지 못했습니다."
+          description={apiErrorMessage(listQ.error)}
+        />
+      ) : null}
+
       <Card>
         {/* TODO: 서버 페이지네이션 전환 필요 */}
         <Table<LeavePolicy>
-          rowKey={(r) => r.policyId ?? Math.random().toString()}
-          loading={listQ.isLoading}
+          rowKey={(r, index) => (r.policyId ? r.policyId : `row-${index}`)}
+          loading={listQ.isLoading || listQ.isFetching}
           dataSource={listQ.data ?? []}
           columns={columns}
           pagination={{ pageSize: 10 }}
@@ -249,7 +298,7 @@ export function AdminLeavePoliciesPage() {
           setEditing(null);
           form.resetFields();
         }}
-        onOk={() => form.submit()}
+        onOk={handlePolicyModalOk}
         confirmLoading={createM.isPending || updateM.isPending}
         okText={editing ? '수정' : '등록'}
         cancelText="취소"
@@ -257,14 +306,7 @@ export function AdminLeavePoliciesPage() {
         destroyOnClose
         width={560}
       >
-        <Form<FormValues>
-          form={form}
-          layout="vertical"
-          onFinish={(v) => {
-            if (editing?.policyId) updateM.mutate({ id: editing.policyId, v });
-            else createM.mutate(v);
-          }}
-        >
+        <Form<FormValues> form={form} layout="vertical">
           <Form.Item label="발생 기준" name="accrualBase" rules={[{ required: true }]}>
             <Select
               options={[

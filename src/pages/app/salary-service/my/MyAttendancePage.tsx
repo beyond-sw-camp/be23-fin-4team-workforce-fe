@@ -67,8 +67,35 @@ export function MyAttendancePage() {
     void qc.invalidateQueries({ queryKey: ['salary', 'attendance', 'my'] });
   };
 
+  /**
+   * 브라우저 Geolocation 으로 현재 위치 취득
+   * 실패 시 null 반환 (서버는 IP 검증만으로 폴백)
+   */
+  const getCurrentPosition = (): Promise<{ latitude: number; longitude: number } | null> =>
+    new Promise((resolve) => {
+      if (!navigator.geolocation) {
+        resolve(null);
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) =>
+          resolve({
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+          }),
+        () => resolve(null),
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 },
+      );
+    });
+
   const clockInM = useMutation({
-    mutationFn: () => attendanceApi.attendance.clockIn({}),
+    mutationFn: async () => {
+      const coords = await getCurrentPosition();
+      return attendanceApi.attendance.clockIn({
+        latitude: coords?.latitude ?? null,
+        longitude: coords?.longitude ?? null,
+      });
+    },
     onSuccess: () => {
       message.success('출근 처리되었습니다.');
       invalidate();
@@ -77,7 +104,13 @@ export function MyAttendancePage() {
   });
 
   const clockOutM = useMutation({
-    mutationFn: () => attendanceApi.attendance.clockOut({}),
+    mutationFn: async () => {
+      const coords = await getCurrentPosition();
+      return attendanceApi.attendance.clockOut({
+        latitude: coords?.latitude ?? null,
+        longitude: coords?.longitude ?? null,
+      });
+    },
     onSuccess: () => {
       message.success('퇴근 처리되었습니다.');
       invalidate();

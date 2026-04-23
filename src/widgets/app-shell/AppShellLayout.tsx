@@ -22,7 +22,9 @@ import {
     MoreOutlined,
     MessageOutlined,
     PartitionOutlined,
+    PauseCircleOutlined,
     PoweroffOutlined,
+    ProfileOutlined,
     ProjectOutlined,
     RobotOutlined,
     ScheduleOutlined,
@@ -120,6 +122,7 @@ const APP_MENU_ICONS: Record<string, ReactNode> = {
     '/app/organization': <ApartmentOutlined className="tw-text-lg"/>,
     '/app/attendance': <ClockCircleOutlined className="tw-text-lg"/>,
     '/app/attendance/overtime': <ClockCircleOutlined className="tw-text-lg"/>,
+    '/app/attendance/work-time': <BarChartOutlined className="tw-text-lg"/>,
     '/app/attendance/schedules/my': <ScheduleOutlined className="tw-text-lg"/>,
     '/app/attendance/overtime-policies': <ControlOutlined className="tw-text-lg"/>,
     '/app/attendance/flexible-slots': <ScheduleOutlined className="tw-text-lg"/>,
@@ -324,6 +327,12 @@ function buildAppShellMenuItems(
                             title: APP_MENU_LABEL['/app/attendance/overtime'],
                         },
                         {
+                            key: '/app/attendance/work-time',
+                            icon: APP_MENU_ICONS['/app/attendance/work-time'],
+                            label: APP_MENU_LABEL['/app/attendance/work-time'],
+                            title: APP_MENU_LABEL['/app/attendance/work-time'],
+                        },
+                        {
                             key: '/app/work-trips',
                             icon: APP_MENU_ICONS['/app/work-trips'],
                             label: APP_MENU_LABEL['/app/work-trips'],
@@ -362,6 +371,12 @@ function buildAppShellMenuItems(
                             icon: APP_MENU_ICONS['/app/attendance/flexible-slots'],
                             label: APP_MENU_LABEL['/app/attendance/flexible-slots'],
                             title: APP_MENU_LABEL['/app/attendance/flexible-slots'],
+                        },
+                        {
+                            key: '/app/attendance/ip-whitelist',
+                            icon: <SafetyCertificateOutlined className="tw-text-lg"/>,
+                            label: APP_MENU_LABEL['/app/attendance/ip-whitelist'],
+                            title: APP_MENU_LABEL['/app/attendance/ip-whitelist'],
                         },
                     );
                 }
@@ -407,6 +422,18 @@ function buildAppShellMenuItems(
                             icon: <FileTextOutlined className="tw-text-lg"/>,
                             label: APP_MENU_LABEL['/app/leave/policies'],
                             title: APP_MENU_LABEL['/app/leave/policies'],
+                        },
+                        {
+                            key: '/app/leave/absence',
+                            icon: <PauseCircleOutlined className="tw-text-lg"/>,
+                            label: APP_MENU_LABEL['/app/leave/absence'],
+                            title: APP_MENU_LABEL['/app/leave/absence'],
+                        },
+                        {
+                            key: '/app/leave/types',
+                            icon: <ProfileOutlined className="tw-text-lg"/>,
+                            label: APP_MENU_LABEL['/app/leave/types'],
+                            title: APP_MENU_LABEL['/app/leave/types'],
                         },
                     );
                 }
@@ -502,6 +529,12 @@ function buildAppShellMenuItems(
                             icon: <SettingOutlined className="tw-text-lg"/>,
                             label: APP_MENU_LABEL['/app/salary/settings'],
                             title: APP_MENU_LABEL['/app/salary/settings'],
+                        },
+                        {
+                            key: '/app/salary/pay-grade-table',
+                            icon: <BarChartOutlined className="tw-text-lg"/>,
+                            label: APP_MENU_LABEL['/app/salary/pay-grade-table'],
+                            title: APP_MENU_LABEL['/app/salary/pay-grade-table'],
                         },
                         {
                             key: '/app/payroll/allowances/admin',
@@ -1167,9 +1200,11 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
     if (pathname === '/app/attendance/monthly') return ['/app/attendance/monthly'];
     if (pathname === '/app/attendance/schedules/my') return ['/app/attendance/schedules/my'];
     if (pathname === '/app/attendance/overtime') return ['/app/attendance/overtime'];
+    if (pathname === '/app/attendance/work-time') return ['/app/attendance/work-time'];
     if (pathname === '/app/attendance/company/monthly') return ['/app/attendance/company/monthly'];
     if (pathname === '/app/attendance/company') return ['/app/attendance/company'];
     if (pathname === '/app/attendance/holidays') return ['/app/attendance/holidays'];
+    if (pathname === '/app/attendance/ip-whitelist') return ['/app/attendance/ip-whitelist'];
     if (pathname === '/app/attendance/schedules') return ['/app/attendance/schedules'];
     if (pathname === '/app/attendance/overtime-policies') return ['/app/attendance/overtime-policies'];
     if (pathname === '/app/attendance/flexible-slots') return ['/app/attendance/flexible-slots'];
@@ -1177,9 +1212,12 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
     if (pathname === '/app/work-trips') return ['/app/work-trips'];
     if (pathname === '/app/leave/grant') return ['/app/leave/grant'];
     if (pathname === '/app/leave/policies') return ['/app/leave/policies'];
+    if (pathname === '/app/leave/absence') return ['/app/leave/absence'];
+    if (pathname === '/app/leave/types') return ['/app/leave/types'];
     if (pathname === '/app/leave') return ['/app/leave'];
     if (pathname === '/app/salary/unused-leave') return ['/app/salary/unused-leave'];
     if (pathname === '/app/salary/settings') return ['/app/salary/settings'];
+    if (pathname === '/app/salary/pay-grade-table') return ['/app/salary/pay-grade-table'];
     if (pathname === '/app/payroll/allowances') return ['/app/payroll/allowances'];
     if (pathname === '/app/payroll/allowances/admin') return ['/app/payroll/allowances/admin'];
     if (pathname.startsWith('/app/payroll/admin')) return ['/app/payroll/admin'];
@@ -1229,7 +1267,8 @@ function menuOpenKeysForPath(
         isSystemAdmin &&
         (pathname.startsWith('/app/payroll') ||
             pathname === '/app/salary/unused-leave' ||
-            pathname === '/app/salary/settings')
+            pathname === '/app/salary/settings' ||
+            pathname === '/app/salary/pay-grade-table')
     ) {
         keys.push(PAYROLL_GROUP_KEY);
     }

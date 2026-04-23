@@ -5,6 +5,12 @@ import type {
   CompanyHoliday,
   CompanyHolidayCreatePayload,
   CompanyHolidayUpdatePayload,
+  CompanyIpWhitelist,
+  CompanyIpWhitelistCreatePayload,
+  CompanyIpWhitelistUpdatePayload,
+  CompanyLeaveType,
+  CompanyLeaveTypeCreatePayload,
+  CompanyLeaveTypeUpdatePayload,
   OvertimeRequest,
   OvertimeRequestCreatePayload,
   OvertimePolicy,
@@ -16,6 +22,8 @@ import type {
   MemberScheduleSelection,
   MemberScheduleSelectionCreatePayload,
   DailyAttendance,
+  LeaveOfAbsence,
+  LeaveOfAbsenceApprovalStatusCode,
   LeavePolicy,
   LeavePolicyCreatePayload,
   LeavePolicyUpdatePayload,
@@ -25,6 +33,7 @@ import type {
   WorkSchedule,
   WorkScheduleCreatePayload,
   WorkScheduleUpdatePayload,
+  WorkTimeSummary,
   WorkTrip,
   WorkTripCreatePayload,
   WorkTripUpdatePayload,
@@ -114,6 +123,14 @@ export const attendanceApi = {
       });
       return unwrapApiResponse<SpringPage<DailyAttendance>>(data);
     },
+
+    /** 본인 주간 근무시간 요약, date 기준 월요일~일요일 집계. date 생략 시 오늘 */
+    async getMyWorkTimeSummary(date?: string): Promise<WorkTimeSummary> {
+      const { data } = await httpClient.get(`${BASE}/attendance/my/work-time-summary`, {
+        params: date ? { date } : undefined,
+      });
+      return unwrapApiResponse<WorkTimeSummary>(data);
+    },
   },
 
   /** /member-balance — 휴가 잔여 */
@@ -188,6 +205,111 @@ export const attendanceApi = {
 
     async delete(holidayId: string): Promise<void> {
       await httpClient.delete(`${BASE}/company-holidays/${encodeURIComponent(holidayId)}`);
+    },
+
+    /** 지정 연도 법정 공휴일 재수집, 커스텀 휴일은 보존 */
+    async refreshLegal(year: number): Promise<{ year: number; importedCount: number }> {
+      /** POST 본문 `null`은 일부 프록시/서버에서 이상 동작할 수 있어 본문 생략 */
+      const { data } = await httpClient.post(`${BASE}/company-holidays/refresh-legal`, undefined, {
+        params: { year },
+      });
+      unwrapMessage(data);
+      return unwrapApiResponse<{ year: number; importedCount: number }>(data);
+    },
+  },
+
+  /** /attendance/ip-whitelist — 회사 허용 IP 관리 (출퇴근 IP 검증) */
+  companyIpWhitelist: {
+    async list(): Promise<CompanyIpWhitelist[]> {
+      const { data } = await httpClient.get(`${BASE}/attendance/ip-whitelist`);
+      const unwrapped = unwrapApiResponse<CompanyIpWhitelist[] | null>(data);
+      return Array.isArray(unwrapped) ? unwrapped : [];
+    },
+
+    async create(payload: CompanyIpWhitelistCreatePayload): Promise<CompanyIpWhitelist> {
+      const { data } = await httpClient.post(`${BASE}/attendance/ip-whitelist/create`, payload);
+      unwrapMessage(data);
+      return unwrapApiResponse<CompanyIpWhitelist>(data);
+    },
+
+    async update(
+      companyIpWhitelistId: string,
+      payload: CompanyIpWhitelistUpdatePayload,
+    ): Promise<CompanyIpWhitelist> {
+      const { data } = await httpClient.put(
+        `${BASE}/attendance/ip-whitelist/${encodeURIComponent(companyIpWhitelistId)}`,
+        payload,
+      );
+      unwrapMessage(data);
+      return unwrapApiResponse<CompanyIpWhitelist>(data);
+    },
+
+    async delete(companyIpWhitelistId: string): Promise<void> {
+      await httpClient.delete(
+        `${BASE}/attendance/ip-whitelist/${encodeURIComponent(companyIpWhitelistId)}`,
+      );
+    },
+  },
+
+  /** /attendance/leave-types — 회사 휴가 종류 */
+  companyLeaveType: {
+    async list(): Promise<CompanyLeaveType[]> {
+      const { data } = await httpClient.get(`${BASE}/attendance/leave-types`);
+      const unwrapped = unwrapApiResponse<CompanyLeaveType[] | null>(data);
+      return Array.isArray(unwrapped) ? unwrapped : [];
+    },
+
+    async getById(companyLeaveTypeId: string): Promise<CompanyLeaveType> {
+      const { data } = await httpClient.get(
+        `${BASE}/attendance/leave-types/${encodeURIComponent(companyLeaveTypeId)}`,
+      );
+      return unwrapApiResponse<CompanyLeaveType>(data);
+    },
+
+    async create(payload: CompanyLeaveTypeCreatePayload): Promise<CompanyLeaveType> {
+      const { data } = await httpClient.post(`${BASE}/attendance/leave-types/create`, payload);
+      unwrapMessage(data);
+      return unwrapApiResponse<CompanyLeaveType>(data);
+    },
+
+    async update(
+      companyLeaveTypeId: string,
+      payload: CompanyLeaveTypeUpdatePayload,
+    ): Promise<CompanyLeaveType> {
+      const { data } = await httpClient.put(
+        `${BASE}/attendance/leave-types/${encodeURIComponent(companyLeaveTypeId)}`,
+        payload,
+      );
+      unwrapMessage(data);
+      return unwrapApiResponse<CompanyLeaveType>(data);
+    },
+
+    async delete(companyLeaveTypeId: string): Promise<void> {
+      await httpClient.delete(
+        `${BASE}/attendance/leave-types/${encodeURIComponent(companyLeaveTypeId)}`,
+      );
+    },
+  },
+
+  /** /attendance/leave-of-absence — 휴직 (관리자) */
+  leaveOfAbsence: {
+    /** 상태별 목록, REQUESTED/ACTIVE/ENDED/REJECTED/CANCELLED */
+    async listByStatus(status: LeaveOfAbsenceApprovalStatusCode): Promise<LeaveOfAbsence[]> {
+      const { data } = await httpClient.get(`${BASE}/attendance/leave-of-absence/admin`, {
+        params: { status },
+      });
+      const unwrapped = unwrapApiResponse<LeaveOfAbsence[] | null>(data);
+      return Array.isArray(unwrapped) ? unwrapped : [];
+    },
+
+    /** 조기 복직 처리, actualEndDate 지정 */
+    async endEarly(leaveOfAbsenceId: string, actualEndDate: string): Promise<void> {
+      const { data } = await httpClient.patch(
+        `${BASE}/attendance/leave-of-absence/admin/${encodeURIComponent(leaveOfAbsenceId)}/end`,
+        null,
+        { params: { actualEndDate } },
+      );
+      unwrapMessage(data);
     },
   },
 

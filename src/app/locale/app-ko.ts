@@ -25,19 +25,24 @@ export const APP_MENU_LABEL: Record<string, string> = {
   '/app/attendance/monthly': '내 근태 이력',
   '/app/attendance/schedules/my': '스케줄/시차',
   '/app/attendance/overtime': '연장근로 신청/이력',
+  '/app/attendance/work-time': '내 주간 근무시간',
   '/app/attendance/company': '오늘 출근 현황',
   '/app/attendance/company/monthly': '월별 근태 현황',
   '/app/attendance/holidays': '휴무일/공휴일',
+  '/app/attendance/ip-whitelist': '출퇴근 허용 IP',
   '/app/attendance/schedules': '근무 스케줄',
   '/app/attendance/overtime-policies': '연장근로 정책',
   '/app/attendance/flexible-slots': '시차 출퇴근 시간대',
   '/app/leave/grant': '휴가 부여',
   '/app/leave/policies': '연차 정책',
+  '/app/leave/absence': '휴직 관리',
+  '/app/leave/types': '휴가 종류 관리',
   '/app/payroll/admin': '급여 정산 관리',
   '/app/payroll/allowances': '수당 변경 신청',
   '/app/payroll/allowances/admin': '수당 요청 관리',
   '/app/salary/unused-leave': '연차수당 정산',
   '/app/salary/settings': '급여 정책/기준',
+  '/app/salary/pay-grade-table': '호봉표 관리',
 };
 
 /** 사이드 메뉴 표시 순서 */
@@ -106,17 +111,22 @@ export function appHeaderTitleFromPath(
   if (pathname === '/app/attendance/monthly') return '내 근태 이력';
   if (pathname === '/app/attendance/schedules/my') return '스케줄/시차';
   if (pathname === '/app/attendance/overtime') return '연장근로 신청/이력';
+  if (pathname === '/app/attendance/work-time') return '내 주간 근무시간';
   if (pathname === '/app/attendance/company/monthly') return '월별 근태 현황';
   if (pathname === '/app/attendance/company') return '오늘 출근 현황';
   if (pathname === '/app/attendance/overtime-policies') return '연장근로 정책';
   if (pathname === '/app/attendance/flexible-slots') return '시차 출퇴근 시간대';
   if (pathname === '/app/leave/grant') return '휴가 부여';
   if (pathname === '/app/leave/policies') return '연차 정책 관리';
+  if (pathname === '/app/leave/absence') return '휴직 관리';
+  if (pathname === '/app/leave/types') return '휴가 종류 관리';
   if (pathname === '/app/attendance/holidays') return '휴무일/공휴일 관리';
+  if (pathname === '/app/attendance/ip-whitelist') return '출퇴근 허용 IP 관리';
   if (pathname === '/app/attendance/schedules') return '근무 스케줄 관리';
   if (pathname === '/app/work-trips') return '출장 신청/이력';
   if (pathname === '/app/payroll/allowances') return '수당 변경 신청';
   if (pathname === '/app/salary/settings') return '급여 정책/기준';
+  if (pathname === '/app/salary/pay-grade-table') return '호봉표 관리';
   if (pathname === '/app/payroll') return '급여 조회';
   if (pathname === '/app/payroll/admin') return '급여 정산 관리';
   if (pathname === '/app/payroll/allowances/admin') return '수당 요청 관리';

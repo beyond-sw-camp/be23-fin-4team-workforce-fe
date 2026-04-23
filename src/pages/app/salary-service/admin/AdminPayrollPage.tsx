@@ -109,16 +109,35 @@ export function AdminPayrollPage() {
 
   const columns: ColumnsType<Payroll> = useMemo(
     () => [
-      { title: '귀속일', dataIndex: 'payrollYearMonthDay', key: 'payrollYearMonthDay' },
+      {
+        title: '귀속일',
+        dataIndex: 'payrollYearMonthDay',
+        key: 'payrollYearMonthDay',
+        sorter: (a, b) => (a.payrollYearMonthDay ?? '').localeCompare(b.payrollYearMonthDay ?? ''),
+        defaultSortOrder: 'descend',
+      },
       {
         title: '상태',
         dataIndex: 'payrollStatus',
         key: 'payrollStatus',
+        filters: [
+          { text: STATUS_KO.DRAFT, value: 'DRAFT' },
+          { text: STATUS_KO.CONFIRMED, value: 'CONFIRMED' },
+          { text: STATUS_KO.PAID, value: 'PAID' },
+        ],
+        onFilter: (value, record) => record.payrollStatus === value,
         render: (s: string) => (
           <Tag color={STATUS_COLOR[s] ?? 'default'}>{STATUS_KO[s] ?? s ?? '—'}</Tag>
         ),
       },
-      { title: '실수령', dataIndex: 'netPay', key: 'netPay', align: 'right', render: (v: number) => formatWon(v) },
+      {
+        title: '실수령',
+        dataIndex: 'netPay',
+        key: 'netPay',
+        align: 'right',
+        sorter: (a, b) => (a.netPay ?? 0) - (b.netPay ?? 0),
+        render: (v: number) => formatWon(v),
+      },
       {
         title: '',
         key: 'act',

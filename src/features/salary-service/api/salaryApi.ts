@@ -2,6 +2,10 @@
 import type {
   MemberAllowance,
   MemberAllowanceCreatePayload,
+  PayGradeTable,
+  PayGradeTableBulkCreatePayload,
+  PayGradeTableCreatePayload,
+  PayGradeTableUpdatePayload,
   Payroll,
   PayrollCreatePayload,
   PayrollItem,
@@ -71,6 +75,15 @@ export const salaryApi = {
 
     async delete(payrollId: string): Promise<void> {
       await httpClient.delete(`${BASE}/salary/payroll/${encodeURIComponent(payrollId)}`);
+    },
+
+    /** 급여명세서 PDF 다운로드. 본인 또는 SALARY:READ 권한 필요 */
+    async downloadPayslipPdf(payrollId: string): Promise<Blob> {
+      const { data } = await httpClient.get(
+        `${BASE}/salary/payroll/${encodeURIComponent(payrollId)}/payslip.pdf`,
+        { responseType: 'blob' },
+      );
+      return data as Blob;
     },
 
     async confirm(payrollId: string): Promise<Payroll> {
@@ -176,6 +189,13 @@ export const salaryApi = {
 
     async delete(id: string): Promise<void> {
       await httpClient.delete(`${BASE}/salary/salary-item-templates/${encodeURIComponent(id)}`);
+    },
+
+    /** 회사 표준 급여 항목 일괄 시드 (기본급/식대/자가운전 등). 이미 시드된 회사는 skip */
+    async initDefaults(): Promise<{ created: number; message: string }> {
+      const { data } = await httpClient.post(`${BASE}/salary/salary-item-templates/init`);
+      unwrapMessage(data);
+      return unwrapApiResponse<{ created: number; message: string }>(data);
     },
   },
 
@@ -306,6 +326,71 @@ export const salaryApi = {
 
     async delete(id: string): Promise<void> {
       await httpClient.delete(`${BASE}/salary/taxRate/${encodeURIComponent(id)}`);
+    },
+
+    /** 지정 연도 표준 세율 시드, 기존 값은 보존 (멱등) */
+    async initDefaults(applyYear: number): Promise<{
+      applyYear: number;
+      inserted: number;
+      skipped: number;
+    }> {
+      const { data } = await httpClient.post(`${BASE}/salary/taxRate/init`, null, {
+        params: { applyYear },
+      });
+      unwrapMessage(data);
+      return unwrapApiResponse<{ applyYear: number; inserted: number; skipped: number }>(data);
+    },
+  },
+
+  /** /salary/pay-grade-table — 호봉표 관리 (호봉 → 기본급, 직급 무관) */
+  payGradeTable: {
+    async list(): Promise<PayGradeTable[]> {
+      const { data } = await httpClient.get(`${BASE}/salary/pay-grade-table`);
+      const unwrapped = unwrapApiResponse<PayGradeTable[] | null>(data);
+      return Array.isArray(unwrapped) ? unwrapped : [];
+    },
+
+    async getById(payGradeTableId: string): Promise<PayGradeTable> {
+      const { data } = await httpClient.get(
+        `${BASE}/salary/pay-grade-table/${encodeURIComponent(payGradeTableId)}`,
+      );
+      return unwrapApiResponse<PayGradeTable>(data);
+    },
+
+    async create(payload: PayGradeTableCreatePayload): Promise<PayGradeTable> {
+      const { data } = await httpClient.post(`${BASE}/salary/pay-grade-table/create`, payload);
+      unwrapMessage(data);
+      return unwrapApiResponse<PayGradeTable>(data);
+    },
+
+    async update(
+      payGradeTableId: string,
+      payload: PayGradeTableUpdatePayload,
+    ): Promise<PayGradeTable> {
+      const { data } = await httpClient.put(
+        `${BASE}/salary/pay-grade-table/${encodeURIComponent(payGradeTableId)}`,
+        payload,
+      );
+      unwrapMessage(data);
+      return unwrapApiResponse<PayGradeTable>(data);
+    },
+
+    async delete(payGradeTableId: string): Promise<void> {
+      await httpClient.delete(
+        `${BASE}/salary/pay-grade-table/${encodeURIComponent(payGradeTableId)}`,
+      );
+    },
+
+    /** 일괄 등록, 같은 (직급, 호봉) 활성 레코드는 자동 마감 후 신규 발행 */
+    async bulkCreate(
+      payload: PayGradeTableBulkCreatePayload,
+    ): Promise<{ created: number; replaced: number }> {
+      const { data } = await httpClient.post(
+        `${BASE}/salary/pay-grade-table/bulk-create`,
+        payload,
+      );
+      unwrapMessage(data);
+      return unwrapApiResponse<{ created: number; replaced: number }>(data);
     },
   },
 
