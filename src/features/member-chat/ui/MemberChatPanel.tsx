@@ -214,6 +214,8 @@ const MEMBER_CHAT_OVERLAY_Z = 10_080;
  * - 한 번 닫은 뒤 재오픈부터는 자동 진입하지 않음 (사용자가 직접 방 선택)
  */
 let shouldAutoEnterRoomOnMount = true;
+/** StrictMode/dev 재실행에서 동일 상대 1:1 방 중복 생성 방지용 잠금 */
+const directRoomCreateLocks = new Set<string>();
 
 export type MemberChatPanelProps = {
   /** `floating`: 드래그 가능한 플로팅 패널 안에서 높이를 부모에 맞춤 */
@@ -311,7 +313,18 @@ export function MemberChatPanel({
     if (variant !== 'floating') return;
     const raw = initialDirectMemberId?.trim();
     if (!raw) return;
+    if (loadingRooms) return;
     let cancelled = false;
+    const existingDirectRoom = rooms.find(
+      (room) => room.roomType === 'DIRECT' && sameMemberUuid(room.otherMemberId, raw),
+    );
+    if (existingDirectRoom) {
+      setActiveRoom(existingDirectRoom);
+      onInitialDirectConsumed?.();
+      return;
+    }
+    if (directRoomCreateLocks.has(raw)) return;
+    directRoomCreateLocks.add(raw);
     void memberChatApi
       .createDirectRoom(raw)
       .then((room) => {
@@ -323,11 +336,14 @@ export function MemberChatPanel({
       .catch(() => {
         message.error('1:1 채팅방을 열 수 없습니다.');
         onInitialDirectConsumed?.();
+      })
+      .finally(() => {
+        directRoomCreateLocks.delete(raw);
       });
     return () => {
       cancelled = true;
     };
-  }, [variant, initialDirectMemberId, queryClient, onInitialDirectConsumed]);
+  }, [variant, initialDirectMemberId, loadingRooms, rooms, queryClient, onInitialDirectConsumed]);
 
   const { data: history, isLoading: loadingMessages } = useQuery({
     queryKey: ['member-chat', 'history', activeRoom?.roomId],

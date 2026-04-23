@@ -39,7 +39,7 @@ import type {MenuProps} from 'antd';
 import MenuContext from 'antd/es/menu/MenuContext';
 import type {ReactNode} from 'react';
 import {useContext, useEffect, useMemo, useState} from 'react';
-import {useQuery, useQueryClient} from '@tanstack/react-query';
+import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Link, Outlet, useNavigate, useRouterState} from '@tanstack/react-router';
 import {useAuth} from '@/features/auth/useAuth';
 import {PERM} from '@/features/permissions/backend-permissions';
@@ -1019,11 +1019,14 @@ function AppShellAccountMenu() {
 
 function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
     const {status} = useAuth();
+    const navigate = useNavigate();
     const queryClient = useQueryClient();
     const {openMemberChat} = useMemberChatOpener();
     const [search, setSearch] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
     const [headerDetailMemberId, setHeaderDetailMemberId] = useState<string | null>(null);
+    const [notificationPopoverOpen, setNotificationPopoverOpen] = useState(false);
+    const [notificationTab, setNotificationTab] = useState<'all' | 'unread'>('all');
 
     useEffect(() => {
         const t = window.setTimeout(() => {
@@ -1047,6 +1050,18 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
         queryFn: () => notificationApi.unreadCount(),
         enabled: status === 'authenticated',
         staleTime: 10_000,
+    });
+    const {data: notifications = [], isFetching: notificationsLoading} = useQuery({
+        queryKey: ['notifications', 'list'],
+        queryFn: () => notificationApi.list(),
+        enabled: status === 'authenticated',
+        staleTime: 10_000,
+    });
+    const markNotificationAsRead = useMutation({
+        mutationFn: (notificationId: string) => notificationApi.markAsRead(notificationId),
+        onSuccess: () => {
+            void queryClient.invalidateQueries({queryKey: ['notifications']});
+        },
     });
 
     /**
@@ -1075,6 +1090,134 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
         });
         return unsubscribe;
     }, [queryClient, status]);
+
+    const isApprovalNotification = (type: string): boolean => {
+        const t = String(type ?? '').toUpperCase();
+        return t === 'APPROVAL_REQUESTED' || t === 'APPROVAL_APPROVED' || t === 'APPROVAL_REJECTED';
+    };
+    const filteredNotifications = notificationTab === 'unread'
+        ? notifications.filter((item) => item.isRead !== 'YES')
+        : notifications;
+    const latestNotifications = filteredNotifications.slice(0, 8);
+
+    const routeApprovalNotification = async (item: (typeof notifications)[number]) => {
+        if (item.isRead !== 'YES') {
+            await markNotificationAsRead.mutateAsync(item.notificationId);
+        }
+        const t = String(item.notificationType ?? '').toUpperCase();
+        if (t === 'APPROVAL_REQUESTED') {
+            await navigate({
+                to: '/app/approvals',
+                search: {tab: 'pending'},
+            });
+            setNotificationPopoverOpen(false);
+            return;
+        }
+        if (t === 'APPROVAL_APPROVED' || t === 'APPROVAL_REJECTED') {
+            await navigate({
+                to: '/app/approvals',
+                search: {tab: 'my', box: 'per-all'},
+            });
+            setNotificationPopoverOpen(false);
+        }
+    };
+
+    const notificationPopoverContent = (
+        <div className="tw-w-[360px] tw-max-w-[86vw] tw-space-y-3 tw-p-1">
+            <div className="tw-flex tw-items-center tw-justify-between">
+                <div className="tw-text-sm tw-font-semibold tw-text-slate-900">알림 센터</div>
+                <button
+                    type="button"
+                    className="tw-cursor-pointer tw-border-0 tw-bg-transparent tw-text-xs tw-font-medium tw-text-blue-600 hover:tw-text-blue-700"
+                    onClick={() => {
+                        setNotificationPopoverOpen(false);
+                        void navigate({to: '/app/notifications'});
+                    }}
+                >
+                    전체 페이지
+                </button>
+            </div>
+            <div className="tw-inline-flex tw-w-full tw-rounded-lg tw-bg-slate-100 tw-p-1">
+                <button
+                    type="button"
+                    className={`tw-flex-1 tw-rounded-md tw-border-0 tw-px-3 tw-py-1.5 tw-text-sm tw-font-medium ${
+                        notificationTab === 'all'
+                            ? 'tw-bg-white tw-text-slate-900 tw-shadow-sm'
+                            : 'tw-bg-transparent tw-text-slate-500'
+                    }`}
+                    onClick={() => setNotificationTab('all')}
+                >
+                    전체 알림
+                </button>
+                <button
+                    type="button"
+                    className={`tw-flex-1 tw-rounded-md tw-border-0 tw-px-3 tw-py-1.5 tw-text-sm tw-font-medium ${
+                        notificationTab === 'unread'
+                            ? 'tw-bg-white tw-text-slate-900 tw-shadow-sm'
+                            : 'tw-bg-transparent tw-text-slate-500'
+                    }`}
+                    onClick={() => setNotificationTab('unread')}
+                >
+                    안 읽은 알림
+                </button>
+            </div>
+            <div className="tw-max-h-[380px] tw-space-y-2 tw-overflow-y-auto tw-pr-1">
+                {notificationsLoading ? (
+                    <div className="tw-flex tw-items-center tw-justify-center tw-py-6">
+                        <Spin size="small"/>
+                    </div>
+                ) : latestNotifications.length === 0 ? (
+                    <div className="tw-rounded-lg tw-border tw-border-slate-200 tw-bg-slate-50 tw-p-5 tw-text-center tw-text-sm tw-text-slate-500">
+                        {notificationTab === 'unread' ? '안 읽은 알림이 없습니다.' : '알림이 없습니다.'}
+                    </div>
+                ) : (
+                    latestNotifications.map((item) => (
+                        <div
+                            key={item.notificationId}
+                            role="button"
+                            tabIndex={0}
+                            className={`tw-rounded-xl tw-border tw-px-3 tw-py-2.5 ${
+                                item.isRead !== 'YES' ? 'tw-border-blue-200 tw-bg-blue-50/50' : 'tw-border-slate-200 tw-bg-white'
+                            } ${isApprovalNotification(item.notificationType) ? 'tw-cursor-pointer hover:tw-bg-slate-50' : ''}`}
+                            onClick={() => {
+                                if (!isApprovalNotification(item.notificationType)) return;
+                                void routeApprovalNotification(item);
+                            }}
+                            onKeyDown={(e) => {
+                                if (!(e.key === 'Enter' || e.key === ' ')) return;
+                                e.preventDefault();
+                                if (!isApprovalNotification(item.notificationType)) return;
+                                void routeApprovalNotification(item);
+                            }}
+                        >
+                            <div className="tw-flex tw-items-start tw-justify-between tw-gap-2">
+                                <div className="tw-min-w-0">
+                                    <div className="tw-flex tw-items-center tw-gap-1.5">
+                                        <div className="tw-truncate tw-text-sm tw-font-semibold tw-text-slate-900">{item.title}</div>
+                                        {item.isRead !== 'YES' ? <span className="tw-size-1.5 tw-rounded-full tw-bg-red-500"/> : null}
+                                    </div>
+                                    <div className="tw-mt-1 tw-line-clamp-2 tw-text-xs tw-text-slate-600">{item.content}</div>
+                                </div>
+                                {item.isRead !== 'YES' ? (
+                                    <button
+                                        type="button"
+                                        className="tw-shrink-0 tw-cursor-pointer tw-border-0 tw-bg-transparent tw-text-[11px] tw-font-medium tw-text-blue-600 hover:tw-text-blue-700"
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            void markNotificationAsRead.mutateAsync(item.notificationId);
+                                        }}
+                                    >
+                                        읽음
+                                    </button>
+                                ) : null}
+                            </div>
+                        </div>
+                    ))
+                )}
+            </div>
+        </div>
+    );
 
     return (
         <Layout.Header
@@ -1169,11 +1312,24 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
                         </button>
                     </Badge>
                 </Tooltip>
-                <Badge count={unreadCount} color="#EF4444" offset={[-8, 8]} showZero={false} overflowCount={99}>
-                    <Link to="/app/notifications" className={headerGhostIconClass} aria-label="알림">
-                        <BellOutlined className="tw-text-[20px]"/>
-                    </Link>
-                </Badge>
+                <Popover
+                    trigger="click"
+                    placement="bottomRight"
+                    open={notificationPopoverOpen}
+                    onOpenChange={setNotificationPopoverOpen}
+                    content={notificationPopoverContent}
+                    overlayClassName="tw-z-[1060]"
+                >
+                    <Badge count={unreadCount} color="#EF4444" offset={[-8, 8]} showZero={false} overflowCount={99}>
+                        <button
+                            type="button"
+                            className={headerGhostIconClass}
+                            aria-label={`알림${unreadCount > 0 ? ` (안 읽은 알림 ${unreadCount}건)` : ''}`}
+                        >
+                            <BellOutlined className="tw-text-[20px]"/>
+                        </button>
+                    </Badge>
+                </Popover>
                 <AppShellAccountMenu/>
             </div>
         </Layout.Header>
