@@ -36,7 +36,8 @@ import PerformancePage from '@/pages/app/PerformancePage';
 import { GoalApprovalDetailPage } from '@/pages/app/GoalApprovalDetailPage';
 import { ApprovalsPage } from '@/pages/app/ApprovalsPage';
 import { AbsenceProxyPage } from '@/pages/app/AbsenceProxyPage';
-import { DepartmentApprovalsInboxPage } from '@/pages/app/DepartmentApprovalsInboxPage';
+import { DepartmentApprovalSearchPage } from '@/pages/app/DepartmentApprovalSearchPage';
+import { MyApprovalRequestsPage } from '@/pages/app/MyApprovalRequestsPage';
 import { GenericPage } from '@/pages/app/GenericPage';
 import { AiDocumentsAdminPage } from '@/pages/app/AiDocumentsAdminPage';
 import { AdminAttendanceDailyPage } from '@/pages/app/salary-service/admin/AdminAttendanceDailyPage';
@@ -291,9 +292,27 @@ const approvalsAdminRoute = createRoute({
   component: ApprovalsPage,
 });
 
+const myApprovalRequestsRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/approvals/my-requests',
+  validateSearch: z.object({
+    query: z.string().optional(),
+    status: z.string().optional(),
+    requestType: z.string().optional(),
+    page: z.number().optional(),
+    size: z.number().optional(),
+    embed: z.string().optional(),
+  }),
+  component: MyApprovalRequestsPage,
+});
+
 const departmentApprovalsSearchSchema = z.object({
   organizationId: z.string().optional(),
-  deptView: z.enum(['draft', 'sent', 'received']).optional(),
+  query: z.string().optional(),
+  status: z.string().optional(),
+  requestType: z.string().optional(),
+  page: z.number().optional(),
+  size: z.number().optional(),
   fromHome: z.string().optional(),
   embed: z.string().optional(),
 });
@@ -302,7 +321,7 @@ const departmentApprovalsInboxRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/approvals/department',
   validateSearch: departmentApprovalsSearchSchema,
-  component: DepartmentApprovalsInboxPage,
+  component: DepartmentApprovalSearchPage,
 });
 
 const absenceProxySearchSchema = z.object({
@@ -697,6 +716,7 @@ const routeTree = rootRoute.addChildren([
       notificationsRoute,
       performanceRoute,
       approvalsAdminRoute,
+      myApprovalRequestsRoute,
       absenceProxyRoute,
       departmentApprovalsInboxRoute,
       goalApprovalDetailRoute,
