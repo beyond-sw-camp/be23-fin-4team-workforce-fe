@@ -56,7 +56,12 @@ function flattenOrgList(nodes: OrganizationTreeNode[]): { id: string; name: stri
   return out;
 }
 
+function isApprovalCalendarEvent(e: CalendarEvent): boolean {
+  return String(e.eventType ?? '').toUpperCase() === 'APPROVAL';
+}
+
 function isTeamEvent(e: CalendarEvent): boolean {
+  if (isApprovalCalendarEvent(e)) return false;
   return e.scope === 'team' || Boolean(e.organizationId?.trim());
 }
 
@@ -95,6 +100,33 @@ const MINUTES_PER_DAY = 24 * 60;
 const DAY_VIEW_HOUR_PX = 48;
 const EVENT_CHIP_CLASS =
   'tw-block tw-w-full tw-truncate tw-rounded tw-border-0 tw-bg-rose-200/75 tw-px-1.5 tw-py-0.5 tw-text-left tw-text-[10px] tw-font-medium tw-leading-tight tw-text-rose-900 hover:tw-bg-rose-200';
+
+const EVENT_CHIP_TEAM_CLASS =
+  'tw-block tw-w-full tw-truncate tw-rounded tw-border-0 tw-bg-violet-200/80 tw-px-1.5 tw-py-0.5 tw-text-left tw-text-[10px] tw-font-medium tw-leading-tight tw-text-violet-950 hover:tw-bg-violet-200';
+
+const EVENT_CHIP_APPROVAL_CLASS =
+  'tw-block tw-w-full tw-truncate tw-rounded tw-border-0 tw-bg-amber-100/90 tw-px-1.5 tw-py-0.5 tw-text-left tw-text-[10px] tw-font-medium tw-leading-tight tw-text-amber-950 hover:tw-bg-amber-100';
+
+function eventChipButtonClass(e: CalendarEvent): string {
+  if (isApprovalCalendarEvent(e)) return EVENT_CHIP_APPROVAL_CLASS;
+  if (isTeamEvent(e)) return EVENT_CHIP_TEAM_CLASS;
+  return EVENT_CHIP_CLASS;
+}
+
+const DAY_LANE_PERSONAL_CLASS =
+  'tw-absolute tw-box-border tw-overflow-hidden tw-rounded tw-border tw-border-rose-300 tw-bg-rose-100/90 tw-px-1 tw-py-0.5 tw-text-left tw-text-[11px] tw-leading-tight tw-text-rose-900 hover:tw-bg-rose-100';
+
+const DAY_LANE_TEAM_CLASS =
+  'tw-absolute tw-box-border tw-overflow-hidden tw-rounded tw-border tw-border-violet-400 tw-bg-violet-100/90 tw-px-1 tw-py-0.5 tw-text-left tw-text-[11px] tw-leading-tight tw-text-violet-950 hover:tw-bg-violet-100';
+
+const DAY_LANE_APPROVAL_CLASS =
+  'tw-absolute tw-box-border tw-overflow-hidden tw-rounded tw-border tw-border-amber-300 tw-bg-amber-100/90 tw-px-1 tw-py-0.5 tw-text-left tw-text-[11px] tw-leading-tight tw-text-amber-950 hover:tw-bg-amber-100';
+
+function dayLaneEventButtonClass(e: CalendarEvent): string {
+  if (isApprovalCalendarEvent(e)) return DAY_LANE_APPROVAL_CLASS;
+  if (isTeamEvent(e)) return DAY_LANE_TEAM_CLASS;
+  return DAY_LANE_PERSONAL_CLASS;
+}
 
 function clipEventToDayMinutes(e: CalendarEvent, day: Dayjs): { startMin: number; endMin: number } | null {
   const dayStart = day.startOf('day');
@@ -267,6 +299,7 @@ export function CalendarPage() {
   const [monthValue, setMonthValue] = useState(() => dayjs());
   const [selectedDay, setSelectedDay] = useState<Dayjs>(() => dayjs());
   const [showPersonal, setShowPersonal] = useState(true);
+  const [showApproval, setShowApproval] = useState(true);
   const [selectedTeamOrgIds, setSelectedTeamOrgIds] = useState<string[]>([]);
 
   const year = monthValue.year();
@@ -306,6 +339,9 @@ export function CalendarPage() {
   const filteredEvents = useMemo(
     () =>
       events.filter((e) => {
+        if (isApprovalCalendarEvent(e)) {
+          return showApproval;
+        }
         const team = isTeamEvent(e);
         if (!team && !showPersonal) return false;
         if (team) {
@@ -316,7 +352,7 @@ export function CalendarPage() {
         }
         return true;
       }),
-    [events, showPersonal, selectedTeamOrgIds],
+    [events, showPersonal, showApproval, selectedTeamOrgIds],
   );
 
   const isLoading =
@@ -433,6 +469,9 @@ export function CalendarPage() {
       event: CalendarEvent;
       payload: CreatePersonalCalendarPayload | CreateTeamCalendarPayload;
     }) => {
+      if (isApprovalCalendarEvent(event)) {
+        throw new Error('결재 연동 일정은 수정할 수 없습니다.');
+      }
       if (isTeamEvent(event)) {
         await calendarApi.updateTeam(event.eventId, payload as CreateTeamCalendarPayload);
       } else {
@@ -451,6 +490,9 @@ export function CalendarPage() {
 
   const deleteM = useMutation({
     mutationFn: async (event: CalendarEvent) => {
+      if (isApprovalCalendarEvent(event)) {
+        throw new Error('결재 연동 일정은 삭제할 수 없습니다.');
+      }
       if (isTeamEvent(event)) {
         await calendarApi.deleteTeam(event.eventId);
       } else {
@@ -490,6 +532,10 @@ export function CalendarPage() {
   };
 
   const openEdit = (e: CalendarEvent) => {
+    if (isApprovalCalendarEvent(e)) {
+      message.warning('결재 연동 일정은 수정할 수 없습니다.');
+      return;
+    }
     setEditing(e);
     const start = dayjs(e.startAt);
     const end = dayjs(e.endAt);
@@ -538,11 +584,11 @@ export function CalendarPage() {
           </div>
         )}
         <ul className="tw-m-0 tw-list-none tw-space-y-0.5 tw-p-0">
-          {list.slice(0, 4).map((e) => (
-            <li key={e.eventId}>
+          {list.slice(0, 4).map((e, idx) => (
+            <li key={`${e.eventId}-${e.startAt}-${e.endAt}-${idx}`}>
               <button
                 type="button"
-                className={EVENT_CHIP_CLASS}
+                className={eventChipButtonClass(e)}
                 onClick={(ev) => {
                   ev.preventDefault();
                   ev.stopPropagation();
@@ -585,6 +631,11 @@ export function CalendarPage() {
                 <label className="tw-flex tw-items-center">
                   <Checkbox checked={showPersonal} onChange={(e) => setShowPersonal(e.target.checked)}>
                     개인 일정
+                  </Checkbox>
+                </label>
+                <label className="tw-flex tw-items-center">
+                  <Checkbox checked={showApproval} onChange={(e) => setShowApproval(e.target.checked)}>
+                    결재 연동 일정
                   </Checkbox>
                 </label>
               </div>
@@ -744,11 +795,11 @@ export function CalendarPage() {
                           <span className="tw-text-slate-900">{d.format('D')}</span>
                         </button>
                         <ul className="tw-m-0 tw-flex tw-min-h-0 tw-flex-1 tw-list-none tw-flex-col tw-space-y-0.5 tw-p-0">
-                          {list.slice(0, 4).map((e) => (
-                            <li key={e.eventId}>
+                          {list.slice(0, 4).map((e, idx) => (
+                            <li key={`${e.eventId}-${e.startAt}-${e.endAt}-${idx}`}>
                               <button
                                 type="button"
-                                className={EVENT_CHIP_CLASS}
+                                className={eventChipButtonClass(e)}
                                 onClick={() => {
                                   setDetailEvent(e);
                                   setDetailOpen(true);
@@ -808,9 +859,9 @@ export function CalendarPage() {
                         const left = (lane / laneCount) * 100 + gapPct / 2;
                         return (
                           <button
-                            key={e.eventId}
+                            key={`${e.eventId}-${clip.startMin}-${clip.endMin}-${lane}`}
                             type="button"
-                            className="tw-absolute tw-box-border tw-overflow-hidden tw-rounded tw-border tw-border-rose-300 tw-bg-rose-100/90 tw-px-1 tw-py-0.5 tw-text-left tw-text-[11px] tw-leading-tight tw-text-rose-900 hover:tw-bg-rose-100"
+                            className={dayLaneEventButtonClass(e)}
                             style={{
                               top: `${pctTop}%`,
                               height: `${pctH}%`,
@@ -936,45 +987,62 @@ export function CalendarPage() {
           setDetailOpen(false);
           setDetailEvent(null);
         }}
-        footer={[
-          <Popconfirm
-            key="del"
-            title="이 일정을 삭제할까요?"
-            okText="삭제"
-            cancelText="취소"
-            okButtonProps={{ danger: true, loading: deleteM.isPending }}
-            onConfirm={() => {
-              const ev = detailData ?? detailEvent;
-              if (ev) deleteM.mutate(ev);
-            }}
-          >
-            <Button danger loading={deleteM.isPending} disabled={!detailData && !detailEvent}>
-              삭제
-            </Button>
-          </Popconfirm>,
-          <Button
-            key="edit"
-            type="primary"
-            disabled={!detailData}
-            onClick={() => {
-              if (!detailData) return;
-              setDetailOpen(false);
-              setDetailEvent(null);
-              openEdit(detailData);
-            }}
-          >
-            수정
-          </Button>,
-          <Button
-            key="close"
-            onClick={() => {
-              setDetailOpen(false);
-              setDetailEvent(null);
-            }}
-          >
-            닫기
-          </Button>,
-        ]}
+        footer={(() => {
+          const resolved = detailData ?? detailEvent;
+          const readOnlyApproval = resolved ? isApprovalCalendarEvent(resolved) : false;
+          if (readOnlyApproval) {
+            return [
+              <Button
+                key="close"
+                onClick={() => {
+                  setDetailOpen(false);
+                  setDetailEvent(null);
+                }}
+              >
+                닫기
+              </Button>,
+            ];
+          }
+          return [
+            <Popconfirm
+              key="del"
+              title="이 일정을 삭제할까요?"
+              okText="삭제"
+              cancelText="취소"
+              okButtonProps={{ danger: true, loading: deleteM.isPending }}
+              onConfirm={() => {
+                const ev = detailData ?? detailEvent;
+                if (ev && !isApprovalCalendarEvent(ev)) deleteM.mutate(ev);
+              }}
+            >
+              <Button danger loading={deleteM.isPending} disabled={!detailData && !detailEvent}>
+                삭제
+              </Button>
+            </Popconfirm>,
+            <Button
+              key="edit"
+              type="primary"
+              disabled={!detailData}
+              onClick={() => {
+                if (!detailData) return;
+                setDetailOpen(false);
+                setDetailEvent(null);
+                openEdit(detailData);
+              }}
+            >
+              수정
+            </Button>,
+            <Button
+              key="close"
+              onClick={() => {
+                setDetailOpen(false);
+                setDetailEvent(null);
+              }}
+            >
+              닫기
+            </Button>,
+          ];
+        })()}
         width={480}
       >
         <Spin spinning={detailLoading}>
@@ -984,7 +1052,13 @@ export function CalendarPage() {
                 <Typography.Text strong className="tw-text-lg">
                   {detailData.title}
                 </Typography.Text>
-                {isTeamEvent(detailData) ? <Tag color="blue">팀</Tag> : <Tag>개인</Tag>}
+                {isApprovalCalendarEvent(detailData) ? (
+                  <Tag color="orange">결재 연동</Tag>
+                ) : isTeamEvent(detailData) ? (
+                  <Tag color="blue">팀</Tag>
+                ) : (
+                  <Tag>개인</Tag>
+                )}
               </div>
               <Typography.Paragraph className="!tw-m-0 tw-whitespace-pre-wrap tw-text-slate-700">
                 {detailData.description?.trim() || '—'}
@@ -996,7 +1070,11 @@ export function CalendarPage() {
                 <div>
                   종료: {dayjs(detailData.endAt).format('YYYY-MM-DD HH:mm')}
                 </div>
-                {!isTeamEvent(detailData) && (
+                {detailData.memberName?.trim() ? <div>대상: {detailData.memberName.trim()}</div> : null}
+                {detailData.eventTypeDescription?.trim() ? (
+                  <div>일정 유형: {detailData.eventTypeDescription.trim()}</div>
+                ) : null}
+                {!isTeamEvent(detailData) && !isApprovalCalendarEvent(detailData) && (
                   <div>공개: {detailData.isPublicYn === 'NO' ? '비공개' : '공개'}</div>
                 )}
                 {isTeamEvent(detailData) && detailData.organizationId && (

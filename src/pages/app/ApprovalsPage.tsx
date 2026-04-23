@@ -12,6 +12,7 @@ import {
   FileTextOutlined,
   FolderOpenOutlined,
   FormOutlined,
+  InboxOutlined,
   MinusOutlined,
   MoreOutlined,
   PaperClipOutlined,
@@ -57,7 +58,9 @@ import {
   Tooltip,
   Tree,
   Typography,
+  Upload,
 } from 'antd';
+import type { UploadProps } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import type { DataNode } from 'antd/es/tree';
 import dayjs from 'dayjs';
@@ -286,7 +289,14 @@ function PendingHomeApprovalLineStepIcon({ status }: { status: string }) {
   return <MinusOutlined className="!tw-text-lg tw-text-slate-400" />;
 }
 
-function PendingHomeApprovalLineStrip({ lines }: { lines: ApprovalLine[] }) {
+function PendingHomeApprovalLineStrip({
+  lines,
+  visibleSlots = 0,
+}: {
+  lines: ApprovalLine[];
+  /** 0보다 크면 결재선 가로 영역에 고정 폭 클래스를 붙입니다(카드·테이블 셀 레이아웃용). */
+  visibleSlots?: number;
+}) {
   const sorted = [...lines].sort((a, b) => a.stepOrder - b.stepOrder);
   if (sorted.length === 0) {
     return (
@@ -736,10 +746,7 @@ function DocumentFormPicker({
         </Typography.Title>
         <div className="tw-grid tw-grid-cols-1 tw-gap-4 md:tw-grid-cols-2 xl:tw-grid-cols-3">
           {APPROVAL_REQUEST_TYPES.map((t) => {
-            const list = byType[t].filter((doc) => {
-              const name = String(doc.documentName ?? '').replace(/\s+/g, '');
-              return name !== '연차신청서';
-            });
+            const list = byType[t];
             const Icon = REQUEST_TYPE_ICON[t];
             const expanded = categoryExpanded[t] ?? false;
             const hasOverflow = list.length > FORM_PICKER_CATEGORY_INITIAL;
@@ -1072,7 +1079,6 @@ export function ApprovalsPage() {
   const [composeFormSelectInitialId, setComposeFormSelectInitialId] = useState<string | undefined>(undefined);
   /** 저장 시 업로드할 로컬 파일 — 임시저장/제출 직후 POST /approval/attachments */
   const [composeAttachmentFiles, setComposeAttachmentFiles] = useState<File[]>([]);
-  const composeAttachmentInputRef = useRef<HTMLInputElement | null>(null);
   const [composeSidebarTab, setComposeSidebarTab] = useState<'line' | 'doc'>('line');
   const [composeAutosaveMode, setComposeAutosaveMode] = useState<'off' | '1m'>('off');
   const [memberKeyword, setMemberKeyword] = useState('');
@@ -1152,11 +1158,7 @@ export function ApprovalsPage() {
     queryFn: () => approvalApi.listActiveDocuments(),
   });
 
-  /** 작성 허브 카드·양식 선택 모달과 동일하게 숨김(연차신청서 등) */
-  const composeHubVisibleDocuments = useMemo(
-    () => activeDocuments.filter((d) => String(d.documentName ?? '').replace(/\s+/g, '') !== '연차신청서'),
-    [activeDocuments],
-  );
+  const composeHubVisibleDocuments = activeDocuments;
 
   const selectedDocument = useMemo(
     () => activeDocuments.find((d) => d.documentId === selectedDocumentId) ?? null,
@@ -2043,32 +2045,49 @@ export function ApprovalsPage() {
     APPROVAL_ATTACHMENT_MAX_COUNT - composeRemoteAttachments.length - composeAttachmentFiles.length,
   );
 
-  const addComposeAttachmentFiles = (incoming: File[]) => {
-    if (!incoming.length) return;
-    const existingRemoteCount = composeRemoteAttachments.length;
-    const existingRemoteBytes = composeRemoteAttachments.reduce(
-      (acc, a) => acc + (Number.isFinite(a.fileSize) ? a.fileSize : 0),
-      0,
-    );
-    setComposeAttachmentFiles((prev) => {
-      const next = [...prev];
-      for (const file of incoming) {
-        const pendingLocalBytes = next.reduce((s, f) => s + f.size, 0);
-        const err = validateApprovalAttachmentCandidate(file, {
-          existingRemoteCount,
-          pendingLocalCount: next.length,
-          pendingLocalBytes,
-          existingRemoteBytes,
-        });
-        if (err) {
-          void message.error(err);
-          break;
+  const addComposeAttachmentFiles = useCallback(
+    (incoming: File[]) => {
+      if (!incoming.length) return;
+      const existingRemoteCount = composeRemoteAttachments.length;
+      const existingRemoteBytes = composeRemoteAttachments.reduce(
+        (acc, a) => acc + (Number.isFinite(a.fileSize) ? a.fileSize : 0),
+        0,
+      );
+      setComposeAttachmentFiles((prev) => {
+        const next = [...prev];
+        for (const file of incoming) {
+          const pendingLocalBytes = next.reduce((s, f) => s + f.size, 0);
+          const err = validateApprovalAttachmentCandidate(file, {
+            existingRemoteCount,
+            pendingLocalCount: next.length,
+            pendingLocalBytes,
+            existingRemoteBytes,
+          });
+          if (err) {
+            void message.error(err);
+            break;
+          }
+          next.push(file);
         }
-        next.push(file);
-      }
-      return next;
-    });
-  };
+        return next;
+      });
+    },
+    [composeRemoteAttachments, message],
+  );
+
+  const composeAttachmentDraggerProps = useMemo<UploadProps>(
+    () => ({
+      multiple: true,
+      showUploadList: false,
+      disabled: composeAttachmentSlotsLeft <= 0,
+      accept: composeAttachmentAcceptAttr,
+      beforeUpload: (file) => {
+        addComposeAttachmentFiles([file as File]);
+        return false;
+      },
+    }),
+    [addComposeAttachmentFiles, composeAttachmentAcceptAttr, composeAttachmentSlotsLeft],
+  );
 
   const submitCompose = async (status: 'DRAFT' | 'WAIT') => {
     try {
@@ -2444,14 +2463,11 @@ export function ApprovalsPage() {
     {
       title: '관리',
       key: 'actions',
-      width: 240,
+      width: 200,
       render: (_: unknown, row: ApprovalRequestDetail) => {
         const myLine = row.approvalLines.find((l) => String(l.approvalStatus).toUpperCase() === 'PENDING');
         return (
-          <Space size="small" wrap>
-            <Button type="link" size="small" onClick={() => setSelectedRequestId(row.requestId)}>
-              상세
-            </Button>
+          <Space size="small" wrap onClick={(e) => e.stopPropagation()}>
             <Button
               type="primary"
               size="small"
@@ -2507,16 +2523,6 @@ export function ApprovalsPage() {
         key: 'createdAt',
         width: 180,
         render: (v: string) => formatDateTime(v),
-      },
-      {
-        title: '상세',
-        key: 'actions',
-        width: 100,
-        render: (_: unknown, row: ApprovalRequestDetail) => (
-          <Button type="link" size="small" onClick={() => setSelectedRequestId(row.requestId)}>
-            보기
-          </Button>
-        ),
       },
     ],
     [authMemberId],
@@ -2777,16 +2783,21 @@ export function ApprovalsPage() {
               임시저장 수정 중
             </Tag>
           ) : null}
-          <Button
-            type="text"
-            size="small"
-            disabled={composeSaving}
-            icon={<FormOutlined className="tw-text-[13px] tw-text-[#333]" />}
-            className={composeToolbarGhostBtn}
-            onClick={() => void submitCompose('WAIT')}
-          >
-            결재요청
+          {composeEditingRequestId ? (
+            <Button type="text" size="small" className={composeToolbarGhostBtn} onClick={() => resetComposeToNew()}>
+              새 작성
+            </Button>
+          ) : null}
+          <Button type="text" size="small" className={composeToolbarGhostBtn} onClick={() => reloadPolicyApprovalLine()}>
+            자동결재선
           </Button>
+        </Space>
+        <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-x-3 tw-gap-y-2">
+          {showTitle && selectedDocument ? (
+            <Typography.Text type="secondary" className="!tw-mr-1 !tw-max-w-[10rem] !tw-truncate !tw-text-xs !tw-text-[#666] sm:!tw-max-w-[14rem]">
+              {formatApprovalDocumentName(selectedDocument.documentName)}
+            </Typography.Text>
+          ) : null}
           <Button
             type="text"
             size="small"
@@ -2797,20 +2808,15 @@ export function ApprovalsPage() {
           >
             임시저장
           </Button>
-          {composeEditingRequestId ? (
-            <Button type="text" size="small" className={composeToolbarGhostBtn} onClick={() => resetComposeToNew()}>
-              새 작성
-            </Button>
-          ) : null}
-        </Space>
-        <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-x-3 tw-gap-y-2">
-          {showTitle && selectedDocument ? (
-            <Typography.Text type="secondary" className="!tw-mr-1 !tw-max-w-[10rem] !tw-truncate !tw-text-xs !tw-text-[#666] sm:!tw-max-w-[14rem]">
-              {formatApprovalDocumentName(selectedDocument.documentName)}
-            </Typography.Text>
-          ) : null}
-          <Button type="text" size="small" className={composeToolbarGhostBtn} onClick={() => reloadPolicyApprovalLine()}>
-            자동결재선
+          <Button
+            type="text"
+            size="small"
+            disabled={composeSaving}
+            icon={<FormOutlined className="tw-text-[13px] tw-text-[#333]" />}
+            className={composeToolbarGhostBtn}
+            onClick={() => void submitCompose('WAIT')}
+          >
+            결재요청
           </Button>
         </div>
       </div>
@@ -3367,7 +3373,7 @@ export function ApprovalsPage() {
         ) : (
           <div className={APPROVAL_HOME_TOP_ROW_MATCH_SCROLL}>
             <Space direction="vertical" size={8} className="tw-w-full">
-              {composeHubVisibleDocuments.slice(0, 20).map((doc) => {
+              {composeHubVisibleDocuments.map((doc) => {
                 const cat = normalizeApprovalRequestType(doc.requestType);
                 return (
                   <div
@@ -3862,8 +3868,8 @@ export function ApprovalsPage() {
               <div className="tw-flex tw-min-h-[min(100vh-220px,920px)] tw-flex-col tw-overflow-hidden lg:tw-flex-row lg:tw-items-stretch">
                 <div className="tw-flex tw-min-h-0 tw-min-w-0 tw-flex-1 tw-flex-col tw-bg-white tw-p-2 sm:tw-p-3">
                   {renderComposeToolbar()}
-                  <div className="tw-min-h-0 tw-flex-1 tw-overflow-auto tw-rounded-none tw-bg-white">
-                    <div className="tw-p-2 sm:tw-p-3">
+                  <div className="tw-min-h-0 tw-flex-1 tw-overflow-auto tw-rounded-none tw-bg-white wf-scrollbar">
+                    <div className="tw-flex tw-flex-col tw-gap-4 tw-p-2 sm:tw-p-3">
                       <ApprovalFormPaperLayout
                         documentName={formatApprovalDocumentName(selectedDocument.documentName)}
                         categoryLabel={
@@ -3980,11 +3986,8 @@ export function ApprovalsPage() {
                           );
                         })}
                       </ApprovalFormPaperLayout>
-                    </div>
-                  </div>
                   {composeSelectedOfficial ? (
-                    <div className="tw-px-2 tw-pb-3 sm:tw-px-3">
-                      <Card size="small" title="수신 부서 (공문 필수)" className="tw-border-slate-200">
+                    <Card size="small" title="수신 부서 (공문 필수)" className="tw-border-slate-200">
                         <Alert
                           type="info"
                           showIcon
@@ -4009,11 +4012,9 @@ export function ApprovalsPage() {
                           showSearch
                           optionFilterProp="label"
                         />
-                      </Card>
-                    </div>
+                    </Card>
                   ) : null}
-                  <div className="tw-px-2 tw-pb-2 sm:tw-px-3">
-                    <Card size="small" title="부서 문서함 공개" className="tw-border-slate-200">
+                  <Card size="small" title="부서 문서함 공개" className="tw-border-slate-200">
                       <Space direction="vertical" size="small" className="tw-w-full">
                         <Typography.Paragraph type="secondary" className="!tw-mb-0 tw-text-sm">
                           켜두면 같은 부서 구성원이 부서 문서함에서 제목과 내용을 볼 수 있습니다. 끄면 작성자만 전체를 열람할 수 있고, 다른 부서원에게는 목록에서만 일부 정보가 표시됩니다.
@@ -4040,8 +4041,7 @@ export function ApprovalsPage() {
                           />
                         ) : null}
                       </Space>
-                    </Card>
-                  </div>
+                  </Card>
                   {composeEditingRequestId ? (
                     <Alert
                       type="warning"
@@ -4050,74 +4050,18 @@ export function ApprovalsPage() {
                       message="임시저장을 다시 저장하면 서버에서 기존 첨부가 비워질 수 있습니다. 저장 후 필요한 파일을 다시 올려 주세요."
                     />
                   ) : null}
-                  <div
-                    className="tw-mt-3 tw-rounded-sm tw-border tw-border-dashed tw-border-slate-400 tw-bg-white tw-px-3 tw-py-4"
-                    onDragOver={(ev) => {
-                      ev.preventDefault();
-                      ev.stopPropagation();
-                    }}
-                    onDrop={(ev) => {
-                      ev.preventDefault();
-                      ev.stopPropagation();
-                      if (composeAttachmentSlotsLeft <= 0) {
-                        void message.warning(
-                          `첨부는 최대 ${APPROVAL_ATTACHMENT_MAX_COUNT}개까지 등록할 수 있습니다.`,
-                        );
-                        return;
-                      }
-                      const list = ev.dataTransfer.files;
-                      if (list?.length) addComposeAttachmentFiles(Array.from(list));
-                    }}
-                  >
+                  <div className="tw-mt-3 tw-rounded-sm tw-border tw-border-dashed tw-border-slate-400 tw-bg-white tw-px-3 tw-py-4">
                     {composeAttachmentSlotsLeft > 0 ? (
-                      <div
-                        role="button"
-                        tabIndex={0}
-                        className="tw-relative tw-min-h-[5.5rem] tw-cursor-pointer tw-rounded-sm tw-py-6 tw-text-center"
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            composeAttachmentInputRef.current?.click();
-                          }
-                        }}
-                        onClick={() => composeAttachmentInputRef.current?.click()}
-                      >
-                        <input
-                          ref={composeAttachmentInputRef}
-                          type="file"
-                          multiple
-                          accept={composeAttachmentAcceptAttr}
-                          className="tw-sr-only"
-                          tabIndex={-1}
-                          onChange={(e) => {
-                            const list = e.target.files;
-                            e.target.value = '';
-                            if (list?.length) addComposeAttachmentFiles(Array.from(list));
-                          }}
-                        />
-                        <PaperClipOutlined className="tw-text-2xl tw-text-slate-400" />
-                        <div className="tw-mt-2 tw-text-sm tw-leading-relaxed tw-text-[#333]">
-                          이 곳에 파일을 드래그하거나 아래에서 파일을 선택하세요.
-                        </div>
-                        <div className="tw-mt-1">
-                          <Button
-                            type="link"
-                            size="small"
-                            className="!tw-h-auto !tw-p-0 !tw-align-baseline !tw-text-sm"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              composeAttachmentInputRef.current?.click();
-                            }}
-                          >
-                            파일 선택
-                          </Button>
-                        </div>
-                        <Typography.Paragraph type="secondary" className="!tw-mb-0 tw-mt-1 tw-text-xs">
+                      <Upload.Dragger {...composeAttachmentDraggerProps} className="!tw-bg-transparent">
+                        <p className="ant-upload-drag-icon">
+                          <InboxOutlined />
+                        </p>
+                        <p className="ant-upload-text">클릭하거나 파일을 여기로 끌어다 놓으세요</p>
+                        <p className="ant-upload-hint">
                           최대 {APPROVAL_ATTACHMENT_MAX_COUNT}개, 파일당 10MB 이하, 합계 50MB 이하 (jpg, png, pdf,
                           Office, hwp, zip 등)
-                        </Typography.Paragraph>
-                      </div>
+                        </p>
+                      </Upload.Dragger>
                     ) : (
                       <div
                         role="presentation"
@@ -4179,7 +4123,7 @@ export function ApprovalsPage() {
                         ))}
                         {composeAttachmentFiles.map((f, idx) => (
                           <li
-                            key={`${f.name}-${f.size}-${idx}`}
+                            key={`${f.name}-${f.size}-${f.lastModified}-${idx}`}
                             className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2 tw-text-sm"
                           >
                             <span className="tw-min-w-0 tw-truncate tw-text-slate-800" title={f.name}>
@@ -4226,6 +4170,8 @@ export function ApprovalsPage() {
                     </Button>
                   </div>
                   <div className="tw-mt-2">{renderComposeToolbar()}</div>
+                    </div>
+                  </div>
                 </div>
                 <aside
                   className={clsx(
@@ -4330,6 +4276,10 @@ export function ApprovalsPage() {
                                 columns={viewerCcOnlyColumns}
                                 dataSource={viewerCcRequests}
                                 pagination={{ pageSize: 10 }}
+                                onRow={(record) => ({
+                                  onClick: () => setSelectedRequestId(record.requestId),
+                                  style: { cursor: 'pointer' },
+                                })}
                               />
                             ),
                           },
@@ -4344,6 +4294,10 @@ export function ApprovalsPage() {
                                 columns={viewerCcOnlyColumns}
                                 dataSource={viewerCirculationRequests}
                                 pagination={{ pageSize: 10 }}
+                                onRow={(record) => ({
+                                  onClick: () => setSelectedRequestId(record.requestId),
+                                  style: { cursor: 'pointer' },
+                                })}
                               />
                             ),
                           },
@@ -4432,6 +4386,10 @@ export function ApprovalsPage() {
                               columns={viewerCcOnlyColumns}
                               dataSource={viewerCcRequests}
                               pagination={{ pageSize: 10 }}
+                              onRow={(record) => ({
+                                onClick: () => setSelectedRequestId(record.requestId),
+                                style: { cursor: 'pointer' },
+                              })}
                             />
                           ),
                         },
@@ -4445,6 +4403,10 @@ export function ApprovalsPage() {
                               columns={viewerCcOnlyColumns}
                               dataSource={viewerCirculationRequests}
                               pagination={{ pageSize: 10 }}
+                              onRow={(record) => ({
+                                onClick: () => setSelectedRequestId(record.requestId),
+                                style: { cursor: 'pointer' },
+                              })}
                             />
                           ),
                         },
@@ -4496,6 +4458,10 @@ export function ApprovalsPage() {
                     columns={pendingColumns}
                     dataSource={pendingInboxRows}
                     pagination={{ pageSize: 10 }}
+                    onRow={(record) => ({
+                      onClick: () => setSelectedRequestId(record.requestId),
+                      style: { cursor: 'pointer' },
+                    })}
                   />
                 );
                 return isEmbedComposeModal ? (
@@ -4555,19 +4521,13 @@ export function ApprovalsPage() {
                         width: 180,
                         render: (v: string) => formatDateTime(v),
                       },
-                      {
-                        title: '상세',
-                        key: 'actions',
-                        width: 100,
-                        render: (_, row) => (
-                          <Button type="link" size="small" onClick={() => setSelectedRequestId(row.requestId)}>
-                            보기
-                          </Button>
-                        ),
-                      },
                     ]}
                     dataSource={actedRequests}
                     pagination={{ pageSize: 10 }}
+                    onRow={(record) => ({
+                      onClick: () => setSelectedRequestId(record.requestId),
+                      style: { cursor: 'pointer' },
+                    })}
                   />
                 );
                 return isEmbedComposeModal ? (
