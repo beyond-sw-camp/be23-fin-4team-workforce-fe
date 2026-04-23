@@ -73,27 +73,29 @@ export function EsgActivitySubmitModal({ open, onClose, initialSubjectId }: Prop
   });
 
   return (
-    <Modal
-      title="활동 제출"
-      open={open}
-      onCancel={onClose}
-      width={520}
-      destroyOnHidden
-      footer={
-        <div className="tw-flex tw-justify-end tw-gap-2">
-          <Button onClick={onClose}>취소</Button>
-          <Button
-            type="primary"
-            className={esgPrimaryButtonClass}
-            loading={submitM.isPending}
-            onClick={() => void submitM.mutate()}
-          >
-            제출
-          </Button>
-        </div>
-      }
-    >
-      {subError && (
+    <>
+      {!open ? <Form form={form} preserve={false} className="tw-hidden" aria-hidden /> : null}
+      <Modal
+        title="활동 제출"
+        open={open}
+        onCancel={onClose}
+        width={520}
+        destroyOnHidden
+        footer={
+          <div className="tw-flex tw-justify-end tw-gap-2">
+            <Button onClick={onClose}>취소</Button>
+            <Button
+              type="primary"
+              className={esgPrimaryButtonClass}
+              loading={submitM.isPending}
+              onClick={() => void submitM.mutate()}
+            >
+              제출
+            </Button>
+          </div>
+        }
+      >
+        {subError && (
         <Alert
           type="error"
           showIcon
@@ -106,8 +108,8 @@ export function EsgActivitySubmitModal({ open, onClose, initialSubjectId }: Prop
             </Button>
           }
         />
-      )}
-      <Form form={form} layout="vertical" className="tw-max-w-full">
+        )}
+        <Form form={form} layout="vertical" className="tw-max-w-full">
         <Form.Item
           name="subjectId"
           label="활동 양식"
@@ -165,7 +167,8 @@ export function EsgActivitySubmitModal({ open, onClose, initialSubjectId }: Prop
             pdf, docx, txt, jpg, png · 최대 10MB
           </Typography.Paragraph>
         </Form.Item>
-      </Form>
-    </Modal>
+        </Form>
+      </Modal>
+    </>
   );
 }

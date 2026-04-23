@@ -1,9 +1,11 @@
 import { Badge, Card, List, Space, Typography } from 'antd';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from '@tanstack/react-router';
 import { notificationApi } from '@/features/notification/api/notificationApi';
 import { AppButton } from '@/shared/ui/AppButton';
 
 export function NotificationsPage() {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: notifications = [], isLoading } = useQuery({
     queryKey: ['notifications', 'list'],
@@ -27,6 +29,31 @@ export function NotificationsPage() {
       void queryClient.invalidateQueries({ queryKey: ['notifications'] });
     },
   });
+
+  const routeApprovalNotification = async (item: (typeof notifications)[number]) => {
+    if (item.isRead !== 'YES') {
+      await markAsRead.mutateAsync(item.notificationId);
+    }
+    const t = String(item.notificationType ?? '').toUpperCase();
+    if (t === 'APPROVAL_REQUESTED') {
+      await navigate({
+        to: '/app/approvals',
+        search: { tab: 'pending' },
+      });
+      return;
+    }
+    if (t === 'APPROVAL_APPROVED' || t === 'APPROVAL_REJECTED') {
+      await navigate({
+        to: '/app/approvals',
+        search: { tab: 'my', box: 'per-all' },
+      });
+    }
+  };
+
+  const isApprovalNotification = (type: string) => {
+    const t = String(type ?? '').toUpperCase();
+    return t === 'APPROVAL_REQUESTED' || t === 'APPROVAL_APPROVED' || t === 'APPROVAL_REJECTED';
+  };
 
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
@@ -65,13 +92,19 @@ export function NotificationsPage() {
           locale={{ emptyText: '알림이 없습니다.' }}
           renderItem={(item) => (
             <List.Item
-              className="!tw-items-start"
+              className={isApprovalNotification(item.notificationType) ? '!tw-cursor-pointer !tw-items-start hover:tw-bg-slate-50/60' : '!tw-items-start'}
+              onClick={() => {
+                if (!isApprovalNotification(item.notificationType)) return;
+                void routeApprovalNotification(item);
+              }}
               actions={[
                 item.isRead !== 'YES' ? (
                   <AppButton
                     key={`${item.notificationId}-read`}
                     type="link"
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
                       void markAsRead.mutateAsync(item.notificationId);
                     }}
                   >

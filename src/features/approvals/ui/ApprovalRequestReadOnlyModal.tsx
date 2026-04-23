@@ -1,11 +1,14 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { SendOutlined } from '@ant-design/icons';
 import {
   Alert,
   Button,
   Card,
   Descriptions,
+  Input,
   message,
   Modal,
+  Popconfirm,
   Space,
   Table,
   Tag,
@@ -13,7 +16,7 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   APPROVAL_REQUEST_TYPES,
   approvalApi,
@@ -22,6 +25,7 @@ import {
 import {
   approvalLineIsProxy,
   approvalRequestApi,
+  canSendOfficialDocument,
   type ApprovalLine,
   type ApprovalRequestStatus,
   type ApprovalViewer,
@@ -102,6 +106,32 @@ type PositionLookupRow = {
   jobTitleName: string;
   pending: boolean;
 };
+
+function detailMemberLookupFromStrings(
+  name?: string,
+  organizationName?: string,
+  jobTitleName?: string,
+): DetailMemberLookupRow {
+  return {
+    name: (name ?? '').trim(),
+    organizationName: (organizationName ?? '').trim(),
+    jobTitleName: (jobTitleName ?? '').trim(),
+    pending: false,
+  };
+}
+
+function mergeDetailMemberRows(a: DetailMemberLookupRow, b: DetailMemberLookupRow): DetailMemberLookupRow {
+  return {
+    name: a.name || b.name,
+    organizationName: a.organizationName || b.organizationName,
+    jobTitleName: a.jobTitleName || b.jobTitleName,
+    pending: false,
+  };
+}
+
+function snapshotHasMemberLabel(row: DetailMemberLookupRow | undefined): boolean {
+  return Boolean(row?.name || row?.organizationName || row?.jobTitleName);
+}
 
 /** UUID 맵 키가 하이픈·대소문자만 다를 때 매칭 */
 function normalizeUuidMapKey(s: string): string {
@@ -246,6 +276,61 @@ export function ApprovalRequestReadOnlyModal({
     onError: (e: Error) => message.error(e.message || '첨부 삭제에 실패했습니다.'),
   });
 
+  const sendOfficialM = useMutation({
+    mutationFn: () => approvalRequestApi.sendOfficial(requestId!),
+    onSuccess: async (detail) => {
+      message.success('공문이 발송되었습니다.');
+      qc.setQueryData(['approval-user', 'request-detail', requestId], detail);
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['approval-user', 'my-requests'] }),
+        qc.invalidateQueries({ queryKey: ['approval-user', 'official-received'] }),
+      ]);
+    },
+    onError: (e: unknown) => {
+      const msg =
+        e && typeof e === 'object' && 'message' in e && typeof (e as { message: unknown }).message === 'string'
+          ? (e as { message: string }).message
+          : '공문 발송에 실패했습니다.';
+      message.error(msg);
+    },
+  });
+
+  const [officialCancelOpen, setOfficialCancelOpen] = useState(false);
+  const [officialCancelReason, setOfficialCancelReason] = useState('');
+
+  const cancelOfficialBeforeSendM = useMutation({
+    mutationFn: (reason: string) => approvalRequestApi.cancelRequest(requestId!, reason),
+    onSuccess: async (detail) => {
+      message.success('공문 발송이 취소되었습니다.');
+      qc.setQueryData(['approval-user', 'request-detail', requestId], detail);
+      setOfficialCancelOpen(false);
+      setOfficialCancelReason('');
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['approval-user', 'my-requests'] }),
+        qc.invalidateQueries({ queryKey: ['approval-user', 'official-received'] }),
+      ]);
+    },
+    onError: (e: unknown) => {
+      const msg =
+        e && typeof e === 'object' && 'message' in e && typeof (e as { message: unknown }).message === 'string'
+          ? (e as { message: string }).message
+          : '취소 처리에 실패했습니다.';
+      message.error(msg);
+    },
+  });
+
+  useEffect(() => {
+    if (!open) {
+      setOfficialCancelOpen(false);
+      setOfficialCancelReason('');
+    }
+  }, [open]);
+
+  useEffect(() => {
+    setOfficialCancelOpen(false);
+    setOfficialCancelReason('');
+  }, [requestId]);
+
   const markViewerReadM = useMutation({
     mutationFn: (viewerId: string) => approvalRequestApi.markViewerRead(viewerId),
     onSuccess: async () => {
@@ -298,11 +383,47 @@ export function ApprovalRequestReadOnlyModal({
     return [...ids];
   }, [open, selectedRequestDetail]);
 
+  /** 결재 응답 스냅샷만으로 표시 가능하면 GET /member/detail 호출을 생략(일반 직원 403 방지) */
+  const approvalDetailMemberSnapshotLookup = useMemo(() => {
+    const map = new Map<string, DetailMemberLookupRow>();
+    if (!selectedRequestDetail) return map;
+    const mergeInto = (memberId: string | null | undefined, row: DetailMemberLookupRow) => {
+      const id = memberId?.trim();
+      if (!id) return;
+      const prev = map.get(id);
+      map.set(id, prev ? mergeDetailMemberRows(row, prev) : row);
+    };
+    for (const l of selectedRequestDetail.approvalLines) {
+      mergeInto(
+        l.approverMemberId,
+        detailMemberLookupFromStrings(l.approverName, l.approverOrganizationName, l.approverJobTitleName),
+      );
+      mergeInto(
+        l.actualApproverMemberId,
+        detailMemberLookupFromStrings(
+          l.actualApproverName,
+          l.actualApproverOrganizationName,
+          l.actualApproverJobTitleName,
+        ),
+      );
+    }
+    for (const v of selectedRequestDetail.viewers ?? []) {
+      mergeInto(
+        v.viewerMemberId,
+        detailMemberLookupFromStrings(v.viewerName, v.viewerOrganizationName, v.viewerJobTitleName),
+      );
+    }
+    return map;
+  }, [selectedRequestDetail]);
+
   const approvalDetailMemberQueries = useQueries({
     queries: detailMemberIds.map((memberId) => ({
       queryKey: ['member', 'detail', memberId],
-      queryFn: () => memberApi.detail(memberId),
-      enabled: open && Boolean(memberId),
+      queryFn: () => memberApi.detailOrNull(memberId),
+      enabled:
+        open &&
+        Boolean(memberId) &&
+        !snapshotHasMemberLabel(approvalDetailMemberSnapshotLookup.get(memberId)),
       staleTime: 5 * 60_000,
     })),
   });
@@ -310,16 +431,30 @@ export function ApprovalRequestReadOnlyModal({
   const approvalDetailMemberLookup = useMemo(() => {
     const map = new Map<string, DetailMemberLookupRow>();
     detailMemberIds.forEach((id, i) => {
+      const snap = approvalDetailMemberSnapshotLookup.get(id);
       const q = approvalDetailMemberQueries[i];
-      map.set(id, {
-        name: q?.data?.name?.trim() ?? '',
-        organizationName: q?.data?.organizationName?.trim() ?? '',
-        jobTitleName: q?.data?.jobTitleName?.trim() ?? '',
-        pending: Boolean(q && (q.isPending || q.isFetching) && !q.data),
-      });
+      const apiRow: DetailMemberLookupRow | null = q?.data
+        ? {
+            name: q.data.name?.trim() ?? '',
+            organizationName: q.data.organizationName?.trim() ?? '',
+            jobTitleName: q.data.jobTitleName?.trim() ?? '',
+            pending: false,
+          }
+        : null;
+      const merged = mergeDetailMemberRows(
+        snap ?? { name: '', organizationName: '', jobTitleName: '', pending: false },
+        apiRow ?? { name: '', organizationName: '', jobTitleName: '', pending: false },
+      );
+      const pending = Boolean(
+        q &&
+          (q.isPending || q.isFetching) &&
+          !snapshotHasMemberLabel(snap) &&
+          !apiRow,
+      );
+      map.set(id, { ...merged, pending });
     });
     return map;
-  }, [detailMemberIds, approvalDetailMemberQueries]);
+  }, [detailMemberIds, approvalDetailMemberSnapshotLookup, approvalDetailMemberQueries]);
 
   const detailPositionIds = useMemo(() => {
     if (!open || !selectedRequestDetail) return [] as string[];
@@ -359,10 +494,25 @@ export function ApprovalRequestReadOnlyModal({
     return map;
   }, [detailPositionIds, approvalPositionInternalQueries]);
 
+  const drafterSnapshotRow = useMemo(
+    () =>
+      selectedRequestDetail
+        ? detailMemberLookupFromStrings(
+            selectedRequestDetail.requesterName,
+            selectedRequestDetail.requesterOrganizationName,
+            undefined,
+          )
+        : undefined,
+    [selectedRequestDetail],
+  );
+
   const { data: requestDetailDrafter } = useQuery({
     queryKey: ['member', 'detail', 'approval-detail-drafter', selectedRequestDetail?.memberId],
-    queryFn: () => memberApi.detail(selectedRequestDetail!.memberId),
-    enabled: open && Boolean(selectedRequestDetail?.memberId?.trim()),
+    queryFn: () => memberApi.detailOrNull(selectedRequestDetail!.memberId),
+    enabled:
+      open &&
+      Boolean(selectedRequestDetail?.memberId?.trim()) &&
+      !snapshotHasMemberLabel(drafterSnapshotRow),
     staleTime: 60_000,
   });
 
@@ -386,6 +536,12 @@ export function ApprovalRequestReadOnlyModal({
     const drafter = selectedRequestDetail.memberId?.trim() ?? '';
     return Boolean(drafter) && drafter === authMemberId.trim();
   }, [selectedRequestDetail, authMemberId]);
+
+  const canSendOfficial = useMemo(
+    () =>
+      selectedRequestDetail ? canSendOfficialDocument(selectedRequestDetail, authMemberId) : false,
+    [selectedRequestDetail, authMemberId],
+  );
 
   const attachmentColumns: ColumnsType<ApprovalAttachment> = useMemo(
     () => [
@@ -443,13 +599,18 @@ export function ApprovalRequestReadOnlyModal({
   );
 
   return (
+    <>
     <Modal
       title={title}
       open={open}
       onCancel={onClose}
       footer={null}
       width={920}
-      styles={{ body: { maxHeight: 'min(85vh, 900px)', overflowY: 'auto' } }}
+      style={{ top: 48 }}
+      styles={{
+        content: { resize: 'both', overflow: 'auto' },
+        body: { maxHeight: 'min(85vh, 900px)', overflowY: 'auto' },
+      }}
       destroyOnHidden
     >
       {detailLoading || !selectedRequestDetail ? (
@@ -462,13 +623,53 @@ export function ApprovalRequestReadOnlyModal({
             <Descriptions.Item label="요청일">{formatDateTime(selectedRequestDetail.createdAt)}</Descriptions.Item>
             <Descriptions.Item label="수정일">{formatDateTime(selectedRequestDetail.updatedAt)}</Descriptions.Item>
             {normalizeApprovalRequestType(selectedRequestDetail.requestType) === 'OFFICIAL' ? (
-              <Descriptions.Item label="공문 번호" span={2}>
-                {selectedRequestDetail.documentNumber?.trim() ? (
-                  <Typography.Text strong>{selectedRequestDetail.documentNumber.trim()}</Typography.Text>
-                ) : (
-                  <Typography.Text type="secondary">발번 전 (최종 승인 후 부여)</Typography.Text>
-                )}
-              </Descriptions.Item>
+              <>
+                <Descriptions.Item label="공문 번호" span={2}>
+                  {selectedRequestDetail.documentNumber?.trim() ? (
+                    <Typography.Text strong>{selectedRequestDetail.documentNumber.trim()}</Typography.Text>
+                  ) : (
+                    <Typography.Text type="secondary">발번 전 (최종 승인 후 부여)</Typography.Text>
+                  )}
+                </Descriptions.Item>
+                {String(selectedRequestDetail.requestStatus).toUpperCase() === 'APPROVED' ? (
+                  <Descriptions.Item label="공문 발송" span={2}>
+                    {String(selectedRequestDetail.sendYn ?? '').toUpperCase() === 'Y' ? (
+                      <Tag color="success">발송 완료</Tag>
+                    ) : canSendOfficial ? (
+                      <Space wrap className="tw-w-full">
+                        <Popconfirm
+                          title="수신 부서로 공문을 발송할까요?"
+                          description="발송 후에는 문서를 취소할 수 없습니다."
+                          okText="발송"
+                          cancelText="닫기"
+                          onConfirm={() => {
+                            if (requestId) void sendOfficialM.mutateAsync();
+                          }}
+                        >
+                          <Button
+                            type="primary"
+                            icon={<SendOutlined />}
+                            loading={sendOfficialM.isPending}
+                            disabled={sendOfficialM.isPending || cancelOfficialBeforeSendM.isPending}
+                          >
+                            발송
+                          </Button>
+                        </Popconfirm>
+                        <Button
+                          danger
+                          loading={cancelOfficialBeforeSendM.isPending}
+                          disabled={sendOfficialM.isPending || cancelOfficialBeforeSendM.isPending}
+                          onClick={() => setOfficialCancelOpen(true)}
+                        >
+                          발송 취소
+                        </Button>
+                      </Space>
+                    ) : (
+                      <Typography.Text type="secondary">기안자 발송 대기 (미발송)</Typography.Text>
+                    )}
+                  </Descriptions.Item>
+                ) : null}
+              </>
             ) : null}
           </Descriptions>
           {normalizeApprovalRequestType(selectedRequestDetail.requestType) === 'OFFICIAL' &&
@@ -499,8 +700,12 @@ export function ApprovalRequestReadOnlyModal({
                   const detail = selectedRequestDetail;
                   const doc = requestDetailDocument;
                   const content = parseDetailContentJson(detail);
-                  const dName = requestDetailDrafter?.name?.trim() || '—';
-                  const dOrg = requestDetailDrafter?.organizationName?.trim() || '—';
+                  const dName =
+                    requestDetailDrafter?.name?.trim() || detail.requesterName?.trim() || '—';
+                  const dOrg =
+                    requestDetailDrafter?.organizationName?.trim() ||
+                    detail.requesterOrganizationName?.trim() ||
+                    '—';
                   const dTitle = requestDetailDrafter?.jobTitleName?.trim();
                   const lines = [...detail.approvalLines].sort((a, b) => a.stepOrder - b.stepOrder);
                   const approvers = lines.map((l) => {
@@ -715,5 +920,38 @@ export function ApprovalRequestReadOnlyModal({
         </Space>
       )}
     </Modal>
+
+    <Modal
+      title="공문 발송 취소"
+      open={officialCancelOpen}
+      onCancel={() => {
+        setOfficialCancelOpen(false);
+        setOfficialCancelReason('');
+      }}
+      okText="취소 확정"
+      cancelText="닫기"
+      confirmLoading={cancelOfficialBeforeSendM.isPending}
+      destroyOnHidden
+      onOk={async () => {
+        if (!officialCancelReason.trim()) {
+          message.warning('취소 사유를 입력해 주세요.');
+          throw new Error('validation');
+        }
+        await cancelOfficialBeforeSendM.mutateAsync(officialCancelReason.trim());
+      }}
+    >
+      <Typography.Paragraph type="secondary" className="!tw-mb-2 !tw-text-sm">
+        승인된 공문이 수신 부서로 나가기 전에만 취소할 수 있습니다. 취소 사유는 결재·참조자에게 안내됩니다.
+      </Typography.Paragraph>
+      <Input.TextArea
+        rows={4}
+        value={officialCancelReason}
+        onChange={(e) => setOfficialCancelReason(e.target.value)}
+        placeholder="취소 사유를 입력하세요."
+        maxLength={2000}
+        showCount
+      />
+    </Modal>
+    </>
   );
 }

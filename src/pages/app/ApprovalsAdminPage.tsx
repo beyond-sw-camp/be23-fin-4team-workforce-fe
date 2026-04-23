@@ -5,6 +5,7 @@ import {
   App,
   Button,
   Card,
+  Checkbox,
   Form,
   Input,
   InputNumber,
@@ -34,22 +35,18 @@ import { parseFormSchema, type FormFieldSchema } from '@/features/approvals/lib/
 import { parseApiError } from '@/shared/api/error-parser';
 import { flattenOrganizationsWithMeta } from '@/features/organization/lib/flattenOrganizationTree';
 import { organizationApi } from '@/features/organization/api/organizationApi';
-import { PERM } from '@/features/permissions/backend-permissions';
-import { usePermissions } from '@/features/permissions/usePermissionsHook';
 import { useAuth } from '@/features/auth/useAuth';
+import { PERM } from '@/features/permissions/backend-permissions';
+import {
+  canAccessMemberDirectoryFromPermissionStrings,
+  isHrTeamMember,
+} from '@/features/permissions/member-directory-access';
+import { usePermissions } from '@/features/permissions/usePermissionsHook';
 
 type DocForm = {
   documentName: string;
   requestType: ApprovalRequestType;
-  /** 부서 문서함 노출 — 급여·부서이동 등은 기본 N 권장 */
-  isDeptVisibleYn?: 'Y' | 'N';
 };
-
-type EditDocForm = {
-  isDeptVisibleYn: 'Y' | 'N';
-};
-
-const REQUEST_TYPES_DEFAULT_DEPT_HIDDEN: ReadonlySet<ApprovalRequestType> = new Set(['SALARY', 'HR_MOVEMENT']);
 const NAVY_BUTTON_CLASS =
   '!tw-border-0 !tw-bg-[#1e3a5f] !tw-text-white hover:!tw-bg-[#152a45] hover:!tw-text-white disabled:!tw-opacity-60';
 
@@ -91,6 +88,40 @@ function parseJobTitleOptions(raw: Array<Record<string, unknown>>): JobTitleOpti
     .sort((a, b) => a.label.localeCompare(b.label, 'ko'));
 }
 
+const CAL_FIELD_NONE = '__none__';
+
+function buildSchemaFieldOptions(fields: FormFieldSchema[]) {
+  return fields.map((f) => ({
+    value: f.name,
+    label: `${f.label} (${f.name})`,
+  }));
+}
+
+function withOrphanFieldOption(
+  options: { value: string; label: string }[],
+  currentValue: string | undefined,
+  orphanLabel = '(스키마에 없음)',
+) {
+  const v = (currentValue ?? '').trim();
+  if (!v) return options;
+  const names = new Set(options.map((o) => o.value));
+  if (names.has(v)) return options;
+  return [...options, { value: v, label: `${v} ${orphanLabel}` }];
+}
+
+function withOptionalNoneOption(
+  options: { value: string; label: string }[],
+  currentValue?: string | undefined,
+  orphanLabel = '(스키마에 없음)',
+) {
+  const names = new Set(options.map((o) => o.value));
+  const out = [{ value: CAL_FIELD_NONE, label: '없음' }, ...options];
+  if (currentValue && currentValue !== CAL_FIELD_NONE && !names.has(currentValue)) {
+    out.push({ value: currentValue, label: `${currentValue} ${orphanLabel}` });
+  }
+  return out;
+}
+
 function validatePolicyLines(rows: PolicyLineDraft[]) {
   if (rows.length === 0) return '정책라인을 1개 이상 추가해 주세요.';
   const sorted = [...rows].sort((a, b) => a.stepOrder - b.stepOrder);
@@ -120,7 +151,18 @@ export function ApprovalsAdminPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [editingDocumentId, setEditingDocumentId] = useState<string | null>(null);
   const [editSchemaFields, setEditSchemaFields] = useState<FormFieldSchema[]>([]);
-  const [editForm] = Form.useForm<EditDocForm>();
+
+  const [createCalVisible, setCreateCalVisible] = useState(false);
+  const [createCalDisplayName, setCreateCalDisplayName] = useState('');
+  const [createCalStartField, setCreateCalStartField] = useState<string | undefined>(undefined);
+  const [createCalEndField, setCreateCalEndField] = useState<string>(CAL_FIELD_NONE);
+  const [createCalTitleField, setCreateCalTitleField] = useState<string>(CAL_FIELD_NONE);
+
+  const [editCalVisible, setEditCalVisible] = useState(false);
+  const [editCalDisplayName, setEditCalDisplayName] = useState('');
+  const [editCalStartField, setEditCalStartField] = useState<string | undefined>(undefined);
+  const [editCalEndField, setEditCalEndField] = useState<string>(CAL_FIELD_NONE);
+  const [editCalTitleField, setEditCalTitleField] = useState<string>(CAL_FIELD_NONE);
 
   const canRead = isSystemAdmin || hasPermission(PERM.APPROVAL_AD_READ);
   const canCreate = isSystemAdmin || hasPermission(PERM.APPROVAL_AD_CREATE);
@@ -217,6 +259,11 @@ export function ApprovalsAdminPage() {
       setCreateOpen(false);
       form.resetFields();
       setSchemaFields(defaultSchemaFields());
+      setCreateCalVisible(false);
+      setCreateCalDisplayName('');
+      setCreateCalStartField(undefined);
+      setCreateCalEndField(CAL_FIELD_NONE);
+      setCreateCalTitleField(CAL_FIELD_NONE);
       await refreshAll();
     },
     onError: (e: unknown) => message.error(parseApiError(e).message || '양식 생성에 실패했습니다.'),
@@ -226,18 +273,38 @@ export function ApprovalsAdminPage() {
     mutationFn: ({
       documentId,
       formSchema,
-      isDeptVisibleYn,
+      isCalendarVisibleYn,
+      calendarDisplayName,
+      calendarStartField,
+      calendarEndField,
+      calendarTitleField,
     }: {
       documentId: string;
       formSchema: string;
-      isDeptVisibleYn: 'Y' | 'N';
-    }) => approvalApi.updateDocument(documentId, { formSchema, isDeptVisibleYn }),
+      isCalendarVisibleYn: 'Y' | 'N';
+      calendarDisplayName: string | null;
+      calendarStartField: string | null;
+      calendarEndField: string | null;
+      calendarTitleField: string | null;
+    }) =>
+      approvalApi.updateDocument(documentId, {
+        formSchema,
+        isCalendarVisibleYn,
+        calendarDisplayName,
+        calendarStartField,
+        calendarEndField,
+        calendarTitleField,
+      }),
     onSuccess: async () => {
       message.success('양식을 수정했습니다.');
       setEditOpen(false);
       setEditingDocumentId(null);
       setEditSchemaFields([]);
-      editForm.resetFields();
+      setEditCalVisible(false);
+      setEditCalDisplayName('');
+      setEditCalStartField(undefined);
+      setEditCalEndField(CAL_FIELD_NONE);
+      setEditCalTitleField(CAL_FIELD_NONE);
       await refreshAll();
     },
     onError: (e: unknown) => message.error(parseApiError(e).message || '양식 수정에 실패했습니다.'),
@@ -259,16 +326,6 @@ export function ApprovalsAdminPage() {
       await refreshAll();
     },
     onError: (e: Error) => message.error(e.message || '비활성화에 실패했습니다.'),
-  });
-
-  const deptVisibleM = useMutation({
-    mutationFn: ({ documentId, visible }: { documentId: string; visible: boolean }) =>
-      visible ? approvalApi.enableDeptVisible(documentId) : approvalApi.disableDeptVisible(documentId),
-    onSuccess: async () => {
-      message.success('부서 문서함 노출 설정을 변경했습니다.');
-      await refreshAll();
-    },
-    onError: (e: Error) => message.error(e.message || '부서 문서함 노출 변경에 실패했습니다.'),
   });
 
   const savePolicyLineM = useMutation({
@@ -293,10 +350,14 @@ export function ApprovalsAdminPage() {
   const handleOpenCreate = () => {
     setCreateOpen(true);
     setSchemaFields(defaultSchemaFields());
+    setCreateCalVisible(false);
+    setCreateCalDisplayName('');
+    setCreateCalStartField(undefined);
+    setCreateCalEndField(CAL_FIELD_NONE);
+    setCreateCalTitleField(CAL_FIELD_NONE);
     form.setFieldsValue({
       documentName: '',
       requestType: 'GENERAL',
-      isDeptVisibleYn: 'Y',
     });
   };
 
@@ -309,9 +370,11 @@ export function ApprovalsAdminPage() {
     setEditingDocumentId(doc.documentId);
     const parsed = parseFormSchema(doc.formSchema);
     setEditSchemaFields(parsed.fields);
-    editForm.setFieldsValue({
-      isDeptVisibleYn: doc.isDeptVisibleYn,
-    });
+    setEditCalVisible(doc.isCalendarVisibleYn === 'Y');
+    setEditCalDisplayName((doc.calendarDisplayName ?? '').trim());
+    setEditCalStartField((doc.calendarStartField ?? '').trim() || undefined);
+    setEditCalEndField((doc.calendarEndField ?? '').trim() || CAL_FIELD_NONE);
+    setEditCalTitleField((doc.calendarTitleField ?? '').trim() || CAL_FIELD_NONE);
     setEditOpen(true);
   };
 
@@ -322,13 +385,27 @@ export function ApprovalsAdminPage() {
       message.warning(schemaError);
       return;
     }
+    if (editCalVisible) {
+      if (!editCalDisplayName.trim()) {
+        message.warning('캘린더 연동 시 캘린더 표시명은 필수입니다.');
+        return;
+      }
+      if (!editCalStartField?.trim()) {
+        message.warning('캘린더 연동 시 시작일 필드는 필수입니다.');
+        return;
+      }
+    }
     try {
-      const values = await editForm.validateFields();
       const formSchema = serializeFormSchema(editSchemaFields);
+      const isCalendarVisibleYn = editCalVisible ? 'Y' : 'N';
       await updateDocumentM.mutateAsync({
         documentId: editingDocumentId,
         formSchema,
-        isDeptVisibleYn: values.isDeptVisibleYn,
+        isCalendarVisibleYn,
+        calendarDisplayName: editCalVisible ? editCalDisplayName.trim() : null,
+        calendarStartField: editCalVisible ? editCalStartField!.trim() : null,
+        calendarEndField: editCalVisible && editCalEndField !== CAL_FIELD_NONE ? editCalEndField : null,
+        calendarTitleField: editCalVisible && editCalTitleField !== CAL_FIELD_NONE ? editCalTitleField : null,
       });
     } catch {
       // validation
@@ -341,19 +418,82 @@ export function ApprovalsAdminPage() {
       message.warning(schemaError);
       return;
     }
+    if (createCalVisible) {
+      if (!createCalDisplayName.trim()) {
+        message.warning('캘린더 연동 시 캘린더 표시명은 필수입니다.');
+        return;
+      }
+      if (!createCalStartField?.trim()) {
+        message.warning('캘린더 연동 시 시작일 필드는 필수입니다.');
+        return;
+      }
+    }
     try {
       const values = await form.validateFields();
       const formSchema = serializeFormSchema(schemaFields);
+      const isCalendarVisibleYn = createCalVisible ? 'Y' : 'N';
       await createDocumentM.mutateAsync({
         documentName: values.documentName.trim(),
         requestType: values.requestType,
         formSchema,
-        isDeptVisibleYn: values.isDeptVisibleYn ?? 'Y',
+        isCalendarVisibleYn,
+        ...(createCalVisible
+          ? {
+              calendarDisplayName: createCalDisplayName.trim(),
+              calendarStartField: createCalStartField!.trim(),
+              calendarEndField: createCalEndField !== CAL_FIELD_NONE ? createCalEndField : null,
+              calendarTitleField: createCalTitleField !== CAL_FIELD_NONE ? createCalTitleField : null,
+            }
+          : {}),
       });
     } catch {
       // validation
     }
   };
+
+  const createSchemaOptions = useMemo(() => buildSchemaFieldOptions(schemaFields), [schemaFields]);
+  const createStartOptions = useMemo(
+    () => withOrphanFieldOption(createSchemaOptions, createCalStartField),
+    [createSchemaOptions, createCalStartField],
+  );
+  const createEndOptions = useMemo(
+    () =>
+      withOptionalNoneOption(
+        createSchemaOptions,
+        createCalEndField !== CAL_FIELD_NONE ? createCalEndField : undefined,
+      ),
+    [createSchemaOptions, createCalEndField],
+  );
+  const createTitleOptions = useMemo(
+    () =>
+      withOptionalNoneOption(
+        createSchemaOptions,
+        createCalTitleField !== CAL_FIELD_NONE ? createCalTitleField : undefined,
+      ),
+    [createSchemaOptions, createCalTitleField],
+  );
+
+  const editSchemaOptions = useMemo(() => buildSchemaFieldOptions(editSchemaFields), [editSchemaFields]);
+  const editStartOptions = useMemo(
+    () => withOrphanFieldOption(editSchemaOptions, editCalStartField),
+    [editSchemaOptions, editCalStartField],
+  );
+  const editEndOptions = useMemo(
+    () =>
+      withOptionalNoneOption(
+        editSchemaOptions,
+        editCalEndField !== CAL_FIELD_NONE ? editCalEndField : undefined,
+      ),
+    [editSchemaOptions, editCalEndField],
+  );
+  const editTitleOptions = useMemo(
+    () =>
+      withOptionalNoneOption(
+        editSchemaOptions,
+        editCalTitleField !== CAL_FIELD_NONE ? editCalTitleField : undefined,
+      ),
+    [editSchemaOptions, editCalTitleField],
+  );
 
   const handleAddPolicyLine = () => {
     setPolicyDrafts((prev) => [
@@ -472,44 +612,6 @@ export function ApprovalsAdminPage() {
                         ),
                       },
                       {
-                        title: '부서 문서함',
-                        dataIndex: 'isDeptVisibleYn',
-                        key: 'isDeptVisibleYn',
-                        width: 160,
-                        render: (value: 'Y' | 'N', row) => (
-                          <Button
-                            size="small"
-                            type={value === 'Y' ? 'primary' : 'default'}
-                            className={value === 'Y' ? NAVY_BUTTON_CLASS : undefined}
-                            disabled={!canUpdate || deptVisibleM.isPending}
-                            onClick={() => {
-                              if (value === 'Y') {
-                                Modal.confirm({
-                                  title: '부서 문서함 노출을 끌까요?',
-                                  content:
-                                    '해당 양식으로 올린 기존 결재도 부서 문서함에서 숨겨집니다. 진행하시겠습니까?',
-                                  okText: '예, 숨기기',
-                                  cancelText: '취소',
-                                  onOk: () =>
-                                    deptVisibleM.mutateAsync({ documentId: row.documentId, visible: false }),
-                                });
-                                return;
-                              }
-                              Modal.confirm({
-                                title: '부서 문서함에 노출할까요?',
-                                content:
-                                  '해당 양식으로 이미 처리된(승인·반려) 결재가 있으면 부서 문서함 목록에 나타날 수 있습니다. 진행하시겠습니까?',
-                                okText: '예, 노출하기',
-                                cancelText: '취소',
-                                onOk: () => deptVisibleM.mutateAsync({ documentId: row.documentId, visible: true }),
-                              });
-                            }}
-                          >
-                            {value === 'Y' ? '노출' : '숨김'}
-                          </Button>
-                        ),
-                      },
-                      {
                         title: '정책라인',
                         key: 'actions',
                         width: 220,
@@ -574,9 +676,6 @@ export function ApprovalsAdminPage() {
                           <Typography.Text strong>선택 양식: {selectedDocument.documentName}</Typography.Text>
                           <Tag color={selectedDocument.isActiveYn === 'Y' ? 'success' : 'default'}>
                             {selectedDocument.isActiveYn === 'Y' ? '활성' : '비활성'}
-                          </Tag>
-                          <Tag color={selectedDocument.isDeptVisibleYn === 'Y' ? 'blue' : 'default'}>
-                            부서함 {selectedDocument.isDeptVisibleYn === 'Y' ? '노출' : '숨김'}
                           </Tag>
                         </Space>
                       </Card>
@@ -780,7 +879,14 @@ export function ApprovalsAdminPage() {
       <Modal
         title="결재 양식 추가"
         open={createOpen}
-        onCancel={() => setCreateOpen(false)}
+        onCancel={() => {
+          setCreateOpen(false);
+          setCreateCalVisible(false);
+          setCreateCalDisplayName('');
+          setCreateCalStartField(undefined);
+          setCreateCalEndField(CAL_FIELD_NONE);
+          setCreateCalTitleField(CAL_FIELD_NONE);
+        }}
         onOk={() => void handleSubmitCreate()}
         okText="등록"
         cancelText="취소"
@@ -788,19 +894,7 @@ export function ApprovalsAdminPage() {
         destroyOnHidden
         width={880}
       >
-        <Form<DocForm>
-          form={form}
-          layout="vertical"
-          className="tw-pt-2"
-          onValuesChange={(changed) => {
-            if ('requestType' in changed && changed.requestType != null) {
-              const t = changed.requestType as ApprovalRequestType;
-              form.setFieldsValue({
-                isDeptVisibleYn: REQUEST_TYPES_DEFAULT_DEPT_HIDDEN.has(t) ? 'N' : 'Y',
-              });
-            }
-          }}
-        >
+        <Form<DocForm> form={form} layout="vertical" className="tw-pt-2">
           <Form.Item name="documentName" label="양식명" rules={[{ required: true, message: '양식명을 입력해 주세요.' }]}>
             <Input placeholder="예: 연차신청서" maxLength={100} showCount />
           </Form.Item>
@@ -812,21 +906,70 @@ export function ApprovalsAdminPage() {
               }))}
             />
           </Form.Item>
-          <Form.Item
-            name="isDeptVisibleYn"
-            label="부서 문서함 노출"
-            extra="급여·부서이동 유형은 기본 숨김(N)으로 맞춰집니다. 민감 양식은 N을 권장합니다."
-          >
-            <Select
-              options={[
-                { value: 'Y', label: '노출 (Y)' },
-                { value: 'N', label: '숨김 (N)' },
-              ]}
-            />
-          </Form.Item>
           <Form.Item label="기안 입력 항목" required>
             <ApprovalFormSchemaBuilder value={schemaFields} onChange={setSchemaFields} />
           </Form.Item>
+          <div className="tw-rounded-lg tw-border tw-border-slate-200 tw-bg-slate-50/70 tw-p-3">
+            <Checkbox checked={createCalVisible} onChange={(e) => setCreateCalVisible(e.target.checked)}>
+              캘린더에 일정 자동 반영 (최종 승인 시)
+            </Checkbox>
+            {createCalVisible ? (
+              <div className="tw-mt-3 tw-space-y-3">
+                <div>
+                  <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
+                    캘린더 표시명 <Typography.Text type="danger">*</Typography.Text>
+                  </Typography.Text>
+                  <Input
+                    placeholder="예: 연차, 출장"
+                    maxLength={100}
+                    showCount
+                    value={createCalDisplayName}
+                    onChange={(e) => setCreateCalDisplayName(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
+                    시작일 필드 (contentJson 키) <Typography.Text type="danger">*</Typography.Text>
+                  </Typography.Text>
+                  <Select
+                    className="tw-w-full"
+                    placeholder="필드 선택"
+                    options={createStartOptions}
+                    value={createCalStartField}
+                    onChange={(v) => setCreateCalStartField(v)}
+                    showSearch
+                    optionFilterProp="label"
+                  />
+                </div>
+                <div>
+                  <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
+                    종료일 필드 (선택, 없으면 당일)
+                  </Typography.Text>
+                  <Select
+                    className="tw-w-full"
+                    options={createEndOptions}
+                    value={createCalEndField}
+                    onChange={(v) => setCreateCalEndField(v)}
+                    showSearch
+                    optionFilterProp="label"
+                  />
+                </div>
+                <div>
+                  <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
+                    부가 제목 필드 (선택)
+                  </Typography.Text>
+                  <Select
+                    className="tw-w-full"
+                    options={createTitleOptions}
+                    value={createCalTitleField}
+                    onChange={(v) => setCreateCalTitleField(v)}
+                    showSearch
+                    optionFilterProp="label"
+                  />
+                </div>
+              </div>
+            ) : null}
+          </div>
         </Form>
       </Modal>
 
@@ -837,7 +980,11 @@ export function ApprovalsAdminPage() {
           setEditOpen(false);
           setEditingDocumentId(null);
           setEditSchemaFields([]);
-          editForm.resetFields();
+          setEditCalVisible(false);
+          setEditCalDisplayName('');
+          setEditCalStartField(undefined);
+          setEditCalEndField(CAL_FIELD_NONE);
+          setEditCalTitleField(CAL_FIELD_NONE);
         }}
         onOk={() => void handleSubmitEdit()}
         okText="저장"
@@ -846,7 +993,7 @@ export function ApprovalsAdminPage() {
         destroyOnHidden
         width={880}
       >
-        <Form<EditDocForm> form={editForm} layout="vertical" className="tw-pt-2">
+        <Form layout="vertical" className="tw-pt-2">
           <Form.Item label="양식명">
             <Input readOnly value={editingDocument?.documentName ?? ''} className="!tw-bg-slate-50" />
           </Form.Item>
@@ -861,17 +1008,70 @@ export function ApprovalsAdminPage() {
               className="!tw-bg-slate-50"
             />
           </Form.Item>
-          <Form.Item name="isDeptVisibleYn" label="부서 문서함 노출">
-            <Select
-              options={[
-                { value: 'Y', label: '노출 (Y)' },
-                { value: 'N', label: '숨김 (N)' },
-              ]}
-            />
-          </Form.Item>
           <Form.Item label="기안 입력 항목" required>
             <ApprovalFormSchemaBuilder value={editSchemaFields} onChange={setEditSchemaFields} respectFieldLocks />
           </Form.Item>
+          <div className="tw-rounded-lg tw-border tw-border-slate-200 tw-bg-slate-50/70 tw-p-3">
+            <Checkbox checked={editCalVisible} onChange={(e) => setEditCalVisible(e.target.checked)}>
+              캘린더에 일정 자동 반영 (최종 승인 시)
+            </Checkbox>
+            {editCalVisible ? (
+              <div className="tw-mt-3 tw-space-y-3">
+                <div>
+                  <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
+                    캘린더 표시명 <Typography.Text type="danger">*</Typography.Text>
+                  </Typography.Text>
+                  <Input
+                    placeholder="예: 연차, 출장"
+                    maxLength={100}
+                    showCount
+                    value={editCalDisplayName}
+                    onChange={(e) => setEditCalDisplayName(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
+                    시작일 필드 (contentJson 키) <Typography.Text type="danger">*</Typography.Text>
+                  </Typography.Text>
+                  <Select
+                    className="tw-w-full"
+                    placeholder="필드 선택"
+                    options={editStartOptions}
+                    value={editCalStartField}
+                    onChange={(v) => setEditCalStartField(v)}
+                    showSearch
+                    optionFilterProp="label"
+                  />
+                </div>
+                <div>
+                  <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
+                    종료일 필드 (선택, 없으면 당일)
+                  </Typography.Text>
+                  <Select
+                    className="tw-w-full"
+                    options={editEndOptions}
+                    value={editCalEndField}
+                    onChange={(v) => setEditCalEndField(v)}
+                    showSearch
+                    optionFilterProp="label"
+                  />
+                </div>
+                <div>
+                  <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
+                    부가 제목 필드 (선택)
+                  </Typography.Text>
+                  <Select
+                    className="tw-w-full"
+                    options={editTitleOptions}
+                    value={editCalTitleField}
+                    onChange={(v) => setEditCalTitleField(v)}
+                    showSearch
+                    optionFilterProp="label"
+                  />
+                </div>
+              </div>
+            ) : null}
+          </div>
         </Form>
       </Modal>
     </Space>

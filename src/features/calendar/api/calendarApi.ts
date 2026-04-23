@@ -21,8 +21,8 @@ export type CreateTeamCalendarPayload = {
 
 export type CalendarEventScope = 'personal' | 'team';
 
-/** 목록 조회 쿼리 `eventType` (생략 시 개인+팀 전체) */
-export type CalendarListEventTypeParam = 'PERSONAL' | 'TEAM';
+/** 목록 조회 쿼리 `eventType` (생략 시 개인+팀+결재 연동 전체) */
+export type CalendarListEventTypeParam = 'PERSONAL' | 'TEAM' | 'APPROVAL';
 
 export type CalendarEvent = {
   eventId: string;
@@ -34,6 +34,10 @@ export type CalendarEvent = {
   organizationId?: string | null;
   /** API가 주면 삭제·수정 시 엔드포인트 선택에 사용 */
   scope?: CalendarEventScope;
+  /** PERSONAL | TEAM | APPROVAL 등 */
+  eventType?: string;
+  eventTypeDescription?: string | null;
+  memberName?: string | null;
 };
 
 export type CalendarHoliday = {
@@ -55,20 +59,35 @@ function normalizeEvent(raw: unknown): CalendarEvent | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
   const eventId = pickEventId(r);
-  const title = r.title;
+  const titleRaw = r.title ?? r.eventTitle ?? r.subject ?? r.eventName ?? r.summary ?? r.name;
+  const title =
+    typeof titleRaw === 'string'
+      ? titleRaw.trim()
+      : titleRaw != null && String(titleRaw).trim()
+        ? String(titleRaw).trim()
+        : '';
   const startAt = r.startAt ?? r.start_at;
   const endAt = r.endAt ?? r.end_at;
-  if (!eventId || typeof title !== 'string' || typeof startAt !== 'string' || typeof endAt !== 'string') {
+  if (!eventId || !title || typeof startAt !== 'string' || typeof endAt !== 'string') {
     return null;
   }
   const desc = r.description;
   const orgId = r.organizationId ?? r.organization_id ?? r.organizerId ?? r.organizer_id;
   const scopeRaw = r.scope ?? r.eventScope ?? r.event_scope ?? r.calendarType ?? r.calendar_type;
+  const eventTypeRaw = r.eventType ?? r.event_type;
+  const eventType = typeof eventTypeRaw === 'string' ? eventTypeRaw.trim() : undefined;
   let scope: CalendarEventScope | undefined;
-  if (scopeRaw === 'personal' || scopeRaw === 'PERSONAL') scope = 'personal';
-  if (scopeRaw === 'team' || scopeRaw === 'TEAM') scope = 'team';
-  if (!scope && typeof orgId === 'string' && orgId.trim()) scope = 'team';
-  if (!scope && (r.isPublicYn != null || r.is_public_yn != null)) scope = 'personal';
+  if (String(eventType).toUpperCase() === 'APPROVAL') {
+    scope = undefined;
+  } else if (scopeRaw === 'personal' || scopeRaw === 'PERSONAL') scope = 'personal';
+  else if (scopeRaw === 'team' || scopeRaw === 'TEAM') scope = 'team';
+  if (!scope && String(eventType).toUpperCase() !== 'APPROVAL') {
+    if (typeof orgId === 'string' && orgId.trim()) scope = 'team';
+    else if (r.isPublicYn != null || r.is_public_yn != null) scope = 'personal';
+  }
+
+  const eventTypeDescriptionRaw = r.eventTypeDescription ?? r.event_type_description;
+  const memberNameRaw = r.memberName ?? r.member_name;
 
   return {
     eventId,
@@ -79,6 +98,11 @@ function normalizeEvent(raw: unknown): CalendarEvent | null {
     isPublicYn: (r.isPublicYn ?? r.is_public_yn) as YnFlag | undefined,
     organizationId: typeof orgId === 'string' ? orgId : null,
     scope,
+    ...(eventType ? { eventType } : {}),
+    ...(typeof eventTypeDescriptionRaw === 'string' && eventTypeDescriptionRaw.trim()
+      ? { eventTypeDescription: eventTypeDescriptionRaw.trim() }
+      : {}),
+    ...(typeof memberNameRaw === 'string' && memberNameRaw.trim() ? { memberName: memberNameRaw.trim() } : {}),
   };
 }
 
@@ -114,6 +138,19 @@ function listQueryParams(eventType?: CalendarListEventTypeParam) {
   return eventType ? { eventType } : {};
 }
 
+/** 월/주/일 API에서 같은 일정이 중복 내려오는 경우를 제거 */
+function dedupeEvents(events: CalendarEvent[]): CalendarEvent[] {
+  const seen = new Set<string>();
+  const out: CalendarEvent[] = [];
+  for (const e of events) {
+    const key = `${e.eventId}|${e.startAt}|${e.endAt}|${String(e.eventType ?? '').toUpperCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(e);
+  }
+  return out;
+}
+
 async function fetchCalendarList(
   url: string,
   params: Record<string, string | number | undefined>,
@@ -121,7 +158,7 @@ async function fetchCalendarList(
   const response = await httpClient.get(url, { params });
   const unwrapped = unwrapApiResponse<unknown>(response.data);
   const arr = normalizeListPayload(unwrapped);
-  return arr.map(normalizeEvent).filter((e): e is CalendarEvent => e != null);
+  return dedupeEvents(arr.map(normalizeEvent).filter((e): e is CalendarEvent => e != null));
 }
 
 async function fetchCalendarMonth(
@@ -138,7 +175,9 @@ async function fetchCalendarMonth(
   });
   const unwrapped = unwrapApiResponse<unknown>(response.data);
 
-  const events = normalizeListPayload(unwrapped).map(normalizeEvent).filter((e): e is CalendarEvent => e != null);
+  const events = dedupeEvents(
+    normalizeListPayload(unwrapped).map(normalizeEvent).filter((e): e is CalendarEvent => e != null),
+  );
   let holidays: CalendarHoliday[] = [];
 
   if (unwrapped && typeof unwrapped === 'object') {

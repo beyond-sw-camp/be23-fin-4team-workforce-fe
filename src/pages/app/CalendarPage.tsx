@@ -24,7 +24,8 @@ import type { CalendarProps } from 'antd';
 import clsx from 'clsx';
 import dayjs, { type Dayjs } from 'dayjs';
 import 'dayjs/locale/ko';
-import { useEffect, useMemo, useState } from 'react';
+import localeData from 'dayjs/plugin/localeData';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import {
   type CalendarHoliday,
   type CalendarEvent,
@@ -34,10 +35,79 @@ import {
 } from '@/features/calendar/api/calendarApi';
 import type { OrganizationTreeNode } from '@/features/organization/api/organizationApi';
 import { organizationApi } from '@/features/organization/api/organizationApi';
+import { CALENDAR_PAGE_KO } from '@/app/locale/app-ko';
+import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 
+dayjs.extend(localeData);
 dayjs.locale('ko');
 
 const EMPTY_ORG_TREE: OrganizationTreeNode[] = [];
+
+/** 월 그리드: 선택 배경 제거 — 숫자 색은 `fullCellRender` 인라인 스타일로 지정 */
+const MONTH_GRID_CALENDAR_CLASS =
+  'wf-cal-month [&_.ant-picker-calendar-header]:tw-hidden [&_.ant-picker-content_td]:tw-px-1 [&_.ant-picker-cell-inner]:tw-min-h-[128px] [&_.ant-picker-calendar-date]:tw-w-full [&_.ant-picker-cell-selected::before]:!tw-border-0 [&_.ant-picker-cell-selected_.ant-picker-calendar-date]:!tw-bg-transparent [&_.ant-picker-cell-selected_.ant-picker-calendar-date]:!tw-shadow-none [&_.ant-picker-cell-today_.ant-picker-calendar-date]:!tw-bg-transparent [&_.ant-picker-cell-today_.ant-picker-calendar-date]:!tw-shadow-none [&_.ant-picker-cell-today_.ant-picker-calendar-date-value]:!tw-inline-flex [&_.ant-picker-cell-today_.ant-picker-calendar-date-value]:!tw-h-6 [&_.ant-picker-cell-today_.ant-picker-calendar-date-value]:!tw-min-w-6 [&_.ant-picker-cell-today_.ant-picker-calendar-date-value]:!tw-items-center [&_.ant-picker-cell-today_.ant-picker-calendar-date-value]:!tw-justify-center [&_.ant-picker-cell-today_.ant-picker-calendar-date-value]:!tw-rounded-full [&_.ant-picker-cell-today_.ant-picker-calendar-date-value]:!tw-bg-slate-900 [&_.ant-picker-cell-today_.ant-picker-calendar-date-value]:!tw-px-1.5 [&_.ant-picker-cell-today_.ant-picker-calendar-date-value]:!tw-text-white';
+
+/** 날짜/월 미니 캘린더(스테퍼 팝오버) — 동일 이슈 방지 */
+const MINI_CALENDAR_CLASS =
+  '[&_.ant-picker-cell:not(.ant-picker-cell-today)_.ant-picker-calendar-date-value]:!tw-text-slate-900 [&_.ant-picker-cell-today_.ant-picker-calendar-date-value]:!tw-text-white';
+
+const CAL_LABEL_COLOR_STORAGE_KEY = 'wf-calendar-label-colors-v1';
+/** UI 참고: 3×6 원형 팔레트 */
+const CAL_LABEL_COLOR_SWATCHES = [
+  '#9b5f50', '#c07d72', '#f05a7e', '#ef7a42', '#f4a640', '#f0c236',
+  '#4ade80', '#22c55e', '#84cc16', '#bef264', '#fde047', '#eab308',
+  '#fb7185', '#e879f9', '#a78bfa', '#c4b5fd', '#2563eb', '#38bdf8',
+] as const;
+
+function normalizeHexColor(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  const s = v.trim();
+  return /^#[0-9a-fA-F]{6}$/.test(s) ? s.toLowerCase() : null;
+}
+
+function loadCalendarLabelColors(): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = window.localStorage.getItem(CAL_LABEL_COLOR_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+      const hex = normalizeHexColor(v);
+      if (hex) out[k] = hex;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const h = normalizeHexColor(hex);
+  if (!h) return null;
+  const n = Number.parseInt(h.slice(1), 16);
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+
+const EVENT_CHIP_TINT_ALPHA = 0.75;
+
+function rgbaFromHex(hex: string, alpha: number): string {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return `rgba(30,58,95,${alpha})`;
+  return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+}
+
+/** 흰 배경 위 알파 틴트와의 대비로 본문색 (연한 틴트에 흰 글씨 방지) */
+function textColorForHexOnWhiteTint(hex: string, alpha: number): string {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return '#0f172a';
+  const r = rgb.r * alpha + 255 * (1 - alpha);
+  const g = rgb.g * alpha + 255 * (1 - alpha);
+  const b = rgb.b * alpha + 255 * (1 - alpha);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.55 ? '#0f172a' : '#ffffff';
+}
 
 function flattenOrgList(nodes: OrganizationTreeNode[]): { id: string; name: string }[] {
   const out: { id: string; name: string }[] = [];
@@ -56,7 +126,12 @@ function flattenOrgList(nodes: OrganizationTreeNode[]): { id: string; name: stri
   return out;
 }
 
+function isApprovalCalendarEvent(e: CalendarEvent): boolean {
+  return String(e.eventType ?? '').toUpperCase() === 'APPROVAL';
+}
+
 function isTeamEvent(e: CalendarEvent): boolean {
+  if (isApprovalCalendarEvent(e)) return false;
   return e.scope === 'team' || Boolean(e.organizationId?.trim());
 }
 
@@ -81,6 +156,20 @@ function holidaysOnDay(holidays: CalendarHoliday[], day: Dayjs): CalendarHoliday
   return holidays.filter((h) => h.holidayDate === key);
 }
 
+/** 일요일·법정 공휴일: 빨강 / 토요일: 회색 / 그 외: 진한 슬레이트 (오늘은 스타일 비움 → pill 규칙 사용) */
+function calendarDateNumberStyle(
+  date: Dayjs,
+  holidays: CalendarHoliday[],
+  isToday: boolean,
+): CSSProperties | undefined {
+  if (isToday) return undefined;
+  if (holidaysOnDay(holidays, date).length > 0) return { color: '#dc2626' };
+  const dow = date.day();
+  if (dow === 0) return { color: '#dc2626' };
+  if (dow === 6) return { color: '#94a3b8' };
+  return { color: '#0f172a' };
+}
+
 function formatEventTimeRange(e: CalendarEvent): string {
   const a = dayjs(e.startAt);
   const b = dayjs(e.endAt);
@@ -94,7 +183,34 @@ const MINUTES_PER_DAY = 24 * 60;
 /** 일간 타임라인 한 시간당 높이(px) — 전체 24시간 = 24 * 이 값 */
 const DAY_VIEW_HOUR_PX = 48;
 const EVENT_CHIP_CLASS =
-  'tw-block tw-w-full tw-truncate tw-rounded tw-border-0 tw-bg-rose-200/75 tw-px-1.5 tw-py-0.5 tw-text-left tw-text-[10px] tw-font-medium tw-leading-tight tw-text-rose-900 hover:tw-bg-rose-200';
+  'tw-block tw-w-full tw-truncate tw-rounded tw-border-0 tw-px-1.5 tw-py-0.5 tw-text-left tw-text-[10px] tw-font-medium tw-leading-tight';
+
+const EVENT_CHIP_TEAM_CLASS =
+  'tw-block tw-w-full tw-truncate tw-rounded tw-border-0 tw-bg-violet-200/80 tw-px-1.5 tw-py-0.5 tw-text-left tw-text-[10px] tw-font-medium tw-leading-tight tw-text-violet-950 hover:tw-bg-violet-200';
+
+const EVENT_CHIP_APPROVAL_CLASS =
+  'tw-block tw-w-full tw-truncate tw-rounded tw-border-0 tw-bg-amber-100/90 tw-px-1.5 tw-py-0.5 tw-text-left tw-text-[10px] tw-font-medium tw-leading-tight tw-text-amber-950 hover:tw-bg-amber-100';
+
+function eventChipButtonClass(e: CalendarEvent): string {
+  if (isApprovalCalendarEvent(e)) return EVENT_CHIP_APPROVAL_CLASS;
+  if (isTeamEvent(e)) return EVENT_CHIP_TEAM_CLASS;
+  return EVENT_CHIP_CLASS;
+}
+
+const DAY_LANE_PERSONAL_CLASS =
+  'tw-absolute tw-box-border tw-overflow-hidden tw-rounded tw-border tw-border-rose-300 tw-bg-rose-100/90 tw-px-1 tw-py-0.5 tw-text-left tw-text-[11px] tw-leading-tight tw-text-rose-900 hover:tw-bg-rose-100';
+
+const DAY_LANE_TEAM_CLASS =
+  'tw-absolute tw-box-border tw-overflow-hidden tw-rounded tw-border tw-border-violet-400 tw-bg-violet-100/90 tw-px-1 tw-py-0.5 tw-text-left tw-text-[11px] tw-leading-tight tw-text-violet-950 hover:tw-bg-violet-100';
+
+const DAY_LANE_APPROVAL_CLASS =
+  'tw-absolute tw-box-border tw-overflow-hidden tw-rounded tw-border tw-border-amber-300 tw-bg-amber-100/90 tw-px-1 tw-py-0.5 tw-text-left tw-text-[11px] tw-leading-tight tw-text-amber-950 hover:tw-bg-amber-100';
+
+function dayLaneEventButtonClass(e: CalendarEvent): string {
+  if (isApprovalCalendarEvent(e)) return DAY_LANE_APPROVAL_CLASS;
+  if (isTeamEvent(e)) return DAY_LANE_TEAM_CLASS;
+  return DAY_LANE_PERSONAL_CLASS;
+}
 
 function clipEventToDayMinutes(e: CalendarEvent, day: Dayjs): { startMin: number; endMin: number } | null {
   const dayStart = day.startOf('day');
@@ -223,8 +339,15 @@ function CalendarDateStepper({
   const popoverCalendarValue = mode === 'month' ? monthValue : selectedDay;
 
   return (
-    <div className="tw-flex tw-items-center tw-gap-1">
-      <Button type="text" icon={<LeftOutlined />} aria-label="이전" onClick={onPrev} />
+    <div className="tw-flex tw-items-center tw-gap-2 md:tw-gap-3">
+      <Button
+        type="text"
+        size="middle"
+        icon={<LeftOutlined className="tw-text-lg tw-text-slate-600" />}
+        aria-label="이전"
+        onClick={onPrev}
+        className="!tw-flex !tw-size-10 !tw-items-center !tw-justify-center"
+      />
       <Popover
         open={pickerOpen}
         onOpenChange={(o) => {
@@ -236,6 +359,7 @@ function CalendarDateStepper({
         content={
           <div className="tw-w-[270px]">
             <Calendar
+              className={MINI_CALENDAR_CLASS}
               fullscreen={false}
               value={popoverCalendarValue}
               mode={mode === 'month' ? 'year' : 'month'}
@@ -251,11 +375,22 @@ function CalendarDateStepper({
           </div>
         }
       >
-        <Button type="text" className="!tw-px-2 !tw-font-semibold">
+        <Button
+          type="text"
+          size="middle"
+          className="!tw-min-h-10 !tw-min-w-[8.5rem] !tw-rounded-lg !tw-px-4 !tw-text-base !tw-font-semibold !tw-text-slate-800 hover:!tw-bg-slate-100"
+        >
           {label}
         </Button>
       </Popover>
-      <Button type="text" icon={<RightOutlined />} aria-label="다음" onClick={onNext} />
+      <Button
+        type="text"
+        size="middle"
+        icon={<RightOutlined className="tw-text-lg tw-text-slate-600" />}
+        aria-label="다음"
+        onClick={onNext}
+        className="!tw-flex !tw-size-10 !tw-items-center !tw-justify-center"
+      />
     </div>
   );
 }
@@ -267,7 +402,90 @@ export function CalendarPage() {
   const [monthValue, setMonthValue] = useState(() => dayjs());
   const [selectedDay, setSelectedDay] = useState<Dayjs>(() => dayjs());
   const [showPersonal, setShowPersonal] = useState(true);
+  const [showApproval, setShowApproval] = useState(true);
   const [selectedTeamOrgIds, setSelectedTeamOrgIds] = useState<string[]>([]);
+  const [labelColors, setLabelColors] = useState<Record<string, string>>(() => loadCalendarLabelColors());
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(CAL_LABEL_COLOR_STORAGE_KEY, JSON.stringify(labelColors));
+    } catch {
+      /* ignore */
+    }
+  }, [labelColors]);
+
+  const setLabelColor = useCallback((key: string, color: string) => {
+    const hex = normalizeHexColor(color);
+    if (!hex) return;
+    setLabelColors((prev) => ({ ...prev, [key]: hex }));
+  }, []);
+
+  const labelColor = useCallback(
+    (key: string, fallback: string) => {
+      return labelColors[key] ?? fallback;
+    },
+    [labelColors],
+  );
+
+  const eventChipStyle = useCallback(
+    (e: CalendarEvent): CSSProperties => {
+      const key = isTeamEvent(e) && e.organizationId?.trim() ? `team:${e.organizationId.trim()}` : 'personal';
+      const base = labelColor(key, key === 'personal' ? '#2563eb' : '#475569');
+      return {
+        backgroundColor: rgbaFromHex(base, EVENT_CHIP_TINT_ALPHA),
+        color: textColorForHexOnWhiteTint(base, EVENT_CHIP_TINT_ALPHA),
+      };
+    },
+    [labelColor],
+  );
+
+  const renderLabelColorPicker = useCallback(
+    (key: string, fallback: string, ariaLabel: string) => {
+      const current = labelColor(key, fallback);
+      return (
+        <Popover
+          trigger="click"
+          placement="bottomRight"
+          content={
+            <div className="tw-grid tw-grid-cols-6 tw-gap-2">
+              {CAL_LABEL_COLOR_SWATCHES.map((hex) => {
+                const selected = current === hex;
+                return (
+                  <button
+                    key={hex}
+                    type="button"
+                    aria-label={`${ariaLabel} ${hex}`}
+                    className={clsx(
+                      'tw-size-5 tw-rounded-full tw-border-0 tw-p-0 tw-transition tw-outline-none',
+                      selected
+                        ? 'tw-ring-2 tw-ring-slate-600 tw-ring-offset-1 tw-ring-offset-white'
+                        : 'hover:tw-scale-105',
+                    )}
+                    style={{ backgroundColor: hex, border: 'none', boxShadow: 'none' }}
+                    onClick={(ev) => {
+                      ev.preventDefault();
+                      ev.stopPropagation();
+                      setLabelColor(key, hex);
+                    }}
+                  />
+                );
+              })}
+            </div>
+          }
+        >
+          <button
+            type="button"
+            aria-label={ariaLabel}
+            className="tw-inline-flex tw-size-3 tw-shrink-0 tw-cursor-pointer tw-items-center tw-justify-center tw-rounded-full tw-border-0 tw-p-0 tw-shadow-none tw-outline-none tw-ring-0 focus:tw-outline-none"
+            style={{ backgroundColor: current, border: 'none', boxShadow: 'none' }}
+            onClick={(ev) => ev.stopPropagation()}
+          />
+        </Popover>
+      );
+    },
+    [labelColor, setLabelColor],
+  );
 
   const year = monthValue.year();
   const month = monthValue.month() + 1;
@@ -285,6 +503,16 @@ export function CalendarPage() {
     queryFn: () => calendarApi.listWeekly(weekMonday.format('YYYY-MM-DD')),
     enabled: viewMode === 'week',
   });
+
+  /** 주간 뷰에서 공휴일 표시 — 해당 주가 속한 달의 법정휴일 목록 */
+  const weekHolidayMonthY = weekMonday.year();
+  const weekHolidayMonthM = weekMonday.month() + 1;
+  const weekMonthHolidaysQuery = useQuery({
+    queryKey: ['calendar', 'month', weekHolidayMonthY, weekHolidayMonthM],
+    queryFn: () => calendarApi.listMonth(weekHolidayMonthY, weekHolidayMonthM),
+    enabled: viewMode === 'week',
+  });
+  const weekHolidays = weekMonthHolidaysQuery.data?.holidays ?? [];
 
   const dayQuery = useQuery({
     queryKey: ['calendar', 'day', selectedDay.format('YYYY-MM-DD')],
@@ -306,6 +534,9 @@ export function CalendarPage() {
   const filteredEvents = useMemo(
     () =>
       events.filter((e) => {
+        if (isApprovalCalendarEvent(e)) {
+          return showApproval;
+        }
         const team = isTeamEvent(e);
         if (!team && !showPersonal) return false;
         if (team) {
@@ -316,7 +547,7 @@ export function CalendarPage() {
         }
         return true;
       }),
-    [events, showPersonal, selectedTeamOrgIds],
+    [events, showPersonal, showApproval, selectedTeamOrgIds],
   );
 
   const isLoading =
@@ -433,6 +664,9 @@ export function CalendarPage() {
       event: CalendarEvent;
       payload: CreatePersonalCalendarPayload | CreateTeamCalendarPayload;
     }) => {
+      if (isApprovalCalendarEvent(event)) {
+        throw new Error('결재 연동 일정은 수정할 수 없습니다.');
+      }
       if (isTeamEvent(event)) {
         await calendarApi.updateTeam(event.eventId, payload as CreateTeamCalendarPayload);
       } else {
@@ -451,6 +685,9 @@ export function CalendarPage() {
 
   const deleteM = useMutation({
     mutationFn: async (event: CalendarEvent) => {
+      if (isApprovalCalendarEvent(event)) {
+        throw new Error('결재 연동 일정은 삭제할 수 없습니다.');
+      }
       if (isTeamEvent(event)) {
         await calendarApi.deleteTeam(event.eventId);
       } else {
@@ -490,6 +727,10 @@ export function CalendarPage() {
   };
 
   const openEdit = (e: CalendarEvent) => {
+    if (isApprovalCalendarEvent(e)) {
+      message.warning('결재 연동 일정은 수정할 수 없습니다.');
+      return;
+    }
     setEditing(e);
     const start = dayjs(e.startAt);
     const end = dayjs(e.endAt);
@@ -525,45 +766,108 @@ export function CalendarPage() {
     [viewMode, dayList, selectedDay],
   );
 
-  const cellRender: CalendarProps<Dayjs>['cellRender'] = (current, info) => {
-    if (!info) return null;
-    if (info.type !== 'date') return info.originNode;
-    const list = eventsOnDay(filteredEvents, current);
-    const holidayList = holidaysOnDay(monthHolidays, current);
-    return (
-      <div className="tw-flex tw-min-h-[112px] tw-flex-col tw-gap-0.5">
-        {holidayList.length > 0 && (
-          <div className="tw-truncate tw-text-[11px] tw-font-medium tw-text-rose-600" title={holidayList[0]?.holidayName}>
-            {holidayList[0]?.holidayName}
+  const monthFullCellRender = useCallback<NonNullable<CalendarProps<Dayjs>['fullCellRender']>>(
+    (current, info) => {
+      if (!info || info.type !== 'date') {
+        return <div className="ant-picker-cell-inner" />;
+      }
+      const isToday = current.isSame(dayjs(), 'day');
+      const list = eventsOnDay(filteredEvents, current);
+      const holidayList = holidaysOnDay(monthHolidays, current);
+      const numStyle = calendarDateNumberStyle(current, monthHolidays, isToday);
+      return (
+        <div
+          className={clsx('ant-picker-cell-inner', 'ant-picker-calendar-date', {
+            'ant-picker-calendar-date-today': isToday,
+          })}
+        >
+          <div className="ant-picker-calendar-date-value" style={numStyle}>
+            {String(current.date()).padStart(2, '0')}
           </div>
-        )}
-        <ul className="tw-m-0 tw-list-none tw-space-y-0.5 tw-p-0">
-          {list.slice(0, 4).map((e) => (
-            <li key={e.eventId}>
-              <button
-                type="button"
-                className={EVENT_CHIP_CLASS}
-                onClick={(ev) => {
-                  ev.preventDefault();
-                  ev.stopPropagation();
-                  setDetailEvent(e);
-                  setDetailOpen(true);
-                }}
-              >
-                {e.title}
-              </button>
-            </li>
-          ))}
-        </ul>
-        {list.length > 4 && (
-          <span className="tw-text-[10px] tw-text-slate-400">+{list.length - 4}</span>
-        )}
-      </div>
+          <div className="ant-picker-calendar-date-content">
+            <div className="tw-flex tw-min-h-[112px] tw-flex-col tw-gap-0.5">
+              {holidayList.length > 0 && (
+                <div
+                  className="tw-truncate tw-text-[11px] tw-font-medium tw-text-rose-600"
+                  title={holidayList[0]?.holidayName}
+                >
+                  {holidayList[0]?.holidayName}
+                </div>
+              )}
+              <ul className="tw-m-0 tw-list-none tw-space-y-0.5 tw-p-0">
+                {list.slice(0, 4).map((e) => (
+                  <li key={e.eventId}>
+                    <button
+                      type="button"
+                      className={EVENT_CHIP_CLASS}
+                      style={eventChipStyle(e)}
+                      onClick={(ev) => {
+                        ev.preventDefault();
+                        ev.stopPropagation();
+                        setDetailEvent(e);
+                        setDetailOpen(true);
+                      }}
+                    >
+                      {e.title}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {list.length > 4 && (
+                <span className="tw-text-[10px] tw-text-slate-400">+{list.length - 4}</span>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    },
+    [eventChipStyle, filteredEvents, monthHolidays],
+  );
+
+  const calendarTheadAccentStyle = useMemo(() => {
+    const first = dayjs.localeData().firstDayOfWeek();
+    const sunCol = first === 0 ? 1 : 7;
+    const satCol = first === 0 ? 7 : 6;
+    return (
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+.wf-cal-month.ant-picker-calendar .ant-picker-content thead > tr > th:nth-child(${sunCol}){color:#dc2626!important;}
+.wf-cal-month.ant-picker-calendar .ant-picker-content thead > tr > th:nth-child(${satCol}){color:#94a3b8!important;}
+/* 캘린더 사이드바: antd 5.29는 박스/체크가 .ant-checkbox-inner(+::after) — 바깥 .ant-checkbox만 줄이면 inner 16px이 겹침 */
+.wf-cal-sidebar-filter-row .ant-checkbox-wrapper{
+  align-items:center!important;
+  flex:1 1 auto!important;
+  min-width:0!important;
+}
+.wf-cal-sidebar-filter-row .ant-checkbox-inner{
+  width:14px!important;
+  height:14px!important;
+  border-radius:4px!important;
+}
+/* 14px inner 기준 체크 크기만 축소 — scale+translate 조합은 시각적으로 우하단으로 밀림 */
+.wf-cal-sidebar-filter-row .ant-checkbox-inner::after{
+  width:5px!important;
+  height:8px!important;
+  border-width:0 1.5px 1.5px 0!important;
+  box-sizing:border-box!important;
+}
+.wf-cal-sidebar-filter-row .ant-checkbox-checked .ant-checkbox-inner::after{
+  transform:rotate(45deg) scale(1) translate(-50%,-50%)!important;
+  transform-origin:center!important;
+}
+.wf-cal-sidebar-filter-row .ant-checkbox-label{
+  padding-inline-start:8px!important;
+}
+`,
+        }}
+      />
     );
-  };
+  }, []);
 
   return (
     <div className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-gap-4">
+      <AppWorkspacePageTitle eyebrow={CALENDAR_PAGE_KO.workspaceEyebrow} title={CALENDAR_PAGE_KO.pageTitle} />
       <div className="tw-grid tw-min-h-0 tw-flex-1 tw-gap-4 lg:tw-grid-cols-[280px_1fr]">
         <Card className="tw-h-fit tw-border-slate-200/80 tw-shadow-sm" styles={{ body: { padding: 12 } }}>
           <div className="tw-space-y-3">
@@ -582,11 +886,53 @@ export function CalendarPage() {
                 월/주/일 일정 목록에 개인 일정을 표시할지 선택합니다.
               </Typography.Paragraph>
               <div className="tw-mt-2 tw-space-y-2">
-                <label className="tw-flex tw-items-center">
-                  <Checkbox checked={showPersonal} onChange={(e) => setShowPersonal(e.target.checked)}>
-                    개인 일정
+                <div
+                  role="checkbox"
+                  aria-checked={showPersonal}
+                  tabIndex={0}
+                  className="wf-cal-sidebar-filter-row tw-flex tw-cursor-pointer tw-items-center tw-justify-between tw-gap-2 tw-rounded-md tw-px-1"
+                  onClick={() => setShowPersonal((v) => !v)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setShowPersonal((v) => !v);
+                    }
+                  }}
+                >
+                  <Checkbox
+                    className="tw-min-w-0 tw-flex-1 !tw-items-center"
+                    checked={showPersonal}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => setShowPersonal(e.target.checked)}
+                  >
+                    <span className="tw-text-slate-800">개인 일정</span>
                   </Checkbox>
-                </label>
+                  <span className="tw-shrink-0" onClick={(e) => e.stopPropagation()}>
+                    {renderLabelColorPicker('personal', '#2563eb', '개인 일정 라벨 색상')}
+                  </span>
+                </div>
+                <div
+                  role="checkbox"
+                  aria-checked={showApproval}
+                  tabIndex={0}
+                  className="wf-cal-sidebar-filter-row tw-flex tw-cursor-pointer tw-items-center tw-justify-between tw-gap-2 tw-rounded-md tw-px-1"
+                  onClick={() => setShowApproval((v) => !v)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setShowApproval((v) => !v);
+                    }
+                  }}
+                >
+                  <Checkbox
+                    className="tw-min-w-0 tw-flex-1 !tw-items-center"
+                    checked={showApproval}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => setShowApproval(e.target.checked)}
+                  >
+                    <span className="tw-text-slate-800">결재 연동 일정</span>
+                  </Checkbox>
+                </div>
               </div>
             </div>
 
@@ -599,9 +945,30 @@ export function CalendarPage() {
                 {teamOrgFilters.length > 0 ? (
                   <div className="tw-space-y-1 tw-pl-1">
                     {teamOrgFilters.map((org) => (
-                      <label key={org.id} className="tw-flex tw-items-center">
+                      <div
+                        key={org.id}
+                        role="checkbox"
+                        aria-checked={selectedTeamOrgIds.includes(org.id)}
+                        tabIndex={0}
+                        className="wf-cal-sidebar-filter-row tw-flex tw-cursor-pointer tw-items-center tw-justify-between tw-gap-2 tw-rounded-md tw-px-1"
+                        onClick={() => {
+                          setSelectedTeamOrgIds((prev) =>
+                            prev.includes(org.id) ? prev.filter((id) => id !== org.id) : [...new Set([...prev, org.id])],
+                          );
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setSelectedTeamOrgIds((prev) =>
+                              prev.includes(org.id) ? prev.filter((id) => id !== org.id) : [...new Set([...prev, org.id])],
+                            );
+                          }
+                        }}
+                      >
                         <Checkbox
+                          className="tw-min-w-0 tw-flex-1 !tw-items-center"
                           checked={selectedTeamOrgIds.includes(org.id)}
+                          onClick={(e) => e.stopPropagation()}
                           onChange={(e) => {
                             const checked = e.target.checked;
                             setSelectedTeamOrgIds((prev) =>
@@ -609,9 +976,12 @@ export function CalendarPage() {
                             );
                           }}
                         >
-                          {org.label}
+                          <span className="tw-text-slate-800">{org.label}</span>
                         </Checkbox>
-                      </label>
+                        <span className="tw-shrink-0" onClick={(e) => e.stopPropagation()}>
+                          {renderLabelColorPicker(`team:${org.id}`, '#475569', `${org.label} 라벨 색상`)}
+                        </span>
+                      </div>
                     ))}
                   </div>
                 ) : (
@@ -625,39 +995,25 @@ export function CalendarPage() {
         </Card>
 
         <Card className="tw-border-slate-200/80 tw-shadow-sm" styles={{ body: { padding: 12 } }}>
-          <div className="tw-mb-3">
-            <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
-              일정목록
-            </Typography.Title>
-          </div>
-          <div className="tw-mb-3 tw-flex tw-flex-wrap tw-items-center tw-gap-3">
-            <Segmented
-              value={viewMode}
-              onChange={(v) => {
-                const mode = v as CalendarViewMode;
-                if (mode === 'month') {
-                  setMonthValue(selectedDay.startOf('month'));
-                }
-                setViewMode(mode);
-              }}
-              options={[
-                { label: '월', value: 'month' },
-                { label: '주', value: 'week' },
-                { label: '일', value: 'day' },
-              ]}
-            />
-            <div className="tw-ml-auto tw-flex tw-items-center tw-gap-2">
-              <Button
-                type="default"
-                size="small"
-                onClick={() => {
-                  const today = dayjs();
-                  setSelectedDay(today);
-                  setMonthValue(today.startOf('month'));
+          <div className="tw-mb-4 tw-grid tw-w-full tw-grid-cols-1 tw-items-center tw-gap-3 sm:tw-grid-cols-[1fr_auto_1fr]">
+            <div className="tw-justify-self-start sm:tw-justify-self-start">
+              <Segmented
+                value={viewMode}
+                onChange={(v) => {
+                  const mode = v as CalendarViewMode;
+                  if (mode === 'month') {
+                    setMonthValue(selectedDay.startOf('month'));
+                  }
+                  setViewMode(mode);
                 }}
-              >
-                오늘
-              </Button>
+                options={[
+                  { label: '월', value: 'month' },
+                  { label: '주', value: 'week' },
+                  { label: '일', value: 'day' },
+                ]}
+              />
+            </div>
+            <div className="tw-flex tw-justify-center tw-justify-self-center">
               <CalendarDateStepper
                 mode={viewMode}
                 monthValue={monthValue}
@@ -694,26 +1050,42 @@ export function CalendarPage() {
                 }}
               />
             </div>
+            <div className="tw-flex tw-justify-end tw-justify-self-end max-sm:tw-w-full max-sm:tw-justify-self-end">
+              <Button
+                type="default"
+                size="middle"
+                onClick={() => {
+                  const today = dayjs();
+                  setSelectedDay(today);
+                  setMonthValue(today.startOf('month'));
+                }}
+              >
+                오늘
+              </Button>
+            </div>
           </div>
           <Spin spinning={isLoading}>
             {viewMode === 'month' && (
-              <Calendar
-                className="[&_.ant-picker-calendar-header]:tw-hidden [&_.ant-picker-content_td]:tw-px-1 [&_.ant-picker-cell-inner]:tw-min-h-[128px] [&_.ant-picker-calendar-date]:tw-w-full [&_.ant-picker-cell-selected::before]:!tw-border-0 [&_.ant-picker-cell-selected_.ant-picker-calendar-date]:!tw-bg-transparent [&_.ant-picker-cell-selected_.ant-picker-calendar-date]:!tw-shadow-none [&_.ant-picker-cell-today_.ant-picker-calendar-date]:!tw-bg-transparent [&_.ant-picker-cell-today_.ant-picker-calendar-date]:!tw-shadow-none [&_.ant-picker-cell-today_.ant-picker-calendar-date-value]:tw-inline-flex [&_.ant-picker-cell-today_.ant-picker-calendar-date-value]:tw-h-6 [&_.ant-picker-cell-today_.ant-picker-calendar-date-value]:tw-min-w-6 [&_.ant-picker-cell-today_.ant-picker-calendar-date-value]:tw-items-center [&_.ant-picker-cell-today_.ant-picker-calendar-date-value]:tw-justify-center [&_.ant-picker-cell-today_.ant-picker-calendar-date-value]:tw-rounded-full [&_.ant-picker-cell-today_.ant-picker-calendar-date-value]:tw-bg-slate-900 [&_.ant-picker-cell-today_.ant-picker-calendar-date-value]:tw-px-1.5 [&_.ant-picker-cell-today_.ant-picker-calendar-date-value]:tw-text-white"
-                fullscreen={false}
-                value={selectedDay}
-                onChange={(d) => {
-                  setMonthValue(d);
-                  setSelectedDay(d);
-                }}
-                onSelect={(d, info) => {
-                  setSelectedDay(d);
-                  if (info?.source === 'date') {
-                    openCreate(d);
-                  }
-                }}
-                onPanelChange={(d) => setMonthValue(d)}
-                cellRender={cellRender}
-              />
+              <>
+                {calendarTheadAccentStyle}
+                <Calendar
+                  className={MONTH_GRID_CALENDAR_CLASS}
+                  fullscreen={false}
+                  value={selectedDay}
+                  onChange={(d) => {
+                    setMonthValue(d);
+                    setSelectedDay(d);
+                  }}
+                  onSelect={(d, info) => {
+                    setSelectedDay(d);
+                    if (info?.source === 'date') {
+                      openCreate(d);
+                    }
+                  }}
+                  onPanelChange={(d) => setMonthValue(d)}
+                  fullCellRender={monthFullCellRender}
+                />
+              </>
             )}
             {viewMode === 'week' && (
               <div className="tw-space-y-3">
@@ -722,6 +1094,8 @@ export function CalendarPage() {
                     const d = weekMonday.add(i, 'day');
                     const list = eventsOnDay(filteredEvents, d);
                     const isSel = d.isSame(selectedDay, 'day');
+                    const isTodayD = d.isSame(dayjs(), 'day');
+                    const dayNumStyle = calendarDateNumberStyle(d, weekHolidays, isTodayD);
                     return (
                       <div
                         key={d.format('YYYY-MM-DD')}
@@ -740,15 +1114,32 @@ export function CalendarPage() {
                             openCreate(d);
                           }}
                         >
-                          {d.format('ddd')}{' '}
-                          <span className="tw-text-slate-900">{d.format('D')}</span>
+                          <span
+                            className={clsx(
+                              d.day() === 0 && 'tw-text-red-600',
+                              d.day() === 6 && 'tw-text-slate-400',
+                              d.day() !== 0 && d.day() !== 6 && 'tw-text-slate-700',
+                            )}
+                          >
+                            {d.format('ddd')}
+                          </span>{' '}
+                          <span
+                            className={clsx(
+                              'tw-tabular-nums tw-font-semibold',
+                              !dayNumStyle && 'tw-text-slate-900',
+                            )}
+                            style={dayNumStyle}
+                          >
+                            {d.format('D')}
+                          </span>
                         </button>
                         <ul className="tw-m-0 tw-flex tw-min-h-0 tw-flex-1 tw-list-none tw-flex-col tw-space-y-0.5 tw-p-0">
-                          {list.slice(0, 4).map((e) => (
-                            <li key={e.eventId}>
+                          {list.slice(0, 4).map((e, idx) => (
+                            <li key={`${e.eventId}-${e.startAt}-${e.endAt}-${idx}`}>
                               <button
                                 type="button"
                                 className={EVENT_CHIP_CLASS}
+                                style={eventChipStyle(e)}
                                 onClick={() => {
                                   setDetailEvent(e);
                                   setDetailOpen(true);
@@ -808,9 +1199,9 @@ export function CalendarPage() {
                         const left = (lane / laneCount) * 100 + gapPct / 2;
                         return (
                           <button
-                            key={e.eventId}
+                            key={`${e.eventId}-${clip.startMin}-${clip.endMin}-${lane}`}
                             type="button"
-                            className="tw-absolute tw-box-border tw-overflow-hidden tw-rounded tw-border tw-border-rose-300 tw-bg-rose-100/90 tw-px-1 tw-py-0.5 tw-text-left tw-text-[11px] tw-leading-tight tw-text-rose-900 hover:tw-bg-rose-100"
+                            className={dayLaneEventButtonClass(e)}
                             style={{
                               top: `${pctTop}%`,
                               height: `${pctH}%`,
@@ -845,6 +1236,9 @@ export function CalendarPage() {
         </Card>
 
       </div>
+
+      {/* `destroyOnHidden` 모달이 닫히면 Form이 제거되어 useForm 경고가 난다. */}
+      {!formOpen ? <Form form={form} preserve={false} className="tw-hidden" aria-hidden /> : null}
 
       <Modal
         title={editing ? '일정 수정' : '일정 추가'}
@@ -933,45 +1327,62 @@ export function CalendarPage() {
           setDetailOpen(false);
           setDetailEvent(null);
         }}
-        footer={[
-          <Popconfirm
-            key="del"
-            title="이 일정을 삭제할까요?"
-            okText="삭제"
-            cancelText="취소"
-            okButtonProps={{ danger: true, loading: deleteM.isPending }}
-            onConfirm={() => {
-              const ev = detailData ?? detailEvent;
-              if (ev) deleteM.mutate(ev);
-            }}
-          >
-            <Button danger loading={deleteM.isPending} disabled={!detailData && !detailEvent}>
-              삭제
-            </Button>
-          </Popconfirm>,
-          <Button
-            key="edit"
-            type="primary"
-            disabled={!detailData}
-            onClick={() => {
-              if (!detailData) return;
-              setDetailOpen(false);
-              setDetailEvent(null);
-              openEdit(detailData);
-            }}
-          >
-            수정
-          </Button>,
-          <Button
-            key="close"
-            onClick={() => {
-              setDetailOpen(false);
-              setDetailEvent(null);
-            }}
-          >
-            닫기
-          </Button>,
-        ]}
+        footer={(() => {
+          const resolved = detailData ?? detailEvent;
+          const readOnlyApproval = resolved ? isApprovalCalendarEvent(resolved) : false;
+          if (readOnlyApproval) {
+            return [
+              <Button
+                key="close"
+                onClick={() => {
+                  setDetailOpen(false);
+                  setDetailEvent(null);
+                }}
+              >
+                닫기
+              </Button>,
+            ];
+          }
+          return [
+            <Popconfirm
+              key="del"
+              title="이 일정을 삭제할까요?"
+              okText="삭제"
+              cancelText="취소"
+              okButtonProps={{ danger: true, loading: deleteM.isPending }}
+              onConfirm={() => {
+                const ev = detailData ?? detailEvent;
+                if (ev && !isApprovalCalendarEvent(ev)) deleteM.mutate(ev);
+              }}
+            >
+              <Button danger loading={deleteM.isPending} disabled={!detailData && !detailEvent}>
+                삭제
+              </Button>
+            </Popconfirm>,
+            <Button
+              key="edit"
+              type="primary"
+              disabled={!detailData}
+              onClick={() => {
+                if (!detailData) return;
+                setDetailOpen(false);
+                setDetailEvent(null);
+                openEdit(detailData);
+              }}
+            >
+              수정
+            </Button>,
+            <Button
+              key="close"
+              onClick={() => {
+                setDetailOpen(false);
+                setDetailEvent(null);
+              }}
+            >
+              닫기
+            </Button>,
+          ];
+        })()}
         width={480}
       >
         <Spin spinning={detailLoading}>
@@ -981,7 +1392,13 @@ export function CalendarPage() {
                 <Typography.Text strong className="tw-text-lg">
                   {detailData.title}
                 </Typography.Text>
-                {isTeamEvent(detailData) ? <Tag color="blue">팀</Tag> : <Tag>개인</Tag>}
+                {isApprovalCalendarEvent(detailData) ? (
+                  <Tag color="orange">결재 연동</Tag>
+                ) : isTeamEvent(detailData) ? (
+                  <Tag color="blue">팀</Tag>
+                ) : (
+                  <Tag>개인</Tag>
+                )}
               </div>
               <Typography.Paragraph className="!tw-m-0 tw-whitespace-pre-wrap tw-text-slate-700">
                 {detailData.description?.trim() || '—'}
@@ -993,7 +1410,11 @@ export function CalendarPage() {
                 <div>
                   종료: {dayjs(detailData.endAt).format('YYYY-MM-DD HH:mm')}
                 </div>
-                {!isTeamEvent(detailData) && (
+                {detailData.memberName?.trim() ? <div>대상: {detailData.memberName.trim()}</div> : null}
+                {detailData.eventTypeDescription?.trim() ? (
+                  <div>일정 유형: {detailData.eventTypeDescription.trim()}</div>
+                ) : null}
+                {!isTeamEvent(detailData) && !isApprovalCalendarEvent(detailData) && (
                   <div>공개: {detailData.isPublicYn === 'NO' ? '비공개' : '공개'}</div>
                 )}
                 {isTeamEvent(detailData) && detailData.organizationId && (

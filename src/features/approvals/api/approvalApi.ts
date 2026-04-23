@@ -23,6 +23,12 @@ export type ApprovalDocument = {
   requestType: ApprovalRequestType | string;
   /** 부서 문서함 노출 — 민감 양식은 N */
   isDeptVisibleYn: 'Y' | 'N';
+  /** 캘린더 자동 연동 (기본 N) */
+  isCalendarVisibleYn: 'Y' | 'N';
+  calendarDisplayName?: string | null;
+  calendarStartField?: string | null;
+  calendarEndField?: string | null;
+  calendarTitleField?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -68,6 +74,12 @@ function asText(value: unknown): string {
   return '';
 }
 
+function asOptionalText(value: unknown): string | null {
+  if (value == null) return null;
+  const s = asText(value);
+  return s || null;
+}
+
 function asYn(value: unknown): 'Y' | 'N' {
   return String(value).toUpperCase() === 'Y' ? 'Y' : 'N';
 }
@@ -107,6 +119,9 @@ function normalizeApprovalDocument(raw: unknown): ApprovalDocument | null {
   const deptRaw = o.isDeptVisibleYn ?? o.is_dept_visible_yn;
   const isDeptVisibleYn =
     deptRaw == null || deptRaw === '' ? 'Y' : asYn(deptRaw);
+  const calVisRaw = o.isCalendarVisibleYn ?? o.is_calendar_visible_yn;
+  const isCalendarVisibleYn =
+    calVisRaw == null || calVisRaw === '' ? 'N' : asYn(calVisRaw);
   return {
     documentId,
     companyId: asText(o.companyId ?? o.company_id),
@@ -115,6 +130,11 @@ function normalizeApprovalDocument(raw: unknown): ApprovalDocument | null {
     isActiveYn: asYn(o.isActiveYn ?? o.is_active_yn),
     requestType,
     isDeptVisibleYn,
+    isCalendarVisibleYn,
+    calendarDisplayName: asOptionalText(o.calendarDisplayName ?? o.calendar_display_name),
+    calendarStartField: asOptionalText(o.calendarStartField ?? o.calendar_start_field),
+    calendarEndField: asOptionalText(o.calendarEndField ?? o.calendar_end_field),
+    calendarTitleField: asOptionalText(o.calendarTitleField ?? o.calendar_title_field),
     createdAt: asText(o.createdAt ?? o.created_at),
     updatedAt: asText(o.updatedAt ?? o.updated_at),
   };
@@ -202,23 +222,36 @@ export const approvalApi = {
     requestType: ApprovalRequestType;
     formSchema: string;
     isDeptVisibleYn?: 'Y' | 'N';
+    isCalendarVisibleYn?: 'Y' | 'N';
+    calendarDisplayName?: string | null;
+    calendarStartField?: string | null;
+    calendarEndField?: string | null;
+    calendarTitleField?: string | null;
   }): Promise<ApprovalDocument> {
     const response = await httpClient.post('/approval/documents', payload);
     return unwrapDocument(unwrapApiResponse<unknown>(response.data));
   },
 
-  /** 양식 스키마·부서 문서함 노출 수정 (documentName·requestType 변경 불가) */
+  /** 양식 스키마 수정 (documentName·requestType 변경 불가) */
   async updateDocument(
     documentId: string,
     payload: {
       formSchema: string;
-      isDeptVisibleYn?: 'Y' | 'N' | null;
+      isCalendarVisibleYn: 'Y' | 'N';
+      calendarDisplayName: string | null;
+      calendarStartField: string | null;
+      calendarEndField: string | null;
+      calendarTitleField: string | null;
     },
   ): Promise<ApprovalDocument> {
-    const body: { formSchema: string; isDeptVisibleYn?: 'Y' | 'N' | null } = {
+    const body = {
       formSchema: payload.formSchema,
+      isCalendarVisibleYn: payload.isCalendarVisibleYn,
+      calendarDisplayName: payload.calendarDisplayName,
+      calendarStartField: payload.calendarStartField,
+      calendarEndField: payload.calendarEndField,
+      calendarTitleField: payload.calendarTitleField,
     };
-    if (payload.isDeptVisibleYn !== undefined) body.isDeptVisibleYn = payload.isDeptVisibleYn;
     const response = await httpClient.put(`/approval/documents/${encodeURIComponent(documentId)}`, body);
     return unwrapDocument(unwrapApiResponse<unknown>(response.data));
   },
@@ -235,20 +268,6 @@ export const approvalApi = {
 
   async deactivateDocument(documentId: string): Promise<ApprovalDocument> {
     const response = await httpClient.patch(`/approval/documents/${encodeURIComponent(documentId)}/deactivate`);
-    return unwrapDocument(unwrapApiResponse<unknown>(response.data));
-  },
-
-  async enableDeptVisible(documentId: string): Promise<ApprovalDocument> {
-    const response = await httpClient.patch(
-      `/approval/documents/${encodeURIComponent(documentId)}/dept-visible/enable`,
-    );
-    return unwrapDocument(unwrapApiResponse<unknown>(response.data));
-  },
-
-  async disableDeptVisible(documentId: string): Promise<ApprovalDocument> {
-    const response = await httpClient.patch(
-      `/approval/documents/${encodeURIComponent(documentId)}/dept-visible/disable`,
-    );
     return unwrapDocument(unwrapApiResponse<unknown>(response.data));
   },
 

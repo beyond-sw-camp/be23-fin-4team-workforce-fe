@@ -23,7 +23,6 @@ import {
   Col,
 } from 'antd';
 import {
-  ArrowLeftOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
   PlusOutlined,
@@ -39,7 +38,7 @@ import {
   StarFilled,
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useParams } from '@tanstack/react-router';
+import { useParams } from '@tanstack/react-router';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
 import { meetingApi } from '@/features/meetings/api/meetingApi';
@@ -51,6 +50,7 @@ import type {
 } from '@/features/meetings/model/types';
 import { MemberRemoteSelect } from '@/features/members/ui/MemberRemoteSelect';
 import { useMemberDisplayNames } from '@/features/members/hooks/useMemberDisplayNames';
+import { DetailPageHeader } from '@/shared/ui/DetailPageHeader';
 
 dayjs.locale('ko');
 
@@ -209,7 +209,6 @@ function TlRatingPicker({
 /* ──────────────── 메인 컴포넌트 ──────────────── */
 export default function MeetingDetailPage() {
   const { meetingId } = useParams({ strict: false }) as { meetingId: string };
-  const navigate = useNavigate();
   const qc = useQueryClient();
 
   const [completeForm] = Form.useForm();
@@ -315,25 +314,23 @@ export default function MeetingDetailPage() {
   const actions: MeetingAction[] = actionsQ.data ?? [];
   const actionsDone = actions.filter((a) => a.status === 'COMPLETED').length;
 
+  const memberLine = labelFor(meeting.memberId);
+  const managerLine = labelFor(meeting.managerId);
+  const scheduleLine = dayjs(meeting.scheduledAt).format('YYYY-MM-DD (ddd) HH:mm');
+
   return (
     <div className="tw-p-6 tw-max-w-[900px] tw-mx-auto">
-      {/* 뒤로가기 */}
-      <Button
-        type="link"
-        icon={<ArrowLeftOutlined />}
-        className="tw-pl-0 tw-mb-3"
-        onClick={() => navigate({ to: '/app/meetings' })}
-      >
-        {KO.back}
-      </Button>
-
-      {/* ── 상단 정보 카드 ── */}
-      <Card
-        className="tw-mb-5"
-        title={
-          <Space>
-            <CalendarOutlined />
-            <span>{KO.titleMeeting}</span>
+      <DetailPageHeader
+        backTo="/app/meetings"
+        backLabel={KO.back}
+        title={KO.titleMeeting}
+        subtitle={
+          <Space wrap size="small" className="tw-text-slate-600">
+            <span>{memberLine} · {managerLine}</span>
+            <span className="tw-inline-flex tw-items-center tw-gap-1">
+              <CalendarOutlined />
+              {scheduleLine}
+            </span>
             {isCompleted ? (
               <Tag icon={<CheckCircleOutlined />} color="success">{KO.statusCompleted}</Tag>
             ) : isOverdue ? (
@@ -341,12 +338,16 @@ export default function MeetingDetailPage() {
             ) : (
               <Tag icon={<ClockCircleOutlined />} color="processing">{KO.statusScheduled}</Tag>
             )}
-            {meeting.relatedSeasonId && (
-              <Tag color="blue" icon={<LinkOutlined />}>{`평가 피드백`}</Tag>
-            )}
+            {meeting.relatedSeasonId ? (
+              <Tag color="blue" icon={<LinkOutlined />}>평가 피드백</Tag>
+            ) : null}
           </Space>
         }
-      >
+        showShare={false}
+      />
+
+      {/* ── 상단 정보 카드 ── */}
+      <Card className="tw-mb-5">
         <Descriptions column={{ xs: 1, sm: 2 }} size="small" styles={{ label: { fontWeight: 500 } }}>
           <Descriptions.Item label={KO.labelMember}>
             <Space>
@@ -622,6 +623,10 @@ export default function MeetingDetailPage() {
           </>
         )}
       </Card>
+
+      {/* 면담 완료 후·액션 폼 접을 때 Form이 언마운트되어 useForm 인스턴스가 끊긴다. */}
+      {isCompleted ? <Form form={completeForm} preserve={false} className="tw-hidden" aria-hidden /> : null}
+      {!showActionForm ? <Form form={actionForm} preserve={false} className="tw-hidden" aria-hidden /> : null}
     </div>
   );
 }

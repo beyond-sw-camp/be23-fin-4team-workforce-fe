@@ -1,7 +1,7 @@
 import { Button, Popconfirm, Spin, Tag, Typography } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import { PERFORMANCE_PAGE_KO } from '@/app/locale/app-ko';
-import type { KpiCycle, KpiTemplate, MeasureType, UnitType } from '@/features/goals/model/types';
+import type { GoalApprovalPolicy, KpiCycle, KpiTemplate, MeasureType, UnitType } from '@/features/goals/model/types';
 import { AppEmptyIllustrated } from '@/shared/ui/AppEmptyIllustrated';
 import { AppPagination, appPaginationShowTotalLabel } from '@/shared/ui/AppPagination';
 
@@ -28,6 +28,18 @@ const CYCLE_LABEL: Record<KpiCycle, string> = {
   HALF_YEARLY: '반기',
   YEARLY: '연간',
 };
+
+const APPROVAL_POLICY_LABEL: Record<GoalApprovalPolicy, { label: string; color: string }> = {
+  NONE: { label: '승인 없음', color: '' },
+  ACTIVATION_ONLY: { label: '활성화 승인', color: 'blue' },
+  COMPLETION_ONLY: { label: '종료 승인', color: 'green' },
+  BOTH: { label: '활성화+종료 승인', color: 'orange' },
+};
+
+function resolvePolicy(tpl: KpiTemplate): GoalApprovalPolicy {
+  if (tpl.goalApprovalPolicy) return tpl.goalApprovalPolicy;
+  return tpl.requireApproval ? 'BOTH' : 'NONE';
+}
 
 function templateIsActive(tpl: KpiTemplate): boolean {
   return tpl.isActive !== false;
@@ -156,6 +168,19 @@ export function KpiTemplateCards({
                     {tpl.capPct != null ? `${tpl.capPct}%` : '—'}
                   </Text>
                 </div>
+                {(() => {
+                  const policy = resolvePolicy(tpl);
+                  const info = APPROVAL_POLICY_LABEL[policy];
+                  if (policy === 'NONE') return null;
+                  return (
+                    <div>
+                      <Text type="secondary" className="tw-mr-2 tw-text-xs">
+                        승인
+                      </Text>
+                      <Tag color={info.color} className="!tw-m-0">{info.label}</Tag>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           );

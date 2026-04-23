@@ -81,6 +81,8 @@ export type ApprovalRequestDetail = {
   requesterOrganizationName?: string;
   /** 부서 문서함 노출 — 공문은 서버에서 Y 고정 */
   isDeptVisibleYn?: 'Y' | 'N';
+  /** 공문(OFFICIAL) — 최종 승인 후 기안자가 수신 부서로 발송했는지 */
+  sendYn?: 'Y' | 'N';
 };
 
 export type CreateApprovalRequestPayload = {
@@ -398,6 +400,12 @@ function normalizeRequest(raw: unknown): ApprovalRequestDetail | null {
       : String(isDeptVisibleRaw).trim().toUpperCase() === 'N'
         ? 'N'
         : 'Y';
+  const sendYnRaw = o.sendYn ?? o.send_yn;
+  let sendYn: 'Y' | 'N' | undefined;
+  if (sendYnRaw != null && String(sendYnRaw).trim() !== '') {
+    const su = String(sendYnRaw).trim().toUpperCase();
+    if (su === 'Y' || su === 'N') sendYn = su;
+  }
   let recipients: OfficialRecipient[] | null = null;
   if (Array.isArray(recipientsRaw)) {
     const parsed: OfficialRecipient[] = [];
@@ -442,6 +450,7 @@ function normalizeRequest(raw: unknown): ApprovalRequestDetail | null {
     ...(documentNumber != null && documentNumber !== '' ? { documentNumber } : {}),
     ...(recipients != null ? { recipients } : {}),
     ...(isDeptVisibleYn != null ? { isDeptVisibleYn } : {}),
+    ...(sendYn != null ? { sendYn } : {}),
   };
 }
 
@@ -455,6 +464,22 @@ function unwrapSingle(raw: unknown): ApprovalRequestDetail {
 export function isOfficialApprovalRequestType(requestType: string | unknown): boolean {
   const u = String(requestType ?? '').trim().toUpperCase();
   return u === 'OFFICIAL';
+}
+
+/**
+ * 승인 완료된 공문을 기안자만 아직 수신 부서로 발송할 수 있는지.
+ * 발송 취소 버튼 노출 조건도 동일(`sendYn === 'N'`·기안자 본인).
+ */
+export function canSendOfficialDocument(
+  detail: ApprovalRequestDetail,
+  currentMemberId: string | undefined | null,
+): boolean {
+  const mid = currentMemberId?.trim();
+  if (!mid) return false;
+  if (!isOfficialApprovalRequestType(detail.requestType)) return false;
+  if (String(detail.requestStatus ?? '').toUpperCase() !== 'APPROVED') return false;
+  if (String(detail.sendYn ?? '').toUpperCase() !== 'N') return false;
+  return eqMemberKey(detail.memberId, mid);
 }
 
 /**
@@ -515,6 +540,12 @@ export const approvalRequestApi = {
 
   async cancelRequest(requestId: string, cancelReason: string): Promise<ApprovalRequestDetail> {
     const response = await httpClient.patch(`/approval/requests/${encodeURIComponent(requestId)}/cancel`, { cancelReason });
+    return unwrapSingle(unwrapApiResponse<unknown>(response.data));
+  },
+
+  /** 승인 완료된 공문을 수신 부서로 발송 (기안자만, 1회, 취소 불가) */
+  async sendOfficial(requestId: string): Promise<ApprovalRequestDetail> {
+    const response = await httpClient.post(`/approval/requests/${encodeURIComponent(requestId)}/send-official`, null);
     return unwrapSingle(unwrapApiResponse<unknown>(response.data));
   },
 

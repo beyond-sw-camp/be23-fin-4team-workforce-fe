@@ -52,4 +52,10 @@ export function syncApprovalQueryCachesAfterAct(
 
   void qc.invalidateQueries({ queryKey: ['approval-user', 'approval-inbox'] });
   void qc.invalidateQueries({ queryKey: ['approval-user', 'approval-waiting'] });
+
+  /** 최종 승인 시 서버가 결재 연동 캘린더 일정을 만들 수 있으므로 캘린더 목록을 다시 불러오게 함 */
+  const terminal = String(detail.requestStatus ?? '').toUpperCase();
+  if (terminal === 'APPROVED' || terminal === 'REJECTED' || terminal === 'CANCELED') {
+    void qc.invalidateQueries({ queryKey: ['calendar'] });
+  }
 }

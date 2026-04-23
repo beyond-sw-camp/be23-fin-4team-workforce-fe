@@ -8,6 +8,7 @@ import { mergePermissionStrings, rolePermissionItemsToCodes } from '@/features/p
 import { httpClient } from '@/shared/api/httpClient';
 import { unwrapApiResponse } from '@/shared/api/response';
 import { decodeJwtPayload, getTenantHeadersFromJwtPayload } from '@/shared/auth/jwtTenantClaims';
+import { setAuthRefreshInFlight } from '@/shared/stores/authRefreshInFlightStore';
 import { clearRefreshIdentity, setRefreshIdentity } from '@/shared/stores/authRefreshIdentityStore';
 import { clearAccessToken, getAccessToken, setAccessToken } from '@/shared/stores/authTokenStore';
 
@@ -28,7 +29,7 @@ type LoginResponse = {
    * 객체 배열이면 문자열로 정규화.
    */
   permissions?: unknown;
-  isSystemAdminYn?: 'Y' | 'N';
+  isSystemAdminYn?: 'Y' | 'N' | 'YES' | 'NO';
   isFirstLoginYn?: 'Y' | 'N' | 'YES' | 'NO';
   isOnboardingYn?: 'Y' | 'N' | 'YES' | 'NO';
   isEmailVerifiedYn?: 'Y' | 'N' | 'YES' | 'NO';
@@ -75,7 +76,13 @@ function toBooleanMaybe(value: unknown): boolean | undefined {
   return undefined;
 }
 
-function pickCompanyId(payload: Partial<LoginResponse> & Partial<Me>): string | undefined {
+type AuthPayload = Partial<LoginResponse> &
+  Omit<Partial<Me>, 'permissions' | 'isSystemAdminYn'> & {
+    permissions?: unknown;
+    isSystemAdminYn?: 'Y' | 'N' | 'YES' | 'NO';
+  };
+
+function pickCompanyId(payload: AuthPayload): string | undefined {
   const extended = payload as Partial<LoginResponse> & { company_id?: string };
   const raw = extended.companyId ?? extended.company_id ?? extended.corpId ?? extended.tenantId;
   if (typeof raw !== 'string' || !raw.trim()) return undefined;
@@ -93,17 +100,17 @@ function parseIsSystemAdmin(value: unknown): boolean | undefined {
   return undefined;
 }
 
-function pickJobTitle(payload: Partial<LoginResponse> & Partial<Me>): string | undefined {
+function pickJobTitle(payload: AuthPayload): string | undefined {
   const raw = payload.jobTitle ?? payload.positionName ?? payload.rank;
   return typeof raw === 'string' && raw.trim() ? raw.trim() : undefined;
 }
 
-function pickDepartmentName(payload: Partial<LoginResponse> & Partial<Me>): string | undefined {
+function pickDepartmentName(payload: AuthPayload): string | undefined {
   const raw = payload.departmentName ?? payload.deptName ?? payload.organizationName;
   return typeof raw === 'string' && raw.trim() ? raw.trim() : undefined;
 }
 
-function pickCompanyName(payload: Partial<LoginResponse> & Partial<Me>): string | undefined {
+function pickCompanyName(payload: AuthPayload): string | undefined {
   const raw =
     payload.companyName ??
     payload.corpName ??
@@ -113,7 +120,7 @@ function pickCompanyName(payload: Partial<LoginResponse> & Partial<Me>): string 
   return typeof raw === 'string' && raw.trim() ? raw.trim() : undefined;
 }
 
-function pickCompanyLogoUrl(payload: Partial<LoginResponse> & Partial<Me>): string | undefined {
+function pickCompanyLogoUrl(payload: AuthPayload): string | undefined {
   const raw =
     payload.companyLogoUrl ??
     payload.logoUrl ??
@@ -126,7 +133,7 @@ function pickCompanyLogoUrl(payload: Partial<LoginResponse> & Partial<Me>): stri
   return u;
 }
 
-function pickProfileImageUrl(payload: Partial<LoginResponse> & Partial<Me>): string | undefined {
+function pickProfileImageUrl(payload: AuthPayload): string | undefined {
   const raw =
     payload.profileImageUrl ??
     payload.profileUrl ??
@@ -140,20 +147,20 @@ function pickProfileImageUrl(payload: Partial<LoginResponse> & Partial<Me>): str
   return u;
 }
 
-function pickRoleIdFromPayload(payload: Partial<LoginResponse> & Partial<Me>): string | undefined {
+function pickRoleIdFromPayload(payload: AuthPayload): string | undefined {
   const raw = payload.roleId ?? payload.role_id;
   if (typeof raw !== 'string' || !raw.trim()) return undefined;
   return raw.trim();
 }
 
-function pickIsSystemAdminYn(payload: Partial<LoginResponse> & Partial<Me>): 'YES' | 'NO' | undefined {
+function pickIsSystemAdminYn(payload: AuthPayload): 'YES' | 'NO' | undefined {
   if (payload.isSystemAdminYn === undefined) return undefined;
   const b = parseIsSystemAdmin(payload.isSystemAdminYn);
   if (b === undefined) return undefined;
   return b ? 'YES' : 'NO';
 }
 
-function mapMe(payload: Partial<LoginResponse> & Partial<Me>): Me {
+function mapMe(payload: AuthPayload): Me {
   const emailVerificationRequired =
     payload.isEmailVerifiedYn === undefined ? undefined : !isYnYes(payload.isEmailVerifiedYn);
 
@@ -190,7 +197,7 @@ function mapMe(payload: Partial<LoginResponse> & Partial<Me>): Me {
   };
 }
 
-function hasFallbackUserPayload(payload: Partial<LoginResponse> & Partial<Me>) {
+function hasFallbackUserPayload(payload: AuthPayload) {
   return Boolean(payload.id ?? payload.memberId);
 }
 
@@ -500,6 +507,7 @@ export const authClient: AuthClient = {
   },
   /** POST /member/generate-at — 연장 버튼 전용. 401 시 httpClient 인터셉터가 스토어 정리 후 /login 이동. */
   async refreshSession() {
+    setAuthRefreshInFlight(true);
     try {
       const response = await httpClient.post('/member/generate-at');
       const payload = unwrapApiResponse<LoginResponse>(response.data);
@@ -525,6 +533,8 @@ export const authClient: AuthClient = {
     } catch {
       currentSession = null;
       return null;
+    } finally {
+      setAuthRefreshInFlight(false);
     }
   },
 };

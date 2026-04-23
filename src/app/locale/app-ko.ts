@@ -15,10 +15,9 @@ export const APP_MENU_LABEL: Record<string, string> = {
   '/app/approvals/department': '부서 문서함',
   '/app/payroll': '급여 조회',
   '/app/notifications': '알림',
-  '/app/member-chat/admin': '보안·컴플라이언스 조회',
   '/app/performance': '성과',
   '/app/evaluations': '평가',
-  '/app/meetings': '미팅',
+  '/app/meetings': '면담',
   '/app/settings': '설정',
   '/app/ai-documents': 'HR 정책 문서',
   '/app/work-trips': '출장 신청/이력',
@@ -85,7 +84,7 @@ export const APP_MENU_ORG_HR_GROUP_LABEL = '인사 관리';
 
 /** 사이드바 전용 — 라우트 없음, 조직도 모달 트리거 */
 export const APP_MENU_ORG_CHART_SIDEBAR_KEY = '__wf_org_chart__';
-export const APP_MENU_ORG_CHART_LABEL = '조직도';
+export const APP_MENU_ORG_CHART_LABEL = '전체 조직도';
 
 /** ESG 하위 화면 묶음 */
 export const APP_MENU_ESG_GROUP_LABEL = 'ESG';
@@ -135,9 +134,14 @@ export function appHeaderTitleFromPath(
   if (/^\/app\/members\/[^/]+$/.test(pathname)) return '구성원 상세';
   if (pathname === '/app/approvals/department') return '부서 문서함';
   if (/^\/app\/meetings\/[^/]+$/.test(pathname)) return '면담 상세';
-  if (pathname === '/app/member-chat/admin') return '보안·컴플라이언스 조회';
   return APP_BRAND_NAME;
 }
+
+/** 일정(/app/calendar) */
+export const CALENDAR_PAGE_KO = {
+  workspaceEyebrow: 'Schedules & availability planning',
+  pageTitle: '일정 관리',
+} as const;
 
 export const APP_GENERIC_PAGE_COPY: Record<string, { title: string; description: string }> = {
   '/approvals': {
@@ -149,7 +153,7 @@ export const APP_GENERIC_PAGE_COPY: Record<string, { title: string; description:
     description: '내부 메일·알림 연동 기능을 준비 중입니다.',
   },
   '/meetings': {
-    title: '미팅',
+    title: '면담',
     description: '1:1·팀 미팅 일정·기록 기능을 준비 중입니다.',
   },
   '/ai-assistant': {
@@ -199,8 +203,10 @@ export const MEMBER_HISTORY_CHANGE_TYPE_KO: Record<string, string> = {
 
 /** 성과(/app/performance) 화면 카피 */
 export const PERFORMANCE_PAGE_KO = {
+  /** 히어로 상단 영문 아이라인 */
+  workspaceEyebrow: 'Goals & outcomes workspace',
   /** 히어로 — 레퍼런스 스타일 상단 요약 */
-  heroTitle: '성과 요약',
+  heroTitle: '성과 관리',
   /** {pct}는 진행 중 평균 달성률로부터 계산한 “남은 비율”로 치환 */
   heroRemainBefore: '현재 목표 달성까지 ',
   heroRemainAfter: ' 남았습니다.',
@@ -231,13 +237,13 @@ export const PERFORMANCE_PAGE_KO = {
   goalSortProgressDesc: '진행률 높은 순',
   advancedFilters: '상세 조건',
   avgAchievement: '진행 중 평균 달성률',
+  /** ACTIVE는 있으나 산출 가능한 달성률(pct)이 없을 때 요약 바 대신 */
+  avgAchievementUnavailable: '산출 가능한 달성률이 없어 평균을 표시할 수 없습니다.',
   statAll: '전체',
   statTotal: '목표',
   statActive: '진행 중',
   statDraft: '진행 전',
   statCompleted: '완료',
-  /** 기간 만료일이 지났는데도 진행 중인 목표 */
-  statDelayed: '지연',
   statScopeNote: '집계 범위는 상단 「내 목표 / 전체」 선택과 동일합니다.',
   approvalStripTitle: '완료 제출 승인',
   approvalStripCenter: '승인 센터',
@@ -349,6 +355,8 @@ export const PERFORMANCE_PAGE_KO = {
 
 /** 평가(/app/evaluations) 화면 */
 export const EVALUATION_PAGE_KO = {
+  /** 허브 상단 영문 아이라인 */
+  workspaceEyebrow: 'Reviews & calibration hub',
   // Page
   pageTitle: '평가 관리',
 
@@ -454,6 +462,20 @@ export const EVALUATION_PAGE_KO = {
   writeReferencePanel: '참고자료',
   writeCriteriaPanel: '기준 명세',
 
+  /** 나의 평가 작성 목록(허브 모달) */
+  myAssignmentsTitle: '나의 평가 작성 목록',
+  myAssignmentsSubtitle: '배정된 평가를 모두 확인하고, 미완료 건은 작성 화면으로 이동할 수 있습니다.',
+  myAssignmentsFilterAll: '전체',
+  myAssignmentsFilterTodo: '작성 필요',
+  myAssignmentsFilterDone: '제출 완료',
+  myAssignmentsColSeason: '시즌',
+  myAssignmentsColSubmittedAt: '제출일',
+  myAssignmentsActionStart: '작성 시작',
+  myAssignmentsActionContinue: '이어 작성',
+  myAssignmentsActionView: '제출 내역',
+  myAssignmentsEmpty: '표시할 평가가 없습니다.',
+  myAssignmentsEmptyTodo: '작성이 필요한 평가가 없습니다.',
+
   // Progress
   progressTitle: '진행도 관리',
   progressOverall: '전체 진행률',
@@ -465,20 +487,6 @@ export const EVALUATION_PAGE_KO = {
   reminderSent: '리마인드가 발송되었습니다.',
   progressLastAccess: '마지막 접속',
   progressLastRemind: '마지막 리마인드',
-
-  // Anomaly
-  anomalyTitle: '스마트 오류 감지',
-  anomalyCount: '감지 건수',
-  anomalyEvaluator: '평가자',
-  anomalyType: '이상 유형',
-  anomalyAction: '액션',
-  anomalyRequestReview: '검토 요청',
-  reviewRequested: '검토 요청이 접수되었습니다.',
-  anomalyDismiss: '무시',
-  anomalyAllSame: '모든 항목 동일 응답',
-  anomalyTooShort: '답변 너무 짧음',
-  anomalyInsincere: '의미 없는 반복 텍스트',
-  anomalyContradiction: '모순 응답 감지',
 
   // Calibration
   calibrationTitle: '등급 캘리브레이션',
@@ -501,10 +509,16 @@ export const EVALUATION_PAGE_KO = {
   calibrationConfirmModal: '확정 후 수정 불가합니다.',
 
   // Analytics
-  analyticsTitle: '분포 분석',
-  analyticsItemDist: '조사항목 분포',
-  analyticsTeamSelf: '팀별 셀프 평가',
-  analyticsChartPlaceholder: '차트 준비 중',
+  analyticsTitle: '결과 분석',
+  analyticsGradeDist: '등급 분포',
+  analyticsScoreSummary: '점수 요약',
+  analyticsAvgScore: '평균 점수',
+  analyticsMaxScore: '최고 점수',
+  analyticsMinScore: '최저 점수',
+  analyticsSampleCount: '응답 수',
+  analyticsByType: '평가 유형별 평균',
+  analyticsNoGrade: '미부여',
+  analyticsEmpty: '아직 분석할 결과가 없습니다.',
 
   // Common
   save: '저장',

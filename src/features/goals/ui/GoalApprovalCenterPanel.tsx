@@ -1,10 +1,10 @@
 import { FileSearchOutlined, SendOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Modal, Table, Tabs, Tag, Typography } from 'antd';
+import { Modal, Segmented, Table, Tabs, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { goalApi } from '@/features/goals/api/goalApi';
-import type { GoalApprovalBundleSummary } from '@/features/goals/model/types';
+import type { BundleApprovalKind, GoalApprovalBundleSummary } from '@/features/goals/model/types';
 import { GoalApprovalDetailView } from '@/features/goals/ui/GoalApprovalDetailView';
 import { useAuth } from '@/features/auth/useAuth';
 import clsx from 'clsx';
@@ -18,6 +18,12 @@ function statusUi(s: string) {
   return { text: '대기', color: 'processing' as const };
 }
 
+function approvalKindLabel(kind?: BundleApprovalKind): { text: string; color: string } {
+  if (kind === 'ACTIVATION') return { text: '활성화', color: 'blue' };
+  if (kind === 'COMPLETION') return { text: '종료', color: 'green' };
+  return { text: '-', color: 'default' };
+}
+
 const summaryColumns: ColumnsType<GoalApprovalBundleSummary> = [
   {
     title: '요청 ID',
@@ -27,6 +33,16 @@ const summaryColumns: ColumnsType<GoalApprovalBundleSummary> = [
     render: (id: string) => (
       <span className="tw-font-mono tw-text-xs tw-text-slate-700">{id.slice(0, 12)}…</span>
     ),
+  },
+  {
+    title: '유형',
+    dataIndex: 'approvalKind',
+    key: 'approvalKind',
+    width: 88,
+    render: (kind?: BundleApprovalKind) => {
+      const u = approvalKindLabel(kind);
+      return <Tag color={u.color}>{u.text}</Tag>;
+    },
   },
   {
     title: '상태',
@@ -94,6 +110,7 @@ export function GoalApprovalCenterPanel({
 
   const [detailRequestId, setDetailRequestId] = useState<string | null>(null);
   const [detailSource, setDetailSource] = useState<'pending' | 'history'>('pending');
+  const [kindFilter, setKindFilter] = useState<'ALL' | 'ACTIVATION' | 'COMPLETION'>('ALL');
 
   const pendingQuery = useQuery({
     queryKey: ['goal-approvals', 'pending', companyId],
@@ -106,8 +123,10 @@ export function GoalApprovalCenterPanel({
     enabled: Boolean(companyId),
   });
 
-  const pendingRows = pendingQuery.data ?? [];
-  const historyRows = historyQuery.data ?? [];
+  const pendingRowsRaw = pendingQuery.data ?? [];
+  const historyRowsRaw = historyQuery.data ?? [];
+  const pendingRows = kindFilter === 'ALL' ? pendingRowsRaw : pendingRowsRaw.filter((r) => r.approvalKind === kindFilter);
+  const historyRows = kindFilter === 'ALL' ? historyRowsRaw : historyRowsRaw.filter((r) => r.approvalKind === kindFilter);
 
   const closeDetail = () => {
     setDetailRequestId(null);
@@ -178,6 +197,19 @@ export function GoalApprovalCenterPanel({
         </p>
       ) : null}
 
+      {/* 승인 유형 필터 */}
+      <Segmented
+        value={kindFilter}
+        onChange={(v) => setKindFilter(v as typeof kindFilter)}
+        options={[
+          { value: 'ALL', label: `전체 (${pendingRowsRaw.length + historyRowsRaw.length})` },
+          { value: 'ACTIVATION', label: `활성화 (${pendingRowsRaw.filter((r) => r.approvalKind === 'ACTIVATION').length + historyRowsRaw.filter((r) => r.approvalKind === 'ACTIVATION').length})` },
+          { value: 'COMPLETION', label: `종료 (${pendingRowsRaw.filter((r) => r.approvalKind === 'COMPLETION').length + historyRowsRaw.filter((r) => r.approvalKind === 'COMPLETION').length})` },
+        ]}
+        className="!tw-mb-2"
+        size="small"
+      />
+
       <Tabs
         defaultActiveKey="pending"
         className={clsx(
@@ -213,7 +245,7 @@ export function GoalApprovalCenterPanel({
       />
 
       <Modal
-        title={<span className="tw-text-[15px] tw-font-semibold tw-text-[#0f172a]">완료 제출 승인</span>}
+        title={<span className="tw-text-[15px] tw-font-semibold tw-text-[#0f172a]">승인 요청 상세</span>}
         open={detailRequestId != null}
         onCancel={closeDetail}
         footer={null}

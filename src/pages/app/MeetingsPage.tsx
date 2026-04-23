@@ -15,12 +15,8 @@ import {
   Tooltip,
   Empty,
   Card,
-  Statistic,
-  Row,
-  Col,
 } from 'antd';
 import {
-  PlusOutlined,
   CalendarOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
@@ -41,15 +37,18 @@ import type {
 } from '@/features/meetings/model/types';
 import { MemberRemoteSelect } from '@/features/members/ui/MemberRemoteSelect';
 import { useMemberDisplayNames } from '@/features/members/hooks/useMemberDisplayNames';
+import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 
 dayjs.extend(relativeTime);
 dayjs.locale('ko');
+const { Text } = Typography;
 
 const MEETING_KO = {
-  pageTitle: '1:1 면담',
+  workspaceEyebrow: 'Meetings & conversation rhythm',
+  pageTitle: '면담 관리',
   pageSubtitle: '정기·수시 면담을 관리하고 후속 액션을 추적합니다.',
-  tabAsMember: '나의 면담',
-  tabAsManager: '매니저 면담',
+  tabAsMember: '참여 면담',
+  tabAsManager: '관리 면담',
   newMeeting: '면담 예약',
   colPartner: '면담 상대',
   colSchedule: '일정',
@@ -152,6 +151,9 @@ export default function MeetingsPage() {
 
   const upcoming = meetings.filter((m) => !m.completedAt);
   const done = meetings.filter((m) => m.completedAt);
+  const thisMonthMeetings = meetings.filter((m) => dayjs(m.scheduledAt).isSame(dayjs(), 'month'));
+  const thisMonthDone = thisMonthMeetings.filter((m) => m.completedAt).length;
+  const progressPct = thisMonthMeetings.length > 0 ? Math.round((thisMonthDone / thisMonthMeetings.length) * 100) : 0;
 
   // ── 멤버 UUID → 이름 변환 ──
   const partnerIds = useMemo(() => {
@@ -169,7 +171,6 @@ export default function MeetingsPage() {
   // ── Columns ──
   const partnerField = tab === 'member' ? 'managerId' : 'memberId';
   const partnerLabel = tab === 'member' ? '매니저' : '구성원';
-  const { Title, Paragraph } = Typography;
 
   const columns = [
     {
@@ -229,61 +230,80 @@ export default function MeetingsPage() {
 
   // ── Render ──
   return (
-    <div className="tw-mx-auto tw-w-full tw-space-y-4">
-      <div className="tw-flex tw-items-start tw-justify-between tw-gap-3">
-        <div className="tw-min-w-0">
-          <Title
-            level={3}
-            className="!tw-m-0 !tw-mb-2 !tw-text-[24px] !tw-font-bold !tw-leading-tight !tw-tracking-tight !tw-text-[#1e3a5f] sm:!tw-text-[26px]"
-          >
-            {MEETING_KO.pageTitle}
-          </Title>
-          <Paragraph className="!tw-mb-0 !tw-max-w-2xl !tw-text-[15px] !tw-leading-relaxed !tw-text-slate-600">
-            {MEETING_KO.pageSubtitle}
-          </Paragraph>
-        </div>
-        {tab === 'manager' ? (
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalOpen(true)}>
-            {MEETING_KO.newMeeting}
-          </Button>
-        ) : null}
-      </div>
+    <div className="tw-mx-auto tw-w-full tw-space-y-8">
+      <AppWorkspacePageTitle
+        eyebrow={MEETING_KO.workspaceEyebrow}
+        title={MEETING_KO.pageTitle}
+      />
 
-      {/* ── 통계 요약 ── */}
-      <Row gutter={16} className="tw-mb-5">
-        <Col span={8}>
-          <Card size="small" className="tw-text-center">
-            <Statistic
-              title={MEETING_KO.statTotal}
-              value={meetings.length}
-              prefix={<TeamOutlined />}
-            />
-          </Card>
-        </Col>
-        <Col span={8}>
-          <Card size="small" className="tw-text-center">
-            <Statistic
-              title={MEETING_KO.statUpcoming}
-              value={upcoming.length}
-              prefix={<CalendarOutlined />}
-              valueStyle={{ color: '#1677ff' }}
-            />
-          </Card>
-        </Col>
-        <Col span={8}>
-          <Card size="small" className="tw-text-center">
-            <Statistic
-              title={MEETING_KO.statDone}
-              value={done.length}
-              prefix={<CheckCircleOutlined />}
-              valueStyle={{ color: '#52c41a' }}
-            />
-          </Card>
-        </Col>
-      </Row>
+      <section className="tw-grid tw-grid-cols-1 tw-gap-4 lg:tw-grid-cols-3">
+        <Card className="tw-rounded-3xl tw-border-slate-200/80 tw-bg-white tw-shadow-[0_1px_2px_rgba(15,23,42,0.05)] [&_.ant-card-body]:tw-p-5">
+          <div className="tw-mb-3 tw-flex tw-items-center tw-gap-2">
+            <TeamOutlined className="tw-text-slate-500" />
+            <Text className="tw-text-lg tw-font-semibold tw-text-slate-900">면담 요약</Text>
+          </div>
+          <div className="tw-space-y-2.5">
+            <div className="tw-flex tw-items-center tw-justify-between tw-rounded-2xl tw-border tw-border-slate-200/80 tw-bg-white tw-px-4 tw-py-3">
+              <span className="tw-text-slate-600">{MEETING_KO.statTotal}</span>
+              <span className="tw-text-2xl tw-font-semibold tw-tabular-nums">{meetings.length}</span>
+            </div>
+            <div className="tw-flex tw-items-center tw-justify-between tw-rounded-2xl tw-border tw-border-slate-200/80 tw-bg-white tw-px-4 tw-py-3">
+              <span className="tw-text-slate-600">{MEETING_KO.statUpcoming}</span>
+              <span className="tw-text-2xl tw-font-semibold tw-tabular-nums tw-text-blue-600">{upcoming.length}</span>
+            </div>
+            <div className="tw-flex tw-items-center tw-justify-between tw-rounded-2xl tw-border tw-border-slate-200/80 tw-bg-white tw-px-4 tw-py-3">
+              <span className="tw-text-slate-600">{MEETING_KO.statDone}</span>
+              <span className="tw-text-2xl tw-font-semibold tw-tabular-nums tw-text-emerald-600">{done.length}</span>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="tw-rounded-3xl tw-border-slate-200/80 tw-bg-white tw-shadow-[0_1px_2px_rgba(15,23,42,0.05)] [&_.ant-card-body]:tw-p-5">
+          <div className="tw-mb-1 tw-flex tw-items-center tw-gap-2">
+            <CalendarOutlined className="tw-text-slate-500" />
+            <Text className="tw-text-lg tw-font-semibold tw-text-slate-900">면담 진척률</Text>
+          </div>
+          <Text className="tw-text-xs tw-text-slate-500">이번 달 진행 면담 수 기준</Text>
+          <div className="tw-flex tw-justify-center tw-py-4">
+            <div
+              className="tw-grid tw-h-[124px] tw-w-[124px] tw-place-items-center tw-rounded-full"
+              style={{ background: `conic-gradient(#3182f6 ${Math.min(100, Math.max(0, progressPct)) * 3.6}deg, #e2e8f0 0deg)` }}
+            >
+              <div className="tw-grid tw-h-[104px] tw-w-[104px] tw-place-items-center tw-rounded-full tw-bg-white">
+                <span className="tw-text-[36px] tw-font-semibold tw-tabular-nums tw-text-slate-800">{progressPct}%</span>
+              </div>
+            </div>
+          </div>
+          <div className="tw-rounded-xl tw-border tw-border-slate-200/80 tw-bg-white tw-px-3 tw-py-2 tw-text-center tw-text-xs tw-text-slate-500">
+            대상자 대비 진행률 <span className="tw-font-semibold tw-tabular-nums">{done.length}</span> / {meetings.length} 명
+          </div>
+        </Card>
+
+        <Card
+          className="tw-relative tw-overflow-hidden tw-rounded-3xl tw-text-white tw-shadow-lg tw-shadow-indigo-500/20 tw-border-0 [&_.ant-card-body]:tw-flex [&_.ant-card-body]:tw-h-full [&_.ant-card-body]:tw-flex-col [&_.ant-card-body]:tw-justify-between [&_.ant-card-body]:tw-p-5"
+          style={{ background: 'linear-gradient(135deg, #6366F1 0%, #4F46E5 55%, #4338CA 100%)' }}
+        >
+          <div>
+            <Text className="!tw-text-indigo-100 tw-text-xs tw-font-semibold tw-uppercase tw-tracking-wide">Quick Action</Text>
+            <div className="tw-mt-3 tw-text-[34px] tw-font-semibold tw-leading-none tw-tabular-nums">{upcoming.length}</div>
+            <div className="tw-mt-1 tw-text-sm tw-font-medium">아직 확정되지 않은 면담 일정</div>
+            <div className="tw-mt-2 tw-text-xs tw-text-indigo-100/90">
+              팀원들과의 소통을 위해 정기 면담 일정을 제안해보세요.
+            </div>
+          </div>
+          <Button
+            size="large"
+            onClick={() => setCreateModalOpen(true)}
+            className="!tw-h-11 !tw-rounded-xl !tw-border-0 !tw-bg-white !tw-font-semibold !tw-text-[#3b5bdb] hover:!tw-bg-indigo-50"
+          >
+            일정 제안하기
+          </Button>
+        </Card>
+      </section>
 
       {/* ── 탭 ── */}
       <Tabs
+        className="[&_.ant-tabs-tab]:!tw-text-base [&_.ant-tabs-tab-btn]:!tw-font-semibold [&_.ant-tabs-ink-bar]:!tw-bg-[#3b5bdb]"
         activeKey={tab}
         onChange={(k) => setTab(k as 'member' | 'manager')}
         items={[
@@ -318,7 +338,7 @@ export default function MeetingsPage() {
         width={520}
         open={createModalOpen}
         onCancel={() => setCreateModalOpen(false)}
-        destroyOnClose
+        destroyOnHidden
         footer={
           <Space>
             <Button onClick={() => setCreateModalOpen(false)}>{MEETING_KO.cancel}</Button>

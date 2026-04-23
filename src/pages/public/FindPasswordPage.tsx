@@ -146,7 +146,6 @@ export function FindPasswordPage() {
               </Form.Item>
 
               <AppButton
-                type="button"
                 size="large"
                 loading={sendingMail}
                 variant="primary"
@@ -178,7 +177,6 @@ export function FindPasswordPage() {
 
                   {!codeVerified ? (
                     <AppButton
-                      type="button"
                       size="large"
                       loading={verifyingCode}
                       variant="secondary"
@@ -233,7 +231,6 @@ export function FindPasswordPage() {
                       </Typography.Paragraph>
 
                       <AppButton
-                        type="button"
                         size="large"
                         loading={registering}
                         variant="primary"

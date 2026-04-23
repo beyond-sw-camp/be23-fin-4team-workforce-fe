@@ -63,7 +63,6 @@ import {
     APP_MENU_ESG_GROUP_LABEL,
     APP_MENU_LABEL,
     APP_MENU_ORG_CHART_LABEL,
-    APP_MENU_ORG_CHART_SIDEBAR_KEY,
     APP_MENU_ORG_HR_GROUP_LABEL,
     APP_MENU_PATH_ORDER,
     APP_MENU_TALENT_HUB_LABEL,
@@ -133,7 +132,6 @@ const APP_MENU_ICONS: Record<string, ReactNode> = {
     '/app/payroll/allowances': <GiftOutlined className="tw-text-lg"/>,
     '/app/payroll/allowances/admin': <GiftOutlined className="tw-text-lg"/>,
     '/app/notifications': <BellOutlined className="tw-text-lg"/>,
-    '/app/member-chat/admin': <MessageOutlined className="tw-text-lg"/>,
     '/app/performance': <LineChartOutlined className="tw-text-lg"/>,
     '/app/evaluations': <StarOutlined className="tw-text-lg"/>,
     '/app/meetings': <VideoCameraOutlined className="tw-text-lg"/>,
@@ -236,25 +234,16 @@ function buildAppShellMenuItems(
     isAdmin: boolean,
     approvalMenuChildren: NonNullable<MenuProps['items']> | undefined,
     canAccessMemberDirectory: boolean,
+    hrGroupExtraChildren?: NonNullable<MenuProps['items']>,
 ): NonNullable<MenuProps['items']> {
     const items: NonNullable<MenuProps['items']> = [];
     let hubInserted = false;
     let orgInserted = false;
     let approvalInserted = false;
-    let orgChartInserted = false;
     let workInserted = false;
     let leaveInserted = false;
 
     for (const path of APP_MENU_PATH_ORDER) {
-        if (path === '/app/members' && !orgChartInserted) {
-            orgChartInserted = true;
-            items.push({
-                key: APP_MENU_ORG_CHART_SIDEBAR_KEY,
-                icon: <PartitionOutlined className="tw-text-lg"/>,
-                label: APP_MENU_ORG_CHART_LABEL,
-                title: APP_MENU_ORG_CHART_LABEL,
-            });
-        }
         if (TALENT_HUB_PATH_SET.has(path)) {
             if (!hubInserted) {
                 hubInserted = true;
@@ -275,10 +264,19 @@ function buildAppShellMenuItems(
             continue;
         }
         if (ORG_HR_PATH_SET.has(path)) {
-            if (!canAccessMemberDirectory) {
-                continue;
-            }
             if (!orgInserted) {
+                const baseChildren: NonNullable<MenuProps['items']> = canAccessMemberDirectory
+                    ? ORG_HR_PATHS.map((p) => ({
+                          key: p,
+                          icon: APP_MENU_ICONS[p],
+                          label: APP_MENU_LABEL[p],
+                          title: APP_MENU_LABEL[p],
+                      }))
+                    : [];
+                const extras = hrGroupExtraChildren ?? [];
+                if (baseChildren.length === 0 && extras.length === 0) {
+                    continue;
+                }
                 orgInserted = true;
                 items.push({
                     key: ORG_HR_GROUP_KEY,
@@ -286,12 +284,7 @@ function buildAppShellMenuItems(
                         <SiderGroupedMenuLabel icon={<TeamOutlined className="tw-text-lg"/>}
                                                text={APP_MENU_ORG_HR_GROUP_LABEL}/>
                     ),
-                    children: ORG_HR_PATHS.map((p) => ({
-                        key: p,
-                        icon: APP_MENU_ICONS[p],
-                        label: APP_MENU_LABEL[p],
-                        title: APP_MENU_LABEL[p],
-                    })),
+                    children: [...baseChildren, ...extras],
                 });
             }
             continue;
@@ -580,7 +573,7 @@ function buildAppShellMenuItems(
     return items;
 }
 
-function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
+function useAppShellSiderMenuItems(currentPathname: string): NonNullable<MenuProps['items']> {
     const {status, user} = useAuth();
     const isAdmin = user?.isSystemAdmin === true;
     const {hasPermission} = usePermissions();
@@ -589,19 +582,22 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
       isAdmin ||
       hasPermission(PERM.APPROVAL_AD_READ) ||
       canAccessMemberDirectory(hasPermission);
+    const shouldQueryEsgConfig =
+        status === 'authenticated' && currentPathname.startsWith('/app/esg');
 
     const {data: esgConfig} = useQuery({
         queryKey: ['esg', 'config'],
         queryFn: () => esgApi.getConfig(),
-        enabled: status === 'authenticated',
+        enabled: shouldQueryEsgConfig,
         retry: false,
         staleTime: 60_000,
     });
 
-    const {data: meMember} = useQuery({
-        queryKey: ['member', 'me', user?.id],
-        queryFn: () => memberApi.detail(user!.id!),
-        enabled: status === 'authenticated' && !!user?.id,
+    const {data: myDashboardProfile} = useQuery({
+        queryKey: ['member', 'dashboard-profile'],
+        queryFn: () => memberApi.dashboardProfile(),
+        enabled: status === 'authenticated',
+        retry: false,
         staleTime: 300_000,
     });
 
@@ -615,27 +611,30 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
     return useMemo(() => {
         const esgPaths = ESG_MENU_PATH_ORDER.filter((p) => shouldShowEsgMenuItem(p, esgConfig ?? null, isAdmin));
         const approvalMenuChildren = buildApprovalMenuGroupChildren(approvalOrgChart?.organizations ?? [], {
-            myOrganizationId: meMember?.organizationId,
-            myOrganizationName: meMember?.organizationName,
+            myOrganizationId: undefined,
+            myOrganizationName: myDashboardProfile?.organizationName ?? user?.departmentName,
         });
         const showMemberDirectoryMenu =
             isAdmin ||
             canAccessMemberDirectory(hasPermission) ||
             canAccessMemberDirectoryFromPermissionStrings(user?.permissions);
-        const items = buildAppShellMenuItems(isAdmin, approvalMenuChildren, showMemberDirectoryMenu);
+        const hrGroupExtraChildren: NonNullable<MenuProps['items']> | undefined = showApprovalFormSettings
+            ? [
+                  {
+                      key: encodeWfNavKey({to: '/app/approvals', search: {tab: 'admin'}}),
+                      icon: <SettingOutlined className="tw-text-lg"/>,
+                      label: '결재 양식 설정',
+                      title: '결재 양식 설정',
+                  },
+              ]
+            : undefined;
+        const items = buildAppShellMenuItems(
+            isAdmin,
+            approvalMenuChildren,
+            showMemberDirectoryMenu,
+            hrGroupExtraChildren,
+        );
 
-        const approvalFormSettingsItem = showApprovalFormSettings
-            ? {
-                  key: encodeWfNavKey({to: '/app/approvals', search: {tab: 'admin'}}),
-                  icon: <SettingOutlined className="tw-text-lg"/>,
-                  label: '결재 양식 설정',
-                  title: '결재 양식 설정',
-              }
-            : null;
-
-        const withApprovalSettings = approvalFormSettingsItem ? [...items, approvalFormSettingsItem] : items;
-
-        if (!isAdmin) return withApprovalSettings;
         const esgMenuItem =
             esgPaths.length > 0
                 ? {
@@ -652,18 +651,11 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
                   }
                 : null;
 
-        /** 직원: ESG를 메뉴 최하단에 배치 */
         if (!isAdmin) {
             return esgMenuItem ? [...items, esgMenuItem] : items;
         }
 
-        /** 시스템 관리자: 보안 조회 다음 · HR 정책 문서 바로 위에 ESG */
-        const chatAdmin = {
-            key: '/app/member-chat/admin',
-            icon: <MessageOutlined className="tw-text-lg"/>,
-            label: '보안·컴플라이언스 조회',
-            title: '보안·컴플라이언스 조회',
-        };
+        /** 시스템 관리자: HR 정책 문서 바로 위에 ESG */
         const doc = {
             key: '/app/ai-documents',
             icon: <RobotOutlined className="tw-text-lg"/>,
@@ -672,10 +664,19 @@ function useAppShellSiderMenuItems(): NonNullable<MenuProps['items']> {
         };
 
         if (esgMenuItem) {
-            return [...withApprovalSettings, chatAdmin, esgMenuItem, doc];
+            return [...items, esgMenuItem, doc];
         }
-        return [...withApprovalSettings, chatAdmin, doc];
-    }, [esgConfig, isAdmin, approvalOrgChart, meMember, status, user?.permissions]);
+        return [...items, doc];
+    }, [
+        esgConfig,
+        isAdmin,
+        approvalOrgChart,
+        status,
+        user?.permissions,
+        myDashboardProfile?.organizationName,
+        user?.departmentName,
+        showApprovalFormSettings,
+    ]);
 }
 
 const headerGhostIconClass =
@@ -747,9 +748,11 @@ function SessionAccessTimer() {
 function SiderBrandHeader({
                               collapsed,
                               onClick,
+                              onToggleSider,
                           }: {
     collapsed?: boolean;
     onClick?: () => void;
+    onToggleSider?: () => void;
 }) {
     const {user, status} = useAuth();
     const {data: companyInfo} = useQuery({
@@ -793,16 +796,31 @@ function SiderBrandHeader({
     );
 
     if (collapsed) {
+        const slotClass = 'tw-absolute tw-inset-0 tw-flex tw-items-center tw-justify-center tw-rounded-xl tw-transition-opacity tw-duration-200 tw-ease-out';
         return (
             <Tooltip title={companyName} placement="right">
-                <button
-                    type="button"
-                    className="tw-flex tw-w-full tw-cursor-pointer tw-justify-center tw-border-0 tw-bg-transparent tw-px-1 tw-py-0"
-                    onClick={onClick}
-                    aria-label="대시보드로 이동"
-                >
-                    {avatar}
-                </button>
+                <div className="tw-group tw-relative tw-mx-auto tw-flex tw-size-10 tw-shrink-0 tw-items-center tw-justify-center">
+                    <button
+                        type="button"
+                        className={`${slotClass} tw-z-[1] tw-cursor-pointer tw-border-0 tw-bg-transparent tw-opacity-100 tw-pointer-events-auto group-hover:tw-pointer-events-none group-hover:tw-opacity-0`}
+                        onClick={onClick}
+                        aria-label="대시보드로 이동"
+                    >
+                        {avatar}
+                    </button>
+                    <button
+                        type="button"
+                        aria-label="사이드바 펼치기"
+                        className={`${slotClass} tw-z-[2] tw-cursor-pointer tw-border-0 tw-bg-slate-100 tw-text-slate-600 tw-opacity-0 tw-pointer-events-none group-hover:tw-pointer-events-auto group-hover:tw-opacity-100 hover:tw-bg-slate-200`}
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onToggleSider?.();
+                        }}
+                    >
+                        <SiderPanelToggleIcon className="tw-text-[20px]"/>
+                    </button>
+                </div>
             </Tooltip>
         );
     }
@@ -938,10 +956,11 @@ function AppShellAccountMenu() {
     const [accountPopoverOpen, setAccountPopoverOpen] = useState(false);
     const memberId = user?.id?.trim();
 
-    const {data: member} = useQuery({
-        queryKey: ['member', 'detail', memberId],
-        queryFn: () => memberApi.detail(memberId!),
+    const {data: memberProfile} = useQuery({
+        queryKey: ['member', 'dashboard-profile', memberId],
+        queryFn: () => memberApi.dashboardProfile(),
         enabled: Boolean(memberId),
+        retry: false,
     });
 
     const handleLogout = async () => {
@@ -951,16 +970,16 @@ function AppShellAccountMenu() {
 
     const name = user?.name?.trim() || '사용자';
     const jobTitle =
-        member?.jobTitleName?.trim() || member?.jobGradeName?.trim() || user?.jobTitle?.trim() || '';
+        memberProfile?.jobTitleName?.trim() || memberProfile?.jobGradeName?.trim() || user?.jobTitle?.trim() || '';
     const nameLine = jobTitle ? `${name} ${jobTitle}` : name;
     const orgLine =
-        member?.organizationName?.trim() ||
+        memberProfile?.organizationName?.trim() ||
         user?.departmentName?.trim() ||
         user?.companyName?.trim() ||
         '—';
-    const emailLine = member?.email?.trim() || user?.email?.trim() || '—';
+    const emailLine = user?.email?.trim() || '—';
     const profileSrc =
-        member?.profileUrl?.trim() || user?.profileImageUrl?.trim() || undefined;
+        memberProfile?.profileUrl?.trim() || user?.profileImageUrl?.trim() || undefined;
 
     const avatar = (
         <Avatar
@@ -1000,33 +1019,34 @@ function AppShellAccountMenu() {
     };
 
     return (
-        <Popover {...popoverCommon} placement="bottomRight" align={{offset: [0, 6]}}>
-            <div
-                className="tw-flex tw-min-w-0 tw-max-w-[min(100vw-96px,280px)] tw-shrink-0 tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-lg tw-py-1 tw-pl-1 tw-pr-1.5 tw-outline-none hover:tw-bg-slate-100/90 focus-visible:tw-ring-2 focus-visible:tw-ring-blue-500/30 md:tw-gap-2.5 md:tw-px-2"
-                role="button"
-                tabIndex={0}
-                aria-label="계정 정보"
-                aria-expanded={accountPopoverOpen}
-                aria-haspopup="dialog"
-                onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        setAccountPopoverOpen((o) => !o);
-                    }
-                }}
-            >
-                {avatar}
-                <div className="tw-hidden tw-min-w-0 tw-flex-1 md:tw-block">
-                    <div className="tw-truncate tw-text-left tw-text-sm tw-font-semibold tw-text-slate-900" title={name}>
-                        {name}
-                    </div>
-                    <div className="tw-truncate tw-text-left tw-text-xs tw-text-slate-500" title={orgLine}>
-                        {orgLine}
+        <div className="tw-relative tw-ml-1 tw-inline-flex tw-shrink-0 tw-pl-3 md:tw-pl-2.5 before:tw-pointer-events-none before:tw-absolute before:tw-left-0 before:tw-top-1/2 before:tw-z-0 before:tw-h-[22px] before:tw-w-px before:-tw-translate-y-1/2 before:tw-bg-slate-200 before:tw-content-['']">
+            <Popover {...popoverCommon} placement="bottomRight" align={{offset: [0, 6]}}>
+                <div
+                    className="tw-relative tw-z-[1] tw-flex tw-min-w-0 tw-max-w-[min(100vw-96px,280px)] tw-shrink-0 tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-lg tw-py-1 tw-pr-1.5 tw-outline-none hover:tw-bg-slate-100/90 focus-visible:tw-ring-2 focus-visible:tw-ring-blue-500/30 md:tw-gap-2.5 md:tw-pr-2.5"
+                    role="button"
+                    tabIndex={0}
+                    aria-label="계정 정보"
+                    aria-expanded={accountPopoverOpen}
+                    aria-haspopup="dialog"
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setAccountPopoverOpen((o) => !o);
+                        }
+                    }}
+                >
+                    {avatar}
+                    <div className="tw-hidden tw-min-w-0 tw-flex-1 md:tw-block">
+                        <div className="tw-truncate tw-text-left tw-text-sm tw-font-semibold tw-text-slate-900" title={name}>
+                            {name}
+                        </div>
+                        <div className="tw-truncate tw-text-left tw-text-xs tw-text-slate-500" title={orgLine}>
+                            {orgLine}
+                        </div>
                     </div>
                 </div>
-                <MoreOutlined className="tw-shrink-0 tw-text-base tw-text-slate-500"/>
-            </div>
-        </Popover>
+            </Popover>
+        </div>
     );
 }
 
@@ -1182,7 +1202,7 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
                         </button>
                     </Badge>
                 </Tooltip>
-                <Badge count={unreadCount} color="#EF4444" offset={[-2, 4]} showZero={false}>
+                <Badge count={unreadCount} color="#EF4444" offset={[-8, 8]} showZero={false} overflowCount={99}>
                     <Link to="/app/notifications" className={headerGhostIconClass} aria-label="알림">
                         <BellOutlined className="tw-text-[20px]"/>
                     </Link>
@@ -1236,7 +1256,6 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
     const menuPaths = new Set<string>([
         ...APP_MENU_PATH_ORDER,
         ...ESG_MENU_PATH_ORDER,
-        '/app/member-chat/admin',
         '/app/ai-documents',
     ]);
     if (menuPaths.has(pathname)) return [pathname];
@@ -1277,9 +1296,13 @@ function menuOpenKeysForPath(
     }
     if (pathname.startsWith('/app/esg')) keys.push(ESG_GROUP_KEY);
     if (pathname.startsWith('/app/approvals')) {
+        const approvalsTab = typeof search.tab === 'string' ? search.tab : undefined;
+        if (approvalsTab === 'admin') {
+            keys.push(ORG_HR_GROUP_KEY);
+        }
         keys.push(
             ...approvalSecondaryPanelOpenKeys(pathname, {
-                tab: typeof search.tab === 'string' ? search.tab : undefined,
+                tab: approvalsTab,
                 myStatus: typeof search.myStatus === 'string' ? search.myStatus : undefined,
                 compose: typeof search.compose === 'string' ? search.compose : undefined,
                 sideNav: typeof search.sideNav === 'string' ? search.sideNav : undefined,
@@ -1306,7 +1329,7 @@ function AppShellLayout() {
     const {user} = useAuth();
     const isSystemAdmin = user?.isSystemAdmin === true;
     const menuSelectedKey = useMemo(() => menuSelectedKeyFromPath(pathname, search), [pathname, search]);
-    const appShellMenuItems = useAppShellSiderMenuItems();
+    const appShellMenuItems = useAppShellSiderMenuItems(pathname);
     const [orgChartModalOpen, setOrgChartModalOpen] = useState(false);
 
     const [siderCollapsed, setSiderCollapsed] = useState(() => {
@@ -1407,7 +1430,20 @@ function AppShellLayout() {
                             onClick={() => {
                                 window.location.assign('/app/dashboard');
                             }}
+                            onToggleSider={() => setSiderCollapsed((c) => !c)}
                         />
+                        {!siderCollapsed && (
+                            <Tooltip title="사이드바 접기" placement="top">
+                                <button
+                                    type="button"
+                                    aria-label="사이드바 접기"
+                                    className="tw-ml-auto tw-flex tw-size-8 tw-items-center tw-justify-center tw-rounded-lg tw-border-0 tw-bg-slate-50 tw-text-slate-600 tw-transition-colors hover:tw-bg-slate-100 hover:tw-text-slate-800"
+                                    onClick={() => setSiderCollapsed(true)}
+                                >
+                                    <SiderPanelToggleIcon className="tw-text-lg"/>
+                                </button>
+                            </Tooltip>
+                        )}
                     </div>
                     <div
                         className="wf-scrollbar tw-min-h-0 tw-w-full tw-flex-1 tw-overflow-y-auto tw-overflow-x-hidden">
@@ -1479,13 +1515,6 @@ function AppShellLayout() {
                                     }
                                     return;
                                 }
-                                if (key === APP_MENU_ORG_CHART_SIDEBAR_KEY) {
-                                    setOrgChartModalOpen(true);
-                                    if (siderCollapsed) {
-                                        setMenuOpenKeys([]);
-                                    }
-                                    return;
-                                }
                                 if (siderCollapsed) {
                                     setMenuOpenKeys([]);
                                 }
@@ -1494,23 +1523,22 @@ function AppShellLayout() {
                         />
                     </div>
                     <div className="tw-flex tw-shrink-0 tw-border-t tw-border-slate-100 tw-px-2 tw-py-1.5">
-                        <Tooltip
-                            title={siderCollapsed ? '사이드바 펼치기' : '사이드바 접기'}
-                            placement={siderCollapsed ? 'right' : 'top'}
-                        >
+                        <Tooltip title={APP_MENU_ORG_CHART_LABEL} placement={siderCollapsed ? 'right' : 'top'}>
                             <Button
                                 type="text"
                                 block
                                 className="!tw-flex !tw-h-auto !tw-min-h-9 !tw-w-full !items-center !justify-center !tw-rounded-lg !tw-bg-slate-50 !tw-py-2 !tw-text-slate-600 hover:!tw-bg-slate-100 hover:!tw-text-slate-800"
-                                onClick={() => setSiderCollapsed((c) => !c)}
-                                aria-label={siderCollapsed ? '사이드바 펼치기' : '사이드바 접기'}
+                                onClick={() => setOrgChartModalOpen(true)}
+                                aria-label={APP_MENU_ORG_CHART_LABEL}
                             >
-                <span className="tw-flex tw-w-full tw-items-center tw-justify-center tw-gap-2">
-                  <SiderPanelToggleIcon className="tw-shrink-0 tw-text-lg"/>
-                    {siderCollapsed ? null : (
-                        <span className="tw-truncate tw-text-sm tw-font-medium tw-text-slate-600">사이드바 접기</span>
-                    )}
-                </span>
+                                <span className="tw-flex tw-w-full tw-items-center tw-justify-center tw-gap-2">
+                                    <PartitionOutlined className="tw-shrink-0 tw-text-lg"/>
+                                    {siderCollapsed ? null : (
+                                        <span className="tw-truncate tw-text-sm tw-font-medium tw-text-slate-600">
+                                            {APP_MENU_ORG_CHART_LABEL}
+                                        </span>
+                                    )}
+                                </span>
                             </Button>
                         </Tooltip>
                     </div>

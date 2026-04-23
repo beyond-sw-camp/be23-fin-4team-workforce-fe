@@ -434,6 +434,11 @@ export function OrganizationPage() {
         </Typography.Paragraph>
       </div>
 
+      {/* `destroyOnHidden` 모달이 닫히면 내부 Form이 제거되어 useForm 인스턴스가 끊긴다. */}
+      {orgModal === null ? <Form form={orgForm} preserve={false} className="tw-hidden" aria-hidden /> : null}
+      {gradeModal === null ? <Form form={gradeForm} preserve={false} className="tw-hidden" aria-hidden /> : null}
+      {titleModal === null ? <Form form={titleForm} preserve={false} className="tw-hidden" aria-hidden /> : null}
+
       <Card variant="borderless" className={perfCardClass}>
         <Tabs
           activeKey={activeTab}
