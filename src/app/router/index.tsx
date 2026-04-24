@@ -273,6 +273,12 @@ const approvalsSearchSchema = z.object({
   compose: z.string().optional(),
   sideNav: z.string().optional(),
   box: z.string().optional(),
+  /** 전자결재 알림 라우팅: 작성 허브에서 전체보기 모달 자동 오픈 키 */
+  approvalModal: z.string().optional(),
+  /** 같은 모달 재오픈을 위한 트리거 값 */
+  approvalOpenAt: z.string().optional(),
+  /** 알림 등에서 전달된 결재 요청 ID — 상세 모달 자동 오픈 */
+  approvalRequestId: z.string().optional(),
   /** 참조/공람 문서함: `cc` 참조만, `circ` 공람만, 없으면 참조 탭 */
   viewerSub: z.string().optional(),
   fromHome: z.string().optional(),

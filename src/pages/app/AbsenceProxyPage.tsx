@@ -45,6 +45,13 @@ function formatRange(start: string, end: string) {
   return `${a.format('YYYY-MM-DD HH:mm')} ~ ${b.format('YYYY-MM-DD HH:mm')}`;
 }
 
+type AbsenceProxyHistoryKind = 'mine' | 'delegated';
+
+type AbsenceProxyHistoryRow = {
+  row: AbsenceProxyRecord;
+  kind: AbsenceProxyHistoryKind;
+};
+
 function proxyStatusTag(row: AbsenceProxyRecord) {
   if (row.isActiveYn !== 'Y') {
     return <Tag>취소됨</Tag>;
@@ -191,6 +198,31 @@ export function AbsenceProxyPage() {
     return map;
   }, [memberIdSet, nameQueries]);
 
+  const absenceHistoryRows = useMemo((): AbsenceProxyHistoryRow[] => {
+    const seen = new Set<string>();
+    const list: AbsenceProxyHistoryRow[] = [];
+    for (const r of mine) {
+      const id = r.proxyId?.trim();
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      list.push({ row: r, kind: 'mine' });
+    }
+    for (const r of delegated) {
+      const id = r.proxyId?.trim();
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      list.push({ row: r, kind: 'delegated' });
+    }
+    list.sort((a, b) => {
+      const ta = dayjs(a.row.updatedAt?.trim() || a.row.endDate).valueOf();
+      const tb = dayjs(b.row.updatedAt?.trim() || b.row.endDate).valueOf();
+      return tb - ta;
+    });
+    return list;
+  }, [mine, delegated]);
+
+  const absenceHistoryLoading = mineLoading || delegatedLoading;
+
   const createMut = useMutation({
     mutationFn: absenceProxyApi.create,
     onSuccess: async (created) => {
@@ -295,6 +327,41 @@ export function AbsenceProxyPage() {
       key: 'st',
       width: 110,
       render: (_, row) => proxyStatusTag(row),
+    },
+  ];
+
+  const allHistoryColumns: ColumnsType<AbsenceProxyHistoryRow> = [
+    {
+      title: '구분',
+      key: 'kind',
+      width: 108,
+      render: (_, { kind }) =>
+        kind === 'mine' ? (
+          <Tag color="blue">내가 등록</Tag>
+        ) : (
+          <Tag color="purple">위임 받음</Tag>
+        ),
+    },
+    {
+      title: '상대',
+      key: 'counterpart',
+      ellipsis: true,
+      render: (_, { row, kind }) =>
+        kind === 'mine'
+          ? memberNameById.get(row.substituteId) ?? row.substituteId
+          : memberNameById.get(row.memberId) ?? row.memberId,
+    },
+    {
+      title: '위임 기간',
+      key: 'range',
+      width: 300,
+      render: (_, { row }) => formatRange(row.startDate, row.endDate),
+    },
+    {
+      title: '상태',
+      key: 'st',
+      width: 100,
+      render: (_, { row }) => proxyStatusTag(row),
     },
   ];
 
@@ -470,6 +537,21 @@ export function AbsenceProxyPage() {
                   dataSource={delegated}
                   pagination={{ pageSize: 8 }}
                   locale={{ emptyText: '나에게 위임된 일정이 없습니다.' }}
+                  className={isEmbedModal ? '[&_.ant-table-wrapper]:tw-min-h-0' : undefined}
+                />,
+              ),
+            },
+            {
+              key: 'all',
+              label: '전체',
+              children: tabTableWrap(
+                <Table<AbsenceProxyHistoryRow>
+                  rowKey={(r) => `${r.kind}-${r.row.proxyId}`}
+                  loading={absenceHistoryLoading}
+                  columns={allHistoryColumns}
+                  dataSource={absenceHistoryRows}
+                  pagination={{ pageSize: 10 }}
+                  locale={{ emptyText: '표시할 위임 기록이 없습니다.' }}
                   className={isEmbedModal ? '[&_.ant-table-wrapper]:tw-min-h-0' : undefined}
                 />,
               ),
