@@ -45,9 +45,11 @@ import {
 import {EVALUATION_PAGE_KO as L} from '@/app/locale/app-ko';
 import {evaluationApi} from '@/features/evaluation/api/evaluationApi';
 import type {
+    CalibrationDistributionOverview,
     EvalType,
     EvaluationDesign,
     EvaluationResponse,
+    RelativeDistributionPreview,
     EvaluationSeason,
     EvaluationStatus,
 } from '@/features/evaluation/model/types';
@@ -162,6 +164,16 @@ export function EvaluationSeasonDetailPage() {
         queryFn: () => evaluationApi.getCalibrationOverview(seasonId),
         enabled: !!seasonId && activeTab === 'calibration',
     });
+    const {data: calibrationOverview} = useQuery<CalibrationDistributionOverview>({
+        queryKey: ['eval-calibration-overview', seasonId],
+        queryFn: () => evaluationApi.getCalibrationDistributionOverview(seasonId),
+        enabled: !!seasonId && activeTab === 'calibration',
+    });
+    const {data: relativePreview} = useQuery<RelativeDistributionPreview>({
+        queryKey: ['eval-calibration-preview-relative', seasonId],
+        queryFn: () => evaluationApi.previewRelativeDistribution(seasonId),
+        enabled: !!seasonId && activeTab === 'calibration',
+    });
 
     // ── Mutations ──
     const invalidate = () => {
@@ -170,6 +182,8 @@ export function EvaluationSeasonDetailPage() {
         queryClient.invalidateQueries({queryKey: ['eval-designs']});
         queryClient.invalidateQueries({queryKey: ['eval-progress', seasonId]});
         queryClient.invalidateQueries({queryKey: ['eval-calibration', seasonId]});
+        queryClient.invalidateQueries({queryKey: ['eval-calibration-overview', seasonId]});
+        queryClient.invalidateQueries({queryKey: ['eval-calibration-preview-relative', seasonId]});
     };
 
     const startSeasonMut = useMutation({
@@ -410,6 +424,56 @@ export function EvaluationSeasonDetailPage() {
                 ),
         },
     ];
+    const relativePreviewCols: ColumnsType<RelativeDistributionPreview['adjustments'][number]> = [
+        {
+            title: '응답 ID',
+            dataIndex: 'responseId',
+            key: 'responseId',
+            render: (v: string) => <span className="tw-text-xs tw-font-mono tw-text-slate-600">{v.slice(0, 8)}</span>,
+        },
+        {
+            title: '점수',
+            dataIndex: 'normalizedScore',
+            key: 'normalizedScore',
+            width: 100,
+            render: (v?: number) => (typeof v === 'number' ? v.toFixed(1) : '-'),
+        },
+        {
+            title: '현재',
+            dataIndex: 'currentGrade',
+            key: 'currentGrade',
+            width: 100,
+            render: (v?: string) => v ?? '미부여',
+        },
+        {
+            title: '예상(강제 후)',
+            dataIndex: 'predictedGrade',
+            key: 'predictedGrade',
+            width: 130,
+            render: (v?: string) => <Tag color="blue">{v ?? '-'}</Tag>,
+        },
+    ];
+    const relativePreviewSummary = useMemo(() => {
+        const rows = relativePreview?.adjustments ?? [];
+        const changed = rows.filter((r) => (r.currentGrade ?? '') !== (r.predictedGrade ?? ''));
+        const deltaByGrade = new Map<string, number>();
+        for (const r of rows) {
+            const cur = r.currentGrade ?? '미부여';
+            const next = r.predictedGrade ?? '미부여';
+            if (cur === next) continue;
+            deltaByGrade.set(cur, (deltaByGrade.get(cur) ?? 0) - 1);
+            deltaByGrade.set(next, (deltaByGrade.get(next) ?? 0) + 1);
+        }
+        const deltas = Array.from(deltaByGrade.entries())
+            .filter(([, v]) => v !== 0)
+            .sort((a, b) => b[1] - a[1]);
+        return {
+            total: rows.length,
+            changedCount: changed.length,
+            unchangedCount: rows.length - changed.length,
+            deltas,
+        };
+    }, [relativePreview]);
 
     // ── Progress stats ──
     // 전체 집계는 검색어와 무관하게 전체 데이터 기준
@@ -422,12 +486,12 @@ export function EvaluationSeasonDetailPage() {
     // - 캘리브레이션 탭: ACTIVE 시즌에서 응답이 하나라도 SUBMITTED 인 경우 활성화
     // - 결과 분석 탭: 결과가 공개된 (resultsPublishedAt != null) 경우 활성화
     const canCalibrate = season?.status === 'ACTIVE' && !season?.resultsPublishedAt;
-    const calibrationEnabled = (progressData ?? []).some((r) => r.status === 'SUBMITTED');
+    const calibrationEnabled = (progressAllData ?? []).some((r) => r.status === 'SUBMITTED');
     const resultsEnabled = !!season?.resultsPublishedAt;
 
     // ── Results analytics aggregates ──
     const resultsAggregate = useMemo(() => {
-        const submitted = progressData.filter((r) => r.status === 'SUBMITTED');
+        const submitted = progressAllData.filter((r) => r.status === 'SUBMITTED');
 
         // 등급 분포: adjustedGrade(캘리브레이션 조정 후) 우선, 없으면 originalGrade
         const gradeCount: Record<string, number> = {};
@@ -470,7 +534,7 @@ export function EvaluationSeasonDetailPage() {
         }));
 
         return {gradeRows, avg, max, min, sampleCount: scores.length, byType};
-    }, [progressData]);
+    }, [progressAllData]);
 
     if (!season) {
         return (
@@ -959,7 +1023,7 @@ export function EvaluationSeasonDetailPage() {
                                 title={
                                     calibrationEnabled
                                         ? undefined
-                                        : '평가 단계가 "등급 조율"에 도달하면 활성화됩니다.'
+                                        : '제출된 평가 응답이 1건 이상 있어야 활성화됩니다.'
                                 }
                             >
                                 <span className="tw-inline-flex tw-items-center tw-gap-1.5">
@@ -970,13 +1034,90 @@ export function EvaluationSeasonDetailPage() {
                         disabled: !calibrationEnabled,
                         children: (
                             <div className="tw-space-y-4">
+                                <Row gutter={16}>
+                                    <Col xs={24} lg={8}>
+                                        <Card title="목표 분포">
+                                            {Object.keys(calibrationOverview?.targetDistribution ?? {}).length === 0 ? (
+                                                <Empty description="설계의 목표 분포가 없습니다." />
+                                            ) : (
+                                                <Space direction="vertical" size={10} className="tw-w-full">
+                                                    {Object.entries(calibrationOverview?.targetDistribution ?? {}).map(([grade, ratio]) => {
+                                                        const pct = Math.round((ratio ?? 0) * 1000) / 10;
+                                                        return (
+                                                            <div key={`target-${grade}`}>
+                                                                <div className="tw-flex tw-justify-between tw-text-sm tw-mb-1">
+                                                                    <span>{grade}</span>
+                                                                    <span>{pct}%</span>
+                                                                </div>
+                                                                <Progress percent={pct} showInfo={false} strokeColor="#6366F1" />
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </Space>
+                                            )}
+                                        </Card>
+                                    </Col>
+                                    <Col xs={24} lg={8}>
+                                        <Card title="현재 분포">
+                                            {Object.keys(calibrationOverview?.currentDistribution ?? {}).length === 0 ? (
+                                                <Empty description="현재 분포 데이터가 없습니다." />
+                                            ) : (
+                                                <Space direction="vertical" size={10} className="tw-w-full">
+                                                    {Object.entries(calibrationOverview?.currentDistribution ?? {}).map(([grade, ratio]) => {
+                                                        const pct = Math.round((ratio ?? 0) * 1000) / 10;
+                                                        return (
+                                                            <div key={`current-${grade}`}>
+                                                                <div className="tw-flex tw-justify-between tw-text-sm tw-mb-1">
+                                                                    <span>{grade}</span>
+                                                                    <span>{pct}%</span>
+                                                                </div>
+                                                                <Progress percent={pct} showInfo={false} strokeColor="#10B981" />
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </Space>
+                                            )}
+                                        </Card>
+                                    </Col>
+                                    <Col xs={24} lg={8}>
+                                        <Card title="상대등급 강제 프리뷰">
+                                            {Object.keys(relativePreview?.predictedDistribution ?? {}).length === 0 ? (
+                                                <Empty description="RELATIVE 분포 프리뷰가 없습니다." />
+                                            ) : (
+                                                <Space direction="vertical" size={10} className="tw-w-full">
+                                                    {Object.entries(relativePreview?.predictedDistribution ?? {}).map(([grade, ratio]) => {
+                                                        const pct = Math.round((ratio ?? 0) * 1000) / 10;
+                                                        return (
+                                                            <div key={`pred-${grade}`}>
+                                                                <div className="tw-flex tw-justify-between tw-text-sm tw-mb-1">
+                                                                    <span>{grade}</span>
+                                                                    <span>{pct}%</span>
+                                                                </div>
+                                                                <Progress percent={pct} showInfo={false} strokeColor="#F59E0B" />
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </Space>
+                                            )}
+                                        </Card>
+                                    </Col>
+                                </Row>
                                 <div className="tw-flex tw-justify-between tw-items-center">
                                     <Text strong className="tw-text-base">
                                         {L.calibrationTitle}
                                     </Text>
                                     {canUpdate && canCalibrate && (
                                         <Popconfirm
-                                            title={L.calibrationConfirmModal}
+                                            title={
+                                                relativePreviewSummary.changedCount > 0
+                                                    ? `프리뷰 기준 ${relativePreviewSummary.changedCount}건의 등급이 변경됩니다. 확정할까요?`
+                                                    : L.calibrationConfirmModal
+                                            }
+                                            description={
+                                                relativePreviewSummary.changedCount > 0
+                                                    ? '확정 후에는 상대등급 분포 강제 결과가 최종 반영되며, 되돌릴 수 없습니다.'
+                                                    : undefined
+                                            }
                                             onConfirm={() => confirmCalibMut.mutate()}
                                         >
                                             <AppButton variant="primary">
@@ -992,6 +1133,28 @@ export function EvaluationSeasonDetailPage() {
                                     size="middle"
                                     pagination={{pageSize: 20}}
                                 />
+                                <Card title="상대 등급 강제 프리뷰 상세">
+                                    <div className="tw-mb-3 tw-flex tw-flex-wrap tw-items-center tw-gap-2">
+                                        <Tag color="blue">전체 {relativePreviewSummary.total}건</Tag>
+                                        <Tag color="orange">변경 예상 {relativePreviewSummary.changedCount}건</Tag>
+                                        <Tag>유지 {relativePreviewSummary.unchangedCount}건</Tag>
+                                        {relativePreviewSummary.deltas.map(([grade, diff]) => (
+                                            <Tag
+                                                key={`delta-${grade}`}
+                                                color={diff > 0 ? 'green' : 'red'}
+                                            >
+                                                {grade} {diff > 0 ? `+${diff}` : diff}
+                                            </Tag>
+                                        ))}
+                                    </div>
+                                    <Table
+                                        columns={relativePreviewCols}
+                                        dataSource={relativePreview?.adjustments ?? []}
+                                        rowKey="responseId"
+                                        size="small"
+                                        pagination={{pageSize: 10}}
+                                    />
+                                </Card>
                             </div>
                         ),
                     },

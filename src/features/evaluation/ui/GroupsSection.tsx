@@ -126,12 +126,17 @@ type GroupCardProps = {
 };
 
 function GroupCard({group, designName, expanded, onToggle, onAssign, labelFor}: GroupCardProps) {
-    const targets = group.targetMemberIds ?? [];
     const maps = group.evaluatorMaps ?? [];
+    const derivedTargets = Array.from(
+        new Set((maps ?? []).map((m) => m.targetMemberId).filter((v): v is string => !!v)),
+    );
+    const targets = derivedTargets.length > 0 ? derivedTargets : (group.targetMemberIds ?? []);
 
-    // 평가자 지정 현황 계산
-    // 각 대상자마다 "평가 유형 수만큼" 지정이 되어야 완료. 단, SELF는 본인=평가자로 자동.
-    const types = group.evaluationTypes ?? [];
+    // evaluatorMaps 기반으로 실제 평가 유형을 우선 계산한다.
+    const derivedTypes = Array.from(
+        new Set((maps ?? []).map((m) => m.evaluationType).filter((v): v is EvalType => !!v)),
+    );
+    const types = derivedTypes.length > 0 ? derivedTypes : (group.evaluationTypes ?? []);
     const typesExcludingSelf = types.filter((t) => t !== 'SELF');
     const expectedPerTarget = typesExcludingSelf.length;
     const totalExpected = targets.length * expectedPerTarget;
@@ -178,11 +183,7 @@ function GroupCard({group, designName, expanded, onToggle, onAssign, labelFor}: 
                     icon={<TeamOutlined/>}
                     value={`${targets.length}명`}
                 />
-                <HeaderStat
-                    label="평가 유형"
-                    icon={<FileTextOutlined/>}
-                    value={typesText}
-                />
+                <HeaderStat label="평가 유형" icon={<FileTextOutlined/>} value={typesText} />
                 <HeaderStat
                     label="평가자 현황"
                     dotClass={statusDotClass}
@@ -220,9 +221,21 @@ function GroupCard({group, designName, expanded, onToggle, onAssign, labelFor}: 
             )}
 
             {/* 그룹 설계 정보 (작게) */}
-            {expanded && designName && (
-                <div className="tw-border-t tw-border-slate-100 tw-bg-slate-50/50 tw-px-5 tw-py-2 tw-text-xs tw-text-slate-500">
-                    설계: <span className="tw-font-medium tw-text-slate-700">{designName}</span>
+            {expanded && (
+                <div className="tw-border-t tw-border-slate-100 tw-bg-slate-50/50 tw-px-5 tw-py-2 tw-text-xs tw-text-slate-500 tw-flex tw-flex-wrap tw-gap-x-4 tw-gap-y-1">
+                    {designName ? (
+                        <span>
+                            설계: <span className="tw-font-medium tw-text-slate-700">{designName}</span>
+                        </span>
+                    ) : (
+                        <span>설계: <span className="tw-font-medium tw-text-slate-700">미지정</span></span>
+                    )}
+                    <span>
+                        매핑 기준 대상자: <span className="tw-font-medium tw-text-slate-700">{targets.length}명</span>
+                    </span>
+                    <span>
+                        매핑 기준 유형: <span className="tw-font-medium tw-text-slate-700">{typesText}</span>
+                    </span>
                 </div>
             )}
         </div>
