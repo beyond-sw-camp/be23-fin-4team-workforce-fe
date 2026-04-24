@@ -1,7 +1,7 @@
-import {useMemo, useState} from 'react';
+import {useEffect, useMemo, useState} from 'react';
 import {useQuery, useQueryClient} from '@tanstack/react-query';
-import {useNavigate} from '@tanstack/react-router';
-import {App, Avatar, Button, Card, Dropdown, Empty, Modal, Space, Table, Tag, Typography} from 'antd';
+import {useNavigate, useSearch} from '@tanstack/react-router';
+import {App, Avatar, Button, Card, Dropdown, Empty, Modal, Space, Table, Typography} from 'antd';
 import type {ColumnsType} from 'antd/es/table';
 import type {MenuProps} from 'antd';
 import {
@@ -18,7 +18,6 @@ import dayjs from 'dayjs';
 import {EVALUATION_PAGE_KO as L} from '@/app/locale/app-ko';
 import {evaluationApi} from '@/features/evaluation/api/evaluationApi';
 import type {
-    EvalType,
     EvaluationResponse,
     EvaluationSeason,
     EvaluationStatus,
@@ -42,16 +41,6 @@ const {Text, Title, Paragraph} = Typography;
 
 const SEASONS_PAGE_SIZE = 3;
 
-function gradeTagColor(grade?: string): string {
-    if (!grade) return '#64748B';
-    const up = grade.toUpperCase();
-    if (up.startsWith('S') || up.startsWith('A+')) return '#F59E0B';
-    if (up.startsWith('A')) return '#10B981';
-    if (up.startsWith('B')) return '#3B82F6';
-    if (up.startsWith('C')) return '#F97316';
-    return '#EF4444';
-}
-
 /** 응답 상태를 사람-친화적 한 줄 문구로 변환 */
 function responseStatusSubtext(r: EvaluationResponse): string {
     const typeLabel = evalTypeLabel(r.evaluationType);
@@ -65,13 +54,19 @@ export function EvaluationsHubPage() {
     const {hasPermission} = usePermissions();
     const queryClient = useQueryClient();
     const navigate = useNavigate();
+    const search = useSearch({strict: false}) as {
+        filter?: 'all' | 'todo' | 'done';
+        openAssignments?: string | boolean;
+    };
     const canCreate = hasPermission(PERM.EVALUATION_CREATE);
     const canUpdate = hasPermission(PERM.EVALUATION_UPDATE);
     const canRead = hasPermission(PERM.EVALUATION_READ);
     const canManage = canCreate || canUpdate || canRead;
 
     const [seasonCreateOpen, setSeasonCreateOpen] = useState(false);
-    const [assignmentsModalOpen, setAssignmentsModalOpen] = useState(false);
+    const [assignmentsModalOpen, setAssignmentsModalOpen] = useState(
+        search.openAssignments === true || search.openAssignments === '1',
+    );
     const [seasonLimit, setSeasonLimit] = useState(SEASONS_PAGE_SIZE);
 
     const {data: myResponses = []} = useQuery({
@@ -137,6 +132,12 @@ export function EvaluationsHubPage() {
 
     // ── Pending evaluations: 미제출 3건까지 노출 ──
     const pendingPreview = sortedMyResponses.slice(0, 4);
+
+    useEffect(() => {
+        if (search.openAssignments === true || search.openAssignments === '1') {
+            setAssignmentsModalOpen(true);
+        }
+    }, [search.openAssignments]);
 
     const seasonRowMenu = (r: EvaluationSeason): MenuProps['items'] => [
         {
@@ -272,7 +273,7 @@ export function EvaluationsHubPage() {
                                 a.click();
                                 document.body.removeChild(a);
                                 URL.revokeObjectURL(url);
-                            } catch (err) {
+                            } catch {
                                 message.error('리포트 다운로드에 실패했습니다.');
                             }
                         }}
@@ -369,7 +370,10 @@ export function EvaluationsHubPage() {
                     },
                 }}
             >
-                <MyEvaluationAssignmentsContent onBeforeNavigateWrite={() => setAssignmentsModalOpen(false)} />
+                <MyEvaluationAssignmentsContent
+                    onBeforeNavigateWrite={() => setAssignmentsModalOpen(false)}
+                    initialFilter={search.filter ?? 'all'}
+                />
             </Modal>
         </div>
     );

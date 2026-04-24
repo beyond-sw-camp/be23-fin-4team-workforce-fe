@@ -1,10 +1,11 @@
-import { CloseOutlined, DeleteOutlined, RobotOutlined, SendOutlined, UserOutlined } from '@ant-design/icons';
+import { CloseOutlined, DeleteOutlined, SendOutlined, UserOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Popconfirm, Spin } from 'antd';
 import dayjs from 'dayjs';
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { aiApi, sortAiChatHistoryChronological } from '@/features/ai/api/aiApi';
 import type { ApiError } from '@/shared/api/types';
+import { AiChatbotLottieIcon } from '@/shared/ui/AiChatbotLottieIcon';
 
 const MSG_502 =
   '[502] member-service\u2192n8n \uC5F0\uB3D9\uC5D0 \uBB38\uC81C\uAC00 \uC788\uC744 \uC218 \uC788\uC2B5\uB2C8\uB2E4. \uC11C\uBC84 \uB85C\uADF8\u00B7n8n \uC6CC\uD06C\uD50C\uB85C(JSON\u00B7answer)\uB97C \uD655\uC778\uD558\uC138\uC694. \uBE0C\uB77C\uC6B0\uC800 \uC694\uCCAD URL\uC740 http://\u2026/chat \uC785\uB2C8\uB2E4.';
@@ -153,11 +154,11 @@ export function AiChatbotFab() {
         <div className="tw-flex tw-h-[min(82vh,680px)] tw-flex-col tw-overflow-hidden tw-bg-white">
           <div className="tw-relative tw-z-[1] tw-shrink-0 tw-cursor-default tw-bg-gradient-to-br tw-from-[#4A7FF7] tw-to-[#7BB3FF] tw-shadow-[0_4px_14px_rgba(74,127,247,0.38)]">
             <div className="tw-flex tw-items-center tw-gap-2.5 tw-px-3.5 tw-py-3">
-              <div className="tw-flex tw-h-[34px] tw-w-[34px] tw-shrink-0 tw-items-center tw-justify-center tw-rounded-full tw-bg-white/25 tw-text-white">
-                <RobotOutlined className="!tw-text-base" aria-hidden />
+              <div className="tw-flex tw-h-9 tw-w-9 tw-shrink-0 tw-items-center tw-justify-center">
+                <AiChatbotLottieIcon className="!tw-h-7 !tw-w-7" />
               </div>
               <div className="tw-min-w-0 tw-flex-1 tw-text-white">
-                <p id={titleId} className="tw-m-0 tw-text-[10px] tw-font-extrabold tw-tracking-wide tw-text-white/75">
+                <p id={titleId} className="tw-m-0 tw-text-xs tw-font-extrabold tw-tracking-wide tw-text-white/75">
                   {AI_TITLE}
                 </p>
               </div>
@@ -179,7 +180,7 @@ export function AiChatbotFab() {
                 >
                   <button
                     type="button"
-                    className="tw-flex tw-h-8 tw-w-8 tw-items-center tw-justify-center tw-rounded-full tw-bg-white/20 tw-text-white tw-transition-colors hover:tw-bg-white/30 disabled:tw-opacity-40"
+                    className="tw-flex tw-h-8 tw-w-8 tw-items-center tw-justify-center tw-rounded-full tw-border-0 tw-bg-white/20 tw-text-white tw-transition-colors hover:tw-bg-white/30 disabled:tw-opacity-40"
                     disabled={(history.length === 0 && !historyLoading) || clearM.isPending}
                     aria-label={ARIA_DEL}
                   >
@@ -188,7 +189,7 @@ export function AiChatbotFab() {
                 </Popconfirm>
                 <button
                   type="button"
-                  className="tw-flex tw-h-8 tw-w-8 tw-items-center tw-justify-center tw-rounded-full tw-bg-white/20 tw-text-white tw-transition-colors hover:tw-bg-white/30"
+                  className="tw-flex tw-h-8 tw-w-8 tw-items-center tw-justify-center tw-rounded-full tw-border-0 tw-bg-white/20 tw-text-white tw-transition-colors hover:tw-bg-white/30"
                   aria-label={ARIA_CLOSE}
                   onClick={() => setOpen(false)}
                 >
@@ -229,8 +230,8 @@ export function AiChatbotFab() {
                   </div>
                 </div>
                 <div className="tw-flex tw-items-end tw-justify-start tw-gap-1">
-                  <div className="tw-flex tw-h-[30px] tw-w-[30px] tw-shrink-0 tw-items-center tw-justify-center tw-rounded-full tw-bg-[#3B82F6] tw-text-white">
-                    <RobotOutlined className="!tw-text-[15px]" aria-hidden />
+                  <div className="tw-flex tw-h-9 tw-w-9 tw-shrink-0 tw-items-center tw-justify-center tw-overflow-hidden tw-rounded-full tw-bg-gradient-to-br tw-from-white/25 tw-via-sky-50/12 tw-to-sky-200/18 tw-backdrop-blur-xl tw-backdrop-saturate-150 tw-shadow-[0_6px_18px_rgba(59,130,246,0.07)]">
+                    <AiChatbotLottieIcon className="!tw-h-7 !tw-w-7" />
                   </div>
                   <div className="tw-flex tw-max-w-[72%] tw-flex-col tw-gap-0.5">
                     <span className="tw-mb-0.5 tw-text-[10px] tw-font-bold tw-text-[#475569]">{AI_TITLE}</span>
@@ -251,8 +252,8 @@ export function AiChatbotFab() {
 
             {pending ? (
               <div className="tw-flex tw-items-end tw-justify-start tw-gap-1">
-                <div className="tw-flex tw-h-[30px] tw-w-[30px] tw-shrink-0 tw-items-center tw-justify-center tw-rounded-full tw-bg-[#d1d5db] tw-text-white">
-                  <RobotOutlined className="!tw-text-[15px]" aria-hidden />
+                <div className="tw-flex tw-h-9 tw-w-9 tw-shrink-0 tw-items-center tw-justify-center tw-overflow-hidden tw-rounded-full tw-bg-white/12 tw-backdrop-blur-xl tw-backdrop-saturate-150 tw-shadow-[0_4px_14px_rgba(15,23,42,0.06)]">
+                  <AiChatbotLottieIcon className="!tw-h-7 !tw-w-7 tw-opacity-90" />
                 </div>
                 <div className="tw-flex tw-items-center tw-gap-2 tw-rounded-[2px_14px_14px_14px] tw-bg-white tw-px-3 tw-py-2.5 tw-text-[0.8rem] tw-text-[#64748B] tw-shadow-[0_1px_3px_rgba(0,0,0,0.07)]">
                   <Spin size="small" />
@@ -302,16 +303,33 @@ export function AiChatbotFab() {
         </div>
       </div>
 
-      <button
-        type="button"
-        className="tw-pointer-events-auto tw-flex tw-h-14 tw-w-14 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-full tw-border-0 tw-bg-[#3B82F6] tw-text-2xl tw-text-white tw-shadow-lg tw-shadow-[rgba(59,130,246,0.35)] tw-transition-[transform,box-shadow,filter] hover:tw-brightness-105 hover:tw-shadow-xl focus-visible:tw-outline focus-visible:tw-outline-2 focus-visible:tw-outline-offset-2 focus-visible:tw-outline-[#3B82F6] active:tw-scale-95"
-        aria-label={open ? ARIA_COLLAPSE_PANEL : ARIA_EXPAND_PANEL}
-        aria-expanded={open}
-        aria-controls="ai-chatbot-panel"
-        onClick={() => setOpen((v) => !v)}
-      >
-        <RobotOutlined aria-hidden />
-      </button>
+      <div className="tw-pointer-events-auto tw-relative tw-inline-flex tw-shrink-0 tw-group">
+        <div
+          className="tw-pointer-events-none tw-absolute tw-inset-0 tw-rounded-full tw-bg-[#4A7FF7]/18 tw-blur-3xl tw-transition-all tw-duration-700 group-hover:tw-bg-[#4A7FF7]/26"
+          aria-hidden
+        />
+        <button
+          type="button"
+          className={[
+            'tw-relative tw-z-[0] tw-flex tw-h-[4.5rem] tw-w-[4.5rem] tw-shrink-0 tw-items-center tw-justify-center tw-overflow-hidden tw-rounded-full tw-border-0',
+            'tw-bg-gradient-to-br tw-from-[#4A7FF7] tw-via-[#5E90F5] tw-to-[#7BB3FF]',
+            'tw-shadow-[0_10px_28px_rgba(74,127,247,0.28),inset_0_-2px_6px_rgba(15,23,42,0.08)]',
+            'tw-transform-gpu tw-transition-all tw-duration-500 group-hover:tw-scale-105',
+            'focus-visible:tw-outline focus-visible:tw-outline-2 focus-visible:tw-outline-offset-2 focus-visible:tw-outline-[#7BB3FF]/70',
+            'active:tw-scale-[0.97]',
+          ].join(' ')}
+          aria-label={open ? ARIA_COLLAPSE_PANEL : ARIA_EXPAND_PANEL}
+          aria-expanded={open}
+          aria-controls="ai-chatbot-panel"
+          onClick={() => setOpen((v) => !v)}
+        >
+          <div
+            className="tw-pointer-events-none tw-absolute tw-inset-0 tw-rounded-full tw-bg-gradient-to-tr tw-from-transparent tw-via-white/8 tw-to-white/14"
+            aria-hidden
+          />
+          <AiChatbotLottieIcon className="tw-relative tw-z-[1] -tw-translate-y-px tw-transition-transform tw-duration-500 group-hover:tw-scale-110 !tw-h-10 !tw-w-10" />
+        </button>
+      </div>
     </div>
   );
 }
