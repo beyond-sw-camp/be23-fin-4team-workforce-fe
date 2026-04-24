@@ -2,6 +2,7 @@ import { Badge, Card, List, Space, Typography } from 'antd';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { notificationApi } from '@/features/notification/api/notificationApi';
+import { buildApprovalNotificationNavigate } from '@/features/notification/lib/approvalNotificationRoute';
 import { AppButton } from '@/shared/ui/AppButton';
 
 export function NotificationsPage() {
@@ -34,25 +35,20 @@ export function NotificationsPage() {
     if (item.isRead !== 'YES') {
       await markAsRead.mutateAsync(item.notificationId);
     }
-    const t = String(item.notificationType ?? '').toUpperCase();
-    if (t === 'APPROVAL_REQUESTED') {
-      await navigate({
-        to: '/app/approvals',
-        search: { tab: 'pending' },
-      });
-      return;
-    }
-    if (t === 'APPROVAL_APPROVED' || t === 'APPROVAL_REJECTED') {
-      await navigate({
-        to: '/app/approvals',
-        search: { tab: 'my', box: 'per-all' },
-      });
-    }
+    await navigate(
+      buildApprovalNotificationNavigate({
+        notificationType: item.notificationType,
+        targetType: item.targetType,
+        title: item.title,
+        content: item.content,
+        targetId: item.targetId,
+      }),
+    );
   };
 
   const isApprovalNotification = (type: string) => {
     const t = String(type ?? '').toUpperCase();
-    return t === 'APPROVAL_REQUESTED' || t === 'APPROVAL_APPROVED' || t === 'APPROVAL_REJECTED';
+    return t.startsWith('APPROVAL_');
   };
 
   return (

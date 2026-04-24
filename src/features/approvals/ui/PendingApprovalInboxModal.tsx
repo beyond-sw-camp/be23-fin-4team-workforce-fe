@@ -215,19 +215,21 @@ export function PendingApprovalInboxModalContent({
             return <Typography.Text type="secondary">—</Typography.Text>;
           }
           return (
-            <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-center tw-gap-2">
+            <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-center tw-gap-2" onClick={(e) => e.stopPropagation()}>
               <Button
                 type="primary"
                 size="small"
                 disabled={!ok}
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   if (!line || !ok) return;
                   onStartApprove(line.approvalId);
                 }}
               >
                 승인
               </Button>
-              <Button danger size="small" disabled={!ok} onClick={() => {
+              <Button danger size="small" disabled={!ok} onClick={(e) => {
+                  e.stopPropagation();
                   if (!line || !ok) return;
                   onStartReject(line.approvalId);
                 }}>
