@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { Avatar, Button, Card, Empty, Segmented, Space, Table, Typography } from 'antd';
@@ -23,11 +24,21 @@ function statusSortOrder(s: EvaluationStatus): number {
 export type MyEvaluationAssignmentsContentProps = {
   /** 작성 화면으로 이동하기 직전(모달 닫기 등) */
   onBeforeNavigateWrite?: () => void;
+  /** 외부에서 초기 필터를 지정할 때 사용 */
+  initialFilter?: FilterKey;
 };
 
-export function MyEvaluationAssignmentsContent({ onBeforeNavigateWrite }: MyEvaluationAssignmentsContentProps) {
+export function MyEvaluationAssignmentsContent({
+  onBeforeNavigateWrite,
+  initialFilter,
+}: MyEvaluationAssignmentsContentProps) {
   const navigate = useNavigate();
-  const [filter, setFilter] = useState<FilterKey>('all');
+  const [filter, setFilter] = useState<FilterKey>(initialFilter ?? 'all');
+
+  useEffect(() => {
+    if (!initialFilter) return;
+    setFilter(initialFilter);
+  }, [initialFilter]);
 
   const { data: rows = [], isLoading } = useQuery({
     queryKey: ['eval-my-responses'],

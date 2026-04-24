@@ -13,7 +13,9 @@ import type {
   SaveResponsePayload,
   CalibrationAdjustPayload,
   CalibrationBaselinePayload,
+  CalibrationDistributionOverview,
   QuestionType,
+  RelativeDistributionPreview,
   DesignQuestion,
   DesignSection,
   SectionType,
@@ -651,6 +653,51 @@ export const evaluationApi = {
   async getCalibrationOverview(seasonId: string): Promise<EvaluationResponse[]> {
     const res = await httpClient.get(`/evaluation/evaluation-responses/seasons/${seasonId}/calibration`);
     return normalizeArray(unwrapApiResponse<unknown>(res.data), mapResponse);
+  },
+
+  async getCalibrationDistributionOverview(seasonId: string): Promise<CalibrationDistributionOverview> {
+    const res = await httpClient.get(
+      `/evaluation/evaluation-responses/seasons/${seasonId}/calibration/overview`,
+    );
+    const raw = unwrapApiResponse<any>(res.data) ?? {};
+    return {
+      targetDistribution:
+        raw.targetDistribution && typeof raw.targetDistribution === 'object'
+          ? (raw.targetDistribution as Record<string, number>)
+          : {},
+      currentDistribution:
+        raw.currentDistribution && typeof raw.currentDistribution === 'object'
+          ? (raw.currentDistribution as Record<string, number>)
+          : {},
+    };
+  },
+
+  async previewRelativeDistribution(seasonId: string): Promise<RelativeDistributionPreview> {
+    const res = await httpClient.get(
+      `/evaluation/evaluation-responses/seasons/${seasonId}/calibration/preview-relative`,
+    );
+    const raw = unwrapApiResponse<any>(res.data) ?? {};
+    const adjustmentsRaw = Array.isArray(raw.adjustments) ? raw.adjustments : [];
+    return {
+      targetDistribution:
+        raw.targetDistribution && typeof raw.targetDistribution === 'object'
+          ? (raw.targetDistribution as Record<string, number>)
+          : {},
+      currentDistribution:
+        raw.currentDistribution && typeof raw.currentDistribution === 'object'
+          ? (raw.currentDistribution as Record<string, number>)
+          : {},
+      predictedDistribution:
+        raw.predictedDistribution && typeof raw.predictedDistribution === 'object'
+          ? (raw.predictedDistribution as Record<string, number>)
+          : {},
+      adjustments: adjustmentsRaw.map((a: any) => ({
+        responseId: String(a.responseId),
+        normalizedScore: typeof a.normalizedScore === 'number' ? a.normalizedScore : undefined,
+        currentGrade: a.currentGrade ?? undefined,
+        predictedGrade: a.predictedGrade ?? undefined,
+      })),
+    };
   },
 
   async applyBaseline(seasonId: string, body: CalibrationBaselinePayload): Promise<void> {
