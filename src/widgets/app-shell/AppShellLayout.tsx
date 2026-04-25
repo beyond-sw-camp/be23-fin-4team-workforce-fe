@@ -48,6 +48,7 @@ import type {EsgConfig} from '@/features/esg/api/esgApi';
 import {esgApi} from '@/features/esg/api/esgApi';
 import {memberChatApi} from '@/features/member-chat/api/memberChatApi';
 import {notificationApi} from '@/features/notification/api/notificationApi';
+import {buildApprovalNotificationNavigate} from '@/features/notification/lib/approvalNotificationRoute';
 import {companyApi} from '@/features/organization/api/companyApi';
 import {searchApi} from '@/features/search/api/searchApi';
 import {organizationApi} from '@/features/organization/api/organizationApi';
@@ -1099,7 +1100,7 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
 
     const isApprovalNotification = (type: string): boolean => {
         const t = String(type ?? '').toUpperCase();
-        return t === 'APPROVAL_REQUESTED' || t === 'APPROVAL_APPROVED' || t === 'APPROVAL_REJECTED';
+        return t.startsWith('APPROVAL_');
     };
     const filteredNotifications = notificationTab === 'unread'
         ? notifications.filter((item) => item.isRead !== 'YES')
@@ -1110,22 +1111,16 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
         if (item.isRead !== 'YES') {
             await markNotificationAsRead.mutateAsync(item.notificationId);
         }
-        const t = String(item.notificationType ?? '').toUpperCase();
-        if (t === 'APPROVAL_REQUESTED') {
-            await navigate({
-                to: '/app/approvals',
-                search: {tab: 'pending'},
-            });
-            setNotificationPopoverOpen(false);
-            return;
-        }
-        if (t === 'APPROVAL_APPROVED' || t === 'APPROVAL_REJECTED') {
-            await navigate({
-                to: '/app/approvals',
-                search: {tab: 'my', box: 'per-all'},
-            });
-            setNotificationPopoverOpen(false);
-        }
+        await navigate(
+          buildApprovalNotificationNavigate({
+            notificationType: item.notificationType,
+            targetType: item.targetType,
+            title: item.title,
+            content: item.content,
+            targetId: item.targetId,
+          }),
+        );
+        setNotificationPopoverOpen(false);
     };
 
     const notificationPopoverContent = (

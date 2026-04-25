@@ -132,6 +132,10 @@ import {
 import { usePermissions } from '@/features/permissions/usePermissionsHook';
 import { ApprovalsAdminPage } from '@/pages/app/ApprovalsAdminPage';
 import {
+  APPROVAL_FAMILY_EVENT_LEAVE_KIND_OPTION,
+  APPROVAL_FAMILY_EVENT_SUBTYPE_FIELD_LABEL,
+  APPROVAL_VACATION_LEAVE_KIND_FIELD_LABEL,
+  findApprovalFormFieldByLabel,
   getApprovalRequestSubjectLine,
   parseDetailContentJson,
   parseFormSchema,
@@ -233,6 +237,7 @@ function buildApprovalEmbedUrl(pathname: string, search: Record<string, string |
 
 /** 작성 허브「전체」모달 iframe — 카드별로 열리는 문서함 구역 */
 type ComposeHomeEmbedPanel = 'my-all' | 'viewers' | 'department' | 'official' | 'draft' | 'absence';
+type ApprovalNotificationModal = 'pending' | 'my-all' | 'viewers' | 'official' | 'draft';
 
 function composeHomeEmbedPanelUrl(panel: ComposeHomeEmbedPanel): string {
   switch (panel) {
@@ -1053,6 +1058,9 @@ export function ApprovalsPage() {
         viewerSub?: string;
         embed?: string;
         docId?: string;
+        approvalModal?: string;
+        approvalOpenAt?: string;
+        approvalRequestId?: string;
       },
   });
   const isEmbedComposeModal = routeSearch.embed === APPROVAL_EMBED_QUERY;
@@ -1128,6 +1136,31 @@ export function ApprovalsPage() {
     return typeof rawTab === 'string' && allowedTabs.includes(rawTab) ? rawTab : 'compose';
   }, [routeSearch.tab, allowedTabs]);
   const onComposeHub = tab === 'compose' && routeSearch.sideNav === 'request-compose';
+  const approvalNotificationModal = useMemo<ApprovalNotificationModal | null>(() => {
+    const raw = String(routeSearch.approvalModal ?? '')
+      .trim()
+      .toLowerCase();
+    if (raw === 'pending' || raw === 'my-all' || raw === 'viewers' || raw === 'official' || raw === 'draft') {
+      return raw;
+    }
+    return null;
+  }, [routeSearch.approvalModal]);
+
+  useEffect(() => {
+    if (!onComposeHub || !approvalNotificationModal) return;
+    if (String(routeSearch.approvalRequestId ?? '').trim()) return;
+    if (approvalNotificationModal === 'pending') {
+      setComposeHomeMoreModal({ kind: 'pending-inbox', title: '결재 대기 문서 전체' });
+      return;
+    }
+    setComposeHomeMoreModal({ kind: 'iframe', panel: approvalNotificationModal });
+  }, [onComposeHub, approvalNotificationModal, routeSearch.approvalOpenAt, routeSearch.approvalRequestId]);
+
+  useEffect(() => {
+    const rid = String(routeSearch.approvalRequestId ?? '').trim();
+    if (!rid) return;
+    setSelectedRequestId(rid);
+  }, [routeSearch.approvalRequestId, routeSearch.approvalOpenAt]);
 
   const requestStatusFilter = useMemo<ApprovalRequestStatus | 'ALL'>(() => {
     if (tab !== 'my') return 'ALL';
@@ -1169,6 +1202,21 @@ export function ApprovalsPage() {
     () => (selectedDocument ? parseFormSchema(selectedDocument.formSchema) : { fields: [] }),
     [selectedDocument],
   );
+  const vacationLeaveKindField = useMemo(
+    () => findApprovalFormFieldByLabel(selectedSchema.fields, APPROVAL_VACATION_LEAVE_KIND_FIELD_LABEL),
+    [selectedSchema.fields],
+  );
+  const familyEventSubtypeField = useMemo(
+    () => findApprovalFormFieldByLabel(selectedSchema.fields, APPROVAL_FAMILY_EVENT_SUBTYPE_FIELD_LABEL),
+    [selectedSchema.fields],
+  );
+  const vacationLeaveKindWatchPath = vacationLeaveKindField
+    ? (['content', vacationLeaveKindField.name] as const)
+    : undefined;
+  const watchedVacationLeaveKind = Form.useWatch(vacationLeaveKindWatchPath, form);
+  const showFamilyEventSubtypeInCompose =
+    familyEventSubtypeField != null &&
+    (vacationLeaveKindField == null || watchedVacationLeaveKind === APPROVAL_FAMILY_EVENT_LEAVE_KIND_OPTION);
   const composeSelectedOfficial = useMemo(
     () =>
       selectedDocument != null &&
@@ -1296,18 +1344,45 @@ export function ApprovalsPage() {
     enabled: onComposeHub,
     staleTime: 60_000,
   });
-  const homeAbsencePreviewRows = useMemo(() => myAbsenceProxies.slice(0, 20), [myAbsenceProxies]);
-  const homeAbsenceSubstituteDetailQueries = useQueries({
-    queries: homeAbsencePreviewRows.map((row) => {
-      const sid = row.substituteId?.trim() ?? '';
-      return {
-        queryKey: ['member', 'detail', 'compose-home-absence-proxy', sid],
-        queryFn: () => memberApi.detail(sid),
-        enabled: onComposeHub && Boolean(sid),
-        staleTime: 60_000,
-      };
-    }),
+  const { data: absenceProxiesDelegatedToMe = [] } = useQuery({
+    queryKey: ['approval', 'absence-proxy', 'delegated'],
+    queryFn: () => absenceProxyApi.listDelegatedToMe(),
+    enabled: onComposeHub,
+    staleTime: 60_000,
   });
+  const homeAbsenceMinePreview = useMemo(() => myAbsenceProxies.slice(0, 10), [myAbsenceProxies]);
+  const homeAbsenceDelegatedPreview = useMemo(
+    () => absenceProxiesDelegatedToMe.slice(0, 10),
+    [absenceProxiesDelegatedToMe],
+  );
+  const absenceHubMemberIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const r of homeAbsenceMinePreview) {
+      const s = r.substituteId?.trim();
+      if (s) ids.add(s);
+    }
+    for (const r of homeAbsenceDelegatedPreview) {
+      const m = r.memberId?.trim();
+      if (m) ids.add(m);
+    }
+    return [...ids];
+  }, [homeAbsenceMinePreview, homeAbsenceDelegatedPreview]);
+  const homeAbsenceMemberDetailQueries = useQueries({
+    queries: absenceHubMemberIds.map((id) => ({
+      queryKey: ['member', 'detail', 'compose-home-absence-proxy', id],
+      queryFn: () => memberApi.detail(id),
+      enabled: onComposeHub && Boolean(id),
+      staleTime: 60_000,
+    })),
+  });
+  const absenceHubMemberNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    absenceHubMemberIds.forEach((id, i) => {
+      const name = homeAbsenceMemberDetailQueries[i]?.data?.name?.trim();
+      if (name) map.set(id, name);
+    });
+    return map;
+  }, [absenceHubMemberIds, homeAbsenceMemberDetailQueries]);
   const { data: officialReceivedRequests = [] } = useQuery({
     queryKey: ['approval-user', 'official-received'],
     queryFn: () => approvalRequestApi.listOfficialReceivedRequests(),
@@ -1513,6 +1588,15 @@ export function ApprovalsPage() {
         setComposeEditingRequestId(detail.requestId);
         setComposeDeptVisibleYn(detail.isDeptVisibleYn === 'N' ? 'N' : 'Y');
         const content = parseDetailContentJson(detail);
+        const draftFields = parseFormSchema(doc.formSchema).fields;
+        const draftLeaveKind = findApprovalFormFieldByLabel(draftFields, APPROVAL_VACATION_LEAVE_KIND_FIELD_LABEL);
+        const draftFamilySubtype = findApprovalFormFieldByLabel(draftFields, APPROVAL_FAMILY_EVENT_SUBTYPE_FIELD_LABEL);
+        if (draftLeaveKind && draftFamilySubtype) {
+          const k = content[draftLeaveKind.name];
+          if (k !== APPROVAL_FAMILY_EVENT_LEAVE_KIND_OPTION) {
+            delete content[draftFamilySubtype.name];
+          }
+        }
         form.setFieldsValue({
           documentId: detail.documentId,
           content,
@@ -2103,6 +2187,14 @@ export function ApprovalsPage() {
         return;
       }
 
+      const contentForSubmit = { ...(values.content ?? {}) };
+      if (vacationLeaveKindField && familyEventSubtypeField) {
+        const kind = contentForSubmit[vacationLeaveKindField.name];
+        if (kind !== APPROVAL_FAMILY_EVENT_LEAVE_KIND_OPTION) {
+          delete contentForSubmit[familyEventSubtypeField.name];
+        }
+      }
+
       const flatApprovers = flattenApprovalLinesForSubmit(approvalLineDrafts);
       const approvalLines = flatApprovers.map((line, idx) => ({
         stepOrder: idx + 1,
@@ -2162,7 +2254,7 @@ export function ApprovalsPage() {
 
       const payload: CreateApprovalRequestPayload = {
         documentId: values.documentId ?? selectedDocument.documentId,
-        contentJson: JSON.stringify(values.content ?? {}),
+        contentJson: JSON.stringify(contentForSubmit),
         requestStatus: status,
         isDeptVisibleYn: isOfficial ? 'Y' : composeDeptVisibleYn,
         ...(approvalLines.length ? { approvalLines } : {}),
@@ -3588,42 +3680,101 @@ export function ApprovalsPage() {
                 전체
               </Button>
             </div>
-            {homeAbsencePreviewRows.length === 0 ? (
-              <Typography.Text type="secondary">등록된 부재 위임이 없습니다.</Typography.Text>
+            {homeAbsenceMinePreview.length === 0 && homeAbsenceDelegatedPreview.length === 0 ? (
+              <Typography.Text type="secondary">
+                내가 등록한 위임과 나에게 위임된 일정이 없습니다.
+              </Typography.Text>
             ) : (
               <div className={APPROVAL_HOME_CARD_SCROLL}>
-                <Space direction="vertical" size={8} className="tw-w-full">
-                  {homeAbsencePreviewRows.map((row, i) => {
-                    const accentClass = 'tw-bg-slate-50/80 tw-border-slate-200';
-                    const substituteName =
-                      homeAbsenceSubstituteDetailQueries[i]?.data?.name?.trim() || '대결자';
-                    return (
-                      <div
-                        key={row.proxyId}
-                        className={`tw-flex tw-items-center tw-justify-between tw-gap-2 tw-rounded-lg tw-border tw-px-3 tw-py-2 ${accentClass}`}
-                      >
-                        <div className="tw-min-w-0">
-                          <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
-                            <Typography.Text strong className="!tw-block tw-truncate">
-                              대결: {substituteName}
-                            </Typography.Text>
-                            {absenceProxyDashboardTag(row)}
-                          </div>
-                          <Typography.Text type="secondary" className="!tw-block tw-text-xs">
-                            {formatAbsenceProxyRange(row.startDate, row.endDate)}
-                          </Typography.Text>
-                        </div>
-                        <Button
-                          size="small"
-                          onClick={() =>
-                            navigate({ to: '/app/approvals/absence-proxy', search: { ...embedSearchSuffix }, replace: true })
-                          }
-                        >
-                          보기
-                        </Button>
-                      </div>
-                    );
-                  })}
+                <Space direction="vertical" size={12} className="tw-w-full">
+                  {homeAbsenceMinePreview.length > 0 ? (
+                    <div className="tw-w-full tw-space-y-2">
+                      <Typography.Text type="secondary" className="!tw-text-xs">
+                        내가 등록한 위임
+                      </Typography.Text>
+                      <Space direction="vertical" size={8} className="tw-w-full">
+                        {homeAbsenceMinePreview.map((row) => {
+                          const accentClass = 'tw-bg-slate-50/80 tw-border-slate-200';
+                          const sid = row.substituteId?.trim() ?? '';
+                          const substituteName = absenceHubMemberNameById.get(sid) || '대결자';
+                          return (
+                            <div
+                              key={`mine-${row.proxyId}`}
+                              className={`tw-flex tw-items-center tw-justify-between tw-gap-2 tw-rounded-lg tw-border tw-px-3 tw-py-2 ${accentClass}`}
+                            >
+                              <div className="tw-min-w-0">
+                                <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
+                                  <Typography.Text strong className="!tw-block tw-truncate">
+                                    대결: {substituteName}
+                                  </Typography.Text>
+                                  {absenceProxyDashboardTag(row)}
+                                </div>
+                                <Typography.Text type="secondary" className="!tw-block tw-text-xs">
+                                  {formatAbsenceProxyRange(row.startDate, row.endDate)}
+                                </Typography.Text>
+                              </div>
+                              <Button
+                                size="small"
+                                onClick={() =>
+                                  navigate({
+                                    to: '/app/approvals/absence-proxy',
+                                    search: { ...embedSearchSuffix },
+                                    replace: true,
+                                  })
+                                }
+                              >
+                                보기
+                              </Button>
+                            </div>
+                          );
+                        })}
+                      </Space>
+                    </div>
+                  ) : null}
+                  {homeAbsenceDelegatedPreview.length > 0 ? (
+                    <div className="tw-w-full tw-space-y-2">
+                      <Typography.Text type="secondary" className="!tw-text-xs">
+                        나에게 위임된 목록
+                      </Typography.Text>
+                      <Space direction="vertical" size={8} className="tw-w-full">
+                        {homeAbsenceDelegatedPreview.map((row) => {
+                          const accentClass = 'tw-bg-slate-50/80 tw-border-slate-200';
+                          const mid = row.memberId?.trim() ?? '';
+                          const absentName = absenceHubMemberNameById.get(mid) || '부재자';
+                          return (
+                            <div
+                              key={`delegated-${row.proxyId}`}
+                              className={`tw-flex tw-items-center tw-justify-between tw-gap-2 tw-rounded-lg tw-border tw-px-3 tw-py-2 ${accentClass}`}
+                            >
+                              <div className="tw-min-w-0">
+                                <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
+                                  <Typography.Text strong className="!tw-block tw-truncate">
+                                    부재자: {absentName}
+                                  </Typography.Text>
+                                  {absenceProxyDashboardTag(row)}
+                                </div>
+                                <Typography.Text type="secondary" className="!tw-block tw-text-xs">
+                                  {formatAbsenceProxyRange(row.startDate, row.endDate)}
+                                </Typography.Text>
+                              </div>
+                              <Button
+                                size="small"
+                                onClick={() =>
+                                  navigate({
+                                    to: '/app/approvals/absence-proxy',
+                                    search: { ...embedSearchSuffix },
+                                    replace: true,
+                                  })
+                                }
+                              >
+                                보기
+                              </Button>
+                            </div>
+                          );
+                        })}
+                      </Space>
+                    </div>
+                  ) : null}
                 </Space>
               </div>
             )}
@@ -3759,6 +3910,17 @@ export function ApprovalsPage() {
                 setComposeSidebarTab('line');
                 setLineInfoTab('approval');
                 void applyPolicyLineDrafts(nextDoc ?? null);
+                return;
+              }
+              if (vacationLeaveKindField && familyEventSubtypeField) {
+                const cv = changed as { content?: Record<string, unknown> };
+                const chContent = cv.content;
+                if (chContent && vacationLeaveKindField.name in chContent) {
+                  const v = chContent[vacationLeaveKindField.name];
+                  if (v !== APPROVAL_FAMILY_EVENT_LEAVE_KIND_OPTION) {
+                    form.setFieldValue(['content', familyEventSubtypeField.name], undefined);
+                  }
+                }
               }
             }}
           >
@@ -3915,7 +4077,14 @@ export function ApprovalsPage() {
                           />
                         }
                       >
-                        {selectedSchema.fields.map((field) => {
+                        {selectedSchema.fields
+                          .filter(
+                            (field) =>
+                              !familyEventSubtypeField ||
+                              field.name !== familyEventSubtypeField.name ||
+                              showFamilyEventSubtypeInCompose,
+                          )
+                          .map((field) => {
                           const namePath: (string | number)[] = ['content', field.name];
                           const ph = field.placeholder;
                           const fieldLocked = field.locked === true;
@@ -4596,7 +4765,22 @@ export function ApprovalsPage() {
 
       <ApprovalRequestReadOnlyModal
         requestId={selectedRequestId}
-        onClose={() => setSelectedRequestId(null)}
+        onClose={() => {
+          setSelectedRequestId(null);
+          if (String(routeSearch.approvalRequestId ?? '').trim()) {
+            navigate({
+              to: '/app/approvals',
+              search: (prev) => {
+                const p = { ...(prev as Record<string, string | undefined>) };
+                delete p.approvalRequestId;
+                delete p.approvalModal;
+                delete p.approvalOpenAt;
+                return p;
+              },
+              replace: true,
+            });
+          }
+        }}
       />
 
       <Modal

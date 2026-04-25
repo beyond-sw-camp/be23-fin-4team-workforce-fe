@@ -79,12 +79,14 @@ function normalizeYesNo(v: unknown): 'YES' | 'NO' {
 function toNotificationItem(raw: unknown): NotificationItem {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const type = String(r.notificationType ?? r.type ?? 'UNKNOWN').trim();
+  const targetIdRaw =
+    r.targetId ?? r.target_id ?? r.requestId ?? r.request_id ?? r.approvalRequestId ?? r.approval_request_id;
   return {
     notificationId: String(r.notificationId ?? r.id ?? '').trim(),
     notificationType: type,
     title: NOTIFICATION_TYPE_KO[type] ?? type,
     content: String(r.content ?? '').trim(),
-    targetId: typeof r.targetId === 'string' ? r.targetId : undefined,
+    targetId: typeof targetIdRaw === 'string' ? targetIdRaw.trim() || undefined : undefined,
     targetType: typeof r.targetType === 'string' ? r.targetType : undefined,
     isRead: normalizeYesNo(r.isRead ?? r.readYn ?? r.read),
     createdAt: typeof r.createdAt === 'string' ? r.createdAt : undefined,
