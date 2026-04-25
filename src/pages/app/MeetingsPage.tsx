@@ -303,7 +303,7 @@ export default function MeetingsPage() {
 
       {/* ── 탭 ── */}
       <Tabs
-        className="[&_.ant-tabs-tab]:!tw-text-base [&_.ant-tabs-tab-btn]:!tw-font-semibold [&_.ant-tabs-ink-bar]:!tw-bg-[#3b5bdb]"
+        className="!tw-mb-0 [&_.ant-tabs-nav]:!tw-mb-0 [&_.ant-tabs-tab]:!tw-text-base [&_.ant-tabs-tab-btn]:!tw-font-semibold [&_.ant-tabs-ink-bar]:!tw-bg-[#3b5bdb]"
         activeKey={tab}
         onChange={(k) => setTab(k as 'member' | 'manager')}
         items={[
@@ -313,6 +313,7 @@ export default function MeetingsPage() {
       />
 
       <Table
+        className="!-tw-mt-1"
         rowKey="meetingRecordId"
         columns={columns}
         dataSource={meetings}

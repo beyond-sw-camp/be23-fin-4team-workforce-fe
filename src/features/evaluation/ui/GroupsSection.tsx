@@ -1,9 +1,7 @@
 import {useMemo, useState} from 'react';
-import {Avatar, Button, Dropdown, Empty, Space, Typography} from 'antd';
-import type {MenuProps} from 'antd';
+import {Avatar, Button, Empty, Space, Tooltip, Typography} from 'antd';
 import {
-    AimOutlined,
-    EllipsisOutlined,
+    EditOutlined,
     FileTextOutlined,
     PlusOutlined,
     TeamOutlined,
@@ -17,6 +15,7 @@ import {
     EvaluatorAssignDrawer,
     type AssignDrawerState,
 } from '@/features/evaluation/ui/EvaluatorAssignDrawer';
+import {GroupCreateModal} from '@/features/evaluation/ui/GroupCreateModal';
 
 const {Text} = Typography;
 
@@ -24,13 +23,19 @@ type Props = {
     groups: EvaluationGroup[];
     designs: EvaluationDesign[];
     selectedSeasonId: string;
+    seasonStatus?: 'DRAFT' | 'ACTIVE' | 'CLOSED';
     onAddGroup: () => void;
     onInvalidate: () => void;
 };
 
-export function GroupsSection({groups, designs, selectedSeasonId, onAddGroup, onInvalidate}: Props) {
-    const [assignDrawer, setAssignDrawer] = useState<AssignDrawerState>({open: false, group: null});
+export function GroupsSection({groups, designs, selectedSeasonId, seasonStatus, onAddGroup, onInvalidate}: Props) {
+    const [assignDrawer, setAssignDrawer] = useState<AssignDrawerState>({
+        open: false,
+        group: null,
+        initialTargetMemberId: null,
+    });
     const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set(groups.map((g) => g.groupId)));
+    const [editGroup, setEditGroup] = useState<EvaluationGroup | null>(null);
 
     const allMemberIds = useMemo(() => {
         const ids = new Set<string>();
@@ -64,18 +69,12 @@ export function GroupsSection({groups, designs, selectedSeasonId, onAddGroup, on
     return (
         <>
             {/* 섹션 헤더 */}
-            <div className="tw-mb-4 tw-flex tw-items-center tw-justify-between">
-                <div className="tw-flex tw-items-center tw-gap-2">
-                    <AimOutlined className="tw-text-[#6366F1]"/>
-                    <Text strong className="tw-text-[18px] tw-font-bold tw-text-slate-900">
-                        그룹 관리
-                    </Text>
-                </div>
+            <div className="tw-mb-4 tw-flex tw-items-center tw-justify-end">
                 <Button
                     type="primary"
                     icon={<PlusOutlined/>}
                     onClick={onAddGroup}
-                    className="!tw-h-10 !tw-rounded-full !tw-bg-[#6366F1] !tw-px-5 !tw-font-medium hover:!tw-bg-[#4F46E5]"
+                    className="!tw-h-10 !tw-rounded-xl !tw-border-0 !tw-bg-[#1e3a5f] !tw-px-5 !tw-font-semibold !tw-text-white hover:!tw-bg-[#152a45]"
                 >
                     새 그룹 추가
                 </Button>
@@ -95,7 +94,16 @@ export function GroupsSection({groups, designs, selectedSeasonId, onAddGroup, on
                             designName={g.designId ? designMap.get(g.designId) : undefined}
                             expanded={expandedIds.has(g.groupId)}
                             onToggle={() => toggle(g.groupId)}
-                            onAssign={() => setAssignDrawer({open: true, group: g})}
+                            onAssign={() => setAssignDrawer({open: true, group: g, initialTargetMemberId: null})}
+                            onEdit={() => setEditGroup(g)}
+                            canEdit={seasonStatus === 'DRAFT'}
+                            onAssignTarget={(targetId) =>
+                                setAssignDrawer({
+                                    open: true,
+                                    group: g,
+                                    initialTargetMemberId: targetId,
+                                })
+                            }
                             labelFor={labelFor}
                         />
                     ))}
@@ -104,11 +112,19 @@ export function GroupsSection({groups, designs, selectedSeasonId, onAddGroup, on
 
             <EvaluatorAssignDrawer
                 state={assignDrawer}
-                onClose={() => setAssignDrawer({open: false, group: null})}
+                onClose={() => setAssignDrawer({open: false, group: null, initialTargetMemberId: null})}
                 seasonId={selectedSeasonId}
                 labelFor={labelFor}
                 evalTypes={assignDrawer.group?.evaluationTypes ?? ['SELF', 'DOWNWARD', 'UPWARD', 'PEER']}
                 onSaved={onInvalidate}
+            />
+            <GroupCreateModal
+                open={!!editGroup}
+                onClose={() => setEditGroup(null)}
+                onCreated={onInvalidate}
+                seasonId={selectedSeasonId}
+                designs={designs}
+                editGroup={editGroup}
             />
         </>
     );
@@ -122,10 +138,13 @@ type GroupCardProps = {
     expanded: boolean;
     onToggle: () => void;
     onAssign: () => void;
+    onEdit: () => void;
+    canEdit: boolean;
+    onAssignTarget: (targetId: string) => void;
     labelFor: (id: string) => string;
 };
 
-function GroupCard({group, designName, expanded, onToggle, onAssign, labelFor}: GroupCardProps) {
+function GroupCard({group, designName, expanded, onToggle, onAssign, onEdit, canEdit, onAssignTarget, labelFor}: GroupCardProps) {
     const maps = group.evaluatorMaps ?? [];
     const derivedTargets = Array.from(
         new Set((maps ?? []).map((m) => m.targetMemberId).filter((v): v is string => !!v)),
@@ -146,7 +165,8 @@ function GroupCard({group, designName, expanded, onToggle, onAssign, labelFor}: 
     let statusTextClass = 'tw-text-slate-500';
     let statusDotClass = 'tw-bg-slate-400';
     if (totalExpected === 0) {
-        statusLabel = '유형 미설정';
+        // SELF만 있는 경우는 "미설정"이 아니라, 추가 지정이 필요 없는 정상 상태로 본다.
+        statusLabel = types.includes('SELF') ? '셀프만 운영' : '유형 미설정';
     } else if (totalAssigned === 0) {
         statusLabel = `0/${totalExpected} 미지정`;
         statusTextClass = 'tw-text-rose-600';
@@ -189,22 +209,33 @@ function GroupCard({group, designName, expanded, onToggle, onAssign, labelFor}: 
                     dotClass={statusDotClass}
                     value={<span className={`tw-font-semibold ${statusTextClass}`}>{statusLabel}</span>}
                 />
-                <Button
-                    icon={<UserAddOutlined/>}
-                    onClick={onAssign}
-                    className="\!tw-h-10 \!tw-rounded-full \!tw-border-slate-200 \!tw-px-4 \!tw-text-sm \!tw-font-medium \!tw-text-slate-700 hover:\!tw-border-slate-300"
-                >
-                    평가자 지정
-                </Button>
+                <div className="tw-flex tw-items-center tw-gap-2">
+                    <Tooltip title={canEdit ? undefined : '시즌 시작 이후에는 그룹을 수정할 수 없습니다.'}>
+                        <Button
+                            icon={<EditOutlined/>}
+                            onClick={onEdit}
+                            disabled={!canEdit}
+                            className="!tw-h-10 !tw-rounded-xl !tw-border-slate-200 !tw-px-4 !tw-text-sm !tw-font-medium !tw-text-slate-700 hover:!tw-border-slate-300 disabled:!tw-border-slate-200 disabled:!tw-text-slate-400"
+                        >
+                            그룹 수정
+                        </Button>
+                    </Tooltip>
+                    <Button
+                        icon={<UserAddOutlined/>}
+                        onClick={onAssign}
+                        className="!tw-h-10 !tw-rounded-xl !tw-border-slate-200 !tw-px-4 !tw-text-sm !tw-font-medium !tw-text-slate-700 hover:!tw-border-slate-300"
+                    >
+                        전체 평가자 지정
+                    </Button>
+                </div>
             </div>
 
             {/* 확장 본문 */}
             {expanded && targets.length > 0 && (
                 <div className="tw-border-t tw-border-slate-100 tw-px-5 tw-py-4">
-                    <div className="tw-grid tw-grid-cols-[minmax(180px,_220px)_1fr_48px] tw-gap-4 tw-px-2 tw-pb-2 tw-text-[11px] tw-font-medium tw-uppercase tw-tracking-wider tw-text-slate-500">
+                    <div className="tw-grid tw-grid-cols-[minmax(180px,_220px)_1fr] tw-gap-4 tw-px-2 tw-pb-2 tw-text-[11px] tw-font-medium tw-uppercase tw-tracking-wider tw-text-slate-500">
                         <span>대상자</span>
                         <span>지정된 평가자</span>
-                        <span className="tw-text-right">관리</span>
                     </div>
                     <div className="tw-space-y-2">
                         {targets.map((tid) => (
@@ -213,7 +244,7 @@ function GroupCard({group, designName, expanded, onToggle, onAssign, labelFor}: 
                                 targetId={tid}
                                 evaluators={maps.filter((m) => m.targetMemberId === tid)}
                                 labelFor={labelFor}
-                                onAdd={onAssign}
+                                onAdd={() => onAssignTarget(tid)}
                             />
                         ))}
                     </div>
@@ -254,15 +285,16 @@ type TargetRowProps = {
 function TargetRow({targetId, evaluators, labelFor, onAdd}: TargetRowProps) {
     const name = labelFor(targetId);
     const initial = name.trim().charAt(0);
-
-    const rowMenu: MenuProps['items'] = [
-        {key: 'assign', label: '평가자 관리', onClick: onAdd},
-    ];
+    const targetProfileUrl = evaluators[0]?.targetMemberProfileUrl;
 
     return (
-        <div className="tw-grid tw-grid-cols-[minmax(180px,_220px)_1fr_48px] tw-items-center tw-gap-4 tw-rounded-xl tw-px-2 tw-py-2 hover:tw-bg-slate-50">
+        <div className="tw-grid tw-grid-cols-[minmax(180px,_220px)_1fr] tw-items-center tw-gap-4 tw-rounded-xl tw-px-2 tw-py-2 hover:tw-bg-slate-50">
             <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-3">
-                <Avatar size={36} style={{backgroundColor: '#EEF2FF', color: '#6366F1', fontWeight: 600}}>
+                <Avatar
+                    size={36}
+                    src={targetProfileUrl}
+                    style={{backgroundColor: '#EEF2FF', color: '#6366F1', fontWeight: 600}}
+                >
                     {initial}
                 </Avatar>
                 <div className="tw-min-w-0">
@@ -286,12 +318,6 @@ function TargetRow({targetId, evaluators, labelFor, onAdd}: TargetRowProps) {
                 >
                     <PlusOutlined/>
                 </button>
-            </div>
-
-            <div className="tw-text-right">
-                <Dropdown menu={{items: rowMenu}} trigger={['click']} placement="bottomRight">
-                    <Button type="text" icon={<EllipsisOutlined/>} className="tw-text-slate-400 hover:tw-text-slate-700"/>
-                </Dropdown>
             </div>
         </div>
     );
@@ -325,12 +351,14 @@ function EvaluatorChip({evaluatorMap, labelFor}: {evaluatorMap: EvaluatorMap; la
             style={{background: style.bg, color: style.text}}
             title={`${evalTypeLabel(evaluatorMap.evaluationType)}: ${name}`}
         >
-            <span
-                className="tw-flex tw-size-6 tw-items-center tw-justify-center tw-rounded-full tw-text-xs tw-font-semibold tw-text-white"
-                style={{background: style.accent}}
+            <Avatar
+                size={24}
+                src={evaluatorMap.evaluatorProfileUrl}
+                className="tw-text-xs tw-font-semibold tw-text-white"
+                style={{backgroundColor: style.accent}}
             >
                 {initial}
-            </span>
+            </Avatar>
             <span className="tw-font-medium">{name}</span>
             <span className="tw-text-[10px] tw-font-semibold tw-uppercase tw-tracking-wide tw-opacity-70">
                 {evalTypeLabel(evaluatorMap.evaluationType)}

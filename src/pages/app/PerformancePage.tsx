@@ -1293,7 +1293,7 @@ function PerformancePage() {
 
           <div className="tw-mt-5 tw-space-y-4">
             <div className="tw-grid tw-w-full tw-min-w-0 tw-grid-cols-1 tw-gap-4 lg:tw-grid-cols-3">
-              <Card className="tw-rounded-3xl tw-border-slate-200/80 tw-bg-white tw-shadow-[0_1px_2px_rgba(15,23,42,0.05)] [&_.ant-card-body]:tw-p-5">
+              <Card className="tw-h-full tw-rounded-3xl tw-border-slate-200/80 tw-bg-white tw-shadow-[0_1px_2px_rgba(15,23,42,0.05)] [&_.ant-card-body]:tw-p-5">
                 <div className="tw-mb-3 tw-flex tw-items-center tw-gap-2">
                   <BarChartOutlined className="tw-text-slate-500" />
                   <Text className="tw-text-lg tw-font-semibold tw-text-slate-900">성과 현황</Text>
@@ -1314,7 +1314,7 @@ function PerformancePage() {
                 </div>
               </Card>
 
-              <Card className="tw-rounded-3xl tw-border-slate-200/80 tw-bg-white tw-shadow-[0_1px_2px_rgba(15,23,42,0.05)] [&_.ant-card-body]:tw-p-5">
+              <Card className="tw-h-full tw-rounded-3xl tw-border-slate-200/80 tw-bg-white tw-shadow-[0_1px_2px_rgba(15,23,42,0.05)] [&_.ant-card-body]:tw-p-5">
                 <div className="tw-mb-1 tw-flex tw-items-center tw-gap-2">
                   <ThunderboltOutlined className="tw-text-slate-500" />
                   <Text className="tw-text-lg tw-font-semibold tw-text-slate-900">{PERFORMANCE_PAGE_KO.avgAchievement}</Text>
@@ -1342,7 +1342,7 @@ function PerformancePage() {
                 const myCount = approvalHistoryQuery.data?.length ?? 0;
                 const hasPending = pendingCount > 0;
                 return (
-                  <Card className="tw-h-full tw-rounded-3xl tw-border-slate-200/80 tw-bg-white tw-shadow-[0_1px_2px_rgba(15,23,42,0.05)] [&_.ant-card-body]:tw-p-5">
+                  <Card className="tw-h-full tw-rounded-3xl tw-border-slate-200/80 tw-bg-white tw-shadow-[0_1px_2px_rgba(15,23,42,0.05)] [&_.ant-card-body]:tw-flex [&_.ant-card-body]:tw-h-full [&_.ant-card-body]:tw-flex-col [&_.ant-card-body]:tw-p-5">
                     <div className="tw-mb-1 tw-flex tw-items-center tw-gap-2">
                       <FileDoneOutlined className="tw-text-slate-500" />
                       <Text className="tw-text-lg tw-font-semibold tw-text-slate-900">
@@ -1352,15 +1352,15 @@ function PerformancePage() {
                     <Text className="tw-text-xs tw-text-slate-500">
                       {hasPending ? '내가 승인해야 할 목표가 있습니다.' : PERFORMANCE_PAGE_KO.approvalStripEmptyPending}
                     </Text>
-                    <div className="tw-mt-5 tw-space-y-4">
-                      <div className="tw-grid tw-w-full tw-grid-cols-2 tw-gap-2.5">
-                        <div className="tw-rounded-xl tw-bg-slate-50 tw-py-2.5 tw-text-center">
+                    <div className="tw-mt-5 tw-flex tw-flex-1 tw-flex-col tw-gap-3">
+                      <div className="tw-grid tw-h-[60%] tw-w-full tw-grid-cols-2 tw-gap-2.5">
+                        <div className="tw-flex tw-min-h-[92px] tw-flex-col tw-items-center tw-justify-center tw-rounded-xl tw-bg-slate-50 tw-px-3 tw-py-3 tw-text-center">
                           <div className="tw-text-[11px] tw-text-slate-500">{PERFORMANCE_PAGE_KO.approvalStripPendingShort}</div>
                           <div className="tw-mt-1 tw-text-[32px] tw-font-semibold tw-leading-none tw-tabular-nums tw-text-[#0f172a]">
                             {pendingCount}
                           </div>
                         </div>
-                        <div className="tw-rounded-xl tw-bg-slate-50 tw-py-2.5 tw-text-center">
+                        <div className="tw-flex tw-min-h-[92px] tw-flex-col tw-items-center tw-justify-center tw-rounded-xl tw-bg-slate-50 tw-px-3 tw-py-3 tw-text-center">
                           <div className="tw-text-[11px] tw-text-slate-500">{PERFORMANCE_PAGE_KO.approvalStripMineShort}</div>
                           <div className="tw-mt-1 tw-text-[32px] tw-font-semibold tw-leading-none tw-tabular-nums tw-text-[#0f172a]">
                             {approvalHistoryQuery.isPending ? '…' : myCount}
@@ -1370,7 +1370,7 @@ function PerformancePage() {
                       <Button
                         size="large"
                         onClick={() => setApprovalHubOpen(true)}
-                        className="!tw-h-12 !tw-w-full !tw-rounded-xl !tw-border-[#3b5bdb] !tw-bg-[#3b5bdb] !tw-font-semibold !tw-text-white hover:!tw-border-[#304ac7] hover:!tw-bg-[#304ac7]"
+                        className="!tw-mt-auto !tw-h-12 !tw-w-full !tw-rounded-xl !tw-border-[#3b5bdb] !tw-bg-[#3b5bdb] !tw-font-semibold !tw-text-white hover:!tw-border-[#304ac7] hover:!tw-bg-[#304ac7]"
                       >
                         {hasPending ? '지금 확인하기' : `${PERFORMANCE_PAGE_KO.approvalStripCenter} →`}
                       </Button>
@@ -1387,8 +1387,8 @@ function PerformancePage() {
         </>
       ) : null}
 
-      <Card className="tw-overflow-hidden tw-rounded-2xl tw-border-slate-200/80 tw-bg-white tw-shadow-[0_1px_3px_rgba(15,23,42,0.06)] [&_.ant-card-body]:tw-px-5 [&_.ant-card-body]:tw-pb-6 [&_.ant-card-body]:tw-pt-5 sm:[&_.ant-card-body]:tw-px-7 [&_.ant-tabs-nav]:tw-mb-2 [&_.ant-tabs-nav]:tw-px-0 [&_.ant-tabs-tab]:!tw-pb-3 [&_.ant-tabs-tab]:!tw-pt-1 [&_.ant-tabs-tab]:!tw-text-slate-600 [&_.ant-tabs-tab.ant-tabs-tab-active_.ant-tabs-tab-btn]:!tw-text-[#1e3a5f] [&_.ant-tabs-tab.ant-tabs-tab-active_.ant-tabs-tab-btn]:!tw-font-semibold [&_.ant-tabs-ink-bar]:!tw-bg-[#3b82f6]">
-        <Tabs
+      <Tabs
+          className="[&_.ant-tabs-nav]:tw-mb-3 [&_.ant-tabs-nav]:tw-px-0 [&_.ant-tabs-content-holder]:tw-mt-0 [&_.ant-tabs-tab]:!tw-pb-3 [&_.ant-tabs-tab]:!tw-pt-1 [&_.ant-tabs-tab]:!tw-text-slate-600 [&_.ant-tabs-tab.ant-tabs-tab-active_.ant-tabs-tab-btn]:!tw-text-[#1e3a5f] [&_.ant-tabs-tab.ant-tabs-tab-active_.ant-tabs-tab-btn]:!tw-font-semibold [&_.ant-tabs-ink-bar]:!tw-bg-[#3b82f6]"
           activeKey={tab}
           onChange={(k) => setTab(k as 'goals' | 'templates')}
           items={[
@@ -1396,7 +1396,7 @@ function PerformancePage() {
               key: 'goals',
               label: PERFORMANCE_PAGE_KO.tabGoals,
               children: (
-                <Space direction="vertical" className="tw-w-full" size={16}>
+                <div className="tw-space-y-3">
                   <div className="tw-flex tw-flex-col tw-gap-3 lg:tw-flex-row lg:tw-items-stretch lg:tw-gap-3">
                     <div className="tw-flex tw-w-full tw-flex-col tw-gap-2 lg:tw-w-auto lg:tw-flex-row lg:tw-items-center">
                       <Segmented
@@ -1507,120 +1507,75 @@ function PerformancePage() {
                       </PermissionGuard>
                     </div>
                   </div>
-
-                  <div className="tw-flex tw-items-center tw-gap-2 tw-text-sm tw-text-slate-500">
-                    <span className="tw-font-semibold tw-tabular-nums tw-text-[#1e3a5f]">{sortedFilteredGoals.length}개</span>
-                    <span>목표</span>
-                    {goalFilters.cycles.length > 0 && (
-                      <Tag color="blue" className="!tw-m-0 !tw-text-[11px]">
-                        사이클 {goalFilters.cycles.length}개 필터
-                      </Tag>
-                    )}
-                    {goalFilters.statuses.length > 0 && (
-                      <Tag color="gold" className="!tw-m-0 !tw-text-[11px]">
-                        상태 {goalFilters.statuses.length}개 필터
-                      </Tag>
-                    )}
-                  </div>
-
-                  <div className="tw-grid tw-grid-cols-1 tw-gap-4 xl:tw-grid-cols-[minmax(0,1fr)_280px]">
-                    <GoalsListCards
-                      goals={sortedFilteredGoals}
-                      loading={loadingGoals}
-                      memberId={memberId}
-                      formatOwnerLabel={formatGoalOwner}
-                      canCreate={canCreate}
-                      emptyTitle={PERFORMANCE_PAGE_KO.emptyGoalsTitle}
-                      emptyHint={PERFORMANCE_PAGE_KO.emptyGoalsHint}
-                      onOpenDetail={setDetailGoal}
-                      onActivate={(id) => {
-                        const goal = goalsList.find((g) => g.id === id);
-                        if (goal) {
-                          const policy = resolveGoalApprovalPolicy(goal, templates);
-                          if (policyRequiresActivation(policy)) {
-                            // 승인이 필요한 경우 상세 모달을 열어 승인 요청 흐름으로 유도
-                            setDetailGoal(goal);
-                            return;
-                          }
-                        }
-                        activateMutation.mutate(id);
-                      }}
-                      onCreateChildGoal={openCreateChildGoal}
-                      activatingGoalId={activatingGoalId}
-                      templates={templates}
-                    />
-                    <aside className="tw-rounded-xl tw-border tw-border-slate-200 tw-bg-white tw-p-3">
-                      <Input
-                        allowClear
-                        value={ownerPanelSearch}
-                        onChange={(e) => setOwnerPanelSearch(e.target.value)}
-                        placeholder={PERFORMANCE_PAGE_KO.orgSearchPlaceholder}
-                        className="!tw-mb-3 [&_.ant-input]:tw-rounded-lg"
-                      />
-                      <div className="tw-mb-1 tw-text-xs tw-font-semibold tw-text-slate-500">{PERFORMANCE_PAGE_KO.quickPickTitle}</div>
-                      <div className="tw-space-y-1.5">
-                        <button
-                          type="button"
-                          onClick={() => setOwnerQuickPick('ALL')}
-                          className={`tw-flex tw-w-full tw-items-center tw-justify-between tw-rounded-lg tw-border tw-px-2.5 tw-py-2 tw-text-left tw-text-sm ${
-                            ownerQuickPick === 'ALL'
-                              ? 'tw-border-[#3b82f6] tw-bg-blue-50 tw-text-[#1e3a5f]'
-                              : 'tw-border-slate-200 tw-bg-white tw-text-slate-600'
-                          }`}
-                        >
-                          <span>{PERFORMANCE_PAGE_KO.quickPickAll}</span>
-                          <span className="tw-text-xs">{scopedGoalsByTab.length}</span>
-                        </button>
-                        {ownerQuickPickOptions.slice(0, 14).map((ownerId) => {
-                          const count = scopedGoalsByTab.filter((g) => String(g.ownerId ?? '').trim() === ownerId).length;
-                          return (
-                            <button
-                              key={ownerId}
-                              type="button"
-                              onClick={() => setOwnerQuickPick(ownerId)}
-                              className={`tw-flex tw-w-full tw-items-center tw-justify-between tw-rounded-lg tw-border tw-px-2.5 tw-py-2 tw-text-left tw-text-sm ${
-                                ownerQuickPick === ownerId
-                                  ? 'tw-border-[#3b82f6] tw-bg-blue-50 tw-text-[#1e3a5f]'
-                                  : 'tw-border-slate-200 tw-bg-white tw-text-slate-600'
-                              }`}
-                            >
-                              <span className="tw-truncate">{ownerPickLabel(ownerId)}</span>
-                              <span className="tw-text-xs">{count}</span>
-                            </button>
-                          );
-                        })}
+                  <Card className="tw-overflow-hidden tw-rounded-2xl tw-border-slate-200/80 tw-bg-white tw-shadow-[0_1px_3px_rgba(15,23,42,0.06)] [&_.ant-card-body]:tw-px-5 [&_.ant-card-body]:tw-pb-5 [&_.ant-card-body]:tw-pt-4 sm:[&_.ant-card-body]:tw-px-7">
+                    <Space direction="vertical" className="tw-w-full" size={16}>
+                      <div className="tw-grid tw-grid-cols-1 tw-gap-4 xl:tw-grid-cols-[minmax(0,1fr)_280px]">
+                        <GoalsListCards
+                          goals={sortedFilteredGoals}
+                          loading={loadingGoals}
+                          memberId={memberId}
+                          formatOwnerLabel={formatGoalOwner}
+                          canCreate={canCreate}
+                          emptyTitle={PERFORMANCE_PAGE_KO.emptyGoalsTitle}
+                          emptyHint={PERFORMANCE_PAGE_KO.emptyGoalsHint}
+                          onOpenDetail={setDetailGoal}
+                          onActivate={(id) => {
+                            const goal = goalsList.find((g) => g.id === id);
+                            if (goal) {
+                              const policy = resolveGoalApprovalPolicy(goal, templates);
+                              if (policyRequiresActivation(policy)) {
+                                // 승인이 필요한 경우 상세 모달을 열어 승인 요청 흐름으로 유도
+                                setDetailGoal(goal);
+                                return;
+                              }
+                            }
+                            activateMutation.mutate(id);
+                          }}
+                          onCreateChildGoal={openCreateChildGoal}
+                          activatingGoalId={activatingGoalId}
+                          templates={templates}
+                        />
+                        <aside className="tw-rounded-xl tw-border tw-border-slate-200 tw-bg-white tw-p-3">
+                          <Input
+                            allowClear
+                            value={ownerPanelSearch}
+                            onChange={(e) => setOwnerPanelSearch(e.target.value)}
+                            placeholder={PERFORMANCE_PAGE_KO.orgSearchPlaceholder}
+                            className="!tw-mb-3 [&_.ant-input]:tw-rounded-lg"
+                          />
+                          <div className="tw-mb-1 tw-text-xs tw-font-semibold tw-text-slate-500">{PERFORMANCE_PAGE_KO.orgPanelTitle}</div>
+                          <Tree
+                            blockNode
+                            showLine
+                            defaultExpandAll
+                            selectedKeys={ownerTreeSelectedKeys}
+                            treeData={ownerTreeData}
+                            onSelect={(keys) => {
+                              const key = String(keys[0] ?? '');
+                              if (!key) return;
+                              if (key === 'all') {
+                                setOwnerQuickPick('ALL');
+                                return;
+                              }
+                              if (key === 'members' || key === 'org') return;
+                              if (key.startsWith('m:') || key.startsWith('o:')) {
+                                setOwnerQuickPick(key.slice(2));
+                              }
+                            }}
+                            className="tw-rounded-lg tw-border tw-border-slate-100 tw-bg-slate-50/40 tw-p-2 [&_.ant-tree-node-content-wrapper]:tw-rounded-md"
+                          />
+                        </aside>
                       </div>
-                      <div className="tw-mb-1 tw-mt-4 tw-text-xs tw-font-semibold tw-text-slate-500">{PERFORMANCE_PAGE_KO.orgPanelTitle}</div>
-                      <Tree
-                        blockNode
-                        showLine
-                        defaultExpandAll
-                        selectedKeys={ownerTreeSelectedKeys}
-                        treeData={ownerTreeData}
-                        onSelect={(keys) => {
-                          const key = String(keys[0] ?? '');
-                          if (!key) return;
-                          if (key === 'all') {
-                            setOwnerQuickPick('ALL');
-                            return;
-                          }
-                          if (key === 'members' || key === 'org') return;
-                          if (key.startsWith('m:') || key.startsWith('o:')) {
-                            setOwnerQuickPick(key.slice(2));
-                          }
-                        }}
-                        className="tw-rounded-lg tw-border tw-border-slate-100 tw-bg-slate-50/40 tw-p-2 [&_.ant-tree-node-content-wrapper]:tw-rounded-md"
-                      />
-                    </aside>
-                  </div>
-                </Space>
+                    </Space>
+                  </Card>
+                </div>
               ),
             },
             {
               key: 'templates',
               label: PERFORMANCE_PAGE_KO.tabTemplates,
               children: (
-                <Space direction="vertical" className="tw-w-full" size={16}>
+                <div className="tw-space-y-3">
                   <div className="tw-flex tw-flex-col tw-gap-3 lg:tw-flex-row lg:tw-items-stretch lg:tw-gap-3">
                     <AppSearchField
                       className="lg:tw-flex-1"
@@ -1641,27 +1596,30 @@ function PerformancePage() {
                       </PermissionGuard>
                     </div>
                   </div>
-                  <Paragraph className="!tw-mb-0 !tw-text-sm !tw-leading-relaxed !tw-text-slate-600">
-                    {PERFORMANCE_PAGE_KO.tabTemplatesIntro}
-                  </Paragraph>
-                  <KpiTemplateCards
-                    templates={filteredTemplates}
-                    loading={loadingTpl}
-                    emptyMessage={
-                      templates.length > 0 && filteredTemplates.length === 0
-                        ? PERFORMANCE_PAGE_KO.emptyTemplatesSearch
-                        : PERFORMANCE_PAGE_KO.emptyTemplates
-                    }
-                    canDeactivate={canUpdate}
-                    onDeactivate={(id) => deactivateTplMutation.mutate(id)}
-                    deactivatingId={deactivatingTemplateId}
-                  />
-                </Space>
+                  <Card className="tw-overflow-hidden tw-rounded-2xl tw-border-slate-200/80 tw-bg-white tw-shadow-[0_1px_3px_rgba(15,23,42,0.06)] [&_.ant-card-body]:tw-px-5 [&_.ant-card-body]:tw-pb-5 [&_.ant-card-body]:tw-pt-4 sm:[&_.ant-card-body]:tw-px-7">
+                    <Space direction="vertical" className="tw-w-full" size={16}>
+                      <Paragraph className="!tw-mb-0 !tw-text-sm !tw-leading-relaxed !tw-text-slate-600">
+                        {PERFORMANCE_PAGE_KO.tabTemplatesIntro}
+                      </Paragraph>
+                      <KpiTemplateCards
+                        templates={filteredTemplates}
+                        loading={loadingTpl}
+                        emptyMessage={
+                          templates.length > 0 && filteredTemplates.length === 0
+                            ? PERFORMANCE_PAGE_KO.emptyTemplatesSearch
+                            : PERFORMANCE_PAGE_KO.emptyTemplates
+                        }
+                        canDeactivate={canUpdate}
+                        onDeactivate={(id) => deactivateTplMutation.mutate(id)}
+                        deactivatingId={deactivatingTemplateId}
+                      />
+                    </Space>
+                  </Card>
+                </div>
               ),
             },
           ]}
         />
-      </Card>
 
       {companyId ? (
         <Modal

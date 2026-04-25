@@ -386,7 +386,12 @@ export function EvaluationWritePage() {
               <AppButton variant="secondary" onClick={() => saveMut.mutate()} loading={saveMut.isPending}>
                 <SaveOutlined /> {L.writeSave}
               </AppButton>
-              <AppButton variant="primary" onClick={handleSubmit} loading={submitMut.isPending}>
+              <AppButton
+                variant="primary"
+                onClick={handleSubmit}
+                loading={submitMut.isPending}
+                className="!tw-rounded-xl !tw-bg-[#1e3a5f] hover:!tw-bg-[#152a45]"
+              >
                 <SendOutlined /> {L.writeSubmit}
               </AppButton>
             </div>

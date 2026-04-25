@@ -1,6 +1,6 @@
 import { RightOutlined, SearchOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { Input, Modal, Spin, Tree, Typography } from 'antd';
+import { Input, Spin, Tree, Typography } from 'antd';
 import type { DataNode } from 'antd/es/tree';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -9,6 +9,7 @@ import {
   type OrgChartOrgNode,
   organizationApi,
 } from '@/features/organization/api/organizationApi';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 
 const MEMBER_KEY_PREFIX = 'm:';
 
@@ -122,23 +123,23 @@ export function SingleMemberOrgChartSelectModal({
   }, [treeData]);
 
   return (
-    <Modal
+    <AppDoubleActionModal
       open={open}
       title={title}
-      onCancel={onClose}
-      onOk={() => {
+      onClose={onClose}
+      onConfirm={() => {
         if (!selectedKey) return;
         const sel = memberByKey.get(selectedKey);
         if (!sel) return;
         onSelect(sel);
       }}
-      okText="선택"
+      confirmText="선택"
       cancelText="닫기"
-      okButtonProps={{ disabled: !selectedKey }}
+      confirmDisabled={!selectedKey}
       width={560}
       destroyOnHidden
     >
-      <div className="tw-space-y-3">
+      <div className="tw-space-y-3 tw-px-5 tw-py-4">
         <Input
           allowClear
           value={keyword}
@@ -175,7 +176,7 @@ export function SingleMemberOrgChartSelectModal({
           )}
         </Spin>
       </div>
-    </Modal>
+    </AppDoubleActionModal>
   );
 }
 

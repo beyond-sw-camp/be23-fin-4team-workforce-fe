@@ -9,7 +9,6 @@ import {
     Card,
     Col,
     Empty,
-    Input,
     Popconfirm,
     Progress,
     Row,
@@ -29,7 +28,6 @@ import {
     FileDoneOutlined,
     NotificationOutlined,
     PlayCircleOutlined,
-    SearchOutlined,
     SendOutlined,
     SoundOutlined,
     StopOutlined,
@@ -58,6 +56,7 @@ import {GroupCreateModal} from '@/features/evaluation/ui/GroupCreateModal';
 import {PERM} from '@/features/permissions/backend-permissions';
 import {usePermissions} from '@/features/permissions/usePermissionsHook';
 import {AppButton} from '@/shared/ui/AppButton';
+import {AppSearchField} from '@/shared/ui/AppSearchField';
 import {AppInlinePillButton} from '@/shared/ui/AppInlinePillButton';
 import {DetailPageHeader} from '@/shared/ui/DetailPageHeader';
 import {parseApiError} from '@/shared/api/error-parser';
@@ -78,7 +77,7 @@ function progressStatusPill(s: EvaluationStatus) {
     }
     if (s === 'IN_PROGRESS') {
         return (
-            <span className="tw-inline-flex tw-items-center tw-rounded-full tw-bg-indigo-50 tw-px-2.5 tw-py-0.5 tw-text-xs tw-font-medium tw-text-[#6366F1]">
+            <span className="tw-inline-flex tw-items-center tw-rounded-full tw-bg-blue-50 tw-px-2.5 tw-py-0.5 tw-text-xs tw-font-medium tw-text-[#1e3a5f]">
                 진행 중
             </span>
         );
@@ -135,6 +134,36 @@ export function EvaluationSeasonDetailPage() {
         queryFn: () => evaluationApi.listGroups(seasonId),
         enabled: !!seasonId,
     });
+    const startReadiness = useMemo(() => {
+        if (!groups.length) {
+            return {ready: false, reason: '그룹이 없어 시즌을 시작할 수 없습니다. 최소 1개 그룹을 생성해 주세요.'};
+        }
+        for (const g of groups) {
+            const targets = g.targetMemberIds ?? [];
+            const evalTypes = g.evaluationTypes ?? [];
+            const maps = g.evaluatorMaps ?? [];
+            if (!targets.length) {
+                return {ready: false, reason: `그룹 '${g.name}'에 대상 인원이 없어 시즌을 시작할 수 없습니다.`};
+            }
+            if (!evalTypes.length) {
+                return {ready: false, reason: `그룹 '${g.name}'에 평가 유형이 없어 시즌을 시작할 수 없습니다.`};
+            }
+            const missing = targets.some((tid) =>
+                evalTypes.some((et) =>
+                    !maps.some((m) =>
+                        m.targetMemberId === tid &&
+                        m.evaluationType === et &&
+                        m.evaluatorId &&
+                        (et === 'SELF' ? m.evaluatorId === tid : m.evaluatorId !== tid),
+                    ),
+                ),
+            );
+            if (missing) {
+                return {ready: false, reason: `그룹 '${g.name}'의 평가자 지정이 완료되지 않았습니다.`};
+            }
+        }
+        return {ready: true, reason: ''};
+    }, [groups]);
 
     // 진행도 쿼리는 검색어까지 key 에 포함해 서버사이드 필터링을 받음
     // 요약(진행률)은 q가 빈 상태의 전체 집계로 계산하므로 별도 query key 사용
@@ -287,7 +316,7 @@ export function EvaluationSeasonDetailPage() {
                         <Avatar
                             size={36}
                             src={g.evaluatorProfileUrl}
-                            style={{backgroundColor: '#EEF2FF', color: '#6366F1', fontWeight: 600}}
+                            style={{backgroundColor: '#E6F0FF', color: '#1e3a5f', fontWeight: 600}}
                         >
                             {initial}
                         </Avatar>
@@ -318,7 +347,7 @@ export function EvaluationSeasonDetailPage() {
                             percent={pct}
                             size="small"
                             showInfo={false}
-                            strokeColor={pct === 100 ? '#10B981' : '#6366F1'}
+                            strokeColor={pct === 100 ? '#10B981' : '#1e3a5f'}
                         />
                     </div>
                 );
@@ -354,7 +383,7 @@ export function EvaluationSeasonDetailPage() {
                 g.pending > 0 ? (
                     <AppInlinePillButton
                         onClick={() => sendOneReminderMut.mutate(g.evaluatorId)}
-                        className="tw-px-3 tw-py-1 tw-text-sm tw-font-medium tw-text-[#6366F1] hover:tw-bg-indigo-50"
+                        className="tw-px-3 tw-py-1 tw-text-sm tw-font-medium tw-text-[#1e3a5f] hover:tw-bg-blue-50"
                     >
                         <SendOutlined/> 리마인드 발송
                     </AppInlinePillButton>
@@ -536,10 +565,10 @@ export function EvaluationSeasonDetailPage() {
             {/* 히어로 카드: 레퍼런스와 유사한 좌(배지·제목·메타·액션) / 우(진행률) */}
             <Card
                 className="tw-rounded-3xl tw-border tw-border-slate-200/80 tw-shadow-sm tw-shadow-slate-900/5"
-                styles={{body: {padding: '28px 28px 26px'}}}
+                styles={{body: {padding: '28px 0 26px'}}}
             >
                 <div className="tw-flex tw-flex-col tw-gap-8 lg:tw-flex-row lg:tw-items-stretch lg:tw-gap-0">
-                    <div className="tw-flex tw-min-h-0 tw-min-w-0 tw-flex-1 tw-flex-col tw-gap-4 lg:tw-pr-10">
+                    <div className="tw-flex tw-min-h-0 tw-min-w-0 tw-flex-1 tw-flex-col tw-gap-4 tw-px-6 lg:tw-pr-10 lg:tw-pl-6">
                         <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
                             {seasonStatusTag(season.status)}
                             {resultsPublishedTag(season.resultsPublishedAt)}
@@ -572,20 +601,29 @@ export function EvaluationSeasonDetailPage() {
 
                         {canUpdate && (
                             <div className="tw-mt-auto tw-flex tw-flex-wrap tw-gap-2 tw-pt-4">
-                                {season.status === 'DRAFT' && (
-                            <Popconfirm
-                                title={L.seasonStartConfirm}
-                                onConfirm={() => startSeasonMut.mutate()}
-                            >
-                                <Button
-                                    type="primary"
-                                    icon={<PlayCircleOutlined />}
-                                    className="!tw-h-9 !tw-rounded-full !tw-border-0 !tw-bg-[#6366F1] !tw-px-4 !tw-text-sm !tw-font-semibold hover:!tw-bg-[#4F46E5]"
-                                >
-                                    {L.seasonStart}
-                                </Button>
-                            </Popconfirm>
-                        )}
+                                {season.status === 'DRAFT' && (() => {
+                                    const startButton = (
+                                        <Button
+                                            type="primary"
+                                            icon={<PlayCircleOutlined />}
+                                            disabled={!startReadiness.ready}
+                                            className="!tw-h-9 !tw-rounded-full !tw-border-0 !tw-bg-[#1e3a5f] !tw-px-4 !tw-text-sm !tw-font-semibold hover:!tw-bg-[#152a45] disabled:!tw-bg-slate-200 disabled:!tw-text-slate-500"
+                                        >
+                                            {L.seasonStart}
+                                        </Button>
+                                    );
+                                    if (!startReadiness.ready) {
+                                        return <Tooltip title={startReadiness.reason}>{startButton}</Tooltip>;
+                                    }
+                                    return (
+                                        <Popconfirm
+                                            title={L.seasonStartConfirm}
+                                            onConfirm={() => startSeasonMut.mutate()}
+                                        >
+                                            {startButton}
+                                        </Popconfirm>
+                                    );
+                                })()}
 
                         {/* 결과 공개 (ACTIVE + 미공개 상태 + 모든 응답 SUBMITTED 시 활성) */}
                         {season.status === 'ACTIVE' && !season.resultsPublishedAt && (() => {
@@ -597,7 +635,7 @@ export function EvaluationSeasonDetailPage() {
                                     icon={<SoundOutlined />}
                                     loading={publishResultsMut.isPending}
                                     disabled={!allSubmitted}
-                                    className="!tw-h-9 !tw-rounded-full !tw-border-0 !tw-bg-[#6366F1] !tw-px-4 !tw-text-sm !tw-font-semibold hover:!tw-bg-[#4F46E5] disabled:!tw-bg-slate-200 disabled:!tw-text-slate-500"
+                                    className="!tw-h-9 !tw-rounded-full !tw-border-0 !tw-bg-[#1e3a5f] !tw-px-4 !tw-text-sm !tw-font-semibold hover:!tw-bg-[#152a45] disabled:!tw-bg-slate-200 disabled:!tw-text-slate-500"
                                 >
                                     결과 공개
                                 </Button>
@@ -685,21 +723,21 @@ export function EvaluationSeasonDetailPage() {
                     />
 
                     {/* 우측 진행률 (레퍼런스: 큰 %, 바, 완료/전체) */}
-                    <div className="tw-flex tw-w-full tw-shrink-0 tw-flex-col tw-justify-center lg:tw-w-[min(100%,300px)] lg:tw-min-w-[260px] lg:tw-pl-10">
+                    <div className="tw-flex tw-w-full tw-shrink-0 tw-flex-col tw-justify-center tw-px-6 lg:tw-w-[min(100%,300px)] lg:tw-min-w-[260px] lg:tw-pl-10 lg:tw-pr-6">
                         <div className="tw-rounded-2xl tw-border tw-border-slate-100 tw-bg-slate-50/80 tw-p-6 lg:tw-border-0 lg:tw-bg-transparent lg:tw-p-0">
                             <div className="tw-text-[11px] tw-font-semibold tw-uppercase tw-tracking-[0.14em] tw-text-slate-400">
                                 Progress
                             </div>
                             <div className="tw-mt-2 tw-flex tw-items-end tw-gap-1">
-                                <span className="tw-text-[48px] tw-font-bold tw-leading-none tw-tracking-tight tw-text-[#4F46E5] sm:tw-text-[52px]">
+                                <span className="tw-text-[48px] tw-font-bold tw-leading-none tw-tracking-tight tw-text-[#1e3a5f] sm:tw-text-[52px]">
                                     {progressPct}
                                 </span>
-                                <span className="tw-mb-2 tw-text-2xl tw-font-bold tw-text-[#6366F1]">%</span>
+                                <span className="tw-mb-2 tw-text-2xl tw-font-bold tw-text-[#1e3a5f]">%</span>
                             </div>
                             <Progress
                                 percent={progressPct}
                                 showInfo={false}
-                                strokeColor={{from: '#818CF8', to: '#4F46E5'}}
+                                strokeColor={{from: '#4A78B8', to: '#1e3a5f'}}
                                 trailColor="#E2E8F0"
                                 strokeLinecap="round"
                                 className="!tw-m-0 tw-mt-5 [&_.ant-progress-inner]:!tw-rounded-full [&_.ant-progress-bg]:!tw-rounded-full"
@@ -733,19 +771,13 @@ export function EvaluationSeasonDetailPage() {
                             </span>
                         ),
                         children: (
-                            <Card
-                                className="tw-rounded-2xl tw-border tw-border-slate-200/80 tw-shadow-sm tw-shadow-slate-900/5"
-                                styles={{body: {padding: 20}}}
-                            >
+                            <div className="tw-space-y-3">
                                 <div className="tw-flex tw-flex-col tw-gap-3 sm:tw-flex-row sm:tw-items-center sm:tw-justify-between">
-                                    <Input
-                                        allowClear
-                                        prefix={<SearchOutlined className="tw-text-slate-400"/>}
+                                    <AppSearchField
+                                        className="sm:!tw-max-w-md"
                                         placeholder="구성원 이름 또는 부서 검색..."
                                         value={progressSearch}
                                         onChange={(e) => setProgressSearch(e.target.value)}
-                                        className="sm:!tw-max-w-md"
-                                        size="large"
                                     />
                                     {canUpdate && (
                                         <Popconfirm
@@ -755,14 +787,17 @@ export function EvaluationSeasonDetailPage() {
                                             <Button
                                                 type="primary"
                                                 icon={<NotificationOutlined/>}
-                                                className="!tw-h-10 !tw-rounded-full !tw-bg-[#6366F1] !tw-px-5 !tw-font-medium hover:!tw-bg-[#4F46E5]"
+                                                className="!tw-h-10 !tw-rounded-xl !tw-border-0 !tw-bg-[#1e3a5f] !tw-px-5 !tw-font-semibold hover:!tw-bg-[#152a45]"
                                             >
                                                 미제출자 리마인드 일괄 발송
                                             </Button>
                                         </Popconfirm>
                                     )}
                                 </div>
-                                <div className="tw-mt-5">
+                                <Card
+                                    className="tw-rounded-2xl tw-border tw-border-slate-200/80 tw-shadow-sm tw-shadow-slate-900/5"
+                                    styles={{body: {padding: 20}}}
+                                >
                                     <Table<EvaluatorGroup>
                                         columns={progressCols}
                                         dataSource={evaluatorGroups}
@@ -811,8 +846,8 @@ export function EvaluationSeasonDetailPage() {
                                             ),
                                         }}
                                     />
-                                </div>
-                            </Card>
+                                </Card>
+                            </div>
                         ),
                     },
                     {
@@ -827,6 +862,7 @@ export function EvaluationSeasonDetailPage() {
                                 groups={groups}
                                 designs={designs}
                                 selectedSeasonId={seasonId}
+                                seasonStatus={season.status}
                                 onAddGroup={() => setGroupCreateOpen(true)}
                                 onInvalidate={invalidate}
                             />
@@ -866,7 +902,7 @@ export function EvaluationSeasonDetailPage() {
                                                                     <span>{grade}</span>
                                                                     <span>{pct}%</span>
                                                                 </div>
-                                                                <Progress percent={pct} showInfo={false} strokeColor="#6366F1" />
+                                                                <Progress percent={pct} showInfo={false} strokeColor="#1e3a5f" />
                                                             </div>
                                                         );
                                                     })}
@@ -1013,7 +1049,7 @@ export function EvaluationSeasonDetailPage() {
                                                                 <Progress
                                                                     percent={row.pct}
                                                                     showInfo={false}
-                                                                    strokeColor="#6366F1"
+                                                                    strokeColor="#1e3a5f"
                                                                 />
                                                             </div>
                                                         ))}

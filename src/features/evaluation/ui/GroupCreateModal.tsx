@@ -5,10 +5,10 @@ import {RightOutlined, SearchOutlined, TeamOutlined} from '@ant-design/icons';
 import {useEffect, useMemo, useState} from 'react';
 import {EVALUATION_PAGE_KO as L} from '@/app/locale/app-ko';
 import {evaluationApi} from '@/features/evaluation/api/evaluationApi';
-import type {CreateGroupPayload, EvaluationDesign} from '@/features/evaluation/model/types';
+import type {CreateGroupPayload, EvaluationDesign, EvaluationGroup} from '@/features/evaluation/model/types';
 import {AppButton} from '@/shared/ui/AppButton';
 import {AppDoubleActionModal} from '@/shared/ui/AppDoubleActionModal';
-import {MemberRemoteSelect} from '@/features/members/ui/MemberRemoteSelect';
+import {parseApiError} from '@/shared/api/error-parser';
 import {
     ORG_CHART_HIDDEN_JOB_GRADE,
     type OrgChartOrgNode,
@@ -21,12 +21,15 @@ type Props = {
     onCreated: () => void;
     seasonId: string;
     designs: EvaluationDesign[];
+    editGroup?: EvaluationGroup | null;
 };
 
-export function GroupCreateModal({open, onClose, onCreated, seasonId, designs}: Props) {
+export function GroupCreateModal({open, onClose, onCreated, seasonId, designs, editGroup}: Props) {
     const {message} = App.useApp();
     const [form] = Form.useForm();
     const [orgPickerOpen, setOrgPickerOpen] = useState(false);
+    const [orgPickerInitialSelectedIds, setOrgPickerInitialSelectedIds] = useState<string[]>([]);
+    const isEditMode = !!editGroup;
 
     const createMut = useMutation({
         mutationFn: (body: CreateGroupPayload) => evaluationApi.createGroup(seasonId, body),
@@ -36,26 +39,58 @@ export function GroupCreateModal({open, onClose, onCreated, seasonId, designs}: 
             onCreated();
             onClose();
         },
+        onError: (err) => {
+            message.error(parseApiError(err).message);
+        },
     });
+    const updateMut = useMutation({
+        mutationFn: (body: CreateGroupPayload) => {
+            if (!editGroup) throw new Error('수정 대상 그룹이 없습니다.');
+            return evaluationApi.updateGroup(seasonId, editGroup.groupId, body);
+        },
+        onSuccess: () => {
+            message.success('그룹이 수정되었습니다.');
+            form.resetFields();
+            onCreated();
+            onClose();
+        },
+        onError: (err) => {
+            message.error(parseApiError(err).message);
+        },
+    });
+
+    useEffect(() => {
+        if (!open) return;
+        if (editGroup) {
+            form.setFieldsValue({
+                name: editGroup.name,
+                evaluationTypes: editGroup.evaluationTypes ?? [],
+                targetMemberIds: editGroup.targetMemberIds ?? [],
+                designId: editGroup.designId ?? undefined,
+            });
+            return;
+        }
+        form.resetFields();
+    }, [open, editGroup, form]);
 
     return (
         <AppDoubleActionModal
-            title={L.groupAdd}
+            title={isEditMode ? '그룹 수정' : L.groupAdd}
             open={open}
             onClose={onClose}
             onConfirm={() => form.submit()}
             width={560}
             destroyOnHidden
             cancelText={L.cancel}
-            confirmText={L.save}
-            confirmLoading={createMut.isPending}
+            confirmText={isEditMode ? '수정 저장' : L.save}
+            confirmLoading={createMut.isPending || updateMut.isPending}
         >
             <Form
                 form={form}
                 layout="vertical"
                 className="tw-px-5 tw-py-4"
                 onFinish={(v) =>
-                    createMut.mutate({
+                    (isEditMode ? updateMut : createMut).mutate({
                         name: v.name,
                         evaluationTypes: v.evaluationTypes ?? [],
                         targetMemberIds: v.targetMemberIds ?? [],
@@ -109,13 +144,15 @@ export function GroupCreateModal({open, onClose, onCreated, seasonId, designs}: 
                     ]}
                 >
                     <div className="tw-space-y-2">
-                        <MemberRemoteSelect multiple placeholder="이름·이메일로 검색하여 추가" />
                         <div className="tw-flex tw-justify-end">
                             <AppButton
                                 variant="secondary"
                                 icon={<TeamOutlined/>}
                                 className="!tw-h-9 !tw-rounded-full !tw-px-3 !tw-text-xs !tw-font-semibold"
-                                onClick={() => setOrgPickerOpen(true)}
+                                onClick={() => {
+                                    setOrgPickerInitialSelectedIds(form.getFieldValue('targetMemberIds') ?? []);
+                                    setOrgPickerOpen(true);
+                                }}
                             >
                                 조직도에서 선택
                             </AppButton>
@@ -137,11 +174,10 @@ export function GroupCreateModal({open, onClose, onCreated, seasonId, designs}: 
             <OrgMemberPickerModal
                 open={orgPickerOpen}
                 onClose={() => setOrgPickerOpen(false)}
-                initialSelectedIds={form.getFieldValue('targetMemberIds') ?? []}
+                initialSelectedIds={orgPickerInitialSelectedIds}
                 onApply={(ids) => {
-                    const prev = form.getFieldValue('targetMemberIds') ?? [];
-                    const merged = Array.from(new Set<string>([...prev, ...ids]));
-                    form.setFieldValue('targetMemberIds', merged);
+                    const next = Array.from(new Set<string>(ids ?? []));
+                    form.setFieldValue('targetMemberIds', next);
                     void form.validateFields(['targetMemberIds']);
                 }}
             />

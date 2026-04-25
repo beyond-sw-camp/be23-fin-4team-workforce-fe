@@ -38,7 +38,6 @@ import {MyEvaluationAssignmentsContent} from '@/features/evaluation/ui/MyEvaluat
 import {PERM} from '@/features/permissions/backend-permissions';
 import {usePermissions} from '@/features/permissions/usePermissionsHook';
 import {AppInlinePillButton} from '@/shared/ui/AppInlinePillButton';
-import {AppButton} from '@/shared/ui/AppButton';
 import {AppWorkspacePageTitle} from '@/shared/ui/AppWorkspacePageTitle';
 import {parseApiError} from '@/shared/api/error-parser';
 
@@ -354,7 +353,7 @@ export function EvaluationsHubPage() {
                                                 <Button
                                                     icon={<PlusOutlined/>}
                                                     onClick={() => setSeasonCreateOpen(true)}
-                                                    className="tw-rounded-full tw-border-slate-200 tw-px-4 tw-py-4 tw-text-sm tw-font-medium tw-text-slate-700 tw-shadow-sm hover:\!tw-border-slate-300"
+                                                    className="!tw-h-10 !tw-rounded-xl !tw-border-0 !tw-bg-[#1e3a5f] !tw-px-4 !tw-text-sm !tw-font-semibold !tw-text-white hover:!tw-bg-[#152a45]"
                                                 >
                                                     새로운 시즌 개설
                                                 </Button>
@@ -418,16 +417,16 @@ export function EvaluationsHubPage() {
                                                     </div>
                                                 </div>
                                                 {canCreate && (
-                                                    <AppButton
-                                                        variant="secondary"
+                                                    <Button
+                                                        type="primary"
                                                         onClick={() => {
                                                             setEditingDesign(null);
                                                             setDesignCreateOpen(true);
                                                         }}
-                                                        className="!tw-h-auto !tw-rounded-full !tw-border-slate-200 !tw-px-4 !tw-py-2.5 !tw-text-sm !tw-font-medium !tw-text-slate-700 !tw-shadow-sm hover:!tw-border-slate-300"
+                                                        className="!tw-h-10 !tw-w-full !tw-rounded-xl !tw-border-0 !tw-bg-[#1e3a5f] !tw-px-4 !tw-text-sm !tw-font-semibold !tw-text-white hover:!tw-bg-[#152a45] sm:!tw-w-auto"
                                                     >
                                                         <PlusOutlined /> 새 설계 만들기
-                                                    </AppButton>
+                                                    </Button>
                                                 )}
                                             </div>
                                         </Card>
@@ -663,7 +662,7 @@ function PendingEvaluationsCard({items, totalCount, onStart, onViewAll}: Pending
                                     <Button
                                         type="primary"
                                         onClick={() => onStart(r)}
-                                        className="\!tw-h-9 \!tw-rounded-full \!tw-bg-slate-900 \!tw-px-4 \!tw-text-sm \!tw-font-medium hover:\!tw-bg-slate-700"
+                                        className="!tw-h-9 !tw-rounded-xl !tw-bg-[#1e3a5f] !tw-px-4 !tw-text-sm !tw-font-medium hover:!tw-bg-[#152a45]"
                                     >
                                         작성 시작
                                     </Button>
