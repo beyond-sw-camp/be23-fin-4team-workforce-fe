@@ -1,13 +1,14 @@
 import {useMutation, useQuery} from '@tanstack/react-query';
-import {App, Avatar, Button, Checkbox, Form, Input, Modal, Select, Space, Spin, Tag, Tree, Typography} from 'antd';
+import {App, Avatar, Button, Checkbox, Form, Input, Select, Space, Spin, Tag, Tree, Typography} from 'antd';
 import type {DataNode} from 'antd/es/tree';
 import {RightOutlined, SearchOutlined, TeamOutlined} from '@ant-design/icons';
 import {useEffect, useMemo, useState} from 'react';
 import {EVALUATION_PAGE_KO as L} from '@/app/locale/app-ko';
 import {evaluationApi} from '@/features/evaluation/api/evaluationApi';
-import type {CreateGroupPayload, EvaluationDesign} from '@/features/evaluation/model/types';
+import type {CreateGroupPayload, EvaluationDesign, EvaluationGroup} from '@/features/evaluation/model/types';
 import {AppButton} from '@/shared/ui/AppButton';
-import {MemberRemoteSelect} from '@/features/members/ui/MemberRemoteSelect';
+import {AppDoubleActionModal} from '@/shared/ui/AppDoubleActionModal';
+import {parseApiError} from '@/shared/api/error-parser';
 import {
     ORG_CHART_HIDDEN_JOB_GRADE,
     type OrgChartOrgNode,
@@ -20,12 +21,15 @@ type Props = {
     onCreated: () => void;
     seasonId: string;
     designs: EvaluationDesign[];
+    editGroup?: EvaluationGroup | null;
 };
 
-export function GroupCreateModal({open, onClose, onCreated, seasonId, designs}: Props) {
+export function GroupCreateModal({open, onClose, onCreated, seasonId, designs, editGroup}: Props) {
     const {message} = App.useApp();
     const [form] = Form.useForm();
     const [orgPickerOpen, setOrgPickerOpen] = useState(false);
+    const [orgPickerInitialSelectedIds, setOrgPickerInitialSelectedIds] = useState<string[]>([]);
+    const isEditMode = !!editGroup;
 
     const createMut = useMutation({
         mutationFn: (body: CreateGroupPayload) => evaluationApi.createGroup(seasonId, body),
@@ -35,15 +39,58 @@ export function GroupCreateModal({open, onClose, onCreated, seasonId, designs}: 
             onCreated();
             onClose();
         },
+        onError: (err) => {
+            message.error(parseApiError(err).message);
+        },
+    });
+    const updateMut = useMutation({
+        mutationFn: (body: CreateGroupPayload) => {
+            if (!editGroup) throw new Error('수정 대상 그룹이 없습니다.');
+            return evaluationApi.updateGroup(seasonId, editGroup.groupId, body);
+        },
+        onSuccess: () => {
+            message.success('그룹이 수정되었습니다.');
+            form.resetFields();
+            onCreated();
+            onClose();
+        },
+        onError: (err) => {
+            message.error(parseApiError(err).message);
+        },
     });
 
+    useEffect(() => {
+        if (!open) return;
+        if (editGroup) {
+            form.setFieldsValue({
+                name: editGroup.name,
+                evaluationTypes: editGroup.evaluationTypes ?? [],
+                targetMemberIds: editGroup.targetMemberIds ?? [],
+                designId: editGroup.designId ?? undefined,
+            });
+            return;
+        }
+        form.resetFields();
+    }, [open, editGroup, form]);
+
     return (
-        <Modal title={L.groupAdd} open={open} onCancel={onClose} width={560} destroyOnHidden footer={null}>
+        <AppDoubleActionModal
+            title={isEditMode ? '그룹 수정' : L.groupAdd}
+            open={open}
+            onClose={onClose}
+            onConfirm={() => form.submit()}
+            width={560}
+            destroyOnHidden
+            cancelText={L.cancel}
+            confirmText={isEditMode ? '수정 저장' : L.save}
+            confirmLoading={createMut.isPending || updateMut.isPending}
+        >
             <Form
                 form={form}
                 layout="vertical"
+                className="tw-px-5 tw-py-4"
                 onFinish={(v) =>
-                    createMut.mutate({
+                    (isEditMode ? updateMut : createMut).mutate({
                         name: v.name,
                         evaluationTypes: v.evaluationTypes ?? [],
                         targetMemberIds: v.targetMemberIds ?? [],
@@ -97,13 +144,15 @@ export function GroupCreateModal({open, onClose, onCreated, seasonId, designs}: 
                     ]}
                 >
                     <div className="tw-space-y-2">
-                        <MemberRemoteSelect multiple placeholder="이름·이메일로 검색하여 추가" />
                         <div className="tw-flex tw-justify-end">
                             <AppButton
                                 variant="secondary"
                                 icon={<TeamOutlined/>}
                                 className="!tw-h-9 !tw-rounded-full !tw-px-3 !tw-text-xs !tw-font-semibold"
-                                onClick={() => setOrgPickerOpen(true)}
+                                onClick={() => {
+                                    setOrgPickerInitialSelectedIds(form.getFieldValue('targetMemberIds') ?? []);
+                                    setOrgPickerOpen(true);
+                                }}
                             >
                                 조직도에서 선택
                             </AppButton>
@@ -121,25 +170,18 @@ export function GroupCreateModal({open, onClose, onCreated, seasonId, designs}: 
                         options={designs.map((d) => ({value: d.designId, label: d.name}))}
                     />
                 </Form.Item>
-                <div className="tw-flex tw-justify-end tw-gap-2">
-                    <Button onClick={onClose}>{L.cancel}</Button>
-                    <AppButton variant="primary" htmlType="submit" loading={createMut.isPending}>
-                        {L.save}
-                    </AppButton>
-                </div>
             </Form>
             <OrgMemberPickerModal
                 open={orgPickerOpen}
                 onClose={() => setOrgPickerOpen(false)}
-                initialSelectedIds={form.getFieldValue('targetMemberIds') ?? []}
+                initialSelectedIds={orgPickerInitialSelectedIds}
                 onApply={(ids) => {
-                    const prev = form.getFieldValue('targetMemberIds') ?? [];
-                    const merged = Array.from(new Set<string>([...prev, ...ids]));
-                    form.setFieldValue('targetMemberIds', merged);
+                    const next = Array.from(new Set<string>(ids ?? []));
+                    form.setFieldValue('targetMemberIds', next);
                     void form.validateFields(['targetMemberIds']);
                 }}
             />
-        </Modal>
+        </AppDoubleActionModal>
     );
 }
 
@@ -225,9 +267,11 @@ function OrgMemberPickerModal({open, onClose, initialSelectedIds, onApply}: OrgM
 
     useEffect(() => {
         if (!open) return;
+        setKeyword('');
+        setSelected(new Set(initialSelectedIds));
         // 조직도에서 대상 선택 시 항상 펼쳐진 상태로 시작/유지
         setExpandedOrgKeys(allVisibleOrgKeys);
-    }, [open, allVisibleOrgKeys]);
+    }, [open, allVisibleOrgKeys, initialSelectedIds]);
 
     const treeData: DataNode[] = useMemo(() => {
         if (!data) return [];
@@ -312,49 +356,20 @@ function OrgMemberPickerModal({open, onClose, initialSelectedIds, onApply}: OrgM
     const selectedCount = selected.size;
 
     return (
-        <Modal
+        <AppDoubleActionModal
             open={open}
-            onCancel={onClose}
+            onClose={onClose}
             width={760}
             title="조직도에서 평가 대상 선택"
             destroyOnHidden
-            afterOpenChange={(next) => {
-                if (next) {
-                    setKeyword('');
-                    setSelected(new Set(initialSelectedIds));
-                }
+            onConfirm={() => {
+                onApply(Array.from(selected));
+                onClose();
             }}
-            footer={
-                <div className="tw-flex tw-items-center tw-justify-between">
-                    <Text type="secondary" className="tw-text-xs">
-                        선택 {selectedCount}명
-                    </Text>
-                    <Space>
-                        <Button
-                            onClick={() => setSelected(new Set(allVisibleMemberIds))}
-                            disabled={allVisibleMemberIds.length === 0}
-                        >
-                            전체 선택
-                        </Button>
-                        <Button onClick={() => setSelected(new Set())} disabled={selectedCount === 0}>
-                            전체 해제
-                        </Button>
-                        <Button onClick={onClose}>취소</Button>
-                        <AppButton
-                            variant="primary"
-                            disabled={selectedCount === 0}
-                            onClick={() => {
-                                onApply(Array.from(selected));
-                                onClose();
-                            }}
-                        >
-                            선택 적용
-                        </AppButton>
-                    </Space>
-                </div>
-            }
+            confirmText="선택 적용"
+            confirmDisabled={selectedCount === 0}
         >
-            <div className="tw-space-y-3">
+            <div className="tw-space-y-3 tw-px-5 tw-py-4">
                 <Input
                     allowClear
                     value={keyword}
@@ -364,7 +379,20 @@ function OrgMemberPickerModal({open, onClose, initialSelectedIds, onApply}: OrgM
                 />
                 <div className="tw-flex tw-items-center tw-justify-between tw-px-1">
                     <span className="tw-text-sm tw-font-semibold tw-text-[#1e3a5f]">{data?.companyName ?? '회사'}</span>
-                    <span className="tw-text-xs tw-text-slate-500">표시 인원 {allVisibleMemberIds.length}명</span>
+                    <Space size={8}>
+                        <Text type="secondary" className="tw-text-xs">
+                            선택 {selectedCount}명
+                        </Text>
+                        <Button
+                            onClick={() => setSelected(new Set(allVisibleMemberIds))}
+                            disabled={allVisibleMemberIds.length === 0}
+                        >
+                            전체 선택
+                        </Button>
+                        <Button onClick={() => setSelected(new Set())} disabled={selectedCount === 0}>
+                            전체 해제
+                        </Button>
+                    </Space>
                 </div>
                 <Spin spinning={isLoading}>
                     {isError ? (
@@ -389,6 +417,6 @@ function OrgMemberPickerModal({open, onClose, initialSelectedIds, onApply}: OrgM
                     )}
                 </Spin>
             </div>
-        </Modal>
+        </AppDoubleActionModal>
     );
 }

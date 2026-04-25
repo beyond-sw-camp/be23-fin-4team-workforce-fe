@@ -70,6 +70,8 @@ function mapEvaluatorMapsFromApi(raw: Record<string, unknown>): EvaluationGroup[
       targetMemberId: String(m.targetMemberId ?? m.target_member_id ?? ''),
       evaluatorId: String(m.evaluatorId ?? m.evaluator_id ?? ''),
       evaluationType: (m.evaluationType ?? m.evaluation_type) as EvaluationGroup['evaluatorMaps'][number]['evaluationType'],
+      targetMemberProfileUrl: m.targetMemberProfileUrl ?? m.target_member_profile_url ?? undefined,
+      evaluatorProfileUrl: m.evaluatorProfileUrl ?? m.evaluator_profile_url ?? undefined,
     }));
   }
   const legacy = raw.evaluatorMapsJson ?? raw.evaluator_maps_json;

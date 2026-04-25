@@ -45,6 +45,8 @@ export type EvaluatorMap = {
   targetMemberId: string;
   evaluatorId: string;
   evaluationType: EvalType;
+  targetMemberProfileUrl?: string;
+  evaluatorProfileUrl?: string;
 };
 
 export type EvaluationGroup = {
