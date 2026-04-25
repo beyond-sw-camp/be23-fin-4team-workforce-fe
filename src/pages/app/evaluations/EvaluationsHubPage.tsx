@@ -1,7 +1,8 @@
 import {useEffect, useMemo, useState} from 'react';
-import {useQuery, useQueryClient} from '@tanstack/react-query';
+import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {useNavigate, useSearch} from '@tanstack/react-router';
-import {App, Avatar, Button, Card, Dropdown, Empty, Modal, Space, Table, Typography} from 'antd';
+import {App, Avatar, Button, Card, Dropdown, Empty, Modal, Space, Table, Tag, Typography} from 'antd';
+import {Tabs} from 'antd';
 import type {ColumnsType} from 'antd/es/table';
 import type {MenuProps} from 'antd';
 import {
@@ -18,6 +19,7 @@ import dayjs from 'dayjs';
 import {EVALUATION_PAGE_KO as L} from '@/app/locale/app-ko';
 import {evaluationApi} from '@/features/evaluation/api/evaluationApi';
 import type {
+    EvaluationDesign,
     EvaluationResponse,
     EvaluationSeason,
     EvaluationStatus,
@@ -31,11 +33,14 @@ import {
     seasonTypeBadge,
 } from '@/features/evaluation/lib/evaluationLabels';
 import {SeasonCreateModal} from '@/features/evaluation/ui/SeasonCreateModal';
+import {DesignCreateModal} from '@/features/evaluation/ui/DesignCreateModal';
 import {MyEvaluationAssignmentsContent} from '@/features/evaluation/ui/MyEvaluationAssignmentsContent';
 import {PERM} from '@/features/permissions/backend-permissions';
 import {usePermissions} from '@/features/permissions/usePermissionsHook';
 import {AppInlinePillButton} from '@/shared/ui/AppInlinePillButton';
+import {AppButton} from '@/shared/ui/AppButton';
 import {AppWorkspacePageTitle} from '@/shared/ui/AppWorkspacePageTitle';
+import {parseApiError} from '@/shared/api/error-parser';
 
 const {Text, Title, Paragraph} = Typography;
 
@@ -50,13 +55,14 @@ function responseStatusSubtext(r: EvaluationResponse): string {
 }
 
 export function EvaluationsHubPage() {
-    const {message} = App.useApp();
+    const {message, modal} = App.useApp();
     const {hasPermission} = usePermissions();
     const queryClient = useQueryClient();
     const navigate = useNavigate();
     const search = useSearch({strict: false}) as {
         filter?: 'all' | 'todo' | 'done';
         openAssignments?: string | boolean;
+        adminTab?: 'seasons' | 'designs';
     };
     const canCreate = hasPermission(PERM.EVALUATION_CREATE);
     const canUpdate = hasPermission(PERM.EVALUATION_UPDATE);
@@ -64,10 +70,13 @@ export function EvaluationsHubPage() {
     const canManage = canCreate || canUpdate || canRead;
 
     const [seasonCreateOpen, setSeasonCreateOpen] = useState(false);
+    const [designCreateOpen, setDesignCreateOpen] = useState(false);
+    const [editingDesign, setEditingDesign] = useState<EvaluationDesign | null>(null);
     const [assignmentsModalOpen, setAssignmentsModalOpen] = useState(
         search.openAssignments === true || search.openAssignments === '1',
     );
     const [seasonLimit, setSeasonLimit] = useState(SEASONS_PAGE_SIZE);
+    const [adminTab, setAdminTab] = useState<'seasons' | 'designs'>(search.adminTab === 'designs' ? 'designs' : 'seasons');
 
     const {data: myResponses = []} = useQuery({
         queryKey: ['eval-my-responses'],
@@ -84,10 +93,34 @@ export function EvaluationsHubPage() {
         queryFn: () => evaluationApi.listSeasons(),
         enabled: canManage,
     });
+    const {data: designs = []} = useQuery<EvaluationDesign[]>({
+        queryKey: ['eval-designs'],
+        queryFn: () => evaluationApi.listDesigns(),
+        enabled: canManage,
+    });
 
     const invalidateSeasons = () => {
         queryClient.invalidateQueries({queryKey: ['eval-seasons']});
     };
+    const invalidateDesigns = () => {
+        queryClient.invalidateQueries({queryKey: ['eval-designs']});
+    };
+    const duplicateDesignMut = useMutation({
+        mutationFn: (designId: string) => evaluationApi.duplicateDesign(designId),
+        onSuccess: () => {
+            message.success('설계를 복제했습니다.');
+            invalidateDesigns();
+        },
+        onError: (err) => message.error(parseApiError(err).message),
+    });
+    const deleteDesignMut = useMutation({
+        mutationFn: (designId: string) => evaluationApi.deleteDesign(designId),
+        onSuccess: () => {
+            message.success('설계를 삭제했습니다.');
+            invalidateDesigns();
+        },
+        onError: (err) => message.error(parseApiError(err).message),
+    });
 
     // ── 내 평가: 미제출 먼저, 같은 상태면 evalType 순 ──
     const sortedMyResponses = useMemo(() => {
@@ -138,6 +171,11 @@ export function EvaluationsHubPage() {
             setAssignmentsModalOpen(true);
         }
     }, [search.openAssignments]);
+    useEffect(() => {
+        if (search.adminTab === 'designs' || search.adminTab === 'seasons') {
+            setAdminTab(search.adminTab);
+        }
+    }, [search.adminTab]);
 
     const seasonRowMenu = (r: EvaluationSeason): MenuProps['items'] => [
         {
@@ -281,7 +319,7 @@ export function EvaluationsHubPage() {
                 </div>
             </section>
 
-            {/* 하단 섹션: 전체 시즌 관리 (HR/매니저만) */}
+            {/* 하단 섹션: 시즌 운영 / 설계 라이브러리 분리 */}
             {canManage && (
                 <section className="tw-space-y-4">
                     <div className="tw-flex tw-flex-wrap tw-items-end tw-justify-between tw-gap-3">
@@ -294,56 +332,209 @@ export function EvaluationsHubPage() {
                                 level={3}
                                 className="!tw-m-0 !tw-mb-3 !tw-text-[24px] !tw-font-bold !tw-leading-tight !tw-tracking-tight !tw-text-[#1e3a5f] sm:!tw-text-[26px]"
                             >
-                                전체 시즌 관리
+                                평가 운영 관리
                             </Title>
                         </div>
-                        {canCreate && (
-                            <Button
-                                icon={<PlusOutlined/>}
-                                onClick={() => setSeasonCreateOpen(true)}
-                                className="tw-rounded-full tw-border-slate-200 tw-px-4 tw-py-4 tw-text-sm tw-font-medium tw-text-slate-700 tw-shadow-sm hover:\!tw-border-slate-300"
-                            >
-                                새로운 시즌 개설
-                            </Button>
-                        )}
                     </div>
-
-                    <Card
-                        className="tw-rounded-2xl tw-border tw-border-slate-200/90 tw-shadow-sm tw-shadow-slate-900/5"
-                        styles={{body: {padding: 4}}}
-                    >
-                        {visibleSeasons.length === 0 ? (
-                            <div className="tw-py-16">
-                                <Empty description="등록된 시즌이 없습니다." />
-                            </div>
-                        ) : (
-                            <Table<EvaluationSeason>
-                                columns={seasonCols}
-                                dataSource={visibleSeasons}
-                                rowKey="seasonId"
-                                size="middle"
-                                pagination={false}
-                                rowClassName="tw-cursor-pointer"
-                                onRow={(r) => ({
-                                    onClick: () =>
-                                        navigate({
-                                            to: '/app/evaluations/seasons/$seasonId',
-                                            params: {seasonId: r.seasonId},
-                                        }),
-                                })}
-                            />
-                        )}
-                        {hasMoreSeasons && (
-                            <div className="tw-flex tw-justify-center tw-border-t tw-border-slate-100 tw-py-3">
-                                <AppInlinePillButton
-                                    onClick={() => setSeasonLimit(seasonLimit + SEASONS_PAGE_SIZE)}
-                                    className="tw-px-4 tw-py-1.5 tw-text-xs tw-font-semibold tw-uppercase tw-tracking-wide"
-                                >
-                                    Load more seasons <DownOutlined/>
-                                </AppInlinePillButton>
-                            </div>
-                        )}
-                    </Card>
+                    <Tabs
+                        activeKey={adminTab}
+                        onChange={(next) => {
+                            const tab = next === 'designs' ? 'designs' : 'seasons';
+                            setAdminTab(tab);
+                            navigate({to: '/app/evaluations', search: {adminTab: tab}, replace: true});
+                        }}
+                        items={[
+                            {
+                                key: 'seasons',
+                                label: '시즌 운영',
+                                children: (
+                                    <div className="tw-space-y-3">
+                                        {canCreate ? (
+                                            <div className="tw-flex tw-justify-end">
+                                                <Button
+                                                    icon={<PlusOutlined/>}
+                                                    onClick={() => setSeasonCreateOpen(true)}
+                                                    className="tw-rounded-full tw-border-slate-200 tw-px-4 tw-py-4 tw-text-sm tw-font-medium tw-text-slate-700 tw-shadow-sm hover:\!tw-border-slate-300"
+                                                >
+                                                    새로운 시즌 개설
+                                                </Button>
+                                            </div>
+                                        ) : null}
+                                        <Card
+                                            className="tw-rounded-2xl tw-border tw-border-slate-200/90 tw-shadow-sm tw-shadow-slate-900/5"
+                                            styles={{body: {padding: 4}}}
+                                        >
+                                            {visibleSeasons.length === 0 ? (
+                                                <div className="tw-py-16">
+                                                    <Empty description="등록된 시즌이 없습니다." />
+                                                </div>
+                                            ) : (
+                                                <Table<EvaluationSeason>
+                                                    columns={seasonCols}
+                                                    dataSource={visibleSeasons}
+                                                    rowKey="seasonId"
+                                                    size="middle"
+                                                    pagination={false}
+                                                    rowClassName="tw-cursor-pointer"
+                                                    onRow={(r) => ({
+                                                        onClick: () =>
+                                                            navigate({
+                                                                to: '/app/evaluations/seasons/$seasonId',
+                                                                params: {seasonId: r.seasonId},
+                                                            }),
+                                                    })}
+                                                />
+                                            )}
+                                            {hasMoreSeasons && (
+                                                <div className="tw-flex tw-justify-center tw-border-t tw-border-slate-100 tw-py-3">
+                                                    <AppInlinePillButton
+                                                        onClick={() => setSeasonLimit(seasonLimit + SEASONS_PAGE_SIZE)}
+                                                        className="tw-px-4 tw-py-1.5 tw-text-xs tw-font-semibold tw-uppercase tw-tracking-wide"
+                                                    >
+                                                        Load more seasons <DownOutlined/>
+                                                    </AppInlinePillButton>
+                                                </div>
+                                            )}
+                                        </Card>
+                                    </div>
+                                ),
+                            },
+                            {
+                                key: 'designs',
+                                label: '회사 설계 라이브러리',
+                                children: (
+                                    <div className="tw-space-y-4">
+                                        <Card
+                                            className="tw-rounded-2xl tw-border tw-border-indigo-200 tw-bg-indigo-50/40"
+                                            styles={{body: {padding: 20}}}
+                                        >
+                                            <div className="tw-flex tw-flex-col tw-gap-3 sm:tw-flex-row sm:tw-items-center sm:tw-justify-between">
+                                                <div className="tw-space-y-1">
+                                                    <Text strong className="tw-text-base tw-text-slate-900">
+                                                        시즌과 분리된 회사 공통 평가 설계입니다.
+                                                    </Text>
+                                                    <div className="tw-text-sm tw-text-slate-600">
+                                                        여기서 설계를 만들고, 각 시즌의 그룹 설정에서 설계를 선택해 연결하세요.
+                                                    </div>
+                                                </div>
+                                                {canCreate && (
+                                                    <AppButton
+                                                        variant="secondary"
+                                                        onClick={() => {
+                                                            setEditingDesign(null);
+                                                            setDesignCreateOpen(true);
+                                                        }}
+                                                        className="!tw-h-auto !tw-rounded-full !tw-border-slate-200 !tw-px-4 !tw-py-2.5 !tw-text-sm !tw-font-medium !tw-text-slate-700 !tw-shadow-sm hover:!tw-border-slate-300"
+                                                    >
+                                                        <PlusOutlined /> 새 설계 만들기
+                                                    </AppButton>
+                                                )}
+                                            </div>
+                                        </Card>
+                                        {designs.length === 0 ? (
+                                            <Card
+                                                className="tw-rounded-2xl tw-border tw-border-dashed tw-border-slate-300 tw-bg-slate-50/70"
+                                                styles={{body: {padding: 28}}}
+                                            >
+                                                <div className="tw-text-center tw-space-y-2">
+                                                    <div className="tw-text-sm tw-font-semibold tw-text-slate-700">등록된 설계가 없습니다.</div>
+                                                    <div className="tw-text-xs tw-text-slate-500">새 템플릿을 추가해 평가 설계를 시작하세요.</div>
+                                                </div>
+                                            </Card>
+                                        ) : (
+                                            <div className="tw-grid tw-grid-cols-1 tw-gap-4 xl:tw-grid-cols-2">
+                                                {designs.map((design) => {
+                                                    const gradeLabel = design.gradeConfig
+                                                        ? (design.gradeConfig.type === 'ABSOLUTE' ? L.gradeAbsolute : L.gradeRelative)
+                                                        : '미설정';
+                                                    const menuItems: MenuProps['items'] = [
+                                                        {
+                                                            key: 'edit',
+                                                            label: '수정',
+                                                            onClick: () => {
+                                                                setEditingDesign(design);
+                                                                setDesignCreateOpen(true);
+                                                            },
+                                                        },
+                                                        {
+                                                            key: 'duplicate',
+                                                            label: '복제',
+                                                            onClick: () => duplicateDesignMut.mutate(design.designId),
+                                                        },
+                                                        {
+                                                            key: 'delete',
+                                                            danger: true,
+                                                            label: '삭제',
+                                                            onClick: () => {
+                                                                modal.confirm({
+                                                                    title: '설계를 삭제할까요?',
+                                                                    content: '삭제하면 되돌릴 수 없습니다.',
+                                                                    okText: '삭제',
+                                                                    okButtonProps: {danger: true},
+                                                                    cancelText: '취소',
+                                                                    onOk: () => deleteDesignMut.mutateAsync(design.designId),
+                                                                });
+                                                            },
+                                                        },
+                                                    ];
+                                                    return (
+                                                        <Card
+                                                            key={design.designId}
+                                                            className="tw-rounded-2xl tw-border tw-border-slate-200/90 tw-shadow-sm tw-shadow-slate-900/5"
+                                                            styles={{body: {padding: 18}}}
+                                                        >
+                                                            <div className="tw-space-y-3">
+                                                                <div className="tw-flex tw-items-start tw-justify-between tw-gap-3">
+                                                                    <div className="tw-min-w-0">
+                                                                        <div className="tw-truncate tw-text-[22px] tw-font-bold tw-leading-tight tw-text-slate-900">
+                                                                            {design.name}
+                                                                        </div>
+                                                                        <div className="tw-mt-1 tw-flex tw-items-center tw-gap-2 tw-text-[11px] tw-font-semibold tw-uppercase tw-tracking-wide tw-text-slate-400">
+                                                                            <span>ID: {design.designId.slice(0, 8)}</span>
+                                                                            <span>{design.designVersion ?? 'v1'}</span>
+                                                                            {design.defaultTemplate && (
+                                                                                <Tag color="blue" className="!tw-m-0 !tw-rounded-full !tw-text-[10px]">
+                                                                                    DEFAULT TEMPLATE
+                                                                                </Tag>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                    <Dropdown menu={{items: menuItems}} trigger={['click']} placement="bottomRight">
+                                                                        <Button
+                                                                            type="text"
+                                                                            icon={<EllipsisOutlined/>}
+                                                                            className="tw-text-slate-400 hover:tw-text-slate-700"
+                                                                        />
+                                                                    </Dropdown>
+                                                                </div>
+                                                                <div className="tw-flex tw-flex-wrap tw-gap-1.5">
+                                                                    {design.sections.map((s) => (
+                                                                        <Tag key={`${design.designId}-${s.title}`} className="!tw-m-0 !tw-rounded-full">
+                                                                            {s.title}
+                                                                        </Tag>
+                                                                    ))}
+                                                                </div>
+                                                                <div className="tw-flex tw-items-center tw-justify-between tw-rounded-xl tw-bg-slate-50 tw-px-3 tw-py-2">
+                                                                    <span className="tw-text-xs tw-font-medium tw-text-slate-500">평가 방식</span>
+                                                                    <span className="tw-text-sm tw-font-semibold tw-text-slate-800">{gradeLabel}</span>
+                                                                </div>
+                                                                <div className="tw-flex tw-items-center tw-justify-between tw-pt-1">
+                                                                    <span className="tw-text-xs tw-text-slate-500">최근 수정</span>
+                                                                    <span className="tw-text-xs tw-font-medium tw-text-slate-600">
+                                                                        {design.updatedAt ? dayjs(design.updatedAt).format('YYYY-MM-DD') : '-'}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        </Card>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                ),
+                            },
+                        ]}
+                    />
                 </section>
             )}
 
@@ -351,6 +542,15 @@ export function EvaluationsHubPage() {
                 open={seasonCreateOpen}
                 onClose={() => setSeasonCreateOpen(false)}
                 onCreated={invalidateSeasons}
+            />
+            <DesignCreateModal
+                open={designCreateOpen}
+                onClose={() => {
+                    setDesignCreateOpen(false);
+                    setEditingDesign(null);
+                }}
+                onCreated={invalidateDesigns}
+                initialDesign={editingDesign}
             />
 
             <Modal
@@ -360,7 +560,7 @@ export function EvaluationsHubPage() {
                 footer={null}
                 width="min(96vw, 1040px)"
                 centered
-                destroyOnClose
+                destroyOnHidden
                 maskClosable
                 styles={{
                     body: {

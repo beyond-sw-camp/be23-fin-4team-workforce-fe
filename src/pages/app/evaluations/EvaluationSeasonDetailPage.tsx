@@ -2,12 +2,12 @@ import {useMemo, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {useNavigate, useParams, useSearch} from '@tanstack/react-router';
 import {
+    Alert,
     App,
     Avatar,
     Button,
     Card,
     Col,
-    Dropdown,
     Empty,
     Input,
     Popconfirm,
@@ -21,22 +21,16 @@ import {
     Tooltip,
     Typography,
 } from 'antd';
-import type {MenuProps} from 'antd';
 import type {ColumnsType} from 'antd/es/table';
 import {
     BarChartOutlined,
     CalendarOutlined,
     CheckCircleOutlined,
-    CopyOutlined,
-    DeleteOutlined,
-    EllipsisOutlined,
     FileDoneOutlined,
     NotificationOutlined,
     PlayCircleOutlined,
-    PlusOutlined,
     SearchOutlined,
     SendOutlined,
-    SettingOutlined,
     SoundOutlined,
     StopOutlined,
     TeamOutlined,
@@ -60,7 +54,6 @@ import {
     seasonTypeLabel,
 } from '@/features/evaluation/lib/evaluationLabels';
 import {GroupsSection} from '@/features/evaluation/ui/GroupsSection';
-import {DesignCreateModal} from '@/features/evaluation/ui/DesignCreateModal';
 import {GroupCreateModal} from '@/features/evaluation/ui/GroupCreateModal';
 import {PERM} from '@/features/permissions/backend-permissions';
 import {usePermissions} from '@/features/permissions/usePermissionsHook';
@@ -72,7 +65,7 @@ import dayjs from 'dayjs';
 
 const {Text, Title} = Typography;
 
-type TabKey = 'progress' | 'groups' | 'design' | 'calibration' | 'results';
+type TabKey = 'progress' | 'groups' | 'calibration' | 'results';
 
 /** 진행도 테이블용 상태 pill (완료=green, 진행 중=blue, 미시작=gray) */
 function progressStatusPill(s: EvaluationStatus) {
@@ -98,7 +91,7 @@ function progressStatusPill(s: EvaluationStatus) {
 }
 
 export function EvaluationSeasonDetailPage() {
-    const {message, modal} = App.useApp();
+    const {message} = App.useApp();
     const {hasPermission} = usePermissions();
     const queryClient = useQueryClient();
     const navigate = useNavigate();
@@ -109,8 +102,6 @@ export function EvaluationSeasonDetailPage() {
     const canUpdate = hasPermission(PERM.EVALUATION_UPDATE);
 
     // 검색·모달 상태 (queries 앞에서 선언되어야 progressData query 가 참조 가능)
-    const [designCreateOpen, setDesignCreateOpen] = useState(false);
-    const [editingDesign, setEditingDesign] = useState<EvaluationDesign | null>(null);
     const [groupCreateOpen, setGroupCreateOpen] = useState(false);
     const [progressSearch, setProgressSearch] = useState('');
 
@@ -236,27 +227,6 @@ export function EvaluationSeasonDetailPage() {
             message.error(parsed.message);
         },
     });
-    const duplicateDesignMut = useMutation({
-        mutationFn: (designId: string) => evaluationApi.duplicateDesign(designId),
-        onSuccess: () => {
-            message.success('설계를 복제했습니다.');
-            queryClient.invalidateQueries({queryKey: ['eval-designs']});
-        },
-        onError: (err) => {
-            message.error(parseApiError(err).message);
-        },
-    });
-    const deleteDesignMut = useMutation({
-        mutationFn: (designId: string) => evaluationApi.deleteDesign(designId),
-        onSuccess: () => {
-            message.success('설계를 삭제했습니다.');
-            queryClient.invalidateQueries({queryKey: ['eval-designs']});
-        },
-        onError: (err) => {
-            message.error(parseApiError(err).message);
-        },
-    });
-
     // ── [진행도 관리] 평가자별 집계 뷰 ──
     // 한 평가자가 여러 응답(대상자 × 유형) 을 가질 수 있고 리마인드는 평가자 단위로 1회 발송되므로
     // 행 주체를 "평가자" 로 집계. 하위 응답은 expandable 로 드릴다운.
@@ -750,7 +720,7 @@ export function EvaluationSeasonDetailPage() {
 
             {/* 탭 */}
             <Tabs
-                className="evaluation-pill-tabs"
+                className="evaluation-pill-tabs [&_.ant-tabs-tab]:!tw-px-0"
                 type="line"
                 activeKey={activeTab}
                 onChange={(k) => setTab(k as TabKey)}
@@ -863,160 +833,6 @@ export function EvaluationSeasonDetailPage() {
                         ),
                     },
                     {
-                        key: 'design',
-                        label: (
-                            <span className="tw-inline-flex tw-items-center tw-gap-1.5">
-                                <SettingOutlined/> {L.tabDesigns}
-                            </span>
-                        ),
-                        children: (
-                            <div className="tw-space-y-4">
-                                <div className="tw-flex tw-items-center tw-justify-between">
-                                    <div>
-                                        <Text strong className="tw-text-base tw-text-slate-900">
-                                            {L.tabDesigns}
-                                        </Text>
-                                        <div className="tw-text-xs tw-text-slate-500">
-                                            템플릿을 빠르게 비교하고 필요한 설계를 바로 수정할 수 있습니다.
-                                        </div>
-                                    </div>
-                                    {canCreate && (
-                                        <AppButton
-                                            variant="primary"
-                                            onClick={() => {
-                                                setEditingDesign(null);
-                                                setDesignCreateOpen(true);
-                                            }}
-                                        >
-                                            <PlusOutlined /> {L.designAdd}
-                                        </AppButton>
-                                    )}
-                                </div>
-                                {designs.length === 0 ? (
-                                    <Card
-                                        className="tw-rounded-2xl tw-border tw-border-dashed tw-border-slate-300 tw-bg-slate-50/70"
-                                        styles={{body: {padding: 28}}}
-                                    >
-                                        <div className="tw-text-center tw-space-y-2">
-                                            <div className="tw-text-sm tw-font-semibold tw-text-slate-700">등록된 설계가 없습니다.</div>
-                                            <div className="tw-text-xs tw-text-slate-500">새 템플릿을 추가해 평가 설계를 시작하세요.</div>
-                                        </div>
-                                    </Card>
-                                ) : (
-                                    <div className="tw-grid tw-grid-cols-1 tw-gap-4 xl:tw-grid-cols-2">
-                                        {designs.map((design) => {
-                                            const gradeLabel = design.gradeConfig
-                                                ? (design.gradeConfig.type === 'ABSOLUTE' ? L.gradeAbsolute : L.gradeRelative)
-                                                : '미설정';
-                                            const menuItems: MenuProps['items'] = [
-                                                {
-                                                    key: 'edit',
-                                                    icon: <SettingOutlined/>,
-                                                    label: '수정',
-                                                    onClick: () => {
-                                                        setEditingDesign(design);
-                                                        setDesignCreateOpen(true);
-                                                    },
-                                                },
-                                                {
-                                                    key: 'duplicate',
-                                                    icon: <CopyOutlined/>,
-                                                    label: '복제',
-                                                    onClick: () => duplicateDesignMut.mutate(design.designId),
-                                                },
-                                                {
-                                                    key: 'delete',
-                                                    icon: <DeleteOutlined/>,
-                                                    danger: true,
-                                                    label: '삭제',
-                                                    onClick: () => {
-                                                        modal.confirm({
-                                                            title: '설계를 삭제할까요?',
-                                                            content: '삭제하면 되돌릴 수 없습니다.',
-                                                            okText: '삭제',
-                                                            okButtonProps: {danger: true},
-                                                            cancelText: '취소',
-                                                            onOk: () => deleteDesignMut.mutateAsync(design.designId),
-                                                        });
-                                                    },
-                                                },
-                                            ];
-                                            return (
-                                                <Card
-                                                    key={design.designId}
-                                                    className="tw-rounded-2xl tw-border tw-border-slate-200/90 tw-shadow-sm tw-shadow-slate-900/5"
-                                                    styles={{body: {padding: 18}}}
-                                                >
-                                                    <div className="tw-space-y-3">
-                                                        <div className="tw-flex tw-items-start tw-justify-between tw-gap-3">
-                                                            <div className="tw-min-w-0">
-                                                                <div className="tw-truncate tw-text-[22px] tw-font-bold tw-leading-tight tw-text-slate-900">
-                                                                    {design.name}
-                                                                </div>
-                                                                <div className="tw-mt-1 tw-flex tw-items-center tw-gap-2 tw-text-[11px] tw-font-semibold tw-uppercase tw-tracking-wide tw-text-slate-400">
-                                                                    <span>ID: {design.designId.slice(0, 8)}</span>
-                                                                    <span>{design.designVersion ?? 'v1'}</span>
-                                                                    {design.defaultTemplate && (
-                                                                        <Tag color="blue" className="!tw-m-0 !tw-rounded-full !tw-text-[10px]">
-                                                                            DEFAULT TEMPLATE
-                                                                        </Tag>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-                                                            <div className="tw-flex tw-items-center tw-gap-2">
-                                                                <Dropdown menu={{items: menuItems}} trigger={['click']} placement="bottomRight">
-                                                                    <Button
-                                                                        type="text"
-                                                                        icon={<EllipsisOutlined/>}
-                                                                        className="tw-text-slate-400 hover:tw-text-slate-700"
-                                                                    />
-                                                                </Dropdown>
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="tw-flex tw-flex-wrap tw-gap-1.5">
-                                                            {design.sections.map((s) => (
-                                                                <Tag key={`${design.designId}-${s.title}`} className="!tw-m-0 !tw-rounded-full">
-                                                                    {s.title}
-                                                                </Tag>
-                                                            ))}
-                                                        </div>
-
-                                                        <div className="tw-flex tw-items-center tw-justify-between tw-rounded-xl tw-bg-slate-50 tw-px-3 tw-py-2">
-                                                            <span className="tw-text-xs tw-font-medium tw-text-slate-500">평가 방식</span>
-                                                            <span className="tw-text-sm tw-font-semibold tw-text-slate-800">{gradeLabel}</span>
-                                                        </div>
-
-                                                        <div className="tw-flex tw-items-center tw-justify-between tw-pt-1">
-                                                            <span className="tw-text-xs tw-text-slate-500">최근 수정</span>
-                                                            <span className="tw-text-xs tw-font-medium tw-text-slate-600">
-                                                                {design.updatedAt ? dayjs(design.updatedAt).format('YYYY-MM-DD') : '-'}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                </Card>
-                                            );
-                                        })}
-                                        {canCreate && (
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    setEditingDesign(null);
-                                                    setDesignCreateOpen(true);
-                                                }}
-                                                className="tw-flex tw-min-h-[230px] tw-w-full tw-items-center tw-justify-center tw-rounded-2xl tw-border tw-border-dashed tw-border-slate-300 tw-bg-slate-50/60 tw-text-sm tw-font-semibold tw-text-slate-500 tw-transition-colors hover:tw-bg-slate-100"
-                                            >
-                                                <span className="tw-inline-flex tw-items-center tw-gap-2">
-                                                    <PlusOutlined/> 새로운 평가 템플릿 설계
-                                                </span>
-                                            </button>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                        ),
-                    },
-                    {
                         key: 'calibration',
                         label: (
                             <Tooltip
@@ -1034,6 +850,7 @@ export function EvaluationSeasonDetailPage() {
                         disabled: !calibrationEnabled,
                         children: (
                             <div className="tw-space-y-4">
+                                <Alert type="info" showIcon message={L.calibrationPublishAutoNote} />
                                 <Row gutter={16}>
                                     <Col xs={24} lg={8}>
                                         <Card title="목표 분포">
@@ -1251,15 +1068,6 @@ export function EvaluationSeasonDetailPage() {
                 ]}
             />
 
-            <DesignCreateModal
-                open={designCreateOpen}
-                onClose={() => {
-                    setDesignCreateOpen(false);
-                    setEditingDesign(null);
-                }}
-                onCreated={invalidate}
-                initialDesign={editingDesign}
-            />
             <GroupCreateModal
                 open={groupCreateOpen}
                 onClose={() => setGroupCreateOpen(false)}

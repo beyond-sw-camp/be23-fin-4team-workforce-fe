@@ -1,9 +1,9 @@
 import {useMutation} from '@tanstack/react-query';
-import {App, Button, DatePicker, Form, Input, Modal, Select} from 'antd';
+import {App, DatePicker, Form, Input, Select} from 'antd';
 import {EVALUATION_PAGE_KO as L} from '@/app/locale/app-ko';
 import {evaluationApi} from '@/features/evaluation/api/evaluationApi';
 import type {CreateSeasonPayload} from '@/features/evaluation/model/types';
-import {AppButton} from '@/shared/ui/AppButton';
+import {AppDoubleActionModal} from '@/shared/ui/AppDoubleActionModal';
 
 type Props = {
     open: boolean;
@@ -26,10 +26,22 @@ export function SeasonCreateModal({open, onClose, onCreated}: Props) {
     });
 
     return (
-        <Modal title={L.seasonAdd} open={open} onCancel={onClose} width={520} destroyOnHidden footer={null}>
+        <AppDoubleActionModal
+            title={L.seasonAdd}
+            open={open}
+            onClose={onClose}
+            onConfirm={() => form.submit()}
+            width={520}
+            destroyOnHidden
+            cancelText={L.cancel}
+            confirmText={L.save}
+            confirmLoading={createMut.isPending}
+        >
             <Form
                 form={form}
                 layout="vertical"
+                className="tw-px-5 tw-py-4"
+                scrollToFirstError={{block: 'center', behavior: 'smooth'}}
                 onFinish={(v) => {
                     // scheduleJson 은 비어 있어도 BE 에서 허용 — 상세 편집은 시즌 상세 화면에서.
                     const schedule = {
@@ -46,6 +58,11 @@ export function SeasonCreateModal({open, onClose, onCreated}: Props) {
                         resultPublishDate: v.resultPublishDate?.format('YYYY-MM-DD'),
                         scheduleJson: JSON.stringify(schedule),
                     });
+                }}
+                onFinishFailed={({errorFields}) => {
+                    const first = errorFields?.[0];
+                    if (!first) return;
+                    form.scrollToField(first.name, {block: 'center', behavior: 'smooth'});
                 }}
             >
                 <Form.Item name="name" label={L.seasonName} rules={[{required: true}]}>
@@ -66,13 +83,7 @@ export function SeasonCreateModal({open, onClose, onCreated}: Props) {
                 <Form.Item name="resultPublishDate" label={L.seasonResultPublishDate}>
                     <DatePicker className="tw-w-full" />
                 </Form.Item>
-                <div className="tw-flex tw-justify-end tw-gap-2">
-                    <Button onClick={onClose}>{L.cancel}</Button>
-                    <AppButton variant="primary" htmlType="submit" loading={createMut.isPending}>
-                        {L.save}
-                    </AppButton>
-                </div>
             </Form>
-        </Modal>
+        </AppDoubleActionModal>
     );
 }

@@ -1,6 +1,6 @@
 import {useEffect, useMemo, useRef, useState} from 'react';
 import {useMutation} from '@tanstack/react-query';
-import {App, Avatar, Button, Modal, Popconfirm, Select, Space, Tag, Tooltip, Typography} from 'antd';
+import {App, Avatar, Button, Popconfirm, Select, Space, Tag, Tooltip, Typography} from 'antd';
 import {
     EditOutlined,
     MinusCircleOutlined,
@@ -13,6 +13,7 @@ import type {EvaluationGroup, EvaluatorMap, EvalType} from '@/features/evaluatio
 import {evalTypeLabel} from '@/features/evaluation/lib/evaluationLabels';
 import {parseApiError} from '@/shared/api/error-parser';
 import {MemberRemoteSelect} from '@/features/members/ui/MemberRemoteSelect';
+import {AppDoubleActionModal} from '@/shared/ui/AppDoubleActionModal';
 
 const {Text} = Typography;
 
@@ -187,7 +188,7 @@ export function EvaluatorAssignDrawer({state, onClose, seasonId, labelFor, evalT
     const targets = group.targetMemberIds ?? [];
 
     return (
-        <Modal
+        <AppDoubleActionModal
             title={
                 <Space>
                     <EditOutlined />
@@ -195,29 +196,17 @@ export function EvaluatorAssignDrawer({state, onClose, seasonId, labelFor, evalT
                 </Space>
             }
             open={state.open}
-            onCancel={onClose}
+            onClose={onClose}
             width={880}
             destroyOnHidden
-            centered
-            footer={
-                <div className="tw-flex tw-items-center tw-justify-between tw-gap-2">
-                    <Text type="secondary" className="tw-text-xs">
-                        그룹 유형: {effectiveEvalTypes.map((t) => evalTypeLabel(t)).join(' · ')}
-                    </Text>
-                    <div className="tw-flex tw-gap-2">
-                        <Button onClick={onClose}>취소</Button>
-                        <Button
-                            type="primary"
-                            onClick={handleSave}
-                            loading={updateMapMut.isPending}
-                            className="!tw-bg-[#6366F1] hover:!tw-bg-[#4F46E5]"
-                        >
-                            저장
-                        </Button>
-                    </div>
-                </div>
-            }
+            onConfirm={handleSave}
+            confirmText="저장"
+            confirmLoading={updateMapMut.isPending}
         >
+            <div className="tw-px-5 tw-py-4">
+            <Text type="secondary" className="tw-text-xs">
+                그룹 유형: {effectiveEvalTypes.map((t) => evalTypeLabel(t)).join(' · ')}
+            </Text>
             {/* 안내 배너 + 자동 지정 */}            <div className="tw-mb-4 tw-flex tw-items-center tw-justify-between tw-gap-3 tw-rounded-2xl tw-bg-indigo-50 tw-px-4 tw-py-3">
                 <div>
                     <Text strong className="tw-text-slate-900">
@@ -326,6 +315,7 @@ export function EvaluatorAssignDrawer({state, onClose, seasonId, labelFor, evalT
                     );
                 })}
             </div>
-        </Modal>
+            </div>
+        </AppDoubleActionModal>
     );
 }

@@ -113,6 +113,8 @@ export type GoalsListCardsProps = {
   emptyHint: string;
   onOpenDetail: (g: Goal) => void;
   onActivate: (goalId: string) => void;
+  /** 상위 목표 행에서 즉시 하위 목표 생성 */
+  onCreateChildGoal?: (goal: Goal) => void;
   activatingGoalId: string | null;
   pageSize?: number;
   pageSizeOptions?: number[];
@@ -130,6 +132,7 @@ export function GoalsListCards({
   emptyHint,
   onOpenDetail,
   onActivate,
+  onCreateChildGoal,
   activatingGoalId,
   pageSize: defaultPageSize = 12,
   pageSizeOptions = [12, 24, 48],
@@ -260,6 +263,16 @@ export function GoalsListCards({
                   >
                     {goal.title}
                   </button>
+                  {canCreate && onCreateChildGoal ? (
+                    <Button
+                      size="small"
+                      type="text"
+                      className="!tw-h-6 !tw-rounded !tw-px-1.5 !tw-text-[11px] !tw-text-slate-500 hover:!tw-bg-slate-100 hover:!tw-text-[#1e3a5f]"
+                      onClick={() => onCreateChildGoal(goal)}
+                    >
+                      + 하위
+                    </Button>
+                  ) : null}
                 </div>
                 {/* 액션 버튼 — 필요한 경우에만 표시 */}
                 {canActivate ? (
