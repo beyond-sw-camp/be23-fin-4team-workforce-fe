@@ -31,7 +31,7 @@ export function ChatRoomList({
 }: Props) {
   return (
     <>
-      <div className="tw-flex tw-shrink-0 tw-flex-col tw-gap-3 tw-border-b tw-border-slate-200 tw-bg-white tw-px-3 tw-pt-3 tw-pb-2">
+      <div className="tw-flex tw-shrink-0 tw-flex-col tw-gap-3 tw-bg-slate-50 tw-px-3 tw-pt-3 tw-pb-2">
         <button
           type="button"
           onClick={onNewRoom}

@@ -315,7 +315,7 @@ export function MemberChatModal({
         aria-modal="true"
         aria-label="멤버 채팅"
       >
-        <div className="tw-relative tw-z-[1] tw-flex tw-h-12 tw-shrink-0 tw-items-center tw-justify-between tw-gap-2 tw-border-b tw-border-slate-100 tw-bg-white tw-px-4 tw-select-none">
+        <div className="tw-relative tw-z-[1] tw-flex tw-h-12 tw-shrink-0 tw-items-center tw-justify-between tw-gap-2 tw-border-b tw-border-slate-300 tw-bg-white tw-px-4 tw-select-none tw-shadow-[inset_0_-1px_0_0_rgba(148,163,184,0.45)]">
           <div
             className={`tw-flex tw-flex-1 tw-items-center tw-gap-2 ${isMaximized ? '' : 'tw-cursor-move'}`}
             onPointerDown={onHeaderPointerDown}

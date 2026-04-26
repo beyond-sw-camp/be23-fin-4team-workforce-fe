@@ -489,7 +489,9 @@ export function MemberChatPanel({
   return (
     <div
       ref={panelRootRef}
-      className={`tw-flex tw-w-full tw-min-h-0 tw-flex-col tw-overflow-hidden lg:tw-flex-row ${splitHeight} ${
+      className={`tw-flex tw-w-full tw-min-h-0 tw-flex-col tw-overflow-hidden lg:tw-flex-row ${
+        isCompactLayout ? '' : 'tw-divide-x tw-divide-slate-300'
+      } ${splitHeight} ${
         isFloating
           ? 'tw-flex-1 tw-rounded-none tw-border-0 tw-bg-transparent tw-shadow-none'
           : 'tw-rounded-xl tw-border tw-border-solid tw-border-slate-200 tw-bg-white tw-shadow-sm'
@@ -502,8 +504,8 @@ export function MemberChatPanel({
             ? `${hideRoomList ? 'tw-hidden' : 'tw-flex'} tw-min-h-0 tw-w-full tw-shrink-0 tw-flex-col tw-bg-slate-50`
             : `tw-flex ${
                 isFloating
-                  ? 'tw-min-h-0 tw-w-full tw-max-h-[min(42%,280px)] tw-flex-1 tw-shrink-0 tw-flex-col tw-rounded-none tw-border-slate-200 tw-bg-slate-50 lg:tw-max-h-none lg:tw-h-full lg:tw-w-[min(100%,360px)] lg:tw-max-w-[40%] lg:tw-border-r'
-                  : 'tw-h-[min(40vh,320px)] tw-w-full tw-shrink-0 tw-flex-col tw-border-slate-200 tw-bg-slate-50 lg:tw-h-auto lg:tw-w-[min(100%,360px)] lg:tw-max-w-[40%] lg:tw-border-r'
+                  ? 'tw-min-h-0 tw-w-full tw-max-h-[min(42%,280px)] tw-flex-1 tw-shrink-0 tw-flex-col tw-rounded-none tw-border-slate-200 tw-bg-slate-50 lg:tw-max-h-none lg:tw-h-full lg:tw-w-[min(100%,360px)] lg:tw-max-w-[40%] lg:tw-border-r lg:tw-border-r-slate-300'
+                  : 'tw-h-[min(40vh,320px)] tw-w-full tw-shrink-0 tw-flex-col tw-border-slate-200 tw-bg-slate-50 lg:tw-h-auto lg:tw-w-[min(100%,360px)] lg:tw-max-w-[40%] lg:tw-border-r lg:tw-border-r-slate-300'
               }`
         }
       >

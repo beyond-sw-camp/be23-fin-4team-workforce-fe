@@ -57,7 +57,7 @@ export function ChatComposer({
   };
 
   return (
-    <div className="tw-flex tw-shrink-0 tw-flex-col tw-gap-1.5">
+    <div className="tw-flex tw-shrink-0 tw-flex-col tw-gap-1.5 tw-border-t tw-border-slate-300 tw-pt-2">
       {replyTo ? (
         <div className="tw-flex tw-items-center tw-gap-2 tw-rounded-xl tw-border tw-border-[#2563EB]/25 tw-bg-[#EFF6FF] tw-px-3 tw-py-2">
           <EnterOutlined className="tw-rotate-180 tw-text-[12px] tw-text-[#2563EB]" />
@@ -87,7 +87,7 @@ export function ChatComposer({
           ) : null}
         </div>
       ) : null}
-      <div className="tw-rounded-2xl tw-border tw-border-slate-200/90 tw-bg-slate-50 tw-px-3 tw-py-2 tw-transition-colors focus-within:tw-border-[#2563EB]/40 focus-within:tw-bg-white">
+      <div className="tw-rounded-2xl tw-border tw-border-slate-300 tw-bg-[#F5F8FF] tw-px-3 tw-py-2 tw-transition-colors focus-within:tw-border-[#2563EB]/35 focus-within:tw-bg-[#FCFDFF]">
         <Input.TextArea
           autoSize={{ minRows: 1, maxRows: isFloating ? 5 : 8 }}
           value={draft}
@@ -95,11 +95,11 @@ export function ChatComposer({
           onKeyDown={onKeyDown}
           placeholder={disabled ? '채팅방을 선택해 주세요' : '메시지를 입력하세요'}
           disabled={disabled || uploading}
-          className={`!tw-max-h-[168px] !tw-min-h-[44px] !tw-border-0 !tw-bg-transparent !tw-p-0 !tw-pr-1 !tw-text-[15px] !tw-leading-[1.5] !tw-shadow-none placeholder:!tw-text-slate-400 focus:!tw-shadow-none ${PRETTY_SCROLLBAR_CLASS}`}
+          className={`!tw-max-h-[168px] !tw-min-h-[44px] !tw-border-0 !tw-bg-transparent !tw-py-0 !tw-pl-2 !tw-pr-2 !tw-text-[15px] !tw-leading-[1.5] !tw-shadow-none placeholder:!tw-text-slate-400 focus:!tw-shadow-none ${PRETTY_SCROLLBAR_CLASS}`}
           style={{ resize: 'none' }}
           aria-label="메시지 입력"
         />
-        <div className="tw-mt-2 tw-flex tw-items-center tw-justify-between tw-gap-2 tw-border-t tw-border-slate-100 tw-pt-2">
+        <div className="tw-mt-2 tw-flex tw-items-center tw-justify-between tw-gap-2 tw-border-t tw-border-slate-300/90 tw-pt-2">
           <Tooltip
             title="사진·파일 보내기"
             zIndex={MEMBER_CHAT_OVERLAY_Z + 50}

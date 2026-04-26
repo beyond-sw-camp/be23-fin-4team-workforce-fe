@@ -58,7 +58,7 @@ export function ChatThreadHeader({
   ];
 
   return (
-    <div className="tw-shrink-0 tw-border-b tw-border-slate-100 tw-bg-white/85 tw-px-4 tw-py-3 tw-backdrop-blur-sm">
+    <div className="tw-shrink-0 tw-bg-white/85 tw-px-4 tw-py-3 tw-backdrop-blur-sm">
       <div className="tw-flex tw-items-start tw-justify-between tw-gap-2">
         <div className="tw-flex tw-min-w-0 tw-items-start tw-gap-2">
         {isCompactLayout ? (
