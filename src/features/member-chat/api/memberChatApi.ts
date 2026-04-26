@@ -177,6 +177,14 @@ export const memberChatApi = {
       .map(toParticipant);
   },
 
+  async addMember(roomId: number, memberId: string): Promise<void> {
+    await httpClient.post(`${MEMBER_CHAT_PREFIX}/rooms/${roomId}/members/${encodeURIComponent(memberId)}`);
+  },
+
+  async leaveRoom(roomId: number): Promise<void> {
+    await httpClient.post(`${MEMBER_CHAT_PREFIX}/rooms/${roomId}/leave`);
+  },
+
   async getRoomHistory(roomId: number, cursor?: number, size = 50): Promise<MemberChatCursorResponse> {
     const response = await httpClient.get(`${MEMBER_CHAT_PREFIX}/rooms/${roomId}/messages`, {
       params: { cursor, size },

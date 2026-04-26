@@ -120,7 +120,7 @@ const loginRoute = createRoute({
   path: 'login',
   component: () => <LoginPage embedded />,
 });
-const findPasswordRoute = createRoute({ getParentRoute: () => publicLayoutRoute, path: '/find-password', component: FindPasswordPage });
+const findPasswordRoute = createRoute({ getParentRoute: () => homeRoute, path: 'find-password', component: FindPasswordPage });
 const changePasswordRoute = createRoute({
   getParentRoute: () => publicLayoutRoute,
   path: '/change-password',

@@ -1079,10 +1079,10 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
         queryKey: ['member-chat', 'rooms'],
         queryFn: () => memberChatApi.listMyRooms(),
         enabled: status === 'authenticated',
-        // 방별 unreadCount 합(헤더 뱃지)과 목록 카운트를 실시간에 가깝게 유지
-        // 현재는 활성 방 외에는 STOMP 직접 구독이 없으므로 짧은 polling으로 동기화한다.
+        // 1차 동기화는 MemberChatLiveSyncAgent 의 STOMP 구독이 처리(메시지 도착 시 즉시 invalidate).
+        // 폴링은 STOMP 미연결/네트워크 단절 대비 백업용으로 길게(30s) 유지.
         staleTime: 0,
-        refetchInterval: 3_000,
+        refetchInterval: 30_000,
         refetchIntervalInBackground: true,
     });
     const chatUnreadTotal = myChatRooms.reduce(
@@ -1676,4 +1676,5 @@ function AppShellLayout() {
     );
 }
 
-export default AppShellLayout
+
+export default AppShellLayout;

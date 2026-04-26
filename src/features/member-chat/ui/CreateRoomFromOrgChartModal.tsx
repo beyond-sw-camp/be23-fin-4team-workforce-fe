@@ -71,6 +71,18 @@ function collectAllSelectableFromRoots(orgs: OrgChartOrgNode[], selfMemberId?: s
   return acc;
 }
 
+function collectOrgKeys(orgs: OrgChartOrgNode[]): string[] {
+  const out: string[] = [];
+  const walk = (nodes: OrgChartOrgNode[]) => {
+    for (const n of nodes) {
+      out.push(`o${KS}${n.organizationId}`);
+      walk(n.children);
+    }
+  };
+  walk(orgs);
+  return out;
+}
+
 function buildNameMap(orgs: OrgChartOrgNode[], selfMemberId?: string, bucket = new Map<string, string>()) {
   for (const org of orgs) {
     for (const m of org.members) {
@@ -106,11 +118,13 @@ export function CreateRoomFromOrgChartModal({
   const queryClient = useQueryClient();
   const [keyword, setKeyword] = useState('');
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
 
   useEffect(() => {
     if (!open) {
       setKeyword('');
       setSelected(new Set());
+      setExpandedKeys([]);
     }
   }, [open]);
 
@@ -145,6 +159,25 @@ export function CreateRoomFromOrgChartModal({
     [filteredRoots, selfMemberId],
   );
 
+  useEffect(() => {
+    if (!open) return;
+    const orgKeys = collectOrgKeys(filteredRoots);
+    setExpandedKeys(['root-company', ...orgKeys]);
+  }, [open, filteredRoots, keyword]);
+
+  const applyBulkSelection = useCallback((memberIds: string[], checked: boolean) => {
+    if (memberIds.length === 0) return;
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (checked) {
+        for (const id of memberIds) next.add(id);
+      } else {
+        for (const id of memberIds) next.delete(id);
+      }
+      return next;
+    });
+  }, []);
+
   const treeData: DataNode[] = useMemo(() => {
     if (!data) return [];
 
@@ -169,7 +202,7 @@ export function CreateRoomFromOrgChartModal({
           }}
         >
           <span className="tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-2">
-            <Avatar size={28} className="tw-shrink-0 tw-bg-slate-200 tw-text-xs tw-text-slate-700">
+            <Avatar size={28} className="tw-shrink-0 tw-bg-slate-200 tw-text-xs tw-text-slate-500">
               {(m.name || '?').slice(0, 1)}
             </Avatar>
             <span className="tw-truncate tw-text-sm tw-text-slate-800">
@@ -190,11 +223,25 @@ export function CreateRoomFromOrgChartModal({
       );
     };
 
-    const orgTitleRow = (label: string, memberCount: number) => (
-      <div className="tw-flex tw-w-full tw-min-w-0 tw-items-center tw-pr-1">
+    const orgTitleRow = (
+      label: string,
+      memberCount: number,
+      checked: boolean,
+      indeterminate: boolean,
+      onToggle: (checked: boolean) => void,
+    ) => (
+      <div className="tw-flex tw-w-full tw-min-w-0 tw-items-center tw-justify-between tw-gap-2 tw-pr-1">
         <span className="tw-truncate tw-text-sm tw-font-semibold tw-text-slate-800">
           {label}
           <span className="tw-ml-1 tw-font-normal tw-text-slate-400"> {memberCount}</span>
+        </span>
+        <span className="tw-shrink-0" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+          <Checkbox
+            checked={checked}
+            indeterminate={indeterminate}
+            onChange={(e) => onToggle(e.target.checked)}
+            aria-label={`${label} 전체 선택`}
+          />
         </span>
       </div>
     );
@@ -202,6 +249,9 @@ export function CreateRoomFromOrgChartModal({
     function buildOrgNodes(orgs: OrgChartOrgNode[]): DataNode[] {
       return orgs.map((org) => {
         const subtreeIds = collectSelectableMemberIdsFromOrg(org, selfMemberId);
+        const checkedCount = subtreeIds.filter((id) => selected.has(id)).length;
+        const orgChecked = subtreeIds.length > 0 && checkedCount === subtreeIds.length;
+        const orgIndeterminate = checkedCount > 0 && checkedCount < subtreeIds.length;
         const memberNodes: DataNode[] = [];
         for (const m of org.members) {
           if (m.jobGradeName.trim() === ORG_CHART_HIDDEN_JOB_GRADE) continue;
@@ -218,7 +268,13 @@ export function CreateRoomFromOrgChartModal({
 
         return {
           key: `o${KS}${org.organizationId}`,
-          title: orgTitleRow(org.name, subtreeIds.length),
+          title: orgTitleRow(
+            org.name,
+            subtreeIds.length,
+            orgChecked,
+            orgIndeterminate,
+            (checked) => applyBulkSelection(subtreeIds, checked),
+          ),
           selectable: false,
           ...(children.length > 0 ? { children } : { isLeaf: true }),
         };
@@ -226,14 +282,25 @@ export function CreateRoomFromOrgChartModal({
     }
 
     const roots = buildOrgNodes(filteredRoots);
+    const rootCheckedCount = allVisibleIds.filter((id) => selected.has(id)).length;
+    const rootChecked = allVisibleIds.length > 0 && rootCheckedCount === allVisibleIds.length;
+    const rootIndeterminate = rootCheckedCount > 0 && rootCheckedCount < allVisibleIds.length;
     return [
       {
         key: 'root-company',
         title: (
-          <div className="tw-flex tw-w-full tw-min-w-0 tw-items-center tw-pr-1">
+          <div className="tw-flex tw-w-full tw-min-w-0 tw-items-center tw-justify-between tw-gap-2 tw-pr-1">
             <span className="tw-truncate tw-text-sm tw-font-semibold tw-text-[#1e3a5f]">
               {data.companyName}
               <span className="tw-ml-1 tw-font-normal tw-text-slate-400"> {allVisibleIds.length}</span>
+            </span>
+            <span className="tw-shrink-0" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+              <Checkbox
+                checked={rootChecked}
+                indeterminate={rootIndeterminate}
+                onChange={(e) => applyBulkSelection(allVisibleIds, e.target.checked)}
+                aria-label="회사 전체 선택"
+              />
             </span>
           </div>
         ),
@@ -242,7 +309,7 @@ export function CreateRoomFromOrgChartModal({
         isLeaf: roots.length === 0,
       },
     ];
-  }, [data, filteredRoots, allVisibleIds, selfMemberId, selected, toggleMember]);
+  }, [data, filteredRoots, allVisibleIds, selfMemberId, selected, toggleMember, applyBulkSelection]);
 
   const createDirectMutation = useMutation({
     mutationFn: (otherMemberId: string) => memberChatApi.createDirectRoom(otherMemberId),
@@ -328,7 +395,8 @@ export function CreateRoomFromOrgChartModal({
                   blockNode
                   expandAction="click"
                   showLine={{ showLeafIcon: false }}
-                  defaultExpandAll
+                  expandedKeys={expandedKeys}
+                  onExpand={(keys) => setExpandedKeys(keys as string[])}
                   selectable={false}
                   treeData={treeData}
                   switcherIcon={({ expanded }) => (
