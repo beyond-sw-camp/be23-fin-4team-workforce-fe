@@ -1,7 +1,12 @@
-import { CloseOutlined, ExpandOutlined, ShrinkOutlined } from '@ant-design/icons';
+import {
+  CloseOutlined,
+  ExpandOutlined,
+  SettingOutlined,
+  ShrinkOutlined,
+} from '@ant-design/icons';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Tooltip } from 'antd';
+import { Dropdown, type MenuProps, Tooltip } from 'antd';
 import { MemberChatPanel } from '@/features/member-chat/ui/MemberChatPanel';
 
 type MemberChatModalProps = {
@@ -15,11 +20,13 @@ type MemberChatModalProps = {
 
 const STORAGE_KEY = 'wf-member-chat-pip';
 const STORAGE_KEY_MAX = 'wf-member-chat-pip-max';
+const STORAGE_KEY_FONT_SIZE = 'wf-member-chat-font-size';
 const MIN_W = 360;
 const MIN_H = 280;
 const DEFAULT_W = 920;
 const DEFAULT_H = 580;
 type Rect = { x: number; y: number; w: number; h: number };
+type ChatFontSize = 'sm' | 'md' | 'lg';
 
 function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));
@@ -63,6 +70,24 @@ function loadBool(key: string): boolean {
 function saveBool(key: string, v: boolean) {
   try {
     localStorage.setItem(key, v ? '1' : '0');
+  } catch {
+    /* ignore */
+  }
+}
+
+function loadFontSize(): ChatFontSize {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_FONT_SIZE);
+    if (raw === 'sm' || raw === 'md' || raw === 'lg') return raw;
+  } catch {
+    /* ignore */
+  }
+  return 'md';
+}
+
+function saveFontSize(v: ChatFontSize) {
+  try {
+    localStorage.setItem(STORAGE_KEY_FONT_SIZE, v);
   } catch {
     /* ignore */
   }
@@ -118,6 +143,7 @@ export function MemberChatModal({
 }: MemberChatModalProps) {
   const [rect, setRect] = useState<Rect>(() => loadRect() ?? defaultRect());
   const [isMaximized, setIsMaximized] = useState<boolean>(() => loadBool(STORAGE_KEY_MAX));
+  const [fontSize, setFontSize] = useState<ChatFontSize>(() => loadFontSize());
   /** 최대화 진입 시 직전 rect 를 보관해 복원에 사용 */
   const preMaxRectRef = useRef<Rect | null>(null);
   const dragRef = useRef<{ dx: number; dy: number } | null>(null);
@@ -173,6 +199,21 @@ export function MemberChatModal({
       return next;
     });
   }, [rect]);
+
+  const fontMenuItems: MenuProps['items'] = [
+    {
+      key: 'sm',
+      label: '글자 작게',
+    },
+    {
+      key: 'md',
+      label: '기본 크기',
+    },
+    {
+      key: 'lg',
+      label: '글자 크게',
+    },
+  ];
 
   const onHeaderPointerDown = useCallback(
     (e: React.PointerEvent) => {
@@ -274,23 +315,49 @@ export function MemberChatModal({
         aria-modal="true"
         aria-label="멤버 채팅"
       >
-        <div
-          className={`tw-relative tw-z-[1] tw-flex tw-h-12 tw-shrink-0 tw-items-center tw-justify-between tw-gap-2 tw-border-b tw-border-slate-100 tw-bg-white tw-px-4 tw-select-none ${
-            isMaximized ? '' : 'tw-cursor-move'
-          }`}
-          onPointerDown={onHeaderPointerDown}
-          onPointerMove={onHeaderPointerMove}
-          onPointerUp={onHeaderPointerUp}
-          onPointerCancel={onHeaderPointerUp}
-        >
-          <div className="tw-flex tw-items-center tw-gap-2">
+        <div className="tw-relative tw-z-[1] tw-flex tw-h-12 tw-shrink-0 tw-items-center tw-justify-between tw-gap-2 tw-border-b tw-border-slate-100 tw-bg-white tw-px-4 tw-select-none">
+          <div
+            className={`tw-flex tw-flex-1 tw-items-center tw-gap-2 ${isMaximized ? '' : 'tw-cursor-move'}`}
+            onPointerDown={onHeaderPointerDown}
+            onPointerMove={onHeaderPointerMove}
+            onPointerUp={onHeaderPointerUp}
+            onPointerCancel={onHeaderPointerUp}
+          >
             <span className="tw-relative tw-inline-flex tw-h-2.5 tw-w-2.5" aria-hidden>
               <span className="tw-absolute tw-inset-0 tw-rounded-full tw-bg-[#2563EB]/45 motion-safe:tw-animate-ping" />
               <span className="tw-relative tw-inline-flex tw-h-2.5 tw-w-2.5 tw-rounded-full tw-bg-[#2563EB] motion-safe:tw-animate-pulse" />
             </span>
             <span className="tw-text-sm tw-font-extrabold tw-tracking-tight tw-text-slate-800">MESSENGER</span>
           </div>
-          <div className="tw-flex tw-items-center tw-gap-1">
+          <div
+            className="tw-flex tw-items-center tw-gap-1"
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Dropdown
+              menu={{
+                items: fontMenuItems,
+                selectable: true,
+                selectedKeys: [fontSize],
+                onClick: ({ key }) => {
+                  const next = key === 'sm' || key === 'md' || key === 'lg' ? key : 'md';
+                  setFontSize(next);
+                  saveFontSize(next);
+                },
+              }}
+              trigger={['click']}
+              placement="bottomRight"
+              overlayStyle={{ zIndex: 1200 }}
+            >
+              <button
+                type="button"
+                className="tw-inline-flex tw-h-7 tw-w-7 tw-cursor-pointer tw-items-center tw-justify-center tw-rounded-md tw-border-0 tw-bg-transparent tw-text-slate-400 tw-transition-colors hover:tw-bg-slate-100 hover:tw-text-slate-700"
+                aria-label="채팅 글자 크기 설정"
+              >
+                <SettingOutlined className="tw-text-[14px]" />
+              </button>
+            </Dropdown>
             <Tooltip title={isMaximized ? '복원' : '최대화'} placement="bottom">
               <button
                 type="button"
@@ -313,7 +380,10 @@ export function MemberChatModal({
             </Tooltip>
           </div>
         </div>
-        <div className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-hidden">
+        <div
+          className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-hidden"
+          data-chat-font={fontSize}
+        >
           <MemberChatPanel
             variant="floating"
             initialDirectMemberId={initialDirectMemberId}

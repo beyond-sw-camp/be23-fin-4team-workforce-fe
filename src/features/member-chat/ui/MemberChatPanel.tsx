@@ -65,9 +65,7 @@ export function MemberChatPanel({
   const [uploading, setUploading] = useState(false);
   const [listQuery, setListQuery] = useState('');
   const [isCompactLayout, setIsCompactLayout] = useState<boolean>(false);
-  const [showCompactRoomList, setShowCompactRoomList] = useState<boolean>(() =>
-    typeof window !== 'undefined' ? window.matchMedia('(max-width: 1023px)').matches : true,
-  );
+  const [showCompactRoomList, setShowCompactRoomList] = useState<boolean>(false);
 
   const isFloating = variant === 'floating';
   const splitHeight = isFloating ? 'tw-h-full tw-min-h-0 tw-flex-1' : 'tw-min-h-[640px]';
@@ -146,9 +144,12 @@ export function MemberChatPanel({
       const compact = width < COMPACT_PANEL_WIDTH;
       setIsCompactLayout(compact);
       setShowCompactRoomList((prev) => {
-        if (!compact) return true;
-        if (!activeRoom?.roomId) return true;
-        return prev;
+        // 데스크탑 폭으로 돌아가도 사용자의 마지막 포커스 상태를 보존한다.
+        if (!compact) return prev;
+        // 컴팩트 폭에서는 활성 방이 있으면 기본 포커스를 대화창에 둔다.
+        if (activeRoom?.roomId) return false;
+        // 활성 방이 없을 때만 목록 화면을 기본으로 보여준다.
+        return true;
       });
     };
     applyCompact(el.clientWidth);
@@ -236,6 +237,7 @@ export function MemberChatPanel({
     onThreadScroll,
     scrollThreadToBottom,
     ackLatestIfViewing,
+    suspendViewingAck,
   } = useChatReadAck({
     roomId: activeRoom?.roomId ?? null,
     orderedMessages,
@@ -541,7 +543,11 @@ export function MemberChatPanel({
                 setParticipantsModalMode('invite');
                 setParticipantsOpen(true);
               }}
-              onShowRoomList={() => setShowCompactRoomList(true)}
+              onShowRoomList={() => {
+                suspendViewingAck();
+                setActiveRoom(null);
+                setShowCompactRoomList(true);
+              }}
               leaving={leaveRoomMutation.isPending}
               onLeaveRoom={() => {
                 const roomId = activeRoom.roomId;

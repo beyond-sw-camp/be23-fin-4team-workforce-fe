@@ -94,3 +94,34 @@ a {
 .wf-scrollbar-modal::-webkit-scrollbar-thumb:hover {
   background-color: rgba(100, 116, 139, 0.5);
 }
+
+/* Member chat font size options (floating modal settings). */
+[data-chat-font='sm'] .tw-text-xs,
+[data-chat-font='sm'] .ant-typography.ant-typography-secondary,
+[data-chat-font='sm'] .ant-tag {
+  font-size: 10px !important;
+}
+[data-chat-font='sm'] .tw-text-sm,
+[data-chat-font='sm'] .ant-typography,
+[data-chat-font='sm'] .ant-input,
+[data-chat-font='sm'] .ant-btn {
+  font-size: 12px !important;
+}
+[data-chat-font='sm'] .tw-text-base {
+  font-size: 13px !important;
+}
+
+[data-chat-font='lg'] .tw-text-xs,
+[data-chat-font='lg'] .ant-typography.ant-typography-secondary,
+[data-chat-font='lg'] .ant-tag {
+  font-size: 14px !important;
+}
+[data-chat-font='lg'] .tw-text-sm,
+[data-chat-font='lg'] .ant-typography,
+[data-chat-font='lg'] .ant-input,
+[data-chat-font='lg'] .ant-btn {
+  font-size: 17px !important;
+}
+[data-chat-font='lg'] .tw-text-base {
+  font-size: 19px !important;
+}

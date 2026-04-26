@@ -93,6 +93,14 @@ export function useChatReadAck({
     ackLatestIfViewing();
   }, [viewing, ackLatestIfViewing]);
 
+  /**
+   * 컴팩트 레이아웃에서 "목록으로 뒤로가기" 누르는 순간처럼,
+   * 리렌더 전에 즉시 읽음 ack 경로를 끊어야 할 때 사용.
+   */
+  const suspendViewingAck = useCallback(() => {
+    viewingRef.current = false;
+  }, []);
+
   return {
     threadRef,
     userScrolledUpRef,
@@ -101,5 +109,6 @@ export function useChatReadAck({
     onThreadScroll,
     ackLatestIfViewing,
     resetForRoomChange,
+    suspendViewingAck,
   };
 }

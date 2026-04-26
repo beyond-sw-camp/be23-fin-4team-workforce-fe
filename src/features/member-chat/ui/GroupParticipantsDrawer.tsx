@@ -83,6 +83,7 @@ export function GroupParticipantsDrawer({
     queryFn: () => organizationApi.getOrgChart(),
     enabled: inviteOpen && roomId != null && isGroupRoom,
     staleTime: 60_000,
+    retry: 0,
   });
 
   const addMembersMutation = useMutation({
@@ -302,7 +303,6 @@ export function GroupParticipantsDrawer({
                 <Tree
                   checkable
                   selectable={false}
-                  defaultExpandAll
                   checkedKeys={checkedMemberIds}
                   onCheck={(keys) => {
                     const arr = Array.isArray(keys) ? keys : keys.checked;
