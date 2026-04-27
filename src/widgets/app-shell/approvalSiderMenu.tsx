@@ -45,7 +45,7 @@ function navDepartment(search: Record<string, string | undefined>): string {
 /** Current URL leaf menu key for approvals / department inbox */
 export function approvalSiderSelectedMenuKeys(pathname: string, rawSearch: Record<string, unknown>): string[] {
   if (pathname === '/app/approvals/absence-proxy') {
-    return [navApprovals({ tab: 'compose', sideNav: 'request-compose' })];
+    return [encodeWfNavKey({ to: '/app/approvals' })];
   }
   if (pathname === '/app/approvals/department') {
     const organizationId = typeof rawSearch.organizationId === 'string' ? rawSearch.organizationId.trim() : '';
@@ -57,19 +57,7 @@ export function approvalSiderSelectedMenuKeys(pathname: string, rawSearch: Recor
     return [navDepartment({ deptView })];
   }
   if (pathname !== '/app/approvals') return [];
-  const tabRaw = typeof rawSearch.tab === 'string' ? rawSearch.tab : 'compose';
-  const segment = APPROVAL_PATH_TABS.has(tabRaw) ? tabRaw : 'compose';
-  const myStatus =
-    typeof rawSearch.myStatus === 'string' && rawSearch.myStatus ? rawSearch.myStatus : undefined;
-  const compose = typeof rawSearch.compose === 'string' && rawSearch.compose ? rawSearch.compose : undefined;
-  const sideNav = typeof rawSearch.sideNav === 'string' && rawSearch.sideNav ? rawSearch.sideNav : undefined;
-
-  const search: Record<string, string | undefined> = {};
-  if (myStatus) search.myStatus = myStatus;
-  if (compose) search.compose = compose;
-  if (sideNav) search.sideNav = sideNav;
-
-  return [encodeWfNavKey({ to: '/app/approvals', search: { tab: segment, ...search } })];
+  return [encodeWfNavKey({ to: '/app/approvals' })];
 }
 
 /** Secondary sider: which submenu should stay open for this route (single parent). */
@@ -92,7 +80,7 @@ export function buildApprovalMenuGroupChildren(
 ): NonNullable<MenuProps['items']> {
   return [
     {
-      key: navApprovals({ tab: 'compose', sideNav: 'request-compose' }),
+      key: encodeWfNavKey({ to: '/app/approvals' }),
       icon: <FormOutlined className="tw-text-lg" />,
       label: '전자결재',
       title: '전자결재',

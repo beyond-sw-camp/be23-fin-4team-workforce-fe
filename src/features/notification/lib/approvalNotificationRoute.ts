@@ -40,7 +40,6 @@ export function buildApprovalNotificationNavigate(input: BuildApprovalRouteInput
   const requestId = String(input.targetId ?? '').trim();
   const search: Record<string, string | undefined> = {
     tab: 'compose',
-    sideNav: 'request-compose',
     approvalModal: modal,
     approvalOpenAt: String(Date.now()),
   };

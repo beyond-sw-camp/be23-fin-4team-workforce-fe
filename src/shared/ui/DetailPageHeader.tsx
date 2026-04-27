@@ -8,6 +8,8 @@ export type DetailPageHeaderProps = {
   /** 목록 등 상위 화면 경로 */
   backTo?: string;
   backLabel?: string;
+  onBackClick?: () => void;
+  hideBack?: boolean;
   /** 메인 제목 */
   title?: string;
   /** 제목 아래 보조 문구(선택) */
@@ -23,6 +25,8 @@ export type DetailPageHeaderProps = {
 export function DetailPageHeader({
   backTo = '/app/members',
   backLabel = '구성원 목록',
+  onBackClick,
+  hideBack = false,
   title = '구성원 상세 정보',
   subtitle,
   showShare = true,
@@ -58,13 +62,26 @@ export function DetailPageHeader({
 
   return (
     <header className="tw-mb-8 tw-w-full">
-      <Link
-        to={backTo}
-        className="tw-mb-1 tw-inline-flex tw-w-fit tw-items-center tw-gap-1 tw-text-sm tw-font-medium tw-text-slate-500 tw-no-underline tw-transition-colors hover:tw-text-slate-700"
-      >
-        <LeftOutlined className="tw-text-[12px] tw-text-slate-400" aria-hidden />
-        {backLabel}
-      </Link>
+      {!hideBack ? (
+        onBackClick ? (
+          <button
+            type="button"
+            onClick={onBackClick}
+            className="tw-mb-1 tw-inline-flex tw-w-fit tw-items-center tw-gap-1 tw-border-0 tw-bg-transparent tw-p-0 tw-text-sm tw-font-medium tw-text-slate-500 tw-transition-colors hover:tw-text-slate-700"
+          >
+            <LeftOutlined className="tw-text-[12px] tw-text-slate-400" aria-hidden />
+            {backLabel}
+          </button>
+        ) : (
+          <Link
+            to={backTo}
+            className="tw-mb-1 tw-inline-flex tw-w-fit tw-items-center tw-gap-1 tw-text-sm tw-font-medium tw-text-slate-500 tw-no-underline tw-transition-colors hover:tw-text-slate-700"
+          >
+            <LeftOutlined className="tw-text-[12px] tw-text-slate-400" aria-hidden />
+            {backLabel}
+          </Link>
+        )
+      ) : null}
 
       <div className="tw-flex tw-w-full tw-items-start tw-justify-between tw-gap-4">
         <h1 className="tw-m-0 tw-min-w-0 tw-flex-1 tw-text-2xl tw-font-bold tw-leading-tight tw-tracking-tight tw-text-[#1e3a5f] sm:tw-text-[26px]">
