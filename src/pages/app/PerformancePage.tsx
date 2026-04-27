@@ -10,6 +10,7 @@ import {
   FilterOutlined,
   MessageOutlined,
   PlusOutlined,
+  TeamOutlined,
   ThunderboltOutlined,
   WarningOutlined,
 } from '@ant-design/icons';
@@ -40,6 +41,7 @@ import {
   Tabs,
   Tag,
   Tree,
+  TreeSelect,
   Tooltip,
   Typography,
   Upload,
@@ -74,6 +76,8 @@ import { AppButton } from '@/shared/ui/AppButton';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import { AppModal } from '@/shared/ui/AppModal';
 import { AppSearchField } from '@/shared/ui/AppSearchField';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
+import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
 import { goalApi } from '@/features/goals/api/goalApi';
 import { organizationApi } from '@/features/organization/api/organizationApi';
 import { flattenOrganizationsWithMeta } from '@/features/organization/lib/flattenOrganizationTree';
@@ -94,6 +98,8 @@ import {
   useMemberDisplayNames,
 } from '@/features/members/hooks/useMemberDisplayNames';
 import { MemberRemoteSelect } from '@/features/members/ui/MemberRemoteSelect';
+import { SingleMemberOrgChartSelectModal } from '@/features/members/ui/SingleMemberOrgChartSelectModal';
+import { OrganizationTreeSelectModal } from '@/features/organization/ui/OrganizationTreeSelectModal';
 import { usePermissions } from '@/features/permissions/usePermissionsHook';
 const { RangePicker } = DatePicker;
 const { Text, Paragraph } = Typography;
@@ -517,6 +523,8 @@ function PerformancePage() {
   const queryClient = useQueryClient();
   const companyId = user?.companyId?.trim();
   const memberId = user?.id ?? '';
+  const creatorOrganizationId = String((user as { organizationId?: string } | null)?.organizationId ?? '').trim();
+  const creatorDepartmentName = String((user as { departmentName?: string } | null)?.departmentName ?? '').trim();
 
   const canCreate = hasPermission(PERM.GOAL_CREATE);
   const canUpdate = hasPermission(PERM.GOAL_UPDATE);
@@ -530,6 +538,8 @@ function PerformancePage() {
   const [ownerQuickPick, setOwnerQuickPick] = useState<string>('ALL');
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
   const [goalModalOpen, setGoalModalOpen] = useState(false);
+  const [goalOrgPickerOpen, setGoalOrgPickerOpen] = useState(false);
+  const [goalMemberPickerField, setGoalMemberPickerField] = useState<'memberOwnerId' | 'responsibleMemberId' | null>(null);
   const [goalEditModalOpen, setGoalEditModalOpen] = useState(false);
   const [completionSubmitModalOpen, setCompletionSubmitModalOpen] = useState(false);
   const [activationApprovalModalOpen, setActivationApprovalModalOpen] = useState(false);
@@ -550,9 +560,11 @@ function PerformancePage() {
   >();
   const tplUnitType = Form.useWatch('unitType', tplForm);
   const tplApprovalPolicy = Form.useWatch('goalApprovalPolicy', tplForm) as GoalApprovalPolicy | undefined;
-  const goalUnitType = Form.useWatch('unitType', goalForm);
   const goalOwnerType = Form.useWatch('ownerType', goalForm);
   const goalSelectedTplId = Form.useWatch('kpiTemplateId', goalForm);
+  const goalOrganizationOwnerId = Form.useWatch('organizationOwnerId', goalForm) as string | undefined;
+  const goalMemberOwnerId = Form.useWatch('memberOwnerId', goalForm) as string | undefined;
+  const goalResponsibleMemberId = Form.useWatch('responsibleMemberId', goalForm) as string | undefined;
   const [activationApprovalForm] = Form.useForm<{ approverId: string }>();
 
   useEffect(() => {
@@ -899,11 +911,13 @@ function PerformancePage() {
     [organizationsQuery.data],
   );
 
-  const goalOrganizationOptions = useMemo(
+  const goalOrganizationTreeData = useMemo(
     () =>
       organizationRowsFlat.map((r) => ({
+        id: r.id,
+        pId: r.parentId ?? undefined,
         value: r.id,
-        label: `${r.depth > 0 ? '\u2003'.repeat(r.depth) : ''}${r.name}`,
+        title: r.name,
       })),
     [organizationRowsFlat],
   );
@@ -926,6 +940,15 @@ function PerformancePage() {
     }
     return m;
   }, [organizationRowsFlat]);
+  const defaultOrganizationOwnerId = useMemo(() => {
+    if (creatorOrganizationId && orgLabelById.has(creatorOrganizationId)) {
+      return creatorOrganizationId;
+    }
+    if (!creatorDepartmentName) return undefined;
+    const hit = organizationRowsFlat.find((r) => r.name.trim() === creatorDepartmentName);
+    if (hit?.id) return hit.id;
+    return organizationRowsFlat[0]?.id;
+  }, [creatorDepartmentName, creatorOrganizationId, orgLabelById, organizationRowsFlat]);
 
   const memberIdsForDisplay = useMemo(() => {
     const s = new Set<string>();
@@ -958,6 +981,10 @@ function PerformancePage() {
     for (const u of detailProgressUpdatesQuery.data ?? []) {
       if (u.createdBy?.trim()) s.add(u.createdBy.trim());
     }
+    const selectedMemberOwnerId = goalMemberOwnerId?.trim();
+    if (selectedMemberOwnerId) s.add(selectedMemberOwnerId);
+    const selectedResponsibleId = goalResponsibleMemberId?.trim();
+    if (selectedResponsibleId) s.add(selectedResponsibleId);
     return [...s];
   }, [
     goalsList,
@@ -966,6 +993,8 @@ function PerformancePage() {
     detailActivitiesQuery.data,
     detailCommentsQuery.data,
     detailProgressUpdatesQuery.data,
+    goalMemberOwnerId,
+    goalResponsibleMemberId,
   ]);
 
   const { labelFor: lookupMemberLabel } = useMemberDisplayNames(memberIdsForDisplay);
@@ -1195,6 +1224,43 @@ function PerformancePage() {
     setGoalModalOpen(true);
   }, [companyId, goalForm, memberId, templatesQuery]);
 
+  const openCreateChildGoal = useCallback((parent: Goal) => {
+    if (!companyId) {
+      message.warning('회사 ID를 확인할 수 없어 목표를 생성할 수 없습니다.');
+      return;
+    }
+    void templatesQuery.refetch();
+    goalForm.setFieldsValue({
+      kpiTemplateId: parent.kpiTemplateId ?? undefined,
+      parentGoalId: parent.id,
+      rollupPolicy: 'CHILDREN_AVG',
+      // 기본 전제조건: 생성 모달 진입 시 소유 유형 기본값은 항상 구성원
+      ownerType: 'MEMBER',
+      organizationOwnerId: undefined,
+      memberOwnerId: memberId,
+      responsibleMemberId: undefined,
+      measureType: parent.measureType ?? 'HIGHER_BETTER',
+      unitType: parent.unitType ?? 'NUMBER',
+      unitLabel: parent.unitType && parent.unitType !== 'CUSTOM'
+        ? fixedUnitLabelForType(parent.unitType)
+        : (parent.unitLabel ?? ''),
+      visibility: parent.visibility ?? 'PUBLIC',
+      contributionPct: undefined,
+      weightPct: undefined,
+      capPct: Number(parent.capPct ?? 120),
+      baseline: Number(parent.baseline ?? 0),
+      targetValue: Number(parent.targetValue ?? 100),
+      actualValue: 0,
+      autoUpdate: parent.autoUpdate ?? false,
+      range: [dayjs(parent.startDate), dayjs(parent.endDate)],
+      title: '',
+      description: '',
+      approverId: undefined,
+    });
+    setGoalModalOpen(true);
+    message.info(`"${parent.title}" 하위 목표 생성으로 전환되었습니다.`);
+  }, [companyId, goalForm, memberId, templatesQuery]);
+
   const loadingGoals = goalsQuery.isPending || goalsQuery.isFetching;
   const loadingTpl = templatesQuery.isPending || templatesQuery.isFetching;
   const activatingGoalId =
@@ -1227,7 +1293,7 @@ function PerformancePage() {
 
           <div className="tw-mt-5 tw-space-y-4">
             <div className="tw-grid tw-w-full tw-min-w-0 tw-grid-cols-1 tw-gap-4 lg:tw-grid-cols-3">
-              <Card className="tw-rounded-3xl tw-border-slate-200/80 tw-bg-white tw-shadow-[0_1px_2px_rgba(15,23,42,0.05)] [&_.ant-card-body]:tw-p-5">
+              <Card className="tw-h-full tw-rounded-3xl tw-border-slate-200/80 tw-bg-white tw-shadow-[0_1px_2px_rgba(15,23,42,0.05)] [&_.ant-card-body]:tw-p-5">
                 <div className="tw-mb-3 tw-flex tw-items-center tw-gap-2">
                   <BarChartOutlined className="tw-text-slate-500" />
                   <Text className="tw-text-lg tw-font-semibold tw-text-slate-900">성과 현황</Text>
@@ -1248,7 +1314,7 @@ function PerformancePage() {
                 </div>
               </Card>
 
-              <Card className="tw-rounded-3xl tw-border-slate-200/80 tw-bg-white tw-shadow-[0_1px_2px_rgba(15,23,42,0.05)] [&_.ant-card-body]:tw-p-5">
+              <Card className="tw-h-full tw-rounded-3xl tw-border-slate-200/80 tw-bg-white tw-shadow-[0_1px_2px_rgba(15,23,42,0.05)] [&_.ant-card-body]:tw-p-5">
                 <div className="tw-mb-1 tw-flex tw-items-center tw-gap-2">
                   <ThunderboltOutlined className="tw-text-slate-500" />
                   <Text className="tw-text-lg tw-font-semibold tw-text-slate-900">{PERFORMANCE_PAGE_KO.avgAchievement}</Text>
@@ -1276,7 +1342,7 @@ function PerformancePage() {
                 const myCount = approvalHistoryQuery.data?.length ?? 0;
                 const hasPending = pendingCount > 0;
                 return (
-                  <Card className="tw-h-full tw-rounded-3xl tw-border-slate-200/80 tw-bg-white tw-shadow-[0_1px_2px_rgba(15,23,42,0.05)] [&_.ant-card-body]:tw-p-5">
+                  <Card className="tw-h-full tw-rounded-3xl tw-border-slate-200/80 tw-bg-white tw-shadow-[0_1px_2px_rgba(15,23,42,0.05)] [&_.ant-card-body]:tw-flex [&_.ant-card-body]:tw-h-full [&_.ant-card-body]:tw-flex-col [&_.ant-card-body]:tw-p-5">
                     <div className="tw-mb-1 tw-flex tw-items-center tw-gap-2">
                       <FileDoneOutlined className="tw-text-slate-500" />
                       <Text className="tw-text-lg tw-font-semibold tw-text-slate-900">
@@ -1286,15 +1352,15 @@ function PerformancePage() {
                     <Text className="tw-text-xs tw-text-slate-500">
                       {hasPending ? '내가 승인해야 할 목표가 있습니다.' : PERFORMANCE_PAGE_KO.approvalStripEmptyPending}
                     </Text>
-                    <div className="tw-mt-5 tw-space-y-4">
-                      <div className="tw-grid tw-w-full tw-grid-cols-2 tw-gap-2.5">
-                        <div className="tw-rounded-xl tw-bg-slate-50 tw-py-2.5 tw-text-center">
+                    <div className="tw-mt-5 tw-flex tw-flex-1 tw-flex-col tw-gap-3">
+                      <div className="tw-grid tw-h-[60%] tw-w-full tw-grid-cols-2 tw-gap-2.5">
+                        <div className="tw-flex tw-min-h-[92px] tw-flex-col tw-items-center tw-justify-center tw-rounded-xl tw-bg-slate-50 tw-px-3 tw-py-3 tw-text-center">
                           <div className="tw-text-[11px] tw-text-slate-500">{PERFORMANCE_PAGE_KO.approvalStripPendingShort}</div>
                           <div className="tw-mt-1 tw-text-[32px] tw-font-semibold tw-leading-none tw-tabular-nums tw-text-[#0f172a]">
                             {pendingCount}
                           </div>
                         </div>
-                        <div className="tw-rounded-xl tw-bg-slate-50 tw-py-2.5 tw-text-center">
+                        <div className="tw-flex tw-min-h-[92px] tw-flex-col tw-items-center tw-justify-center tw-rounded-xl tw-bg-slate-50 tw-px-3 tw-py-3 tw-text-center">
                           <div className="tw-text-[11px] tw-text-slate-500">{PERFORMANCE_PAGE_KO.approvalStripMineShort}</div>
                           <div className="tw-mt-1 tw-text-[32px] tw-font-semibold tw-leading-none tw-tabular-nums tw-text-[#0f172a]">
                             {approvalHistoryQuery.isPending ? '…' : myCount}
@@ -1304,7 +1370,7 @@ function PerformancePage() {
                       <Button
                         size="large"
                         onClick={() => setApprovalHubOpen(true)}
-                        className="!tw-h-12 !tw-w-full !tw-rounded-xl !tw-border-[#3b5bdb] !tw-bg-[#3b5bdb] !tw-font-semibold !tw-text-white hover:!tw-border-[#304ac7] hover:!tw-bg-[#304ac7]"
+                        className="!tw-mt-auto !tw-h-12 !tw-w-full !tw-rounded-xl !tw-border-[#3b5bdb] !tw-bg-[#3b5bdb] !tw-font-semibold !tw-text-white hover:!tw-border-[#304ac7] hover:!tw-bg-[#304ac7]"
                       >
                         {hasPending ? '지금 확인하기' : `${PERFORMANCE_PAGE_KO.approvalStripCenter} →`}
                       </Button>
@@ -1321,8 +1387,8 @@ function PerformancePage() {
         </>
       ) : null}
 
-      <Card className="tw-overflow-hidden tw-rounded-2xl tw-border-slate-200/80 tw-bg-white tw-shadow-[0_1px_3px_rgba(15,23,42,0.06)] [&_.ant-card-body]:tw-px-5 [&_.ant-card-body]:tw-pb-6 [&_.ant-card-body]:tw-pt-5 sm:[&_.ant-card-body]:tw-px-7 [&_.ant-tabs-nav]:tw-mb-2 [&_.ant-tabs-nav]:tw-px-0 [&_.ant-tabs-tab]:!tw-pb-3 [&_.ant-tabs-tab]:!tw-pt-1 [&_.ant-tabs-tab]:!tw-text-slate-600 [&_.ant-tabs-tab.ant-tabs-tab-active_.ant-tabs-tab-btn]:!tw-text-[#1e3a5f] [&_.ant-tabs-tab.ant-tabs-tab-active_.ant-tabs-tab-btn]:!tw-font-semibold [&_.ant-tabs-ink-bar]:!tw-bg-[#3b82f6]">
-        <Tabs
+      <Tabs
+          className="[&_.ant-tabs-nav]:tw-mb-3 [&_.ant-tabs-nav]:tw-px-0 [&_.ant-tabs-content-holder]:tw-mt-0 [&_.ant-tabs-tab]:!tw-pb-3 [&_.ant-tabs-tab]:!tw-pt-1 [&_.ant-tabs-tab]:!tw-text-slate-600 [&_.ant-tabs-tab.ant-tabs-tab-active_.ant-tabs-tab-btn]:!tw-text-[#1e3a5f] [&_.ant-tabs-tab.ant-tabs-tab-active_.ant-tabs-tab-btn]:!tw-font-semibold [&_.ant-tabs-ink-bar]:!tw-bg-[#3b82f6]"
           activeKey={tab}
           onChange={(k) => setTab(k as 'goals' | 'templates')}
           items={[
@@ -1330,7 +1396,7 @@ function PerformancePage() {
               key: 'goals',
               label: PERFORMANCE_PAGE_KO.tabGoals,
               children: (
-                <Space direction="vertical" className="tw-w-full" size={16}>
+                <div className="tw-space-y-3">
                   <div className="tw-flex tw-flex-col tw-gap-3 lg:tw-flex-row lg:tw-items-stretch lg:tw-gap-3">
                     <div className="tw-flex tw-w-full tw-flex-col tw-gap-2 lg:tw-w-auto lg:tw-flex-row lg:tw-items-center">
                       <Segmented
@@ -1441,119 +1507,75 @@ function PerformancePage() {
                       </PermissionGuard>
                     </div>
                   </div>
-
-                  <div className="tw-flex tw-items-center tw-gap-2 tw-text-sm tw-text-slate-500">
-                    <span className="tw-font-semibold tw-tabular-nums tw-text-[#1e3a5f]">{sortedFilteredGoals.length}개</span>
-                    <span>목표</span>
-                    {goalFilters.cycles.length > 0 && (
-                      <Tag color="blue" className="!tw-m-0 !tw-text-[11px]">
-                        사이클 {goalFilters.cycles.length}개 필터
-                      </Tag>
-                    )}
-                    {goalFilters.statuses.length > 0 && (
-                      <Tag color="gold" className="!tw-m-0 !tw-text-[11px]">
-                        상태 {goalFilters.statuses.length}개 필터
-                      </Tag>
-                    )}
-                  </div>
-
-                  <div className="tw-grid tw-grid-cols-1 tw-gap-4 xl:tw-grid-cols-[minmax(0,1fr)_280px]">
-                    <GoalsListCards
-                      goals={sortedFilteredGoals}
-                      loading={loadingGoals}
-                      memberId={memberId}
-                      formatOwnerLabel={formatGoalOwner}
-                      canCreate={canCreate}
-                      emptyTitle={PERFORMANCE_PAGE_KO.emptyGoalsTitle}
-                      emptyHint={PERFORMANCE_PAGE_KO.emptyGoalsHint}
-                      onOpenDetail={setDetailGoal}
-                      onActivate={(id) => {
-                        const goal = goalsList.find((g) => g.id === id);
-                        if (goal) {
-                          const policy = resolveGoalApprovalPolicy(goal, templates);
-                          if (policyRequiresActivation(policy)) {
-                            // 승인이 필요한 경우 상세 모달을 열어 승인 요청 흐름으로 유도
-                            setDetailGoal(goal);
-                            return;
-                          }
-                        }
-                        activateMutation.mutate(id);
-                      }}
-                      activatingGoalId={activatingGoalId}
-                      templates={templates}
-                    />
-                    <aside className="tw-rounded-xl tw-border tw-border-slate-200 tw-bg-white tw-p-3">
-                      <Input
-                        allowClear
-                        value={ownerPanelSearch}
-                        onChange={(e) => setOwnerPanelSearch(e.target.value)}
-                        placeholder={PERFORMANCE_PAGE_KO.orgSearchPlaceholder}
-                        className="!tw-mb-3 [&_.ant-input]:tw-rounded-lg"
-                      />
-                      <div className="tw-mb-1 tw-text-xs tw-font-semibold tw-text-slate-500">{PERFORMANCE_PAGE_KO.quickPickTitle}</div>
-                      <div className="tw-space-y-1.5">
-                        <button
-                          type="button"
-                          onClick={() => setOwnerQuickPick('ALL')}
-                          className={`tw-flex tw-w-full tw-items-center tw-justify-between tw-rounded-lg tw-border tw-px-2.5 tw-py-2 tw-text-left tw-text-sm ${
-                            ownerQuickPick === 'ALL'
-                              ? 'tw-border-[#3b82f6] tw-bg-blue-50 tw-text-[#1e3a5f]'
-                              : 'tw-border-slate-200 tw-bg-white tw-text-slate-600'
-                          }`}
-                        >
-                          <span>{PERFORMANCE_PAGE_KO.quickPickAll}</span>
-                          <span className="tw-text-xs">{scopedGoalsByTab.length}</span>
-                        </button>
-                        {ownerQuickPickOptions.slice(0, 14).map((ownerId) => {
-                          const count = scopedGoalsByTab.filter((g) => String(g.ownerId ?? '').trim() === ownerId).length;
-                          return (
-                            <button
-                              key={ownerId}
-                              type="button"
-                              onClick={() => setOwnerQuickPick(ownerId)}
-                              className={`tw-flex tw-w-full tw-items-center tw-justify-between tw-rounded-lg tw-border tw-px-2.5 tw-py-2 tw-text-left tw-text-sm ${
-                                ownerQuickPick === ownerId
-                                  ? 'tw-border-[#3b82f6] tw-bg-blue-50 tw-text-[#1e3a5f]'
-                                  : 'tw-border-slate-200 tw-bg-white tw-text-slate-600'
-                              }`}
-                            >
-                              <span className="tw-truncate">{ownerPickLabel(ownerId)}</span>
-                              <span className="tw-text-xs">{count}</span>
-                            </button>
-                          );
-                        })}
+                  <Card className="tw-overflow-hidden tw-rounded-2xl tw-border-slate-200/80 tw-bg-white tw-shadow-[0_1px_3px_rgba(15,23,42,0.06)] [&_.ant-card-body]:tw-px-5 [&_.ant-card-body]:tw-pb-5 [&_.ant-card-body]:tw-pt-4 sm:[&_.ant-card-body]:tw-px-7">
+                    <Space direction="vertical" className="tw-w-full" size={16}>
+                      <div className="tw-grid tw-grid-cols-1 tw-gap-4 xl:tw-grid-cols-[minmax(0,1fr)_280px]">
+                        <GoalsListCards
+                          goals={sortedFilteredGoals}
+                          loading={loadingGoals}
+                          memberId={memberId}
+                          formatOwnerLabel={formatGoalOwner}
+                          canCreate={canCreate}
+                          emptyTitle={PERFORMANCE_PAGE_KO.emptyGoalsTitle}
+                          emptyHint={PERFORMANCE_PAGE_KO.emptyGoalsHint}
+                          onOpenDetail={setDetailGoal}
+                          onActivate={(id) => {
+                            const goal = goalsList.find((g) => g.id === id);
+                            if (goal) {
+                              const policy = resolveGoalApprovalPolicy(goal, templates);
+                              if (policyRequiresActivation(policy)) {
+                                // 승인이 필요한 경우 상세 모달을 열어 승인 요청 흐름으로 유도
+                                setDetailGoal(goal);
+                                return;
+                              }
+                            }
+                            activateMutation.mutate(id);
+                          }}
+                          onCreateChildGoal={openCreateChildGoal}
+                          activatingGoalId={activatingGoalId}
+                          templates={templates}
+                        />
+                        <aside className="tw-rounded-xl tw-border tw-border-slate-200 tw-bg-white tw-p-3">
+                          <Input
+                            allowClear
+                            value={ownerPanelSearch}
+                            onChange={(e) => setOwnerPanelSearch(e.target.value)}
+                            placeholder={PERFORMANCE_PAGE_KO.orgSearchPlaceholder}
+                            className="!tw-mb-3 [&_.ant-input]:tw-rounded-lg"
+                          />
+                          <div className="tw-mb-1 tw-text-xs tw-font-semibold tw-text-slate-500">{PERFORMANCE_PAGE_KO.orgPanelTitle}</div>
+                          <Tree
+                            blockNode
+                            showLine
+                            defaultExpandAll
+                            selectedKeys={ownerTreeSelectedKeys}
+                            treeData={ownerTreeData}
+                            onSelect={(keys) => {
+                              const key = String(keys[0] ?? '');
+                              if (!key) return;
+                              if (key === 'all') {
+                                setOwnerQuickPick('ALL');
+                                return;
+                              }
+                              if (key === 'members' || key === 'org') return;
+                              if (key.startsWith('m:') || key.startsWith('o:')) {
+                                setOwnerQuickPick(key.slice(2));
+                              }
+                            }}
+                            className="tw-rounded-lg tw-border tw-border-slate-100 tw-bg-slate-50/40 tw-p-2 [&_.ant-tree-node-content-wrapper]:tw-rounded-md"
+                          />
+                        </aside>
                       </div>
-                      <div className="tw-mb-1 tw-mt-4 tw-text-xs tw-font-semibold tw-text-slate-500">{PERFORMANCE_PAGE_KO.orgPanelTitle}</div>
-                      <Tree
-                        blockNode
-                        showLine
-                        defaultExpandAll
-                        selectedKeys={ownerTreeSelectedKeys}
-                        treeData={ownerTreeData}
-                        onSelect={(keys) => {
-                          const key = String(keys[0] ?? '');
-                          if (!key) return;
-                          if (key === 'all') {
-                            setOwnerQuickPick('ALL');
-                            return;
-                          }
-                          if (key === 'members' || key === 'org') return;
-                          if (key.startsWith('m:') || key.startsWith('o:')) {
-                            setOwnerQuickPick(key.slice(2));
-                          }
-                        }}
-                        className="tw-rounded-lg tw-border tw-border-slate-100 tw-bg-slate-50/40 tw-p-2 [&_.ant-tree-node-content-wrapper]:tw-rounded-md"
-                      />
-                    </aside>
-                  </div>
-                </Space>
+                    </Space>
+                  </Card>
+                </div>
               ),
             },
             {
               key: 'templates',
               label: PERFORMANCE_PAGE_KO.tabTemplates,
               children: (
-                <Space direction="vertical" className="tw-w-full" size={16}>
+                <div className="tw-space-y-3">
                   <div className="tw-flex tw-flex-col tw-gap-3 lg:tw-flex-row lg:tw-items-stretch lg:tw-gap-3">
                     <AppSearchField
                       className="lg:tw-flex-1"
@@ -1574,27 +1596,30 @@ function PerformancePage() {
                       </PermissionGuard>
                     </div>
                   </div>
-                  <Paragraph className="!tw-mb-0 !tw-text-sm !tw-leading-relaxed !tw-text-slate-600">
-                    {PERFORMANCE_PAGE_KO.tabTemplatesIntro}
-                  </Paragraph>
-                  <KpiTemplateCards
-                    templates={filteredTemplates}
-                    loading={loadingTpl}
-                    emptyMessage={
-                      templates.length > 0 && filteredTemplates.length === 0
-                        ? PERFORMANCE_PAGE_KO.emptyTemplatesSearch
-                        : PERFORMANCE_PAGE_KO.emptyTemplates
-                    }
-                    canDeactivate={canUpdate}
-                    onDeactivate={(id) => deactivateTplMutation.mutate(id)}
-                    deactivatingId={deactivatingTemplateId}
-                  />
-                </Space>
+                  <Card className="tw-overflow-hidden tw-rounded-2xl tw-border-slate-200/80 tw-bg-white tw-shadow-[0_1px_3px_rgba(15,23,42,0.06)] [&_.ant-card-body]:tw-px-5 [&_.ant-card-body]:tw-pb-5 [&_.ant-card-body]:tw-pt-4 sm:[&_.ant-card-body]:tw-px-7">
+                    <Space direction="vertical" className="tw-w-full" size={16}>
+                      <Paragraph className="!tw-mb-0 !tw-text-sm !tw-leading-relaxed !tw-text-slate-600">
+                        {PERFORMANCE_PAGE_KO.tabTemplatesIntro}
+                      </Paragraph>
+                      <KpiTemplateCards
+                        templates={filteredTemplates}
+                        loading={loadingTpl}
+                        emptyMessage={
+                          templates.length > 0 && filteredTemplates.length === 0
+                            ? PERFORMANCE_PAGE_KO.emptyTemplatesSearch
+                            : PERFORMANCE_PAGE_KO.emptyTemplates
+                        }
+                        canDeactivate={canUpdate}
+                        onDeactivate={(id) => deactivateTplMutation.mutate(id)}
+                        deactivatingId={deactivatingTemplateId}
+                      />
+                    </Space>
+                  </Card>
+                </div>
               ),
             },
           ]}
         />
-      </Card>
 
       {companyId ? (
         <Modal
@@ -1612,17 +1637,21 @@ function PerformancePage() {
         </Modal>
       ) : null}
 
-      <AppModal
+      <AppSingleActionModal
         title="KPI 템플릿 등록"
         open={templateModalOpen}
-        onCancel={() => setTemplateModalOpen(false)}
-        footer={null}
+        onClose={() => setTemplateModalOpen(false)}
+        onSubmit={() => tplForm.submit()}
+        submitText="저장"
+        submitLoading={createTplMutation.isPending}
         destroyOnHidden
         width={480}
       >
         <Form<CreateKpiTemplatePayload>
           form={tplForm}
           layout="vertical"
+          className="tw-px-5 tw-py-4"
+          scrollToFirstError={{ block: 'center', behavior: 'smooth' }}
           onFinish={(v) => {
             if (!companyId) return;
             const unitLabel =
@@ -1630,6 +1659,11 @@ function PerformancePage() {
                 ? String(v.unitLabel ?? '').trim()
                 : fixedUnitLabelForType(v.unitType);
             createTplMutation.mutate({ ...v, companyId, unitLabel });
+          }}
+          onFinishFailed={({ errorFields }) => {
+            const first = errorFields?.[0];
+            if (!first) return;
+            tplForm.scrollToField(first.name, { block: 'center', behavior: 'smooth' });
           }}
           initialValues={{
             measureType: 'HIGHER_BETTER',
@@ -1763,24 +1797,24 @@ function PerformancePage() {
               description="승인자는 목표 생성 시 지정합니다."
             />
           )}
-          <AppButton type="primary" htmlType="submit" className="tw-w-full" loading={createTplMutation.isPending}>
-            저장
-          </AppButton>
         </Form>
-      </AppModal>
+      </AppSingleActionModal>
 
-      <AppModal
+      <AppSingleActionModal
         title="새 목표"
         open={goalModalOpen}
-        onCancel={() => setGoalModalOpen(false)}
-        footer={null}
+        onClose={() => setGoalModalOpen(false)}
+        onSubmit={() => goalForm.submit()}
+        submitText="목표 만들기"
+        submitLoading={createGoalMutation.isPending}
         destroyOnHidden
         width={560}
-        styles={{ body: { overflowX: 'hidden' } }}
       >
         <Form
           form={goalForm}
           layout="vertical"
+          className="tw-px-5 tw-py-4"
+          scrollToFirstError={{ block: 'center', behavior: 'smooth' }}
           onFinish={(values) => {
             if (!companyId) return;
             const [start, end] = values.range;
@@ -1873,6 +1907,11 @@ function PerformancePage() {
             }
             createGoalMutation.mutate(payload);
           }}
+          onFinishFailed={({ errorFields }) => {
+            const first = errorFields?.[0];
+            if (!first) return;
+            goalForm.scrollToField(first.name, { block: 'center', behavior: 'smooth' });
+          }}
         >
           <Form.Item name="kpiTemplateId" label="KPI 템플릿" rules={[{ required: true, message: '템플릿을 선택하세요.' }]}>
             <Select
@@ -1927,39 +1966,143 @@ function PerformancePage() {
               }}
             />
           </Form.Item>
+          {/* 상위 목표는 리스트 행의 "하위 추가" 액션에서 자동 주입되며, 생성 모달에서는 노출하지 않는다. */}
+          <Form.Item name="parentGoalId" hidden>
+            <Input type="hidden" />
+          </Form.Item>
           <Form.Item
-            name="parentGoalId"
-            label={PERFORMANCE_PAGE_KO.parentGoalLabel}
-            tooltip={PERFORMANCE_PAGE_KO.parentGoalTooltip}
+            name="ownerType"
+            label="소유 유형"
+            tooltip={`${PERFORMANCE_PAGE_KO.goalOwnerTypeMemberHint} ${PERFORMANCE_PAGE_KO.goalOwnerTypeOrgHint}`}
+            rules={[{ required: true }]}
+            initialValue="MEMBER"
           >
-            <Select
-              allowClear
-              showSearch
-              optionFilterProp="label"
-              loading={goalsQuery.isFetching}
-              placeholder={PERFORMANCE_PAGE_KO.parentGoalPlaceholder}
-              getPopupContainer={(triggerNode) =>
-                (triggerNode.closest('.ant-modal-content') as HTMLElement | null) ?? document.body
-              }
-              options={goalsList.map((g) => {
-                const title = g.title?.trim() ? g.title.trim() : `목표 ${g.id.slice(0, 8)}…`;
-                const isCancelled = String(g.status ?? '').toUpperCase() === 'CANCELLED';
-                return {
-                  value: g.id,
-                  label: `${title} (${g.startDate} ~ ${g.endDate})${isCancelled ? ' · 취소됨' : ''}`,
-                  disabled: isCancelled,
-                };
-              })}
+            <Radio.Group
+              options={OWNER_OPTIONS}
+              optionType="button"
+              buttonStyle="solid"
+              onChange={(e) => {
+                const v = e.target.value as OwnerType;
+                if (v === 'MEMBER') {
+                  goalForm.setFieldValue('organizationOwnerId', undefined);
+                  goalForm.setFieldValue('responsibleMemberId', undefined);
+                  if (!String(goalForm.getFieldValue('memberOwnerId') ?? '').trim()) {
+                    goalForm.setFieldValue('memberOwnerId', memberId);
+                  }
+                } else {
+                  goalForm.setFieldValue('memberOwnerId', undefined);
+                  goalForm.setFieldValue('organizationOwnerId', defaultOrganizationOwnerId);
+                  goalForm.setFieldValue('responsibleMemberId', memberId);
+                }
+              }}
             />
           </Form.Item>
-          <Form.Item
-            name="rollupPolicy"
-            label={PERFORMANCE_PAGE_KO.goalRollupPolicyLabel}
-            tooltip={PERFORMANCE_PAGE_KO.goalRollupPolicyTooltip}
-            rules={[{ required: true, message: '롤업 방식을 선택하세요.' }]}
-          >
-            <Select options={ROLLUP_POLICY_OPTIONS} />
-          </Form.Item>
+          {goalOwnerType === 'MEMBER' || goalOwnerType == null ? (
+            <Form.Item
+              name="memberOwnerId"
+              label={PERFORMANCE_PAGE_KO.goalMemberOwnerLabel}
+              rules={[{ required: true, message: PERFORMANCE_PAGE_KO.goalMemberOwnerRequired }]}
+            >
+              <div className="tw-space-y-2">
+                <Input type="hidden" />
+                <div className="tw-rounded-lg tw-border tw-border-slate-200 tw-bg-slate-50/60 tw-px-3 tw-py-2.5">
+                  <div className="tw-flex tw-items-center tw-justify-between tw-gap-3">
+                    <div className="tw-min-w-0">
+                      <Text className="tw-block tw-text-[11px] tw-font-medium tw-text-slate-500">현재 선택</Text>
+                      {String(goalMemberOwnerId ?? '').trim() ? (
+                        <Tag color="blue" className="!tw-mt-1 !tw-mb-0">
+                          {memberLabelForUi(goalMemberOwnerId)}
+                        </Tag>
+                      ) : (
+                        <Text className="tw-text-sm tw-text-slate-400">아직 선택된 구성원이 없습니다.</Text>
+                      )}
+                    </div>
+                    <AppButton
+                      variant="secondary"
+                      icon={<TeamOutlined />}
+                      className="!tw-h-9 !tw-shrink-0 !tw-rounded-full !tw-px-3 !tw-text-xs !tw-font-semibold"
+                      onClick={() => setGoalMemberPickerField('memberOwnerId')}
+                    >
+                      조직도에서 선택
+                    </AppButton>
+                  </div>
+                </div>
+              </div>
+            </Form.Item>
+          ) : null}
+          {goalOwnerType === 'ORGANIZATION' ? (
+            <>
+              <Form.Item
+                name="organizationOwnerId"
+                label={PERFORMANCE_PAGE_KO.goalOrganizationOwnerLabel}
+                rules={[{ required: true, message: PERFORMANCE_PAGE_KO.goalOrganizationOwnerRequired }]}
+                extra={
+                  goalOrganizationTreeData.length === 0 ? (
+                    <Text type="warning">{PERFORMANCE_PAGE_KO.goalOrganizationListEmpty}</Text>
+                  ) : undefined
+                }
+              >
+                <div className="tw-space-y-2">
+                  <Input type="hidden" />
+                  <div className="tw-rounded-lg tw-border tw-border-slate-200 tw-bg-slate-50/60 tw-px-3 tw-py-2.5">
+                    <div className="tw-flex tw-items-center tw-justify-between tw-gap-3">
+                      <div className="tw-min-w-0">
+                        <Text className="tw-block tw-text-[11px] tw-font-medium tw-text-slate-500">현재 선택</Text>
+                        {String(goalOrganizationOwnerId ?? '').trim() ? (
+                          <Tag color="blue" className="!tw-mt-1 !tw-mb-0">
+                            {orgLabelById.get(String(goalOrganizationOwnerId)) ?? String(goalOrganizationOwnerId)}
+                          </Tag>
+                        ) : (
+                          <Text className="tw-text-sm tw-text-slate-400">아직 선택된 조직이 없습니다.</Text>
+                        )}
+                      </div>
+                      <AppButton
+                        variant="secondary"
+                        icon={<TeamOutlined />}
+                        className="!tw-h-9 !tw-shrink-0 !tw-rounded-full !tw-px-3 !tw-text-xs !tw-font-semibold"
+                        onClick={() => setGoalOrgPickerOpen(true)}
+                        disabled={goalOrganizationTreeData.length === 0}
+                      >
+                        조직트리에서 선택
+                      </AppButton>
+                    </div>
+                  </div>
+                </div>
+              </Form.Item>
+              <Form.Item
+                name="responsibleMemberId"
+                label="목표 책임자"
+                rules={[{ required: true, message: '조직 목표는 책임자를 지정해 주세요.' }]}
+                extra="이 조직 목표의 완료 승인 요청을 주도하고 진행률 편집을 주도할 사원입니다. 팀장이 일반적이지만 담당자 지정 가능."
+              >
+                <div className="tw-space-y-2">
+                  <Input type="hidden" />
+                  <div className="tw-rounded-lg tw-border tw-border-slate-200 tw-bg-slate-50/60 tw-px-3 tw-py-2.5">
+                    <div className="tw-flex tw-items-center tw-justify-between tw-gap-3">
+                      <div className="tw-min-w-0">
+                        <Text className="tw-block tw-text-[11px] tw-font-medium tw-text-slate-500">현재 선택</Text>
+                        {String(goalResponsibleMemberId ?? '').trim() ? (
+                          <Tag color="blue" className="!tw-mt-1 !tw-mb-0">
+                            {memberLabelForUi(goalResponsibleMemberId)}
+                          </Tag>
+                        ) : (
+                          <Text className="tw-text-sm tw-text-slate-400">아직 선택된 목표 책임자가 없습니다.</Text>
+                        )}
+                      </div>
+                      <AppButton
+                        variant="secondary"
+                        icon={<TeamOutlined />}
+                        className="!tw-h-9 !tw-shrink-0 !tw-rounded-full !tw-px-3 !tw-text-xs !tw-font-semibold"
+                        onClick={() => setGoalMemberPickerField('responsibleMemberId')}
+                      >
+                        조직도에서 선택
+                      </AppButton>
+                    </div>
+                  </div>
+                </div>
+              </Form.Item>
+            </>
+          ) : null}
           <Form.Item
             name="title"
             label="목표 제목"
@@ -1981,82 +2124,20 @@ function PerformancePage() {
             <RangePicker className="tw-w-full" format="YYYY-MM-DD" />
           </Form.Item>
           <Form.Item
-            name="ownerType"
-            label="소유 유형"
-            tooltip={`${PERFORMANCE_PAGE_KO.goalOwnerTypeMemberHint} ${PERFORMANCE_PAGE_KO.goalOwnerTypeOrgHint}`}
-            rules={[{ required: true }]}
+            name="rollupPolicy"
+            label={PERFORMANCE_PAGE_KO.goalRollupPolicyLabel}
+            tooltip={PERFORMANCE_PAGE_KO.goalRollupPolicyTooltip}
+            rules={[{ required: true, message: '롤업 방식을 선택하세요.' }]}
           >
             <Radio.Group
-              options={OWNER_OPTIONS}
+              options={ROLLUP_POLICY_OPTIONS}
               optionType="button"
               buttonStyle="solid"
-              onChange={(e) => {
-                const v = e.target.value as OwnerType;
-                if (v === 'MEMBER') {
-                  goalForm.setFieldValue('organizationOwnerId', undefined);
-                  if (!String(goalForm.getFieldValue('memberOwnerId') ?? '').trim()) {
-                    goalForm.setFieldValue('memberOwnerId', memberId);
-                  }
-                } else {
-                  goalForm.setFieldValue('memberOwnerId', undefined);
-                }
-              }}
             />
           </Form.Item>
-          {goalOwnerType === 'MEMBER' || goalOwnerType == null ? (
-            <Form.Item
-              name="memberOwnerId"
-              label={PERFORMANCE_PAGE_KO.goalMemberOwnerLabel}
-              rules={[{ required: true, message: PERFORMANCE_PAGE_KO.goalMemberOwnerRequired }]}
-            >
-              <MemberRemoteSelect
-                placeholder={PERFORMANCE_PAGE_KO.goalMemberOwnerPlaceholder}
-                getPopupContainer={(triggerNode) =>
-                  (triggerNode.closest('.ant-modal-content') as HTMLElement | null) ?? document.body
-                }
-              />
-            </Form.Item>
-          ) : null}
-          {goalOwnerType === 'ORGANIZATION' ? (
-            <>
-              <Form.Item
-                name="organizationOwnerId"
-                label={PERFORMANCE_PAGE_KO.goalOrganizationOwnerLabel}
-                rules={[{ required: true, message: PERFORMANCE_PAGE_KO.goalOrganizationOwnerRequired }]}
-                extra={
-                  goalOrganizationOptions.length === 0 ? (
-                    <Text type="warning">{PERFORMANCE_PAGE_KO.goalOrganizationListEmpty}</Text>
-                  ) : undefined
-                }
-              >
-                <Select
-                  showSearch
-                  optionFilterProp="label"
-                  allowClear
-                  placeholder={PERFORMANCE_PAGE_KO.goalOrganizationOwnerPlaceholder}
-                  options={goalOrganizationOptions}
-                  loading={organizationsQuery.isFetching}
-                  disabled={goalOrganizationOptions.length === 0}
-                  getPopupContainer={(triggerNode) =>
-                    (triggerNode.closest('.ant-modal-content') as HTMLElement | null) ?? document.body
-                  }
-                />
-              </Form.Item>
-              <Form.Item
-                name="responsibleMemberId"
-                label="목표 책임자"
-                rules={[{ required: true, message: '조직 목표는 책임자를 지정해 주세요.' }]}
-                extra="이 조직 목표의 완료 승인 요청을 주도하고 진행률 편집을 주도할 사원입니다. 팀장이 일반적이지만 담당자 지정 가능."
-              >
-                <MemberRemoteSelect
-                  placeholder="책임자로 지정할 사원을 검색"
-                  getPopupContainer={(triggerNode) =>
-                    (triggerNode.closest('.ant-modal-content') as HTMLElement | null) ?? document.body
-                  }
-                />
-              </Form.Item>
-            </>
-          ) : null}
+          <Text type="secondary" className="tw-mb-2 tw-mt-1 tw-block tw-text-xs">
+            지표 방향과 단위 유형은 선택한 KPI 템플릿 값이 자동 적용됩니다.
+          </Text>
           <Row gutter={12}>
             <Col span={12}>
               <Form.Item
@@ -2065,6 +2146,7 @@ function PerformancePage() {
                 rules={[{ required: true }]}
               >
                 <Select
+                  disabled
                   options={MEASURE_OPTIONS.map((o) => ({ value: o.value, label: `${o.label} (${o.description})` }))}
                 />
               </Form.Item>
@@ -2072,6 +2154,7 @@ function PerformancePage() {
             <Col span={12}>
               <Form.Item name="unitType" label="단위 유형" rules={[{ required: true }]}>
                 <Select
+                  disabled
                   options={UNIT_OPTIONS}
                   onChange={(ut: UnitType) => {
                     if (ut === 'CUSTOM') {
@@ -2087,28 +2170,14 @@ function PerformancePage() {
           <Form.Item
             name="unitLabel"
             label="단위 표시명"
-            tooltip={
-              goalUnitType === 'CUSTOM'
-                ? '비우면 KPI 템플릿에 저장된 표시명이 적용됩니다. 입력 시 최대 20자.'
-                : '단위 유형에 맞춰 자동 표시됩니다. 사용자 정의 유형만 수정할 수 있습니다.'
-            }
-            rules={
-              goalUnitType === 'CUSTOM'
-                ? [{ max: 20, message: '최대 20자입니다.' }]
-                : []
-            }
+            tooltip="선택한 KPI 템플릿의 표시명이 자동 반영됩니다."
+            rules={[{ max: 20, message: '최대 20자입니다.' }]}
           >
             <Input
-              readOnly={goalUnitType !== 'CUSTOM'}
-              allowClear={goalUnitType === 'CUSTOM'}
-              placeholder={
-                goalUnitType === 'CUSTOM'
-                  ? '템플릿 기본값을 쓰려면 비워 두세요'
-                  : '자동 (단위 유형 기준)'
-              }
+              disabled
+              placeholder="선택한 템플릿에서 자동 반영"
               maxLength={20}
-              showCount={goalUnitType === 'CUSTOM'}
-              className={goalUnitType !== 'CUSTOM' ? '[&_.ant-input]:tw-bg-slate-50' : undefined}
+              className="[&_.ant-input]:tw-bg-slate-50"
             />
           </Form.Item>
           <Row gutter={12}>
@@ -2142,10 +2211,10 @@ function PerformancePage() {
           <Form.Item
             name="capPct"
             label="달성률 상한(%)"
-            tooltip="GoalCreateReqDto 필수. KPI 템플릿 capPct를 그대로 쓰는 것을 권장합니다."
+            tooltip="선택한 KPI 템플릿의 상한값이 자동 반영됩니다."
             rules={[{ required: true, message: '상한(%)을 입력하세요.' }, { type: 'number', min: 1 }]}
           >
-            <InputNumber className="tw-w-full" min={1} />
+            <InputNumber className="tw-w-full" min={1} disabled />
           </Form.Item>
           <Form.Item name="visibility" label="공개 범위" rules={[{ required: true }]}>
             <Radio.Group options={VISIBILITY_OPTIONS} optionType="button" buttonStyle="solid" />
@@ -2204,28 +2273,27 @@ function PerformancePage() {
                       if (getFieldValue('rollupPolicy') !== 'CHILDREN_WEIGHTED') return Promise.resolve();
                       if (value != null && Number.isFinite(Number(value))) return Promise.resolve();
                       return Promise.reject(
-                        new Error('가중 롤업(CHILDREN_WEIGHTED)일 때 가중치(%)를 입력해 주세요.'),
+                        new Error('하위 목표 가중치 합산 방식을 선택한 경우 가중치(%)를 입력해 주세요.'),
                       );
                     },
                   }),
                 ]}
               >
-                <InputNumber className="tw-w-full" min={0} max={100} placeholder="WEIGHTED 시 권장" />
+                <InputNumber className="tw-w-full" min={0} max={100} placeholder="가중 합산 시 권장" />
               </Form.Item>
             </Col>
           </Row>
-          <AppButton type="primary" htmlType="submit" className="tw-w-full" loading={createGoalMutation.isPending}>
-            목표 만들기
-          </AppButton>
         </Form>
-      </AppModal>
+      </AppSingleActionModal>
 
 
-      <AppModal
+      <AppSingleActionModal
         title={PERFORMANCE_PAGE_KO.progressUpdateModalTitle}
         open={goalProgressUpdateModalOpen && detailGoal != null}
-        onCancel={() => setGoalProgressUpdateModalOpen(false)}
-        footer={null}
+        onClose={() => setGoalProgressUpdateModalOpen(false)}
+        onSubmit={() => progressUpdateForm.submit()}
+        submitText={PERFORMANCE_PAGE_KO.progressUpdateSubmit}
+        submitLoading={addProgressUpdateMutation.isPending}
         destroyOnHidden
       >
         {detailGoal ? (
@@ -2236,7 +2304,7 @@ function PerformancePage() {
             <Form
               form={progressUpdateForm}
               layout="vertical"
-              className="tw-mt-3 [&_.ant-form-item]:tw-mb-3"
+              className="tw-mt-3 tw-px-5 tw-py-4 [&_.ant-form-item]:tw-mb-3"
               onFinish={(values) => {
                 addProgressUpdateMutation.mutate({
                   goalId: detailGoal.id,
@@ -2272,15 +2340,6 @@ function PerformancePage() {
                 </Col>
               </Row>
               <Space direction="vertical" className="tw-w-full" size={12}>
-                <Button
-                  type="primary"
-                  htmlType="submit"
-                  loading={addProgressUpdateMutation.isPending}
-                  className="!tw-rounded-lg"
-                  block
-                >
-                  {PERFORMANCE_PAGE_KO.progressUpdateSubmit}
-                </Button>
                 {detailProgressUpdatesQuery.data && detailProgressUpdatesQuery.data.length > 0 ? (
                   <div className="tw-rounded-lg tw-border tw-border-slate-100 tw-bg-slate-50/50 tw-px-3 tw-py-2">
                     <div className="tw-mb-2 tw-text-[11px] tw-font-semibold tw-text-slate-500">
@@ -2301,13 +2360,15 @@ function PerformancePage() {
             </Form>
           </>
         ) : null}
-      </AppModal>
+      </AppSingleActionModal>
 
-      <AppModal
+      <AppSingleActionModal
         title="목표 수정"
         open={goalEditModalOpen && detailGoal != null}
-        onCancel={() => setGoalEditModalOpen(false)}
-        footer={null}
+        onClose={() => setGoalEditModalOpen(false)}
+        onSubmit={() => goalEditForm.submit()}
+        submitText="저장"
+        submitLoading={patchGoalMutation.isPending}
         destroyOnHidden
         width={560}
       >
@@ -2315,6 +2376,8 @@ function PerformancePage() {
           <Form
             form={goalEditForm}
             layout="vertical"
+            className="tw-px-5 tw-py-4"
+            scrollToFirstError={{ block: 'center', behavior: 'smooth' }}
             onFinish={async (values) => {
               const body: UpdateGoalPayload = {
                 title: values.title.trim(),
@@ -2331,6 +2394,11 @@ function PerformancePage() {
                 { goalId: detailGoal.id, body },
                 { onSuccess: () => setGoalEditModalOpen(false) },
               );
+            }}
+            onFinishFailed={({ errorFields }) => {
+              const first = errorFields?.[0];
+              if (!first) return;
+              goalEditForm.scrollToField(first.name, { block: 'center', behavior: 'smooth' });
             }}
           >
             <Form.Item name="title" label="목표 제목" rules={[{ required: true }, { max: 300 }]}>
@@ -2362,24 +2430,28 @@ function PerformancePage() {
               />
             </Form.Item>
             <Form.Item name="rollupPolicy" label={PERFORMANCE_PAGE_KO.goalRollupPolicyLabel}>
-              <Select options={ROLLUP_POLICY_OPTIONS} allowClear />
+              <Radio.Group
+                options={ROLLUP_POLICY_OPTIONS}
+                optionType="button"
+                buttonStyle="solid"
+              />
             </Form.Item>
             <Form.Item name="cycle" label="사이클">
               <Select options={CYCLE_OPTIONS} allowClear />
             </Form.Item>
-            <AppButton type="primary" htmlType="submit" className="tw-w-full" loading={patchGoalMutation.isPending}>
-              저장
-            </AppButton>
           </Form>
         ) : null}
-      </AppModal>
+      </AppSingleActionModal>
 
       {/* ── 활성화 승인 요청 모달 ── */}
-      <AppModal
+      <AppDoubleActionModal
         title="활성화 승인 요청"
         open={activationApprovalModalOpen && detailGoal != null}
-        onCancel={() => setActivationApprovalModalOpen(false)}
-        footer={null}
+        onClose={() => setActivationApprovalModalOpen(false)}
+        onConfirm={() => activationApprovalForm.submit()}
+        confirmText="활성화 승인 요청"
+        cancelText="취소"
+        confirmLoading={activationApprovalMutation.isPending}
         destroyOnHidden
         width={480}
       >
@@ -2387,6 +2459,7 @@ function PerformancePage() {
           <Form
             form={activationApprovalForm}
             layout="vertical"
+            className="tw-px-5 tw-py-4"
             onFinish={(values) => {
               const approverId = String(values.approverId ?? '').trim();
               if (!approverId) {
@@ -2424,29 +2497,19 @@ function PerformancePage() {
               <MemberRemoteSelect placeholder="검색하여 승인자를 선택" />
             </Form.Item>
 
-            <div className="tw-grid tw-grid-cols-2 tw-gap-2">
-              <Button onClick={() => setActivationApprovalModalOpen(false)} className="!tw-rounded-lg">
-                취소
-              </Button>
-              <Button
-                type="primary"
-                htmlType="submit"
-                loading={activationApprovalMutation.isPending}
-                className="!tw-rounded-lg !tw-bg-[#1e3a5f] hover:!tw-bg-[#152a45]"
-              >
-                활성화 승인 요청
-              </Button>
-            </div>
           </Form>
         ) : null}
-      </AppModal>
+      </AppDoubleActionModal>
 
       {/* ── 완료 제출 모달 ── */}
-      <AppModal
+      <AppDoubleActionModal
         title={detailGoal && policyRequiresCompletion(resolveGoalApprovalPolicy(detailGoal, templates)) ? '목표 완료 승인 제출' : '목표 완료 제출'}
         open={completionSubmitModalOpen && detailGoal != null}
-        onCancel={() => setCompletionSubmitModalOpen(false)}
-        footer={null}
+        onClose={() => setCompletionSubmitModalOpen(false)}
+        onConfirm={() => completionSubmitForm.submit()}
+        cancelText="취소"
+        confirmText={detailGoal && policyRequiresCompletion(resolveGoalApprovalPolicy(detailGoal, templates)) ? '완료 승인 요청' : '완료 제출'}
+        confirmLoading={completionSubmitMutation.isPending}
         destroyOnHidden
         width={680}
       >
@@ -2458,6 +2521,7 @@ function PerformancePage() {
           <Form
             form={completionSubmitForm}
             layout="vertical"
+            className="tw-px-5 tw-py-4"
             onFinish={async (values) => {
               if (!values.checked1 || !values.checked2 || !values.checked3) {
                 message.warning('체크리스트를 모두 확인해 주세요.');
@@ -2577,7 +2641,7 @@ function PerformancePage() {
               </Form.Item>
             </div>
 
-            <div className="tw-grid tw-grid-cols-2 tw-gap-2">
+            <div className="tw-grid tw-grid-cols-1 tw-gap-2">
               <Button
                 onClick={() => {
                   if (!detailGoal) return;
@@ -2596,20 +2660,12 @@ function PerformancePage() {
               >
                 임시저장
               </Button>
-              <Button
-                type="primary"
-                htmlType="submit"
-                loading={completionSubmitMutation.isPending}
-                className="!tw-rounded-lg !tw-bg-[#1e3a5f] hover:!tw-bg-[#152a45]"
-              >
-                {modalNeedsApproval ? '완료 승인 요청' : '완료 제출'}
-              </Button>
             </div>
           </Form>
             );
           })()
         ) : null}
-      </AppModal>
+      </AppDoubleActionModal>
 
 
       <AppModal
@@ -3216,6 +3272,32 @@ function PerformancePage() {
           })()
         ) : null}
       </AppModal>
+      <SingleMemberOrgChartSelectModal
+        open={goalMemberPickerField != null}
+        title={goalMemberPickerField === 'responsibleMemberId' ? '조직도에서 목표 책임자 선택' : '조직도에서 담당 구성원 선택'}
+        selectedMemberId={
+          goalMemberPickerField
+            ? String(goalForm.getFieldValue(goalMemberPickerField) ?? '')
+            : undefined
+        }
+        onClose={() => setGoalMemberPickerField(null)}
+        onSelect={({ memberId: selectedId, name }) => {
+          if (!goalMemberPickerField) return;
+          goalForm.setFieldValue(goalMemberPickerField, selectedId);
+          message.success(`${name} 구성원을 선택했습니다.`);
+          setGoalMemberPickerField(null);
+        }}
+      />
+      <OrganizationTreeSelectModal
+        open={goalOrgPickerOpen}
+        rows={organizationRowsFlat}
+        selectedOrganizationId={goalOrganizationOwnerId}
+        onClose={() => setGoalOrgPickerOpen(false)}
+        onSelect={(organizationId) => {
+          goalForm.setFieldValue('organizationOwnerId', organizationId);
+          setGoalOrgPickerOpen(false);
+        }}
+      />
     </div>
   );
 }

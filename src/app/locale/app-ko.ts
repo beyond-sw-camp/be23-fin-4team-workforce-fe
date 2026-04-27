@@ -275,9 +275,9 @@ export const PERFORMANCE_PAGE_KO = {
   parentGoalUnknown: '상위 미표시(권한·목록 밖)',
   goalRollupPolicyLabel: '하위 목표 롤업 방식',
   goalRollupPolicyTooltip:
-    'CHILDREN_AVG: 직속 하위 달성률 평균. CHILDREN_WEIGHTED: 가중치·롤업 정책에 따름(가중치 미입력 시 서버 검증).',
-  goalRollupChildrenAvg: '하위 평균 (CHILDREN_AVG)',
-  goalRollupChildrenWeighted: '가중 롤업 (CHILDREN_WEIGHTED)',
+    '하위 평균: 직속 하위 목표 달성률을 단순 평균합니다. 가중 롤업: 하위 목표별 가중치를 반영해 합산합니다(가중치 미입력 시 저장이 제한될 수 있습니다).',
+  goalRollupChildrenAvg: '하위 목표 평균',
+  goalRollupChildrenWeighted: '하위 목표 가중 합산',
   goalOrganizationOwnerLabel: '담당 조직',
   goalOrganizationOwnerPlaceholder: '조직 API에서 불러온 목록 중 선택',
   goalOrganizationOwnerRequired: '조직 목표는 담당 조직을 선택해야 합니다.',
@@ -286,9 +286,11 @@ export const PERFORMANCE_PAGE_KO = {
   goalContributionPctLabel: '기여도(%)',
   goalContributionPctTooltip: 'GoalCreateReqDto contributionPct. 선택 입력.',
   goalWeightPctLabel: '가중치(%)',
-  goalWeightPctTooltip: '롤업이 CHILDREN_WEIGHTED일 때 사용. 비우면 전송하지 않습니다.',
-  goalOwnerTypeMemberHint: '목표 소유 구성원을 지정합니다. 기본값은 본인이며, 검색으로 다른 구성원을 선택할 수 있습니다.',
-  goalOwnerTypeOrgHint: '조직 엔티티 UUID를 선택합니다. 회사 ID(`companyId`)와는 별도입니다.',
+  goalWeightPctTooltip: '하위 목표 가중 합산 방식을 사용할 때 적용됩니다. 비우면 전송하지 않습니다.',
+  goalOwnerTypeMemberHint:
+    '구성원: 개인 목표입니다. 누가 직접 수행하고 관리할지 지정합니다. 보통 본인 목표를 만들 때 사용합니다.',
+  goalOwnerTypeOrgHint:
+    '조직: 팀/부서 목표입니다. 조직 단위로 관리하며, 목표 책임자가 진행 상황을 주도합니다.',
   goalMemberOwnerLabel: '담당 구성원',
   goalMemberOwnerPlaceholder: '이름·이메일로 검색하여 선택',
   goalMemberOwnerRequired: '담당 구성원을 선택해 주세요.',
@@ -497,6 +499,9 @@ export const EVALUATION_PAGE_KO = {
   calibrationConfirmStatus: '확정 상태',
   calibrationUnconfirmed: '미확정',
   calibrationConfirmModal: '확정 후 수정 불가합니다.',
+  /** 결과 공개 시 백엔드가 자동 등급 확정 — 캘리브레이션 탭 안내 */
+  calibrationPublishAutoNote:
+    '결과 공개 시점에 제출이 모두 완료된 시즌은, 절대평가 구간·상대평가 목표 분포에 따라 등급이 자동 확정됩니다. 공개 전에 미리 같은 기준으로 고정하려면 아래 「확정하기」를 사용하세요. 이미 확정된 시즌은 공개 시 등급 산식을 다시 덮어쓰지 않습니다.',
 
   // Analytics
   analyticsTitle: '결과 분석',

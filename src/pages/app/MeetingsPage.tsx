@@ -5,7 +5,6 @@ import {
   Button,
   Tag,
   Space,
-  Modal,
   Form,
   Input,
   DatePicker,
@@ -37,6 +36,7 @@ import type {
 } from '@/features/meetings/model/types';
 import { MemberRemoteSelect } from '@/features/members/ui/MemberRemoteSelect';
 import { useMemberDisplayNames } from '@/features/members/hooks/useMemberDisplayNames';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 
 dayjs.extend(relativeTime);
@@ -303,7 +303,7 @@ export default function MeetingsPage() {
 
       {/* ── 탭 ── */}
       <Tabs
-        className="[&_.ant-tabs-tab]:!tw-text-base [&_.ant-tabs-tab-btn]:!tw-font-semibold [&_.ant-tabs-ink-bar]:!tw-bg-[#3b5bdb]"
+        className="!tw-mb-0 [&_.ant-tabs-nav]:!tw-mb-0 [&_.ant-tabs-tab]:!tw-text-base [&_.ant-tabs-tab-btn]:!tw-font-semibold [&_.ant-tabs-ink-bar]:!tw-bg-[#3b5bdb]"
         activeKey={tab}
         onChange={(k) => setTab(k as 'member' | 'manager')}
         items={[
@@ -313,6 +313,7 @@ export default function MeetingsPage() {
       />
 
       <Table
+        className="!-tw-mt-1"
         rowKey="meetingRecordId"
         columns={columns}
         dataSource={meetings}
@@ -333,28 +334,21 @@ export default function MeetingsPage() {
       />
 
       {/* ── 생성 Modal ── */}
-      <Modal
+      <AppDoubleActionModal
         title={MEETING_KO.drawerTitle}
         width={520}
         open={createModalOpen}
-        onCancel={() => setCreateModalOpen(false)}
+        onClose={() => setCreateModalOpen(false)}
+        onConfirm={() => form.submit()}
+        cancelText={MEETING_KO.cancel}
+        confirmText={MEETING_KO.create}
+        confirmLoading={createMut.isPending}
         destroyOnHidden
-        footer={
-          <Space>
-            <Button onClick={() => setCreateModalOpen(false)}>{MEETING_KO.cancel}</Button>
-            <Button
-              type="primary"
-              loading={createMut.isPending}
-              onClick={() => form.submit()}
-            >
-              {MEETING_KO.create}
-            </Button>
-          </Space>
-        }
       >
         <Form
           form={form}
           layout="vertical"
+          className="tw-px-5 tw-py-4"
           onFinish={(vals) => {
             createMut.mutate({
               memberId: vals.memberId,
@@ -396,7 +390,7 @@ export default function MeetingsPage() {
             <Input.TextArea rows={3} placeholder="면담 안건을 간단히 적어 주세요." />
           </Form.Item>
         </Form>
-      </Modal>
+      </AppDoubleActionModal>
     </div>
   );
 }

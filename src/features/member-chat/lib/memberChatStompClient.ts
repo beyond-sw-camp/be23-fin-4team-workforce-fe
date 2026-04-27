@@ -2,7 +2,11 @@ import { Client, type IMessage, type StompHeaders, type StompSubscription } from
 import SockJS from 'sockjs-client/dist/sockjs';
 import { env } from '@/app/config/env';
 import { getAccessToken } from '@/shared/stores/authTokenStore';
-import type { MemberChatReadEvent, MemberChatSendRequest } from '@/features/member-chat/model/types';
+import type {
+  MemberChatReadEvent,
+  MemberChatSendRequest,
+  MemberChatTypingEvent,
+} from '@/features/member-chat/model/types';
 
 const WS_ENDPOINT_PATH = '/mc/connect';
 const TOPIC_PREFIX = '/mc/topic';
@@ -29,6 +33,7 @@ function parseJson<T>(raw: string): T | null {
 
 type RoomMessageCb = (payload: unknown, raw: IMessage) => void;
 type ReadCb = (payload: MemberChatReadEvent) => void;
+type TypingCb = (payload: MemberChatTypingEvent) => void;
 
 /**
  * STOMP 재연결 시 기존 StompSubscription 은 무효화된다.
@@ -40,10 +45,12 @@ export class MemberChatStompClient {
 
   private readonly roomMessageCbs = new Map<number, Set<RoomMessageCb>>();
   private readonly roomReadCbs = new Map<number, Set<ReadCb>>();
+  private readonly roomTypingCbs = new Map<number, Set<TypingCb>>();
   private readonly errorCbs = new Set<(raw: unknown) => void>();
 
   private stompRoomMsg = new Map<number, StompSubscription>();
   private stompRoomRead = new Map<number, StompSubscription>();
+  private stompRoomTyping = new Map<number, StompSubscription>();
   private stompErrors: StompSubscription | null = null;
 
   async connect(): Promise<void> {
@@ -114,6 +121,14 @@ export class MemberChatStompClient {
       }
     }
     this.stompRoomRead.clear();
+    for (const s of this.stompRoomTyping.values()) {
+      try {
+        s.unsubscribe();
+      } catch {
+        /* noop */
+      }
+    }
+    this.stompRoomTyping.clear();
     try {
       this.stompErrors?.unsubscribe();
     } catch {
@@ -137,6 +152,11 @@ export class MemberChatStompClient {
     for (const roomId of this.roomReadCbs.keys()) {
       if ((this.roomReadCbs.get(roomId)?.size ?? 0) > 0) {
         this.attachRoomRead(roomId);
+      }
+    }
+    for (const roomId of this.roomTypingCbs.keys()) {
+      if ((this.roomTypingCbs.get(roomId)?.size ?? 0) > 0) {
+        this.attachRoomTyping(roomId);
       }
     }
   }
@@ -168,6 +188,21 @@ export class MemberChatStompClient {
       }
     });
     this.stompRoomRead.set(roomId, sub);
+  }
+
+  private attachRoomTyping(roomId: number) {
+    if (!this.client?.connected || this.stompRoomTyping.has(roomId)) return;
+    const cbs = this.roomTypingCbs.get(roomId);
+    if (!cbs || cbs.size === 0) return;
+
+    const sub = this.client.subscribe(`${TOPIC_PREFIX}/typing/${roomId}`, (message) => {
+      const payload = parseJson<MemberChatTypingEvent>(message.body);
+      if (!payload) return;
+      for (const cb of cbs) {
+        cb(payload);
+      }
+    });
+    this.stompRoomTyping.set(roomId, sub);
   }
 
   private attachErrors() {
@@ -237,6 +272,34 @@ export class MemberChatStompClient {
     };
   }
 
+  /**
+   * 타이핑 인디케이터 구독. 영속화 X — 단발 broadcast 만 받는다.
+   * 본인 송신은 토픽 fan-out 으로 자기 자신에게도 오므로, 호출 측에서 senderId 로 필터한다.
+   */
+  subscribeTypingEvents(roomId: number, onTyping: (payload: MemberChatTypingEvent) => void): () => void {
+    let set = this.roomTypingCbs.get(roomId);
+    if (!set) {
+      set = new Set();
+      this.roomTypingCbs.set(roomId, set);
+    }
+    set.add(onTyping);
+
+    void this.connect().then(() => {
+      if (this.client?.connected && !this.stompRoomTyping.has(roomId)) {
+        this.attachRoomTyping(roomId);
+      }
+    });
+
+    return () => {
+      set!.delete(onTyping);
+      if (set!.size === 0) {
+        this.roomTypingCbs.delete(roomId);
+        this.stompRoomTyping.get(roomId)?.unsubscribe();
+        this.stompRoomTyping.delete(roomId);
+      }
+    };
+  }
+
   subscribeErrors(onError: (raw: unknown) => void): () => void {
     this.errorCbs.add(onError);
     void this.connect().then(() => {
@@ -272,6 +335,20 @@ export class MemberChatStompClient {
       destination: `${APP_PREFIX}/room/${roomId}/read`,
       // 서버 ChatStompController 는 payload.messageId 를 본다. lastMessageId 키로 보내면 messageId 필수 에러.
       body: JSON.stringify({ messageId: payload.messageId, deviceId: payload.deviceId ?? 'web' }),
+      headers: authHeaders(),
+    });
+  }
+
+  /**
+   * 타이핑 송신. 영속화 X. 클라이언트는 3초 throttle 로 호출한다.
+   * 서버는 RateLimiter 로 추가 보호.
+   */
+  async sendTyping(roomId: number): Promise<void> {
+    await this.connect();
+    if (!this.client?.connected) return;
+    this.client.publish({
+      destination: `${APP_PREFIX}/room/${roomId}/typing`,
+      body: '{}',
       headers: authHeaders(),
     });
   }

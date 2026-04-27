@@ -1,11 +1,35 @@
 import { Alert, Card, Checkbox, Form, Input, Typography } from 'antd';
 import { ArrowRightOutlined, LockOutlined, MailOutlined } from '@ant-design/icons';
 import { useNavigate } from '@tanstack/react-router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { APP_POST_LOGIN_PATH } from '@/app/config/paths';
 import { useAuth } from '@/features/auth/useAuth';
 import brandLogo from '@/shared/assets/brand/logo.png';
 import { AppButton } from '@/shared/ui/AppButton';
+
+const SAVED_LOGIN_EMAIL_KEY = 'workforce.savedLoginEmail';
+
+function readSavedLoginEmail(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    return localStorage.getItem(SAVED_LOGIN_EMAIL_KEY)?.trim() ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function persistSavedLoginEmail(email: string, remember: boolean) {
+  if (typeof window === 'undefined') return;
+  try {
+    if (remember && email.trim()) {
+      localStorage.setItem(SAVED_LOGIN_EMAIL_KEY, email.trim());
+    } else {
+      localStorage.removeItem(SAVED_LOGIN_EMAIL_KEY);
+    }
+  } catch {
+    // 저장 실패 시 무시 (프라이빗 모드 등)
+  }
+}
 
 export type LoginPageProps = {
   embedded?: boolean;
@@ -14,14 +38,25 @@ export type LoginPageProps = {
 function LoginPage({ embedded = false }: LoginPageProps) {
   const auth = useAuth();
   const navigate = useNavigate();
+  const [form] = Form.useForm<{
+    email: string;
+    password: string;
+    rememberSaveId: boolean;
+  }>();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const onFinish = async (values: { email: string; password: string }) => {
+  const savedEmail = useMemo(() => readSavedLoginEmail(), []);
+
+  const onFinish = async (values: { email: string; password: string; rememberSaveId: boolean }) => {
     setLoading(true);
     setError(null);
     try {
-      const session = await auth.login(values);
+      const session = await auth.login({
+        email: values.email,
+        password: values.password,
+      });
+      persistSavedLoginEmail(values.email, values.rememberSaveId);
       if (session.user.flags?.mustChangePassword) {
         void navigate({ to: '/change-password', search: { forced: true } });
         return;
@@ -39,7 +74,7 @@ function LoginPage({ embedded = false }: LoginPageProps) {
   };
 
   const shellClass = embedded
-    ? 'tw-relative tw-flex tw-w-full tw-min-h-screen tw-items-center tw-justify-center tw-bg-slate-50 tw-pb-12'
+    ? 'tw-relative tw-flex tw-w-full tw-min-h-screen tw-items-start tw-justify-center tw-bg-slate-50 tw-pt-20 sm:tw-pt-24 tw-pb-8 sm:tw-pb-10 tw-px-3 sm:tw-px-4'
     : 'tw-relative tw-flex tw-min-h-screen tw-items-center tw-justify-center tw-overflow-hidden tw-bg-slate-50 tw-p-6';
 
   return (
@@ -51,15 +86,10 @@ function LoginPage({ embedded = false }: LoginPageProps) {
         </>
       )}
 
-      <Card
-        className={
-          embedded
-            ? 'tw-z-10 tw-w-full tw-max-w-[460px] tw-mx-auto tw-rounded-[28px] tw-border tw-border-slate-100 tw-shadow-lg tw-shadow-slate-900/5'
-            : 'tw-z-10 tw-w-full tw-max-w-[460px] tw-rounded-[36px] tw-border tw-border-slate-100 tw-shadow-2xl tw-shadow-blue-900/5'
-        }
-      >
-        <div className="tw-p-8 md:tw-p-10">
-          <div className="tw-mb-8 tw-flex tw-flex-col tw-items-center tw-gap-2">
+      {embedded ? (
+        <div className="tw-z-10 tw-w-full tw-max-w-[460px] tw-mx-auto">
+          <div className="tw-p-5 sm:tw-p-6 md:tw-p-8">
+            <div className="tw-mb-5 sm:tw-mb-6 tw-flex tw-flex-col tw-items-center tw-gap-2">
             <img
               src={brandLogo}
               alt="WORKFORCE 로고"
@@ -72,7 +102,16 @@ function LoginPage({ embedded = false }: LoginPageProps) {
 
           {error ? <Alert type="error" showIcon message={error} className="tw-mb-4" /> : null}
 
-          <Form layout="vertical" onFinish={(values) => void onFinish(values)} requiredMark={false}>
+          <Form
+            form={form}
+            layout="vertical"
+            initialValues={{
+              email: savedEmail,
+              rememberSaveId: Boolean(savedEmail),
+            }}
+            onFinish={(values) => void onFinish(values)}
+            requiredMark={false}
+          >
             <Form.Item
               label={<span className="tw-text-[11px] tw-font-bold tw-uppercase tw-tracking-[0.15em] tw-text-slate-400">Email</span>}
               name="email"
@@ -99,8 +138,10 @@ function LoginPage({ embedded = false }: LoginPageProps) {
               />
             </Form.Item>
 
-            <div className="tw-mb-4 tw-flex tw-items-center tw-justify-between">
-              <Checkbox className="tw-text-xs tw-font-semibold tw-text-slate-500">아이디 저장</Checkbox>
+            <div className="tw-mb-4 tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2">
+              <Form.Item name="rememberSaveId" valuePropName="checked" className="tw-mb-0">
+                <Checkbox className="tw-text-xs tw-font-semibold tw-text-slate-500">아이디 저장</Checkbox>
+              </Form.Item>
               <AppButton
                 type="text"
                 variant="text"
@@ -123,7 +164,7 @@ function LoginPage({ embedded = false }: LoginPageProps) {
             </AppButton>
           </Form>
 
-          <div className="tw-mt-3 tw-border-t tw-border-slate-100 tw-pt-3">
+          <div className="tw-mt-2 tw-border-t tw-border-slate-100 tw-pt-2">
             <div className="tw-space-y-3">
               <AppButton
                 size="large"
@@ -135,8 +176,101 @@ function LoginPage({ embedded = false }: LoginPageProps) {
               </AppButton>
             </div>
           </div>
+          </div>
         </div>
-      </Card>
+      ) : (
+        <Card className="tw-z-10 tw-w-full tw-max-w-[460px] tw-rounded-[36px] tw-border tw-border-slate-100 tw-shadow-2xl tw-shadow-blue-900/5">
+          <div className="tw-p-7 md:tw-p-9">
+            <div className="tw-mb-6 tw-flex tw-flex-col tw-items-center tw-gap-2">
+              <img
+                src={brandLogo}
+                alt="WORKFORCE 로고"
+                className="tw-h-12 tw-w-auto tw-block tw-shrink-0"
+              />
+              <Typography.Text className="tw-text-[11px] tw-font-bold tw-uppercase tw-tracking-[0.2em] tw-text-slate-500">
+                LOGIN
+              </Typography.Text>
+            </div>
+
+            {error ? <Alert type="error" showIcon message={error} className="tw-mb-4" /> : null}
+
+            <Form
+              form={form}
+              layout="vertical"
+              initialValues={{
+                email: savedEmail,
+                rememberSaveId: Boolean(savedEmail),
+              }}
+              onFinish={(values) => void onFinish(values)}
+              requiredMark={false}
+            >
+              <Form.Item
+                label={<span className="tw-text-[11px] tw-font-bold tw-uppercase tw-tracking-[0.15em] tw-text-slate-400">Email</span>}
+                name="email"
+                rules={[{ required: true, message: '이메일을 입력해 주세요.' }]}
+              >
+                <Input
+                  size="large"
+                  prefix={<MailOutlined className="tw-text-slate-400" />}
+                  placeholder="example@workforce.com"
+                  className="tw-rounded-2xl"
+                />
+              </Form.Item>
+
+              <Form.Item
+                label={<span className="tw-text-[11px] tw-font-bold tw-uppercase tw-tracking-[0.15em] tw-text-slate-400">Password</span>}
+                name="password"
+                rules={[{ required: true, message: '비밀번호를 입력해 주세요.' }]}
+              >
+                <Input.Password
+                  size="large"
+                  prefix={<LockOutlined className="tw-text-slate-400" />}
+                  placeholder="••••••••"
+                  className="tw-rounded-2xl"
+                />
+              </Form.Item>
+
+              <div className="tw-mb-4 tw-flex tw-items-center tw-justify-between">
+                <Form.Item name="rememberSaveId" valuePropName="checked" className="tw-mb-0">
+                  <Checkbox className="tw-text-xs tw-font-semibold tw-text-slate-500">아이디 저장</Checkbox>
+                </Form.Item>
+                <AppButton
+                  type="text"
+                  variant="text"
+                  className="tw-text-xs tw-font-bold tw-text-blue-600 hover:tw-text-blue-700"
+                  onClick={() => navigate({ to: '/find-password' })}
+                >
+                  비밀번호 찾기
+                </AppButton>
+              </div>
+
+              <AppButton
+                htmlType="submit"
+                size="large"
+                loading={loading}
+                icon={!loading ? <ArrowRightOutlined /> : undefined}
+                iconPosition="end"
+                className="tw-h-12 tw-w-full !tw-font-black"
+              >
+                로그인
+              </AppButton>
+            </Form>
+
+            <div className="tw-mt-2 tw-border-t tw-border-slate-100 tw-pt-2">
+              <div className="tw-space-y-3">
+                <AppButton
+                  size="large"
+                  variant="secondary"
+                  className="tw-h-12 tw-w-full !tw-font-semibold !tw-bg-white hover:!tw-bg-white"
+                  onClick={() => navigate({ to: '/company/onboarding' })}
+                >
+                  회사 계정 가입
+                </AppButton>
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
     </div>
   );
 }

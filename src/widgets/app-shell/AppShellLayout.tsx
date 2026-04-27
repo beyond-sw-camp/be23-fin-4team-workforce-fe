@@ -695,7 +695,7 @@ function SessionAccessTimer() {
 
     return (
         <div
-            className="tw-flex tw-items-center tw-gap-2 tw-rounded-full tw-border tw-border-solid tw-border-slate-200 tw-bg-slate-50 tw-px-3 tw-py-1.5">
+            className="tw-flex tw-h-11 tw-items-center tw-gap-2 tw-rounded-full tw-border tw-border-solid tw-border-slate-200 tw-bg-slate-50 tw-px-3">
             <ClockCircleOutlined
                 className={warn ? 'tw-text-amber-600' : 'tw-text-slate-500'}
                 aria-hidden
@@ -706,7 +706,13 @@ function SessionAccessTimer() {
             >
         {formatSessionCountdown(remainingSec)}
       </span>
-            <Button type="default" size="small" loading={extending} onClick={() => void handleExtend()}>
+            <Button
+                type="default"
+                size="small"
+                loading={extending}
+                onClick={() => void handleExtend()}
+                className="!tw-h-7 !tw-rounded-full !tw-border-slate-300 !tw-px-3 !tw-text-xs !tw-font-semibold !tw-text-slate-700 hover:!tw-border-slate-400 hover:!tw-text-slate-900"
+            >
                 연장
             </Button>
         </div>
@@ -987,7 +993,7 @@ function AppShellAccountMenu() {
     };
 
     return (
-        <div className="tw-relative tw-ml-1 tw-inline-flex tw-shrink-0 tw-pl-3 md:tw-pl-2.5 before:tw-pointer-events-none before:tw-absolute before:tw-left-0 before:tw-top-1/2 before:tw-z-0 before:tw-h-[22px] before:tw-w-px before:-tw-translate-y-1/2 before:tw-bg-slate-200 before:tw-content-['']">
+        <div className="tw-relative tw-ml-0.5 tw-inline-flex tw-shrink-0 tw-pl-2.5 md:tw-pl-3 before:tw-pointer-events-none before:tw-absolute before:tw-left-0 before:tw-top-1/2 before:tw-z-0 before:tw-h-[22px] before:tw-w-px before:-tw-translate-y-1/2 before:tw-bg-slate-200 before:tw-content-['']">
             <Popover {...popoverCommon} placement="bottomRight" align={{offset: [0, 6]}}>
                 <div
                     className="tw-relative tw-z-[1] tw-flex tw-min-w-0 tw-max-w-[min(100vw-96px,280px)] tw-shrink-0 tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-lg tw-py-1 tw-pr-1.5 tw-outline-none hover:tw-bg-slate-100/90 focus-visible:tw-ring-2 focus-visible:tw-ring-blue-500/30 md:tw-gap-2.5 md:tw-pr-2.5"
@@ -1079,10 +1085,10 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
         queryKey: ['member-chat', 'rooms'],
         queryFn: () => memberChatApi.listMyRooms(),
         enabled: status === 'authenticated',
-        // 방별 unreadCount 합(헤더 뱃지)과 목록 카운트를 실시간에 가깝게 유지
-        // 현재는 활성 방 외에는 STOMP 직접 구독이 없으므로 짧은 polling으로 동기화한다.
+        // 1차 동기화는 MemberChatLiveSyncAgent 의 STOMP 구독이 처리(메시지 도착 시 즉시 invalidate).
+        // 폴링은 STOMP 미연결/네트워크 단절 대비 백업용으로 길게(30s) 유지.
         staleTime: 0,
-        refetchInterval: 3_000,
+        refetchInterval: 30_000,
         refetchIntervalInBackground: true,
     });
     const chatUnreadTotal = myChatRooms.reduce(
@@ -1312,7 +1318,7 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
                 onClose={() => setHeaderDetailMemberId(null)}
             />
 
-            <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-2 tw-overflow-visible md:tw-gap-4">
+            <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-3 tw-overflow-visible md:tw-gap-3.5">
                 <SessionAccessTimer/>
                 <Tooltip title="멤버 채팅">
                     <Badge count={chatUnreadTotal} color="#EF4444" offset={[-8, 8]} showZero={false} overflowCount={99}>
@@ -1689,4 +1695,5 @@ function AppShellLayout() {
     );
 }
 
-export default AppShellLayout
+
+export default AppShellLayout;

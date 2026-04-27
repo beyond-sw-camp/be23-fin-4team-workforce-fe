@@ -142,8 +142,17 @@ export function MyEvaluationAssignmentsContent({
             : r.status === 'IN_PROGRESS'
               ? L.myAssignmentsActionContinue
               : L.myAssignmentsActionStart;
+        const isPrimaryAction = r.status !== 'SUBMITTED';
         return (
-          <Button type={r.status === 'SUBMITTED' ? 'default' : 'primary'} onClick={() => goWrite(r.responseId)}>
+          <Button
+            type={isPrimaryAction ? 'primary' : 'default'}
+            onClick={() => goWrite(r.responseId)}
+            className={
+              isPrimaryAction
+                ? '!tw-h-11 !tw-rounded-xl !tw-border-0 !tw-bg-[#1e3a5f] !tw-font-semibold hover:!tw-bg-[#152a45]'
+                : '!tw-h-11 !tw-rounded-xl !tw-font-semibold'
+            }
+          >
             {label}
           </Button>
         );
