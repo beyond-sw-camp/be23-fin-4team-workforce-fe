@@ -9,6 +9,7 @@ import { Alert, Card, DatePicker, Descriptions, Progress, Space, Tag, Typography
 import { CheckCircleFilled, ExclamationCircleFilled } from '@ant-design/icons';
 import dayjs, { type Dayjs } from 'dayjs';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
+import type { ComprehensiveOvertimeStatus } from '@/features/salary-service/types';
 
 type Severity = 'normal' | 'warning' | 'critical' | 'exceeded';
 
@@ -49,7 +50,14 @@ export function MyWorkTimePage() {
     queryFn: () => attendanceApi.attendance.getMyWorkTimeSummary(dateIso),
   });
 
+  // 포괄임금제인 경우에만 데이터 반환, 비포괄/미적용이면 null
+  const comprehensiveQ = useQuery<ComprehensiveOvertimeStatus | null>({
+    queryKey: ['salary', 'attendance', 'my', 'comprehensive-overtime', dateIso],
+    queryFn: () => attendanceApi.comprehensiveOvertime.getMy(dateIso),
+  });
+
   const summary = summaryQ.data;
+  const comprehensive = comprehensiveQ.data;
 
   const totalSev = severityOf(summary?.totalUsagePercent);
   const otSev = severityOf(summary?.overtimeUsagePercent);
@@ -215,6 +223,48 @@ export function MyWorkTimePage() {
           </Space>
         )}
       </Card>
+
+      {comprehensive && comprehensive.fixedLimit != null && (
+        <Card
+          loading={comprehensiveQ.isLoading}
+          className="tw-border-slate-200/80 tw-shadow-sm"
+          title="내 포괄임금 고정 OT 현황 (이번 달)"
+        >
+          <Space direction="vertical" className="tw-w-full" size={16}>
+            <Descriptions column={{ xs: 1, sm: 2 }} size="small" bordered>
+              <Descriptions.Item label="이번 달 누적 OT">
+                {formatHm(comprehensive.approvedMinutes)}
+              </Descriptions.Item>
+              <Descriptions.Item label="고정 한도">
+                {formatHm(comprehensive.fixedLimit)}
+              </Descriptions.Item>
+              <Descriptions.Item label="사용률">
+                <Tag color={(comprehensive.usagePercent ?? 0) >= 100 ? 'red'
+                  : (comprehensive.usagePercent ?? 0) >= 80 ? 'orange' : 'default'}>
+                  {(comprehensive.usagePercent ?? 0).toFixed(1)}%
+                </Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="초과분">
+                {!comprehensive.exceedMinutes
+                  ? <Typography.Text type="secondary">—</Typography.Text>
+                  : <Tag color="red">{formatHm(comprehensive.exceedMinutes)}</Tag>}
+              </Descriptions.Item>
+            </Descriptions>
+            <Progress
+              percent={Math.min(100, comprehensive.usagePercent ?? 0)}
+              strokeColor={
+                (comprehensive.usagePercent ?? 0) >= 100 ? '#CF1322'
+                  : (comprehensive.usagePercent ?? 0) >= 80 ? '#D48806' : '#2563EB'
+              }
+              status={(comprehensive.usagePercent ?? 0) >= 100 ? 'exception' : 'normal'}
+            />
+            <Typography.Text type="secondary" className="tw-text-xs">
+              ※ 포괄임금제는 월 기본급에 고정 OT 분이 포함되어 있습니다. 초과분은 다음 급여에 별도
+              지급됩니다.
+            </Typography.Text>
+          </Space>
+        </Card>
+      )}
     </Space>
   );
 }

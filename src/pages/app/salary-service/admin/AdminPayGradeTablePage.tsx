@@ -33,7 +33,7 @@ function formatWon(n: number | null | undefined) {
 
 const QK = ['salary', 'pay-grade-table'] as const;
 
-export function AdminPayGradeTablePage() {
+export function AdminPayGradeTablePage({ embedded = false }: { embedded?: boolean }) {
   const { message } = App.useApp();
   const qc = useQueryClient();
 
@@ -183,19 +183,25 @@ export function AdminPayGradeTablePage() {
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
       <div className="tw-flex tw-flex-wrap tw-items-start tw-justify-between tw-gap-3">
-        <div>
-          <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
-            호봉표 관리
-          </Typography.Title>
-          <Typography.Text type="secondary" className="tw-text-xs">
-            호봉 → 기본급 매핑을 관리합니다. 직급별 차등은 직책수당 등 별도 수당으로 처리하세요.
-          </Typography.Text>
-          <div className="tw-mt-2">
-            <Link to="/app/salary/settings" className="tw-text-sm tw-text-[#2563EB]">
-              ← 급여 설정
-            </Link>
+        {!embedded ? (
+          <div>
+            <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
+              호봉표 관리
+            </Typography.Title>
+            <Typography.Text type="secondary" className="tw-text-xs">
+              호봉 → 기본급 매핑을 관리합니다. 직급별 차등은 직책수당 등 별도 수당으로 처리하세요.
+            </Typography.Text>
+            <div className="tw-mt-2">
+              <Link to="/app/salary/settings" className="tw-text-sm tw-text-[#2563EB]">
+                ← 급여 정책
+              </Link>
+            </div>
           </div>
-        </div>
+        ) : (
+          <Typography.Text type="secondary" className="!tw-text-sm">
+            호봉표는 급여 정책에서 호봉제를 사용하는 경우에만 표시됩니다.
+          </Typography.Text>
+        )}
         <Space wrap>
           <Space align="center">
             <Typography.Text type="secondary" className="!tw-text-xs">

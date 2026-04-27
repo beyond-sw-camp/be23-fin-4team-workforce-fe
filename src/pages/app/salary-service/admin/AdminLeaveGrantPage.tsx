@@ -1,36 +1,16 @@
-/** /app/leave/grant — 휴가 부여 POST /member-balance/grant (시스템 관리자) */
+/** /app/leave/grant — 특별휴가 일괄 부여 POST /member-balance/grant (시스템 관리자) */
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Alert, Button, Card, DatePicker, Form, InputNumber, Select, Space, Typography } from 'antd';
 import dayjs from 'dayjs';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import { memberApi } from '@/features/member/api/memberApi';
-import type { BalanceTypeCode } from '@/features/salary-service/types';
 
 type FormValues = {
-  memberId: string;
-  balanceType: BalanceTypeCode;
+  memberIds: string[];
   totalGranted: number;
   expirationDate?: dayjs.Dayjs | null;
 };
-
-const BALANCE_OPTIONS: { value: BalanceTypeCode; label: string; description: string }[] = [
-  {
-    value: 'ANNUAL',
-    label: '당해 연차 (ANNUAL)',
-    description: '법정 연차에 해당하는 잔여 통로. 휴가 신청 시 가장 흔하게 차감됩니다.',
-  },
-  {
-    value: 'MONTHLY',
-    label: '월차 (MONTHLY)',
-    description: '입사 1년 미만 등 월 단위로 쌓는 잔여 통로.',
-  },
-  {
-    value: 'CARRYOVER',
-    label: '이월 연차 (CARRYOVER)',
-    description: '전년 이월분. 회사 정책에서 이월을 허용할 때 사용합니다.',
-  },
-];
 
 function useDebouncedValue<T>(value: T, delayMs: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -74,12 +54,13 @@ function MemberGrantTargetField() {
 
   return (
     <Form.Item
-      name="memberId"
-      label="부여 대상 직원"
-      rules={[{ required: true, message: '검색 후 직원을 선택하세요.' }]}
-      extra="이름·이메일·부서 등으로 검색한 뒤 목록에서 선택합니다. (구성원 UUID를 직접 입력할 필요 없음)"
+      name="memberIds"
+      label="부여 대상 직원 (복수 선택)"
+      rules={[{ required: true, message: '검색 후 직원을 한 명 이상 선택하세요.' }]}
+      extra="이름·이메일·부서 등으로 검색한 뒤 여러 직원을 선택할 수 있습니다."
     >
       <Select
+        mode="multiple"
         showSearch
         allowClear
         placeholder="검색어 입력…"
@@ -100,6 +81,7 @@ function MemberGrantTargetField() {
         }
         options={options}
         loading={isFetching}
+        maxTagCount="responsive"
       />
     </Form.Item>
   );
@@ -109,33 +91,50 @@ export function AdminLeaveGrantPage() {
   const { message } = App.useApp();
   const qc = useQueryClient();
   const [form] = Form.useForm<FormValues>();
+  const selectedMemberIds = Form.useWatch('memberIds', form) as string[] | undefined;
 
   const grantM = useMutation({
-    mutationFn: (v: FormValues) =>
-      attendanceApi.memberBalance.grant({
-        memberId: v.memberId.trim(),
-        balanceType: v.balanceType,
-        totalGranted: v.totalGranted,
-        expirationDate: v.expirationDate ? v.expirationDate.format('YYYY-MM-DD') : null,
-      }),
-    onSuccess: () => {
-      message.success('휴가가 부여되었습니다.');
+    mutationFn: async (v: FormValues) => {
+      const targetIds = Array.from(new Set((v.memberIds ?? []).map((id) => id.trim()).filter(Boolean)));
+      if (targetIds.length === 0) throw new Error('부여 대상을 한 명 이상 선택해 주세요.');
+
+      let successCount = 0;
+      const failed: string[] = [];
+      for (const memberId of targetIds) {
+        try {
+          await attendanceApi.memberBalance.grant({
+            memberId,
+            balanceType: 'CARRYOVER',
+            totalGranted: v.totalGranted,
+            expirationDate: v.expirationDate ? v.expirationDate.format('YYYY-MM-DD') : null,
+          });
+          successCount += 1;
+        } catch {
+          failed.push(memberId);
+        }
+      }
+      return { successCount, failedCount: failed.length };
+    },
+    onSuccess: (result) => {
+      if (result.failedCount > 0) {
+        message.warning(`특별휴가 일괄 부여 완료: 성공 ${result.successCount}명, 실패 ${result.failedCount}명`);
+      } else {
+        message.success(`특별휴가가 ${result.successCount}명에게 일괄 부여되었습니다.`);
+      }
       form.resetFields();
       void qc.invalidateQueries({ queryKey: ['salary', 'member-balance'] });
     },
-    onError: (e: unknown) => message.error(apiErrorMessage(e) || '부여에 실패했습니다.'),
+    onError: (e: unknown) => message.error(apiErrorMessage(e) || '일괄 부여에 실패했습니다.'),
   });
 
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
       <div>
         <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
-          휴가 부여
+          특별휴가 일괄 부여
         </Typography.Title>
         <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-sm">
-          관리자가 특정 직원의{' '}
-          <Typography.Text strong>연차·월차·이월</Typography.Text> 잔여 통로에 일수를 수동으로 쌓습니다.{' '}
-          <Typography.Text code>POST /member-balance/grant</Typography.Text>
+          배치 자동 부여(연차·월차·이월)와 분리해서, 관리자가 예외성 특별휴가를 여러 직원에게 한 번에 부여합니다.
         </Typography.Paragraph>
       </div>
 
@@ -145,11 +144,9 @@ export function AdminLeaveGrantPage() {
         message="정책 자동 부여와 이 화면의 역할"
         description={
           <div className="tw-text-sm">
-            연차·월차 등은 보통{' '}
-            <Typography.Text strong>휴가 정책·배치(스케줄러)</Typography.Text>에 따라 입사일·회계연도 등 기준으로 자동
-            부여되는 흐름을 둡니다. 이 메뉴는 그보다 <Typography.Text strong>예외 조정</Typography.Text>(정책 반영 전
-            보정, 경영 가산, 이월 수동 반영 등)을 위한 수동 부여입니다. 자동이 안 되는지 확인할 때는 배치 실행·정책
-            설정·로그를 먼저 보는 것이 좋습니다.
+            정기 휴가(연차·월차·이월)는 <Typography.Text strong>스케줄러/배치 자동 부여</Typography.Text>가 기본입니다.
+            이 화면은 예외성 보상, 포상, 운영 보정 같은 <Typography.Text strong>특별휴가 수동 부여</Typography.Text>에
+            사용해 주세요.
           </div>
         }
       />
@@ -157,16 +154,11 @@ export function AdminLeaveGrantPage() {
       <Alert
         type="warning"
         showIcon
-        message="특별 휴가·회사 휴가 종류와의 관계"
+        message="현재 저장 방식"
         description={
           <div className="tw-text-sm">
-            현재 이 API의 <Typography.Text strong>잔여 유형</Typography.Text>은{' '}
-            <Typography.Text code>ANNUAL</Typography.Text>, <Typography.Text code>MONTHLY</Typography.Text>,{' '}
-            <Typography.Text code>CARRYOVER</Typography.Text> 세 가지뿐입니다. 병가·경조사 등{' '}
-            <Typography.Text strong>회사 휴가 종류별로 각각 잔고를 나눠 쌓는 방식</Typography.Text>은 이 화면만으로는
-            지원되지 않으며, 백엔드에서 <Typography.Text code>BalanceType</Typography.Text>·차감 로직을 확장해야 합니다.
-            지금은 &quot;특별히 일수를 더 준다&quot;는 의미에서 위 세 통로 중 하나를 선택해 부여하는 식으로 쓰는 것이
-            맞습니다.
+            현재 API 제약으로 특별휴가는 <Typography.Text code>CARRYOVER</Typography.Text> 잔여 통로에 누적 저장됩니다.
+            휴가 종류별 별도 잔고 분리를 원하면 백엔드 <Typography.Text code>BalanceType</Typography.Text> 확장이 필요합니다.
           </div>
         }
       />
@@ -175,17 +167,12 @@ export function AdminLeaveGrantPage() {
         <Form<FormValues>
           form={form}
           layout="vertical"
-          initialValues={{ balanceType: 'ANNUAL', totalGranted: 1 }}
+          initialValues={{ memberIds: [], totalGranted: 1 }}
           onFinish={(v) => grantM.mutate(v)}
         >
           <MemberGrantTargetField />
-          <Form.Item name="balanceType" label="잔여 유형 (부여 통로)" rules={[{ required: true }]}>
-            <Select
-              options={BALANCE_OPTIONS.map((o) => ({
-                value: o.value,
-                label: `${o.label} — ${o.description}`,
-              }))}
-            />
+          <Form.Item label="부여 통로">
+            <Typography.Text strong>CARRYOVER (특별휴가 누적 통로)</Typography.Text>
           </Form.Item>
           <Form.Item name="totalGranted" label="부여 일수" rules={[{ required: true }]}>
             <InputNumber className="tw-w-full" min={0.5} step={0.5} />
@@ -193,9 +180,12 @@ export function AdminLeaveGrantPage() {
           <Form.Item name="expirationDate" label="만료일 (선택)">
             <DatePicker className="tw-w-full" />
           </Form.Item>
+          <Typography.Paragraph type="secondary" className="!tw-mb-3 !tw-text-xs">
+            선택된 대상: {selectedMemberIds?.length ?? 0}명
+          </Typography.Paragraph>
           <Form.Item>
             <Button type="primary" htmlType="submit" loading={grantM.isPending}>
-              부여
+              일괄 부여
             </Button>
           </Form.Item>
         </Form>

@@ -22,13 +22,15 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
+import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import { memberApi } from '@/features/member/api/memberApi';
+import { AdminPayGradeTablePage } from '@/pages/app/salary-service/admin/AdminPayGradeTablePage';
 import type {
+  ComprehensiveOvertimeStatus,
   Salary,
   SalaryPolicy,
   SalaryItemTemplate,
   TaxRate,
-  PayTypeCode,
   WageSystemTypeCode,
   PeriodStartTypeCode,
   PeriodEndTypeCode,
@@ -40,7 +42,6 @@ import { TAX_CAP_SUPPORTED_TYPES } from '@/features/salary-service/types';
 
 /* ─── 공통 한글 맵 ─── */
 
-const PAY_TYPE_KO: Record<string, string> = { MONTHLY: '월급', BONUS: '보너스', SEVERANCE: '퇴직금' };
 const WAGE_SYS_KO: Record<string, string> = { COMPREHENSIVE: '포괄', NON_COMPREHENSIVE: '비포괄' };
 const TAX_TYPE_KO: Record<string, string> = {
   NATIONAL_PENSION: '국민연금',
@@ -142,6 +143,8 @@ type SalaryFormValues = {
   jobGradeName?: string;
   jobTitleName?: string;
   effectiveRange: [dayjs.Dayjs, dayjs.Dayjs | null];
+  /** 부양가족수 0~11, 기본 1=본인만, 소득세 간이세액표 룩업용 */
+  dependentCount?: number;
 };
 
 type BootstrapFormValues = {
@@ -152,7 +155,7 @@ type BootstrapFormValues = {
   jobTitleName?: string;
 };
 
-function SalaryTab() {
+export function SalaryTab() {
   const { message } = App.useApp();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -216,6 +219,7 @@ function SalaryTab() {
         jobTitleName: v.jobTitleName?.trim() || null,
         effectiveFrom: v.effectiveRange[0].format('YYYY-MM-DD'),
         effectiveTo: v.effectiveRange[1]?.format('YYYY-MM-DD') ?? null,
+        dependentCount: v.dependentCount ?? 1,
       }),
     onSuccess: () => { message.success('등록 완료'); setOpen(false); form.resetFields(); void qc.invalidateQueries({ queryKey: ['salary', 'salaries'] }); },
     onError: (e: Error) => message.error(e.message || '실패'),
@@ -231,6 +235,7 @@ function SalaryTab() {
         jobTitleName: v.jobTitleName?.trim() || null,
         effectiveFrom: v.effectiveRange[0].format('YYYY-MM-DD'),
         effectiveTo: v.effectiveRange[1]?.format('YYYY-MM-DD') ?? null,
+        dependentCount: v.dependentCount ?? 1,
       }),
     onSuccess: () => { message.success('수정 완료'); setOpen(false); setEditing(null); form.resetFields(); void qc.invalidateQueries({ queryKey: ['salary', 'salaries'] }); },
     onError: (e: Error) => message.error(e.message || '실패'),
@@ -245,13 +250,62 @@ function SalaryTab() {
   const policyOptions = useMemo(
     () =>
       (policiesQ.data ?? [])
-        .filter((p) => p.payType === 'MONTHLY')
-        .map((p) => ({ value: p.salaryPolicyId!, label: `${p.policyName} (${PAY_TYPE_KO[p.payType ?? ''] ?? p.payType})` })),
+        .map((p) => ({ value: p.salaryPolicyId!, label: p.policyName ?? '' })),
     [policiesQ.data],
   );
 
+  const salaries = listQ.data ?? [];
+
+  const deriveStatus = (row: Salary): 'ACTIVE' | 'ENDED' => {
+    if (!row.effectiveTo) return 'ACTIVE';
+    const end = dayjs(row.effectiveTo);
+    if (!end.isValid()) return 'ACTIVE';
+    return end.isBefore(dayjs().startOf('day')) ? 'ENDED' : 'ACTIVE';
+  };
+
+  const [keyword, setKeyword] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'ENDED'>('ALL');
+  const [departmentFilter, setDepartmentFilter] = useState<string | 'ALL'>('ALL');
+
+  // 백엔드 응답에 이미 sabun/name/organizationName 결합되어 옴 N+1 호출 제거
+  const enrichedRows = useMemo(
+    () =>
+      salaries.map((row) => ({
+        ...row,
+        sabun: row.sabun ?? null,
+        memberName: row.name ?? null,
+        organizationName: row.organizationName ?? null,
+        salaryStatus: deriveStatus(row),
+      })),
+    [salaries],
+  );
+
+  const departmentOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const row of enrichedRows) {
+      if (row.organizationName) set.add(row.organizationName);
+    }
+    return Array.from(set).sort().map((d) => ({ value: d, label: d }));
+  }, [enrichedRows]);
+
+  const filteredRows = useMemo(() => {
+    const k = keyword.trim().toLowerCase();
+    return enrichedRows.filter((row) => {
+      if (statusFilter !== 'ALL' && row.salaryStatus !== statusFilter) return false;
+      if (departmentFilter !== 'ALL' && row.organizationName !== departmentFilter) return false;
+      if (!k) return true;
+      return (
+        (row.sabun?.toLowerCase().includes(k) ?? false) ||
+        (row.memberName?.toLowerCase().includes(k) ?? false) ||
+        (row.organizationName?.toLowerCase().includes(k) ?? false)
+      );
+    });
+  }, [departmentFilter, enrichedRows, keyword, statusFilter]);
+
   const cols = useMemo<ColumnsType<Salary>>(() => [
-    { title: '멤버 ID', dataIndex: 'memberId', key: 'memberId', ellipsis: true, width: 220 },
+    { title: '사번', dataIndex: 'sabun', key: 'sabun', width: 120, render: (v) => v ?? '-' },
+    { title: '이름', dataIndex: 'memberName', key: 'memberName', width: 120, render: (v) => v ?? '-' },
+    { title: '부서', dataIndex: 'organizationName', key: 'organizationName', width: 150, render: (v) => v ?? '-' },
     {
       title: '호봉',
       dataIndex: 'step',
@@ -262,6 +316,14 @@ function SalaryTab() {
     { title: '기본급', dataIndex: 'baseSalary', key: 'baseSalary', width: 140, render: (v) => v != null ? `${Number(v).toLocaleString()}원` : '-' },
     { title: '직급', dataIndex: 'jobGradeName', key: 'jobGradeName', width: 100 },
     { title: '직책', dataIndex: 'jobTitleName', key: 'jobTitleName', width: 100 },
+    {
+      title: '부양가족',
+      dataIndex: 'dependentCount',
+      key: 'dependentCount',
+      width: 100,
+      align: 'center',
+      render: (v) => (v != null ? `${v}명` : <Typography.Text type="secondary">-</Typography.Text>),
+    },
     { title: '적용 기간', key: 'eff', width: 220, render: (_, r) => `${r.effectiveFrom ?? ''} ~ ${r.effectiveTo ?? '진행중'}` },
     {
       title: '액션', key: 'actions', width: 140,
@@ -277,6 +339,7 @@ function SalaryTab() {
               jobGradeName: r.jobGradeName ?? '',
               jobTitleName: r.jobTitleName ?? '',
               effectiveRange: [r.effectiveFrom ? dayjs(r.effectiveFrom) : dayjs(), r.effectiveTo ? dayjs(r.effectiveTo) : null],
+              dependentCount: r.dependentCount ?? 1,
             });
           }}>수정</Button>
           <Popconfirm title="삭제?" okText="삭제" cancelText="취소" onConfirm={() => r.salaryId && deleteM.mutate(r.salaryId)}>
@@ -304,12 +367,44 @@ function SalaryTab() {
           <Button onClick={() => { bootstrapForm.resetFields(); bootstrapForm.setFieldsValue({ hireDate: dayjs() }); setBootstrapOpen(true); }}>
             입사 누락 복구
           </Button>
-          <Button type="primary" onClick={() => { setEditing(null); form.resetFields(); form.setFieldsValue({ baseSalary: 0, step: null, effectiveRange: [dayjs(), null] }); setOpen(true); }}>
+          <Button type="primary" onClick={() => { setEditing(null); form.resetFields(); form.setFieldsValue({ baseSalary: 0, step: null, effectiveRange: [dayjs(), null], dependentCount: 1 }); setOpen(true); }}>
             급여 이력 등록
           </Button>
         </Space>
       </div>
-      <Table<Salary> rowKey={(r) => r.salaryId ?? Math.random().toString()} loading={listQ.isLoading} dataSource={listQ.data ?? []} columns={cols} pagination={{ pageSize: 20 }} locale={{ emptyText: '등록된 급여 이력이 없습니다.' }} />
+      <Space wrap className="tw-mb-3">
+        <Input.Search
+          placeholder="이름·사번·부서 검색"
+          value={keyword}
+          onChange={(e) => setKeyword(e.target.value)}
+          allowClear
+          style={{ width: 260 }}
+        />
+        <Select
+          value={statusFilter}
+          onChange={setStatusFilter}
+          style={{ width: 130 }}
+          options={[
+            { value: 'ALL', label: '상태 전체' },
+            { value: 'ACTIVE', label: '진행중' },
+            { value: 'ENDED', label: '종료' },
+          ]}
+        />
+        <Select
+          value={departmentFilter}
+          onChange={setDepartmentFilter}
+          style={{ width: 150 }}
+          options={[{ value: 'ALL', label: '부서 전체' }, ...departmentOptions]}
+        />
+      </Space>
+      <Table<Salary>
+        rowKey={(r) => r.salaryId ?? Math.random().toString()}
+        loading={listQ.isLoading}
+        dataSource={filteredRows}
+        columns={cols}
+        pagination={{ pageSize: 20 }}
+        locale={{ emptyText: '등록된 급여 이력이 없습니다.' }}
+      />
       <Modal open={open} onCancel={() => { setOpen(false); setEditing(null); form.resetFields(); }} onOk={() => form.submit()} confirmLoading={createM.isPending || updateM.isPending} okText={editing ? '수정' : '등록'} cancelText="취소" title={editing ? '급여 이력 수정' : '급여 이력 등록'} destroyOnClose width={520}>
         <Form<SalaryFormValues>
           form={form}
@@ -395,6 +490,14 @@ function SalaryTab() {
 
           <Form.Item label="직급명" name="jobGradeName"><Input maxLength={40} /></Form.Item>
           <Form.Item label="직책명" name="jobTitleName"><Input maxLength={40} /></Form.Item>
+          <Form.Item
+            label="부양가족수"
+            name="dependentCount"
+            rules={[{ required: true, message: '부양가족수를 입력하세요.' }]}
+            extra="본인 포함 (예: 본인만 1, 본인+배우자 2). 소득세 간이세액표 룩업에 사용됩니다."
+          >
+            <InputNumber min={0} max={11} style={{ width: '100%' }} />
+          </Form.Item>
           <Form.Item label="적용 기간 (새 effectiveFrom)" name="effectiveRange" rules={[{ required: true }]}>
             <DatePicker.RangePicker allowEmpty={[false, true]} format="YYYY-MM-DD" style={{ width: '100%' }} />
           </Form.Item>
@@ -441,10 +544,8 @@ function SalaryTab() {
 
 type PolicyFormValues = {
   policyName: string;
-  payType: PayTypeCode;
   payDay: number;
   usePayGradeYn: 'Y' | 'N';
-  overtimeRoundingMinutes: 15 | 30;
   wageSystemType: WageSystemTypeCode;
   fixedOvertimeMinutes?: number;
   payDayShiftRule: PayDayShiftRuleCode;
@@ -462,10 +563,8 @@ function SalaryPolicyTab() {
 
   const buildPayload = (v: PolicyFormValues) => ({
     policyName: v.policyName.trim(),
-    payType: v.payType,
     payDay: v.payDay,
     usePayGradeYn: v.usePayGradeYn,
-    overtimeRoundingMinutes: v.overtimeRoundingMinutes,
     wageSystemType: v.wageSystemType,
     fixedOvertimeMinutes: v.wageSystemType === 'NON_COMPREHENSIVE' ? 0 : (v.fixedOvertimeMinutes ?? 0),
     // 급여 정산 기간은 1일~말일 고정
@@ -494,7 +593,6 @@ function SalaryPolicyTab() {
 
   const cols = useMemo<ColumnsType<SalaryPolicy>>(() => [
     { title: '정책명', dataIndex: 'policyName', key: 'policyName' },
-    { title: '지급유형', dataIndex: 'payType', key: 'payType', width: 100, render: (v) => <Tag>{PAY_TYPE_KO[v] ?? v}</Tag> },
     { title: '지급일', dataIndex: 'payDay', key: 'payDay', width: 80, render: (v) => `${v}일` },
     {
       title: '지급일 조정',
@@ -521,9 +619,8 @@ function SalaryPolicyTab() {
           <Button size="small" onClick={() => {
             setEditing(r); setOpen(true);
             form.setFieldsValue({
-              policyName: r.policyName ?? '', payType: (r.payType as PayTypeCode) ?? 'MONTHLY', payDay: r.payDay ?? 25,
+              policyName: r.policyName ?? '', payDay: r.payDay ?? 25,
               usePayGradeYn: r.usePayGradeYn === 'Y' ? 'Y' : 'N',
-              overtimeRoundingMinutes: (r.overtimeRoundingMinutes === 30 ? 30 : 15) as 15 | 30,
               wageSystemType: (r.wageSystemType as WageSystemTypeCode) ?? 'NON_COMPREHENSIVE',
               fixedOvertimeMinutes: r.fixedOvertimeMinutes ?? undefined,
               payDayShiftRule: (r.payDayShiftRule as PayDayShiftRuleCode) ?? 'BEFORE',
@@ -538,15 +635,12 @@ function SalaryPolicyTab() {
 
   return (
     <>
-      <div className="tw-flex tw-justify-end tw-mb-3"><Button type="primary" onClick={() => { setEditing(null); form.resetFields(); form.setFieldsValue({ payType: 'MONTHLY', payDay: 25, usePayGradeYn: 'N', overtimeRoundingMinutes: 15, wageSystemType: 'NON_COMPREHENSIVE', payDayShiftRule: 'BEFORE', effectiveRange: [dayjs(), null] }); setOpen(true); }}>정책 등록</Button></div>
+      <div className="tw-flex tw-justify-end tw-mb-3"><Button type="primary" onClick={() => { setEditing(null); form.resetFields(); form.setFieldsValue({ payDay: 25, usePayGradeYn: 'N', wageSystemType: 'NON_COMPREHENSIVE', payDayShiftRule: 'BEFORE', effectiveRange: [dayjs(), null] }); setOpen(true); }}>정책 등록</Button></div>
       <Table<SalaryPolicy> rowKey={(r) => r.salaryPolicyId ?? Math.random().toString()} loading={listQ.isLoading} dataSource={listQ.data ?? []} columns={cols} pagination={{ pageSize: 10 }} locale={{ emptyText: '등록된 정책이 없습니다.' }} />
       <Modal open={open} onCancel={() => { setOpen(false); setEditing(null); form.resetFields(); }} onOk={() => form.submit()} confirmLoading={createM.isPending || updateM.isPending} okText={editing ? '수정' : '등록'} cancelText="취소" title={editing ? '급여 정책 수정' : '급여 정책 등록'} destroyOnClose width={600}>
         <Form<PolicyFormValues> form={form} layout="vertical" onFinish={(v) => editing?.salaryPolicyId ? updateM.mutate({ id: editing.salaryPolicyId, v }) : createM.mutate(v)}>
           <Form.Item label="정책명" name="policyName" rules={[{ required: true }]}><Input maxLength={60} placeholder="예: ㅇㅇ컴퍼니 급여정책" /></Form.Item>
-          <Space className="tw-w-full" size={16}>
-            <Form.Item label="지급 유형" name="payType" rules={[{ required: true }]}><Select style={{ width: 160 }} options={[{ value: 'MONTHLY', label: '월급' }, { value: 'BONUS', label: '보너스' }, { value: 'SEVERANCE', label: '퇴직금' }]} /></Form.Item>
-            <Form.Item label="지급일 (1~31)" name="payDay" rules={[{ required: true }]}><InputNumber min={1} max={31} style={{ width: 120 }} /></Form.Item>
-          </Space>
+          <Form.Item label="지급일 (1~31)" name="payDay" rules={[{ required: true }]}><InputNumber min={1} max={31} style={{ width: 120 }} /></Form.Item>
           <Form.Item
             label="지급일 주말/공휴일 조정"
             name="payDayShiftRule"
@@ -590,20 +684,12 @@ function SalaryPolicyTab() {
               ) : null}
             </Form.Item>
           </Space>
-          <Form.Item
-            label="연장근무시간 인정 단위"
-            name="overtimeRoundingMinutes"
-            rules={[{ required: true }]}
-            extra="법정 FLOOR 절사 단위로 15분 또는 30분만 허용"
-          >
-            <Select
-              style={{ width: '100%' }}
-              options={[
-                { value: 15, label: '15분' },
-                { value: 30, label: '30분' },
-              ]}
-            />
-          </Form.Item>
+          <Alert
+            type="info"
+            showIcon
+            className="!tw-mb-3"
+            message="연장근무시간 인정 단위(15분/30분 절사)는 「연장근로 정책」에서 관리합니다."
+          />
           <Form.Item label="적용 기간" name="effectiveRange" rules={[{ required: true }]}><DatePicker.RangePicker allowEmpty={[false, true]} format="YYYY-MM-DD" style={{ width: '100%' }} /></Form.Item>
         </Form>
       </Modal>
@@ -871,6 +957,27 @@ function SalaryItemTemplateTab() {
       ),
     },
     {
+      // 카테고리 기준 월 비과세 한도 한도 없음 또는 미지정 dash
+      title: '기본 비과세 금액',
+      dataIndex: 'monthlyNonTaxableLimit',
+      key: 'monthlyNonTaxableLimit',
+      width: 160,
+      align: 'right',
+      render: (v: number | null | undefined, r) => {
+        if (typeof v === 'number' && v > 0) {
+          return <span>{v.toLocaleString('ko-KR')} 원 / 월</span>;
+        }
+        if (typeof v === 'number' && v === 0) {
+          return <Typography.Text type="secondary">한도 없음</Typography.Text>;
+        }
+        // null 인 경우 한도 미정 카테고리 학자금 기타 비과세
+        if (r.taxCategory === 'TUITION' || r.taxCategory === 'ETC_NON_TAXABLE') {
+          return <Typography.Text type="secondary">실비 / 별도</Typography.Text>;
+        }
+        return <Typography.Text type="secondary">—</Typography.Text>;
+      },
+    },
+    {
       title: '유형',
       dataIndex: 'itemType',
       key: 'itemType',
@@ -978,30 +1085,268 @@ function SalaryItemTemplateTab() {
 }
 
 /* ======================================================================
- * Page — 4탭 통합
+ * 5. 포괄임금 OT 현황 (ComprehensiveOvertime)
+ *    - 포괄임금제 회사만 의미, 비포괄이면 빈 테이블
+ *    - 이번 달 1일 ~ 기준일 누적 승인 OT vs 고정 OT 한도
+ * ====================================================================== */
+
+export function ComprehensiveOvertimeTab() {
+  const [baseDate, setBaseDate] = useState<dayjs.Dayjs>(() => dayjs());
+  const iso = baseDate.format('YYYY-MM-DD');
+
+  const listQ = useQuery({
+    queryKey: ['salary', 'comprehensive-overtime', iso],
+    queryFn: () => attendanceApi.comprehensiveOvertime.getStatus(iso),
+  });
+
+  const cols = useMemo<ColumnsType<ComprehensiveOvertimeStatus>>(() => [
+    { title: '구성원', dataIndex: 'name', key: 'name', render: (v) => v ?? '—' },
+    {
+      title: '이번 달 누적 OT',
+      dataIndex: 'approvedMinutes',
+      key: 'approvedMinutes',
+      width: 140,
+      align: 'right',
+      render: (v: number | null) => (v == null ? '—' : `${v}분 (${((v ?? 0) / 60).toFixed(1)}h)`),
+    },
+    {
+      title: '고정 한도',
+      dataIndex: 'fixedLimit',
+      key: 'fixedLimit',
+      width: 120,
+      align: 'right',
+      render: (v: number | null) => (v == null ? '—' : `${v}분 (${((v ?? 0) / 60).toFixed(1)}h)`),
+    },
+    {
+      title: '사용률',
+      dataIndex: 'usagePercent',
+      key: 'usagePercent',
+      width: 100,
+      align: 'right',
+      render: (v: number | null) => {
+        if (v == null) return '—';
+        if (v >= 100) return <Tag color="red">{v.toFixed(1)}%</Tag>;
+        if (v >= 80) return <Tag color="orange">{v.toFixed(1)}%</Tag>;
+        return <Tag>{v.toFixed(1)}%</Tag>;
+      },
+      sorter: (a, b) => (a.usagePercent ?? 0) - (b.usagePercent ?? 0),
+      defaultSortOrder: 'descend',
+    },
+    {
+      title: '초과분',
+      dataIndex: 'exceedMinutes',
+      key: 'exceedMinutes',
+      width: 120,
+      align: 'right',
+      render: (v: number | null) =>
+        !v ? <Typography.Text type="secondary">—</Typography.Text> : <Tag color="red">{v}분</Tag>,
+    },
+  ], []);
+
+  return (
+    <Space direction="vertical" className="tw-w-full" size={12}>
+      <Alert
+        type="info"
+        showIcon
+        message="포괄임금제 정책을 적용받는 구성원의 이번 달 누적 OT 현황입니다."
+        description="사용률 50% 이상만 표시됩니다. 80% 이상은 주황, 초과(100%+)는 빨간색으로 강조됩니다. 배치가 매주 월요일 04:00 기준 알림도 발송합니다."
+      />
+      <div className="tw-flex tw-items-center tw-gap-3">
+        <Typography.Text type="secondary" className="!tw-text-sm">
+          기준일
+        </Typography.Text>
+        <DatePicker
+          value={baseDate}
+          onChange={(d) => d && setBaseDate(d)}
+          allowClear={false}
+          format="YYYY-MM-DD"
+        />
+      </div>
+      <Table<ComprehensiveOvertimeStatus>
+        rowKey={(r) => r.memberId ?? `${r.name}-${r.approvedMinutes}`}
+        loading={listQ.isLoading}
+        dataSource={listQ.data ?? []}
+        columns={cols}
+        pagination={{ pageSize: 20 }}
+        locale={{ emptyText: '포괄임금제 초과(또는 임박) 대상이 없습니다.' }}
+      />
+    </Space>
+  );
+}
+
+/* ======================================================================
+ * 간이세액표 (SimplifiedTaxTable) — 국세청 고시 표 엑셀 업로드
+ * 매년 1월 새 표 등록 시 다음 달 급여 계산부터 정확한 소득세 적용
+ * ====================================================================== */
+
+function SimplifiedTaxTableTab() {
+  const { message } = App.useApp();
+  const qc = useQueryClient();
+  const [year, setYear] = useState<number>(() => dayjs().year());
+  const [uploading, setUploading] = useState(false);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [pickedFile, setPickedFile] = useState<File | null>(null);
+
+  const yearsQ = useQuery({
+    queryKey: ['salary', 'simplified-tax-table', 'years'],
+    queryFn: () => salaryApi.simplifiedTaxTable.listYears(),
+  });
+
+  const countQ = useQuery({
+    queryKey: ['salary', 'simplified-tax-table', 'count', year],
+    queryFn: () => salaryApi.simplifiedTaxTable.countByYear(year),
+  });
+
+  const handleUpload = async () => {
+    if (!pickedFile) {
+      message.warning('엑셀 파일을 선택하세요.');
+      return;
+    }
+    try {
+      setUploading(true);
+      const res = await salaryApi.simplifiedTaxTable.upload(year, pickedFile);
+      message.success(`${res.effectiveYear}년 표 ${res.inserted.toLocaleString()}행 등록 완료`);
+      setPickedFile(null);
+      setFileName(null);
+      void qc.invalidateQueries({ queryKey: ['salary', 'simplified-tax-table'] });
+    } catch (e: unknown) {
+      const err = e as { message?: string };
+      message.error(err?.message ?? '업로드 실패');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const yearOptions = useMemo(
+    () =>
+      Array.from({ length: 5 }, (_, i) => {
+        const y = dayjs().year() - 1 + i;
+        return { value: y, label: `${y}년` };
+      }),
+    [],
+  );
+
+  return (
+    <Space direction="vertical" className="tw-w-full" size={16}>
+      <Alert
+        type="info"
+        showIcon
+        message="간이세액표는 국세청 홈택스에서 매년 고시됩니다."
+        description={
+          <span className="tw-text-xs">
+            홈택스 → 「세무업무별 서비스」 → 「원천징수」 → 「근로소득간이세액표」 에서 엑셀 다운로드 후 업로드하세요.
+            같은 연도 재업로드 시 기존 행은 자동 갱신됩니다.
+          </span>
+        }
+      />
+
+      <Card title="신규 업로드">
+        <Space direction="vertical" className="tw-w-full" size={12}>
+          <Space wrap>
+            <span className="tw-text-sm">적용 연도</span>
+            <Select
+              value={year}
+              onChange={setYear}
+              options={yearOptions}
+              style={{ width: 140 }}
+            />
+          </Space>
+
+          <Space wrap>
+            <input
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={(e) => {
+                const f = e.target.files?.[0] ?? null;
+                setPickedFile(f);
+                setFileName(f?.name ?? null);
+              }}
+            />
+            {fileName && <span className="tw-text-xs tw-text-slate-500">{fileName}</span>}
+          </Space>
+
+          <Button
+            type="primary"
+            onClick={handleUpload}
+            loading={uploading}
+            disabled={!pickedFile}
+          >
+            업로드
+          </Button>
+        </Space>
+      </Card>
+
+      <Card title="등록 현황">
+        <Space direction="vertical" className="tw-w-full" size={8}>
+          <div>
+            <span className="tw-text-sm tw-text-slate-500">{year}년 등록 행 수</span>
+            <Typography.Title level={3} className="!tw-m-0 !tw-mt-1">
+              {countQ.isLoading ? '…' : (countQ.data?.count ?? 0).toLocaleString()}
+              <span className="tw-text-base tw-font-normal tw-ml-1">건</span>
+            </Typography.Title>
+          </div>
+
+          <div>
+            <span className="tw-text-sm tw-text-slate-500">등록된 연도 목록</span>
+            <div className="tw-mt-1">
+              {yearsQ.isLoading ? '…'
+                : (yearsQ.data ?? []).length === 0
+                  ? <span className="tw-text-slate-400">등록된 연도가 없습니다.</span>
+                  : (yearsQ.data ?? []).map((y) => <Tag key={y} color="blue">{y}년</Tag>)
+              }
+            </div>
+          </div>
+        </Space>
+      </Card>
+
+      <Alert
+        type="warning"
+        showIcon
+        message="간이세액표가 등록되지 않은 연도는 소득세가 0원으로 계산됩니다."
+      />
+    </Space>
+  );
+}
+
+/* ======================================================================
+ * Page — 4탭 통합 (정책/세율/항목/간이세액표 + 호봉표 조건부)
  * ====================================================================== */
 
 export function AdminSalarySettingsPage() {
+  const salaryPoliciesQ = useQuery({
+    queryKey: ['salary', 'salary-policies', 'settings-tabs'],
+    queryFn: () => salaryApi.salaryPolicy.list(),
+  });
+  const hasPayGradePolicy = useMemo(
+    () => (salaryPoliciesQ.data ?? []).some((p) => p.usePayGradeYn === 'Y'),
+    [salaryPoliciesQ.data],
+  );
+
+  const tabItems = useMemo(
+    () => [
+      { key: 'policy', label: '급여 정책', children: <SalaryPolicyTab /> },
+      ...(hasPayGradePolicy
+        ? [{ key: 'pay-grade-table', label: '호봉표 관리', children: <AdminPayGradeTablePage embedded /> }]
+        : []),
+      { key: 'tax', label: '세율', children: <TaxRateTab /> },
+      { key: 'template', label: '급여 항목', children: <SalaryItemTemplateTab /> },
+      { key: 'simplified-tax', label: '간이세액표', children: <SimplifiedTaxTableTab /> },
+    ],
+    [hasPayGradePolicy],
+  );
+
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
       <div>
         <Typography.Title level={1} className="!tw-m-0 !tw-text-slate-900">
-          급여 설정
+          급여 정책
         </Typography.Title>
         <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-sm">
-          급여 이력·급여 정책·세율·항목 템플릿을 관리합니다. (신규 입사자의 초기 기본급은 '인사정보등록'에서 처리)
+          회사 단위 급여 정책, 세율, 항목을 관리합니다.
         </Typography.Paragraph>
       </div>
       <Card>
-        <Tabs
-          defaultActiveKey="policy"
-          items={[
-            { key: 'policy', label: '급여 정책', children: <SalaryPolicyTab /> },
-            { key: 'tax', label: '세율', children: <TaxRateTab /> },
-            { key: 'template', label: '급여 항목', children: <SalaryItemTemplateTab /> },
-            { key: 'salary', label: '직원 급여 관리', children: <SalaryTab /> }
-          ]}
-        />
+        <Tabs defaultActiveKey="policy" items={tabItems} />
       </Card>
     </Space>
   );

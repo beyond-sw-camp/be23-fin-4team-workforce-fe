@@ -137,7 +137,28 @@ export function AdminCompanyHolidaysPage() {
   const refreshLegalM = useMutation({
     mutationFn: (year: number) => attendanceApi.companyHoliday.refreshLegal(year),
     onSuccess: (res) => {
-      message.success(`${res.year}년 법정 공휴일 ${res.importedCount}건 반영되었습니다.`);
+      /*
+       * 백엔드는 외부 공공 API 응답이 비어있어도 200 + importedCount=0 으로 돌려주므로
+       * count 기반으로 success/warning 분기.
+       *  - 성공: 가져온 건수 표시
+       *  - 0건 + 미래 연도: 아직 공공 API 에 데이터 없음 (통상 익년 11~12월 공개)
+       *  - 0건 + 과거/현재 연도: 수집 실패 의심 (XML 파싱 오류, ServiceKey 등) → 백엔드 로그 확인 필요
+       */
+      if (res.importedCount > 0) {
+        message.success(`${res.year}년 법정 공휴일 ${res.importedCount}건 반영되었습니다.`);
+      } else {
+        const currentYear = dayjs().year();
+        if (res.year > currentYear) {
+          message.warning(
+            `${res.year}년 법정 공휴일 데이터가 공공 API 에 아직 없습니다. 통상 익년 데이터는 그 해 11~12월에 공개됩니다.`,
+          );
+        } else {
+          message.warning({
+            content: `${res.year}년 법정 공휴일 수집 결과가 0건입니다. 공공 데이터포털 응답 오류일 수 있어요. 관리자 (member-service) 로그를 확인해 주세요.`,
+            duration: 6,
+          });
+        }
+      }
       void qc.invalidateQueries({ queryKey: QK });
     },
     onError: (e: unknown) => message.error(apiErrorMessage(e) || '법정 공휴일 새로고침에 실패했습니다.'),

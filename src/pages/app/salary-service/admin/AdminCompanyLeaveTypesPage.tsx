@@ -28,7 +28,6 @@ import type {
 } from '@/features/salary-service/types';
 
 type FormValues = {
-  code: string;
   name: string;
   balanceType: BalanceTypeCode | 'NONE';
   daysPerUse: number;
@@ -69,7 +68,6 @@ export function AdminCompanyLeaveTypesPage() {
   const createM = useMutation({
     mutationFn: (v: FormValues) =>
       attendanceApi.companyLeaveType.create({
-        code: v.code.trim(),
         name: v.name.trim(),
         balanceType: v.balanceType === 'NONE' ? null : v.balanceType,
         daysPerUse: v.daysPerUse,
@@ -136,7 +134,6 @@ export function AdminCompanyLeaveTypesPage() {
   const openEdit = (record: CompanyLeaveType) => {
     setEditing(record);
     form.setFieldsValue({
-      code: record.code ?? '',
       name: record.name ?? '',
       balanceType: (record.balanceType ?? 'NONE') as FormValues['balanceType'],
       daysPerUse: record.daysPerUse ?? 1,
@@ -164,22 +161,16 @@ export function AdminCompanyLeaveTypesPage() {
   const columns = useMemo<ColumnsType<CompanyLeaveType>>(
     () => [
       {
-        title: '코드',
-        dataIndex: 'code',
-        key: 'code',
-        width: 160,
-        render: (v: string, r) => (
-          <Space size={4}>
-            <Typography.Text className="tw-font-mono tw-text-xs">{v ?? '—'}</Typography.Text>
-            {r.isSystemDefault ? <Tag color="blue">기본</Tag> : null}
-          </Space>
-        ),
-      },
-      {
         title: '이름',
         dataIndex: 'name',
         key: 'name',
         width: 160,
+        render: (v: string, r) => (
+          <Space size={4}>
+            <Typography.Text>{v ?? '—'}</Typography.Text>
+            {r.isSystemDefault ? <Tag color="blue">기본</Tag> : null}
+          </Space>
+        ),
       },
       {
         title: '잔고 유형',
@@ -280,7 +271,7 @@ export function AdminCompanyLeaveTypesPage() {
       <div className="tw-flex tw-flex-wrap tw-items-end tw-justify-between tw-gap-3">
         <div>
           <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
-            회사 휴가 종류 관리
+            휴가 관리
           </Typography.Title>
           <Typography.Text type="secondary" className="tw-text-xs">
             직원이 휴가 신청 시 선택하는 휴가 종류를 관리합니다. 시스템 기본은 이름과 순서만 수정
@@ -294,7 +285,7 @@ export function AdminCompanyLeaveTypesPage() {
 
       <Card className="tw-border-slate-200/80 tw-shadow-sm">
         <Table<CompanyLeaveType>
-          rowKey={(r) => r.companyLeaveTypeId ?? `${r.code}-${r.displayOrder}`}
+          rowKey={(r) => r.companyLeaveTypeId ?? `${r.name}-${r.displayOrder}`}
           loading={listQ.isLoading}
           dataSource={listQ.data ?? []}
           columns={columns}
@@ -320,19 +311,6 @@ export function AdminCompanyLeaveTypesPage() {
         width={560}
       >
         <Form<FormValues> form={form} layout="vertical" onFinish={onSubmit}>
-          <Form.Item
-            label="코드"
-            name="code"
-            rules={[
-              { required: true, message: '코드를 입력하세요.' },
-              { pattern: /^[A-Z_]+$/, message: '대문자와 언더스코어(_)만 허용됩니다.' },
-              { max: 50 },
-            ]}
-            extra="예: REFRESH, BIRTHDAY. 생성 후 변경 불가."
-          >
-            <Input disabled={Boolean(editing)} placeholder="CUSTOM_LEAVE" />
-          </Form.Item>
-
           <Form.Item
             label="이름"
             name="name"

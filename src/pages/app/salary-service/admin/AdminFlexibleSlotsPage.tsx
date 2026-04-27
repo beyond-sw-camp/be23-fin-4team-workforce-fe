@@ -55,13 +55,15 @@ export function AdminFlexibleSlotsPage() {
     enabled: Boolean(selectedScheduleId),
   });
 
+  /** 유연근무는 스케줄 단계에서 시간을 입력하지 않으므로 라벨에 시간을 노출하지 않는다.
+   *  실제 시간은 슬롯 단위로 정의·표시. */
   const scheduleOptions = useMemo(
     () =>
       (schedulesQ.data ?? [])
         .filter((s: WorkSchedule) => s.workType === 'FLEXIBLE')
         .map((s: WorkSchedule) => ({
           value: s.workScheduleId!,
-          label: `${s.scheduleName ?? '스케줄'} (${s.startTime ?? '--:--'}-${s.endTime ?? '--:--'})`,
+          label: s.scheduleName ?? '스케줄',
         })),
     [schedulesQ.data],
   );
@@ -85,7 +87,7 @@ export function AdminFlexibleSlotsPage() {
         workMinutes: calcWorkMinutes(v.startTime, v.endTime, v.breakMinutes),
       }),
     onSuccess: () => {
-      message.success('슬롯이 등록되었습니다.');
+      message.success('스케줄이 등록되었습니다.');
       setOpen(false);
       form.resetFields();
       void qc.invalidateQueries({ queryKey: ['salary', 'attendance', 'flexible-slots', selectedScheduleId] });
@@ -105,7 +107,7 @@ export function AdminFlexibleSlotsPage() {
         isDefault: v.isDefault,
       }),
     onSuccess: () => {
-      message.success('슬롯이 수정되었습니다.');
+      message.success('스케줄이 수정되었습니다.');
       setOpen(false);
       setEditing(null);
       form.resetFields();
@@ -117,7 +119,7 @@ export function AdminFlexibleSlotsPage() {
   const deleteM = useMutation({
     mutationFn: (id: string) => attendanceApi.flexibleSlot.delete(id),
     onSuccess: () => {
-      message.success('슬롯이 삭제되었습니다.');
+      message.success('스케줄이 삭제되었습니다.');
       void qc.invalidateQueries({ queryKey: ['salary', 'attendance', 'flexible-slots', selectedScheduleId] });
     },
     onError: (e: Error) => message.error(e.message || '삭제에 실패했습니다.'),
@@ -126,7 +128,7 @@ export function AdminFlexibleSlotsPage() {
   const defaultM = useMutation({
     mutationFn: (id: string) => attendanceApi.flexibleSlot.setDefault(id),
     onSuccess: () => {
-      message.success('기본 슬롯이 변경되었습니다.');
+      message.success('기본 스케줄이 변경되었습니다.');
       void qc.invalidateQueries({ queryKey: ['salary', 'attendance', 'flexible-slots', selectedScheduleId] });
     },
     onError: (e: Error) => message.error(e.message || '기본 지정에 실패했습니다.'),
@@ -193,13 +195,13 @@ export function AdminFlexibleSlotsPage() {
       <Card className="tw-border-slate-200/80 tw-shadow-sm">
         <Space className="tw-w-full tw-justify-between tw-mb-3" wrap>
           <Select
-            placeholder="유연근무 스케줄 선택"
+            placeholder="유연근무(시차출퇴근) 스케줄 선택"
             options={scheduleOptions}
             value={selectedScheduleId || undefined}
             onChange={(v) => setSelectedScheduleId(v)}
             className="tw-min-w-[320px]"
             loading={schedulesQ.isLoading}
-            notFoundContent="유연근무(FLEXIBLE) 스케줄이 없습니다. 근무 스케줄 관리에서 먼저 생성해 주세요."
+            notFoundContent="유연근무(시차출퇴근) 스케줄이 없습니다. 근무 스케줄 관리에서 먼저 생성해 주세요."
           />
           <Button
             type="primary"
@@ -229,7 +231,7 @@ export function AdminFlexibleSlotsPage() {
           dataSource={slotsQ.data ?? []}
           columns={columns}
           loading={slotsQ.isLoading}
-          locale={{ emptyText: selectedScheduleId ? '등록된 슬롯이 없습니다.' : '유연근무 스케줄을 먼저 등록해 주세요.' }}
+          locale={{ emptyText: selectedScheduleId ? '등록된 스케줄이 없습니다.' : '유연근무(시차출퇴근) 스케줄을 먼저 등록해 주세요.' }}
           pagination={{ pageSize: 10 }}
           scroll={{ x: 920 }}
         />
@@ -237,7 +239,7 @@ export function AdminFlexibleSlotsPage() {
 
       <Modal
         open={open}
-        title={editing ? '슬롯 수정' : '슬롯 등록'}
+        title={editing ? '스케줄 수정' : '스케줄 등록'}
         onCancel={() => {
           setOpen(false);
           setEditing(null);

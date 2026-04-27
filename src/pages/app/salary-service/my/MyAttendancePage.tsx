@@ -4,18 +4,53 @@
  */
 import { Link } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Card, DatePicker, Descriptions, Space, Table, Typography } from 'antd';
+import { Alert, App, Button, Card, DatePicker, Descriptions, Progress, Space, Statistic, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useMemo, useState } from 'react';
 import { useAuth } from '@/features/auth/useAuth';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
-import type { AttendanceLog, DailyAttendance } from '@/features/salary-service/types';
+import type {
+  AttendanceLog,
+  ComprehensiveOvertimeStatus,
+  DailyAttendance,
+} from '@/features/salary-service/types';
 import { AttendanceStatusTag } from '@/features/salary-service/ui/AttendanceStatusTag';
 import type { ApiError } from '@/shared/api/types';
 
 function isApiError(e: unknown): e is ApiError {
   return typeof e === 'object' && e !== null && 'status' in e && typeof (e as ApiError).status === 'number';
+}
+
+// 주간 근무시간 한도 임계치 75% WARNING 92% CRITICAL 100% EXCEEDED
+type Severity = 'normal' | 'warning' | 'critical' | 'exceeded';
+
+function severityOf(percent: number | null | undefined): Severity {
+  const p = percent ?? 0;
+  if (p >= 100) return 'exceeded';
+  if (p >= 92) return 'critical';
+  if (p >= 75) return 'warning';
+  return 'normal';
+}
+
+function percentColor(sev: Severity): string {
+  switch (sev) {
+    case 'exceeded':
+      return '#CF1322';
+    case 'critical':
+      return '#D4380D';
+    case 'warning':
+      return '#D48806';
+    default:
+      return '#2563EB';
+  }
+}
+
+function formatHm(minutes: number | null | undefined): string {
+  const m = Math.max(0, Math.floor(minutes ?? 0));
+  const h = Math.floor(m / 60);
+  const rem = m % 60;
+  return `${h}시간 ${rem}분`;
 }
 
 const EVENT_KO: Record<string, string> = {
@@ -63,39 +98,61 @@ export function MyAttendancePage() {
     },
   });
 
+  // 선택 일자 기준 주간 근무시간 요약 법정 52시간 / 12시간 모니터링
+  const summaryQ = useQuery({
+    queryKey: ['salary', 'attendance', 'my', 'work-time-summary', dateIso],
+    queryFn: () => attendanceApi.attendance.getMyWorkTimeSummary(dateIso),
+  });
+
+  // 포괄임금제 적용 직원만 데이터 반환 비포괄/미적용은 null
+  const comprehensiveQ = useQuery<ComprehensiveOvertimeStatus | null>({
+    queryKey: ['salary', 'attendance', 'my', 'comprehensive-overtime', dateIso],
+    queryFn: () => attendanceApi.comprehensiveOvertime.getMy(dateIso),
+  });
+
+  const summary = summaryQ.data;
+  const comprehensive = comprehensiveQ.data;
+  const totalSev = severityOf(summary?.totalUsagePercent);
+  const otSev = severityOf(summary?.overtimeUsagePercent);
+
+  const highest = useMemo<Severity>(() => {
+    const order: Severity[] = ['normal', 'warning', 'critical', 'exceeded'];
+    return order[Math.max(order.indexOf(totalSev), order.indexOf(otSev))];
+  }, [totalSev, otSev]);
+
+  const weekAlert = useMemo(() => {
+    switch (highest) {
+      case 'exceeded':
+        return {
+          type: 'error' as const,
+          message: '법정 한도 초과',
+          description:
+            '주 52시간(총) 또는 주 12시간(연장) 한도를 초과했습니다. 관리자와 즉시 협의하세요.',
+        };
+      case 'critical':
+        return {
+          type: 'error' as const,
+          message: '법정 한도 임박',
+          description:
+            '사용률이 92%를 초과했습니다. 추가 연장근무 신청 전 관리자와 조율이 필요합니다.',
+        };
+      case 'warning':
+        return {
+          type: 'warning' as const,
+          message: '주의 단계',
+          description: '사용률이 75%를 초과했습니다. 남은 근무시간을 점검하세요.',
+        };
+      default:
+        return null;
+    }
+  }, [highest]);
+
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ['salary', 'attendance', 'my'] });
   };
 
-  /**
-   * 브라우저 Geolocation 으로 현재 위치 취득
-   * 실패 시 null 반환 (서버는 IP 검증만으로 폴백)
-   */
-  const getCurrentPosition = (): Promise<{ latitude: number; longitude: number } | null> =>
-    new Promise((resolve) => {
-      if (!navigator.geolocation) {
-        resolve(null);
-        return;
-      }
-      navigator.geolocation.getCurrentPosition(
-        (pos) =>
-          resolve({
-            latitude: pos.coords.latitude,
-            longitude: pos.coords.longitude,
-          }),
-        () => resolve(null),
-        { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 },
-      );
-    });
-
   const clockInM = useMutation({
-    mutationFn: async () => {
-      const coords = await getCurrentPosition();
-      return attendanceApi.attendance.clockIn({
-        latitude: coords?.latitude ?? null,
-        longitude: coords?.longitude ?? null,
-      });
-    },
+    mutationFn: () => attendanceApi.attendance.clockIn({}),
     onSuccess: () => {
       message.success('출근 처리되었습니다.');
       invalidate();
@@ -104,13 +161,7 @@ export function MyAttendancePage() {
   });
 
   const clockOutM = useMutation({
-    mutationFn: async () => {
-      const coords = await getCurrentPosition();
-      return attendanceApi.attendance.clockOut({
-        latitude: coords?.latitude ?? null,
-        longitude: coords?.longitude ?? null,
-      });
-    },
+    mutationFn: () => attendanceApi.attendance.clockOut({}),
     onSuccess: () => {
       message.success('퇴근 처리되었습니다.');
       invalidate();
@@ -185,6 +236,147 @@ export function MyAttendancePage() {
           )}
         </Space>
       </div>
+
+      {weekAlert && (
+        <Alert
+          type={weekAlert.type}
+          showIcon
+          message={weekAlert.message}
+          description={weekAlert.description}
+        />
+      )}
+
+      <Card
+        className="tw-border-slate-200/80 tw-shadow-sm"
+        title="주간 근무시간 요약"
+        loading={summaryQ.isLoading}
+        size="small"
+      >
+        {summaryQ.isError && (
+          <Typography.Text type="danger">주간 근무시간을 불러오지 못했습니다.</Typography.Text>
+        )}
+        {summary && (
+          <Space direction="vertical" className="tw-w-full" size={12}>
+            <Typography.Text type="secondary" className="tw-text-xs">
+              대상 주간 {summary.weekStart ?? '—'} ~ {summary.weekEnd ?? '—'}
+            </Typography.Text>
+
+            <div className="tw-grid tw-grid-cols-2 md:tw-grid-cols-4 tw-gap-3">
+              <Card size="small" className="tw-border-slate-200/80">
+                <Statistic
+                  title="주 총 근무"
+                  value={Math.round(((summary.totalWorkedMinutes ?? 0) / 60) * 10) / 10}
+                  suffix="시간"
+                  valueStyle={{ fontSize: 20, color: percentColor(totalSev) }}
+                />
+                <Progress
+                  percent={summary.totalUsagePercent ?? 0}
+                  size="small"
+                  showInfo={false}
+                  strokeColor={percentColor(totalSev)}
+                  status={totalSev === 'exceeded' ? 'exception' : 'normal'}
+                />
+                <Typography.Text type="secondary" className="tw-text-xs">
+                  {formatHm(summary.totalWorkedMinutes)} / {formatHm(summary.totalLimitMinutes)} (법정 52h)
+                </Typography.Text>
+              </Card>
+
+              <Card size="small" className="tw-border-slate-200/80">
+                <Statistic
+                  title="주 연장근무"
+                  value={Math.round(((summary.overtimeApprovedMinutes ?? 0) / 60) * 10) / 10}
+                  suffix="시간"
+                  valueStyle={{ fontSize: 20, color: percentColor(otSev) }}
+                />
+                <Progress
+                  percent={summary.overtimeUsagePercent ?? 0}
+                  size="small"
+                  showInfo={false}
+                  strokeColor={percentColor(otSev)}
+                  status={otSev === 'exceeded' ? 'exception' : 'normal'}
+                />
+                <Typography.Text type="secondary" className="tw-text-xs">
+                  {formatHm(summary.overtimeApprovedMinutes)} / {formatHm(summary.overtimeLimitMinutes)} (법정 12h)
+                </Typography.Text>
+              </Card>
+
+              <Card size="small" className="tw-border-slate-200/80">
+                <Statistic
+                  title="주휴수당 자격"
+                  value={summary.weeklyHolidayEligible ? '충족' : '미충족'}
+                  valueStyle={{
+                    fontSize: 20,
+                    color: summary.weeklyHolidayEligible ? '#16a34a' : '#d97706',
+                  }}
+                />
+                <div className="tw-mt-1">
+                  <Tag color={summary.weeklyAbsentDays === 0 ? 'green' : 'red'}>
+                    {summary.weeklyAbsentDays === 0
+                      ? '개근'
+                      : `결근 ${summary.weeklyAbsentDays ?? 0}일`}
+                  </Tag>
+                </div>
+                <Typography.Text type="secondary" className="tw-text-xs">
+                  근기법 55조
+                </Typography.Text>
+              </Card>
+
+              {comprehensive && comprehensive.fixedLimit != null ? (
+                <Card size="small" className="tw-border-slate-200/80">
+                  <Statistic
+                    title="포괄임금 OT (월)"
+                    value={(comprehensive.usagePercent ?? 0).toFixed(1)}
+                    suffix="%"
+                    valueStyle={{
+                      fontSize: 20,
+                      color:
+                        (comprehensive.usagePercent ?? 0) >= 100
+                          ? '#CF1322'
+                          : (comprehensive.usagePercent ?? 0) >= 80
+                          ? '#D48806'
+                          : '#2563EB',
+                    }}
+                  />
+                  <Progress
+                    percent={Math.min(100, comprehensive.usagePercent ?? 0)}
+                    size="small"
+                    showInfo={false}
+                    strokeColor={
+                      (comprehensive.usagePercent ?? 0) >= 100
+                        ? '#CF1322'
+                        : (comprehensive.usagePercent ?? 0) >= 80
+                        ? '#D48806'
+                        : '#2563EB'
+                    }
+                    status={(comprehensive.usagePercent ?? 0) >= 100 ? 'exception' : 'normal'}
+                  />
+                  <Typography.Text type="secondary" className="tw-text-xs">
+                    {formatHm(comprehensive.approvedMinutes)} / {formatHm(comprehensive.fixedLimit)}
+                    {comprehensive.exceedMinutes ? (
+                      <> · <Tag color="red" className="!tw-text-xs">초과 {formatHm(comprehensive.exceedMinutes)}</Tag></>
+                    ) : null}
+                  </Typography.Text>
+                </Card>
+              ) : (
+                <Card size="small" className="tw-border-slate-200/80">
+                  <Statistic
+                    title="포괄임금 OT"
+                    value="미적용"
+                    valueStyle={{ fontSize: 18, color: '#6b7280' }}
+                  />
+                  <Typography.Text type="secondary" className="tw-text-xs">
+                    실연장근무 정산 대상
+                  </Typography.Text>
+                </Card>
+              )}
+            </div>
+
+            <Typography.Text type="secondary" className="tw-text-xs">
+              ※ 총 근무시간은 승인된 연장근무 + 실제 근무분 합산. 연장근무 승인분은 결재 완료 건만 반영.
+            </Typography.Text>
+          </Space>
+        )}
+      </Card>
 
       <Card className="tw-border-slate-200/80 tw-shadow-sm" title="오늘 처리">
         <Space wrap>

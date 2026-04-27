@@ -15,7 +15,6 @@ import {
   Modal,
   Space,
   Table,
-  Tabs,
   Tag,
   Typography,
 } from 'antd';
@@ -28,13 +27,7 @@ import type {
   LeaveOfAbsenceTypeCode,
 } from '@/features/salary-service/types';
 
-const STATUS_TABS: { key: LeaveOfAbsenceApprovalStatusCode; label: string }[] = [
-  { key: 'ACTIVE', label: '휴직 중' },
-  { key: 'REQUESTED', label: '결재 대기' },
-  { key: 'ENDED', label: '복직 완료' },
-  { key: 'REJECTED', label: '반려' },
-  { key: 'CANCELLED', label: '철회' },
-];
+const ACTIVE_STATUS: LeaveOfAbsenceApprovalStatusCode = 'ACTIVE';
 
 const TYPE_KO: Record<LeaveOfAbsenceTypeCode, string> = {
   MATERNITY: '출산휴가',
@@ -52,6 +45,13 @@ const STATUS_COLOR: Record<LeaveOfAbsenceApprovalStatusCode, string> = {
   REJECTED: 'red',
   CANCELLED: 'default',
 };
+const STATUS_LABEL: Record<LeaveOfAbsenceApprovalStatusCode, string> = {
+  REQUESTED: '결재 대기',
+  ACTIVE: '휴직 중',
+  ENDED: '복직 완료',
+  REJECTED: '반려',
+  CANCELLED: '철회',
+};
 
 type EndFormValues = {
   actualEndDate: dayjs.Dayjs;
@@ -61,16 +61,15 @@ export function AdminLeaveOfAbsencePage() {
   const { message } = App.useApp();
   const qc = useQueryClient();
 
-  const [status, setStatus] = useState<LeaveOfAbsenceApprovalStatusCode>('ACTIVE');
   const [memberSearch, setMemberSearch] = useState('');
   const [target, setTarget] = useState<LeaveOfAbsence | null>(null);
   const [endForm] = Form.useForm<EndFormValues>();
 
-  const QK = useMemo(() => ['salary', 'leave-of-absence', status] as const, [status]);
+  const QK = useMemo(() => ['salary', 'leave-of-absence', ACTIVE_STATUS] as const, []);
 
   const listQ = useQuery({
     queryKey: QK,
-    queryFn: () => attendanceApi.leaveOfAbsence.listByStatus(status),
+    queryFn: () => attendanceApi.leaveOfAbsence.listByStatus(ACTIVE_STATUS),
   });
 
   // 구성원 UUID 부분문자열 + 사유 부분문자열 필터
@@ -151,7 +150,7 @@ export function AdminLeaveOfAbsencePage() {
         width: 110,
         render: (v: LeaveOfAbsenceApprovalStatusCode) => (
           <Tag color={STATUS_COLOR[v] ?? 'default'}>
-            {STATUS_TABS.find((t) => t.key === v)?.label ?? v}
+            {STATUS_LABEL[v] ?? v}
           </Tag>
         ),
       },
@@ -200,19 +199,19 @@ export function AdminLeaveOfAbsencePage() {
         <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
           휴직 관리
         </Typography.Title>
-        <Typography.Text type="secondary" className="tw-text-xs">
+        <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-sm">
           신청/결재는 전자결재에서 처리됩니다. 여기서는 상태 조회와 조기 복직 처리만 수행합니다.
-        </Typography.Text>
+        </Typography.Paragraph>
       </div>
 
       <Card className="tw-border-slate-200/80 tw-shadow-sm">
         <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-3">
-          <Tabs
-            activeKey={status}
-            onChange={(k) => setStatus(k as LeaveOfAbsenceApprovalStatusCode)}
-            items={STATUS_TABS.map((t) => ({ key: t.key, label: t.label }))}
-            className="tw-flex-1"
-          />
+          <Space size={8} className="tw-flex-1">
+            <Tag color="blue">휴직 중</Tag>
+            <Typography.Text type="secondary" className="tw-text-sm">
+              현재 휴직 중인 직원만 표시됩니다.
+            </Typography.Text>
+          </Space>
           <Input.Search
             placeholder="구성원 UUID 또는 사유로 필터"
             value={memberSearch}
