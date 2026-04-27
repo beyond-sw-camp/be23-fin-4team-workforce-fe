@@ -9,6 +9,10 @@ import {
   App,
   Button,
   Card,
+  Checkbox,
+  Descriptions,
+  Divider,
+  Drawer,
   Form,
   Input,
   InputNumber,
@@ -21,6 +25,11 @@ import {
   Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import {
+  ArrowDownOutlined,
+  ArrowUpOutlined,
+  HolderOutlined,
+} from '@ant-design/icons';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import { useAuth } from '@/features/auth/useAuth';
 import type {
@@ -30,7 +39,6 @@ import type {
 
 type FormValues = {
   name: string;
-  balanceType: BalanceTypeCode | 'NONE';
   isPaidYn: 'Y' | 'N';
   maxDaysPerYear?: number | null;
   requireEvidenceYn: 'Y' | 'N';
@@ -38,12 +46,81 @@ type FormValues = {
   displayOrder: number;
 };
 
-const BALANCE_OPTIONS: { value: FormValues['balanceType']; label: string }[] = [
-  { value: 'NONE', label: '차감 없음' },
-  { value: 'ANNUAL', label: '당해 연차 (ANNUAL)' },
-  { value: 'MONTHLY', label: '월차 (MONTHLY)' },
-  { value: 'CARRYOVER', label: '이월 연차 (CARRYOVER)' },
+// 잔고 차감 휴가 (연차/월차/반차) 는 시스템 기본으로 관리되며 화면에서 수정 불가
+// 일반 추가 휴가는 모두 차감 없음 (balanceType = null)
+const LOCKED_NAMES = new Set<string>(['연차', '월차']);
+
+// 기본 휴가 카탈로그 백엔드 initializeDefaults spec 과 동기화
+//  required: 무조건 시드 (체크박스 비활성)
+//  recommended: 디폴트 체크
+//  optional: 디폴트 미체크 (회사가 안 쓰는 경우가 많은 항목)
+type DefaultSpecMeta = {
+  code: string;
+  name: string;
+  required?: boolean;       // 체크 해제 불가
+  defaultChecked: boolean;  // 모달 진입 시 기본 체크 여부
+};
+
+type DefaultSection = {
+  key: string;
+  title: string;
+  description?: string;
+  items: DefaultSpecMeta[];
+};
+
+const DEFAULT_CATALOG: DefaultSection[] = [
+  {
+    key: 'annual',
+    title: '연차·반차',
+    description: '연차는 필수입니다. 반차는 회사 정책에 따라 선택하세요.',
+    items: [
+      { code: 'ANNUAL',  name: '연차',         required: true,  defaultChecked: true  },
+      { code: 'HALF_AM', name: '반차(오전)',    defaultChecked: false }, // 옵션 — 안 쓰는 회사도 많음
+      { code: 'HALF_PM', name: '반차(오후)',    defaultChecked: false },
+    ],
+  },
+  {
+    key: 'bereavement',
+    title: '경조사',
+    description: '근로기준법상 의무는 아니지만 대부분 회사가 운영합니다.',
+    items: [
+      { code: 'BEREAVEMENT',    name: '경조휴가(일반)',     defaultChecked: true },
+      { code: 'MARRIAGE_SELF',  name: '결혼(본인)',         defaultChecked: true },
+      { code: 'MARRIAGE_CHILD', name: '결혼(자녀)',         defaultChecked: true },
+      { code: 'BIRTH_SPOUSE',   name: '배우자 출산휴가',    defaultChecked: true },
+      { code: 'DEATH_PARENT',   name: '부모 사망',          defaultChecked: true },
+      { code: 'DEATH_SPOUSE',   name: '배우자 사망',        defaultChecked: true },
+      { code: 'DEATH_CHILD',    name: '자녀 사망',          defaultChecked: true },
+      { code: 'DEATH_SIBLING',  name: '형제자매 사망',      defaultChecked: true },
+    ],
+  },
+  {
+    key: 'statutory',
+    title: '기타 법정 휴가',
+    description: '국가가 인정하는 법정 휴가입니다.',
+    items: [
+      { code: 'PUBLIC',           name: '공가',     defaultChecked: true  },
+      { code: 'SICK',             name: '병가',     defaultChecked: true  },
+      { code: 'RESERVE_TRAINING', name: '예비군',   defaultChecked: true  },
+      { code: 'CIVIL_DEFENSE',    name: '민방위',   defaultChecked: true  },
+    ],
+  },
+  {
+    key: 'female',
+    title: '여성 보호',
+    description: '회사 정책에 따라 선택하세요 (근로기준법 제73조).',
+    items: [
+      { code: 'MENSTRUATION', name: '생리휴가', defaultChecked: false },
+    ],
+  },
 ];
+const isHalfDay = (name?: string | null) =>
+  !!name && (name.startsWith('반차') || name === '오전반차' || name === '오후반차');
+const isLocked = (record: CompanyLeaveType) =>
+  LOCKED_NAMES.has(record.name ?? '') || isHalfDay(record.name);
+// 반차만 삭제 가능 그 외 시스템 기본은 삭제 불가 커스텀은 항상 삭제 가능
+const canDelete = (record: CompanyLeaveType) =>
+  isHalfDay(record.name) || !record.isSystemDefault;
 
 const BALANCE_KO: Record<string, string> = {
   ANNUAL: '당해 연차',
@@ -61,16 +138,78 @@ export function AdminCompanyLeaveTypesPage() {
   const [open, setOpen] = useState(false);
   const [form] = Form.useForm<FormValues>();
 
+  // 행 클릭 시 우측 Drawer 에 표시할 상세 대상
+  const [detailTarget, setDetailTarget] = useState<CompanyLeaveType | null>(null);
+
+  // [기본 휴가 불러오기] 선택 모달 — 패턴 D
+  const [initOpen, setInitOpen] = useState(false);
+  const [selectedCodes, setSelectedCodes] = useState<Set<string>>(() => {
+    const init = new Set<string>();
+    DEFAULT_CATALOG.forEach((sec) =>
+      sec.items.forEach((it) => {
+        if (it.defaultChecked) init.add(it.code);
+      }),
+    );
+    return init;
+  });
+
+  const toggleCode = (code: string) => {
+    setSelectedCodes((prev) => {
+      const next = new Set(prev);
+      if (next.has(code)) next.delete(code);
+      else next.add(code);
+      return next;
+    });
+  };
+
+  const toggleSection = (section: DefaultSection, checked: boolean) => {
+    setSelectedCodes((prev) => {
+      const next = new Set(prev);
+      section.items.forEach((it) => {
+        if (it.required) {
+          // 필수 항목은 항상 켜져 있음
+          next.add(it.code);
+          return;
+        }
+        if (checked) next.add(it.code);
+        else next.delete(it.code);
+      });
+      return next;
+    });
+  };
+
+  const openInitModal = () => {
+    // 모달 열 때 기본 체크 = (default + 이미 등록된 것) 새로 추가될 것만 다루므로 등록된 건 이미 SKIP 됨
+    const init = new Set<string>();
+    DEFAULT_CATALOG.forEach((sec) =>
+      sec.items.forEach((it) => {
+        if (it.required || it.defaultChecked) init.add(it.code);
+      }),
+    );
+    setSelectedCodes(init);
+    setInitOpen(true);
+  };
+
   const listQ = useQuery({
     queryKey: QK,
     queryFn: () => attendanceApi.companyLeaveType.list(),
   });
 
+  // 이미 등록된 코드 — 모달에서 회색 처리 (이미 있음 표시)
+  const existingCodes = useMemo(() => {
+    const set = new Set<string>();
+    (listQ.data ?? []).forEach((r) => {
+      if (r.code) set.add(r.code);
+    });
+    return set;
+  }, [listQ.data]);
+
   const createM = useMutation({
     mutationFn: (v: FormValues) =>
       attendanceApi.companyLeaveType.create({
         name: v.name.trim(),
-        balanceType: v.balanceType === 'NONE' ? null : v.balanceType,
+        // 잔고 차감 휴가 (연차/월차/반차) 는 시스템 기본만 존재 추가 휴가는 항상 차감 없음
+        balanceType: null,
         daysPerUse: 1,
         isPaidYn: v.isPaidYn,
         maxDaysPerYear: v.maxDaysPerYear ?? null,
@@ -88,10 +227,16 @@ export function AdminCompanyLeaveTypesPage() {
   });
 
   const updateM = useMutation({
-    mutationFn: (input: { id: string; v: FormValues; daysPerUse: number }) =>
+    mutationFn: (input: {
+      id: string;
+      v: FormValues;
+      daysPerUse: number;
+      // 시스템 기본 휴가의 기존 balanceType 보존
+      keepBalanceType: BalanceTypeCode | null;
+    }) =>
       attendanceApi.companyLeaveType.update(input.id, {
         name: input.v.name.trim(),
-        balanceType: input.v.balanceType === 'NONE' ? null : input.v.balanceType,
+        balanceType: input.keepBalanceType,
         daysPerUse: input.daysPerUse,
         isPaidYn: input.v.isPaidYn,
         maxDaysPerYear: input.v.maxDaysPerYear ?? null,
@@ -118,16 +263,77 @@ export function AdminCompanyLeaveTypesPage() {
     onError: (e: Error) => message.error(e.message || '삭제에 실패했습니다.'),
   });
 
+  // 두 휴가의 displayOrder 를 swap 하여 순서 위/아래 이동
+  const swapM = useMutation({
+    mutationFn: async (input: { a: CompanyLeaveType; b: CompanyLeaveType }) => {
+      const { a, b } = input;
+      const orderA = a.displayOrder ?? 0;
+      const orderB = b.displayOrder ?? 0;
+      await Promise.all([
+        attendanceApi.companyLeaveType.update(a.companyLeaveTypeId!, {
+          name: a.name ?? '',
+          balanceType: a.balanceType ?? null,
+          daysPerUse: a.daysPerUse ?? 1,
+          isPaidYn: a.isPaidYn ?? 'Y',
+          maxDaysPerYear: a.maxDaysPerYear ?? null,
+          requireEvidenceYn: a.requireEvidenceYn ?? 'N',
+          usageDeadlineDays: a.usageDeadlineDays ?? null,
+          displayOrder: orderB,
+        }),
+        attendanceApi.companyLeaveType.update(b.companyLeaveTypeId!, {
+          name: b.name ?? '',
+          balanceType: b.balanceType ?? null,
+          daysPerUse: b.daysPerUse ?? 1,
+          isPaidYn: b.isPaidYn ?? 'Y',
+          maxDaysPerYear: b.maxDaysPerYear ?? null,
+          requireEvidenceYn: b.requireEvidenceYn ?? 'N',
+          usageDeadlineDays: b.usageDeadlineDays ?? null,
+          displayOrder: orderA,
+        }),
+      ]);
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: QK });
+    },
+    onError: (e: Error) => message.error(e.message || '순서 변경에 실패했습니다.'),
+  });
+
+  // displayOrder 오름차순 정렬된 행 ↑↓ 인접 swap 에 사용
+  const sortedRows = useMemo(
+    () =>
+      [...(listQ.data ?? [])].sort(
+        (a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0),
+      ),
+    [listQ.data],
+  );
+
+  const moveUp = (record: CompanyLeaveType) => {
+    const idx = sortedRows.findIndex(
+      (r) => r.companyLeaveTypeId === record.companyLeaveTypeId,
+    );
+    if (idx <= 0) return;
+    swapM.mutate({ a: record, b: sortedRows[idx - 1] });
+  };
+
+  const moveDown = (record: CompanyLeaveType) => {
+    const idx = sortedRows.findIndex(
+      (r) => r.companyLeaveTypeId === record.companyLeaveTypeId,
+    );
+    if (idx === -1 || idx >= sortedRows.length - 1) return;
+    swapM.mutate({ a: record, b: sortedRows[idx + 1] });
+  };
+
   const initDefaultsM = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (codes: string[]) => {
       const companyId = user?.companyId?.trim();
       if (!companyId) {
         throw new Error('회사 정보가 없어 기본 휴가를 불러올 수 없습니다.');
       }
-      await attendanceApi.companyLeaveType.initDefaults(companyId);
+      await attendanceApi.companyLeaveType.initDefaults(companyId, codes);
     },
     onSuccess: async () => {
-      message.success('기본 휴가 불러오기가 완료되었습니다.');
+      message.success('선택한 기본 휴가가 등록되었습니다.');
+      setInitOpen(false);
       await qc.invalidateQueries({ queryKey: QK });
     },
     onError: (e: Error) => message.error(e.message || '기본 휴가 불러오기에 실패했습니다.'),
@@ -137,7 +343,6 @@ export function AdminCompanyLeaveTypesPage() {
     setEditing(null);
     form.resetFields();
     form.setFieldsValue({
-      balanceType: 'NONE',
       isPaidYn: 'Y',
       requireEvidenceYn: 'N',
       displayOrder: (listQ.data ?? []).length + 1,
@@ -146,10 +351,14 @@ export function AdminCompanyLeaveTypesPage() {
   };
 
   const openEdit = (record: CompanyLeaveType) => {
+    // 연차 월차 반차 는 수정 불가 모달 자체 안 띄움
+    if (isLocked(record)) {
+      message.info('연차·월차·반차는 수정할 수 없습니다.');
+      return;
+    }
     setEditing(record);
     form.setFieldsValue({
       name: record.name ?? '',
-      balanceType: (record.balanceType ?? 'NONE') as FormValues['balanceType'],
       isPaidYn: (record.isPaidYn as 'Y' | 'N') ?? 'Y',
       maxDaysPerYear: record.maxDaysPerYear ?? undefined,
       requireEvidenceYn: (record.requireEvidenceYn as 'Y' | 'N') ?? 'N',
@@ -165,6 +374,7 @@ export function AdminCompanyLeaveTypesPage() {
         id: editing.companyLeaveTypeId,
         v,
         daysPerUse: editing.daysPerUse ?? 1,
+        keepBalanceType: (editing.balanceType as BalanceTypeCode | null) ?? null,
       });
     } else {
       createM.mutate(v);
@@ -174,10 +384,21 @@ export function AdminCompanyLeaveTypesPage() {
   const columns = useMemo<ColumnsType<CompanyLeaveType>>(
     () => [
       {
+        // 좌측 drag handle 시각적 hint 실제 DnD 는 다음 단계 ↑↓ 버튼으로 정렬
+        title: '',
+        key: 'dragHandle',
+        width: 32,
+        align: 'center',
+        render: () => (
+          <span className="tw-text-slate-300 tw-cursor-grab">
+            <HolderOutlined />
+          </span>
+        ),
+      },
+      {
         title: '이름',
         dataIndex: 'name',
         key: 'name',
-        width: 160,
         render: (v: string, r) => (
           <Space size={4}>
             <Typography.Text>{v ?? '—'}</Typography.Text>
@@ -189,84 +410,89 @@ export function AdminCompanyLeaveTypesPage() {
         title: '잔고 유형',
         dataIndex: 'balanceType',
         key: 'balanceType',
-        width: 120,
-        render: (v: string | null) => (v ? BALANCE_KO[v] ?? v : <Typography.Text type="secondary">차감 없음</Typography.Text>),
+        width: 130,
+        render: (v: string | null) =>
+          v ? BALANCE_KO[v] ?? v : <Typography.Text type="secondary">차감 없음</Typography.Text>,
       },
       {
         title: '유급',
         dataIndex: 'isPaidYn',
         key: 'isPaidYn',
-        width: 80,
+        width: 90,
+        align: 'center',
         render: (v: string) => (v === 'Y' ? <Tag color="green">유급</Tag> : <Tag>무급</Tag>),
-      },
-      {
-        title: '증빙',
-        dataIndex: 'requireEvidenceYn',
-        key: 'requireEvidenceYn',
-        width: 80,
-        render: (v: string) => (v === 'Y' ? <Tag color="orange">필수</Tag> : <Tag>선택</Tag>),
       },
       {
         title: '연 한도',
         dataIndex: 'maxDaysPerYear',
         key: 'maxDaysPerYear',
-        width: 100,
-        align: 'right',
-        render: (v: number | null) => (v == null ? '—' : `${v}일`),
-      },
-      {
-        title: '사용 기한',
-        dataIndex: 'usageDeadlineDays',
-        key: 'usageDeadlineDays',
-        width: 130,
+        width: 110,
         align: 'right',
         render: (v: number | null) =>
-          v == null ? (
-            <Typography.Text type="secondary">—</Typography.Text>
-          ) : (
-            <Tag color="purple">발생일 +{v}일</Tag>
-          ),
-      },
-      {
-        title: '순서',
-        dataIndex: 'displayOrder',
-        key: 'displayOrder',
-        width: 70,
-        align: 'right',
-        sorter: (a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0),
-        defaultSortOrder: 'ascend',
+          v == null ? <Typography.Text type="secondary">—</Typography.Text> : `${v}일`,
       },
       {
         title: '작업',
         key: 'actions',
-        width: 160,
-        render: (_, record) => (
-          <Space>
-            <Button size="small" onClick={() => openEdit(record)}>
-              수정
-            </Button>
-            {record.isSystemDefault ? (
-              <Typography.Text type="secondary" className="tw-text-xs">
-                삭제 불가
-              </Typography.Text>
-            ) : (
-              <Popconfirm
-                title="정말 삭제하시겠어요?"
-                description="이 휴가 종류를 선택해 사용 중인 기존 신청은 유지됩니다."
-                okText="삭제"
-                cancelText="취소"
-                onConfirm={() => record.companyLeaveTypeId && deleteM.mutate(record.companyLeaveTypeId)}
+        width: 220,
+        align: 'center',
+        // 행 클릭 onClick 과 충돌 방지 위해 stopPropagation 처리
+        render: (_, record) => {
+          const idx = sortedRows.findIndex(
+            (r) => r.companyLeaveTypeId === record.companyLeaveTypeId,
+          );
+          const isFirst = idx === 0;
+          const isLast = idx === sortedRows.length - 1;
+          const locked = isLocked(record);
+          const deletable = canDelete(record);
+          return (
+            <Space size={4} onClick={(e) => e.stopPropagation()}>
+              <Button
+                size="small"
+                icon={<ArrowUpOutlined />}
+                disabled={isFirst}
+                loading={swapM.isPending}
+                onClick={() => moveUp(record)}
+              />
+              <Button
+                size="small"
+                icon={<ArrowDownOutlined />}
+                disabled={isLast}
+                loading={swapM.isPending}
+                onClick={() => moveDown(record)}
+              />
+              <Button
+                size="small"
+                disabled={locked}
+                onClick={() => openEdit(record)}
               >
-                <Button size="small" danger>
-                  삭제
-                </Button>
-              </Popconfirm>
-            )}
-          </Space>
-        ),
+                수정
+              </Button>
+              {deletable ? (
+                <Popconfirm
+                  title="정말 삭제하시겠어요?"
+                  description="이 휴가 종류를 선택해 사용 중인 기존 신청은 유지됩니다."
+                  okText="삭제"
+                  cancelText="취소"
+                  onConfirm={() =>
+                    record.companyLeaveTypeId && deleteM.mutate(record.companyLeaveTypeId)
+                  }
+                >
+                  <Button size="small" danger>
+                    삭제
+                  </Button>
+                </Popconfirm>
+              ) : (
+                <Typography.Text type="secondary" className="tw-text-xs">
+                  삭제 불가
+                </Typography.Text>
+              )}
+            </Space>
+          );
+        },
       },
     ],
-    [deleteM],
+    [deleteM, sortedRows, swapM],
   );
 
   return (
@@ -281,15 +507,9 @@ export function AdminCompanyLeaveTypesPage() {
           </Typography.Text>
         </div>
         <Space>
-          <Popconfirm
-            title="기본 휴가를 불러올까요?"
-            description="이미 있는 코드(연차/반차 등)는 유지되고, 없는 기본 휴가만 추가됩니다."
-            okText="불러오기"
-            cancelText="취소"
-            onConfirm={() => initDefaultsM.mutate()}
-          >
-            <Button loading={initDefaultsM.isPending}>기본 휴가 불러오기</Button>
-          </Popconfirm>
+          <Button loading={initDefaultsM.isPending} onClick={openInitModal}>
+            기본 휴가 불러오기
+          </Button>
           <Button type="primary" onClick={openCreate}>
             휴가 종류 추가
           </Button>
@@ -300,13 +520,196 @@ export function AdminCompanyLeaveTypesPage() {
         <Table<CompanyLeaveType>
           rowKey={(r) => r.companyLeaveTypeId ?? `${r.name}-${r.displayOrder}`}
           loading={listQ.isLoading}
-          dataSource={listQ.data ?? []}
+          dataSource={sortedRows}
           columns={columns}
           pagination={false}
           size="small"
           locale={{ emptyText: '등록된 휴가 종류가 없습니다.' }}
+          onRow={(record) => ({
+            onClick: () => setDetailTarget(record),
+            style: { cursor: 'pointer' },
+          })}
         />
       </Card>
+
+      {/* 우측 Drawer 행 클릭 시 증빙 사용기한 순서 등 상세 메타 표시 */}
+      <Drawer
+        open={!!detailTarget}
+        onClose={() => setDetailTarget(null)}
+        width={420}
+        title={
+          detailTarget ? (
+            <Space size={4}>
+              <span>{detailTarget.name ?? '—'}</span>
+              {detailTarget.isSystemDefault ? <Tag color="blue">기본</Tag> : null}
+            </Space>
+          ) : (
+            '휴가 상세'
+          )
+        }
+        extra={
+          detailTarget && (
+            <Button
+              type="primary"
+              onClick={() => {
+                openEdit(detailTarget);
+                setDetailTarget(null);
+              }}
+            >
+              수정
+            </Button>
+          )
+        }
+      >
+        {detailTarget && (
+          <Descriptions
+            column={1}
+            size="small"
+            bordered
+            labelStyle={{ width: '40%', backgroundColor: '#fafafa' }}
+            items={[
+              {
+                key: 'balanceType',
+                label: '잔고 유형',
+                children: detailTarget.balanceType
+                  ? BALANCE_KO[detailTarget.balanceType] ?? detailTarget.balanceType
+                  : '차감 없음',
+              },
+              {
+                key: 'isPaidYn',
+                label: '유급 여부',
+                children:
+                  detailTarget.isPaidYn === 'Y' ? (
+                    <Tag color="green">유급</Tag>
+                  ) : (
+                    <Tag>무급</Tag>
+                  ),
+              },
+              {
+                key: 'requireEvidenceYn',
+                label: '증빙 첨부',
+                children:
+                  detailTarget.requireEvidenceYn === 'Y' ? (
+                    <Tag color="orange">필수</Tag>
+                  ) : (
+                    <Tag>선택</Tag>
+                  ),
+              },
+              {
+                key: 'maxDaysPerYear',
+                label: '연간 한도',
+                children:
+                  detailTarget.maxDaysPerYear == null
+                    ? '제한 없음'
+                    : `${detailTarget.maxDaysPerYear}일`,
+              },
+              {
+                key: 'usageDeadlineDays',
+                label: '사용 기한',
+                children:
+                  detailTarget.usageDeadlineDays == null ? (
+                    <Typography.Text type="secondary">기한 없음</Typography.Text>
+                  ) : (
+                    <Tag color="purple">사유 발생일 +{detailTarget.usageDeadlineDays}일</Tag>
+                  ),
+              },
+              {
+                key: 'displayOrder',
+                label: '정렬 순서',
+                children: detailTarget.displayOrder ?? '—',
+              },
+              {
+                key: 'isSystemDefault',
+                label: '시스템 기본',
+                children: detailTarget.isSystemDefault ? '예 (삭제 불가)' : '아니오',
+              },
+            ]}
+          />
+        )}
+      </Drawer>
+
+      {/* [기본 휴가 불러오기] — 패턴 D 선택 마법사 */}
+      <Modal
+        open={initOpen}
+        onCancel={() => setInitOpen(false)}
+        onOk={() => {
+          // 이미 등록된 코드는 backend 가 자동 SKIP 하지만 명시적으로 빼서 보내면 호환성 ↑
+          const codes = Array.from(selectedCodes).filter((c) => !existingCodes.has(c));
+          if (codes.length === 0) {
+            message.info('이미 모두 등록되어 있어 추가할 항목이 없습니다.');
+            setInitOpen(false);
+            return;
+          }
+          initDefaultsM.mutate(codes);
+        }}
+        confirmLoading={initDefaultsM.isPending}
+        okText="추가하기"
+        cancelText="취소"
+        title="기본 휴가 불러오기"
+        width={580}
+      >
+        <Typography.Paragraph type="secondary" className="!tw-text-xs !tw-mb-3">
+          회사에서 사용할 휴가 종류를 선택하세요. 이미 등록된 항목은 회색으로 표시되며 다시 추가되지 않습니다.
+        </Typography.Paragraph>
+
+        {DEFAULT_CATALOG.map((section, idx) => {
+          // 섹션 전체 체크 상태 계산
+          const allCodes = section.items.map((it) => it.code);
+          const checkedCount = allCodes.filter((c) => selectedCodes.has(c)).length;
+          const allChecked = checkedCount === allCodes.length;
+          const indeterminate = checkedCount > 0 && !allChecked;
+
+          return (
+            <div key={section.key}>
+              {idx > 0 && <Divider className="!tw-my-3" />}
+              <div className="tw-flex tw-items-center tw-justify-between tw-mb-2">
+                <Space size={6}>
+                  <Checkbox
+                    checked={allChecked}
+                    indeterminate={indeterminate}
+                    onChange={(e) => toggleSection(section, e.target.checked)}
+                  >
+                    <Typography.Text strong>{section.title}</Typography.Text>
+                  </Checkbox>
+                </Space>
+                <Typography.Text type="secondary" className="tw-text-xs">
+                  {checkedCount} / {allCodes.length}
+                </Typography.Text>
+              </div>
+              {section.description && (
+                <Typography.Paragraph type="secondary" className="!tw-text-xs !tw-mb-2 !tw-ml-6">
+                  {section.description}
+                </Typography.Paragraph>
+              )}
+              <div className="tw-grid tw-grid-cols-2 tw-gap-y-1 tw-ml-6">
+                {section.items.map((it) => {
+                  const already = existingCodes.has(it.code);
+                  const checked = selectedCodes.has(it.code);
+                  return (
+                    <Checkbox
+                      key={it.code}
+                      checked={checked}
+                      disabled={it.required || already}
+                      onChange={() => toggleCode(it.code)}
+                    >
+                      <Space size={4}>
+                        <span className={already ? 'tw-text-slate-400' : ''}>{it.name}</span>
+                        {it.required && <Tag color="red">필수</Tag>}
+                        {already && <Tag>이미 있음</Tag>}
+                      </Space>
+                    </Checkbox>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+
+        <Divider className="!tw-my-3" />
+        <Typography.Text type="secondary" className="tw-text-xs">
+          선택 안 한 휴가 종류는 등록되지 않습니다. 나중에 [기본 휴가 불러오기] 다시 눌러서 추가할 수 있습니다.
+        </Typography.Text>
+      </Modal>
 
       <Modal
         open={open}
@@ -324,58 +727,84 @@ export function AdminCompanyLeaveTypesPage() {
         width={560}
       >
         <Form<FormValues> form={form} layout="vertical" onFinish={onSubmit}>
-          <Form.Item
-            label="이름"
-            name="name"
-            rules={[{ required: true, message: '이름을 입력하세요.' }, { max: 100 }]}
-          >
-            <Input placeholder="리프레시 휴가" />
-          </Form.Item>
+          {/* 시스템 기본 휴가 안내 */}
+          {editing?.isSystemDefault && (
+            <div className="tw-rounded tw-bg-blue-50 tw-border tw-border-blue-100 tw-px-3 tw-py-2 tw-mb-4">
+              <Typography.Text className="tw-text-xs tw-text-blue-700">
+                ⓘ 시스템 기본 휴가입니다. 일부 필드만 수정할 수 있고 삭제는 불가합니다.
+              </Typography.Text>
+            </div>
+          )}
 
-          <Form.Item
-            label="잔고 유형"
-            name="balanceType"
-            extra="잔고에서 차감할 풀. '차감 없음' 선택 시 잔고와 무관하게 부여됩니다(경조·예비군 등)."
-          >
-            <Select options={BALANCE_OPTIONS} />
-          </Form.Item>
+          {/* ── 1. 기본 정보 ───────────────────────── */}
+          <Typography.Text strong className="tw-text-slate-700 tw-text-sm">
+            기본 정보
+          </Typography.Text>
+          <div className="tw-mt-2 tw-mb-4">
+            <Form.Item
+              label="휴가 이름"
+              name="name"
+              rules={[{ required: true, message: '이름을 입력하세요.' }, { max: 100 }]}
+              className="!tw-mb-3"
+            >
+              <Input placeholder="예: 리프레시 휴가" />
+            </Form.Item>
 
-          <Form.Item label="연간 한도 (선택)" name="maxDaysPerYear" extra="비워두면 연간 한도 없음.">
-            <InputNumber className="tw-w-full" min={0.5} step={0.5} />
-          </Form.Item>
-
-          <Form.Item
-            label="사용 기한 (사유 발생일 + N일)"
-            name="usageDeadlineDays"
-            extra="설정하면 신청 시 사유 발생일(eventDate) 필수 + N일 이내만 사용 가능. 경조사/출산 등에 사용. 비워두면 기한 없음."
-          >
-            <InputNumber
-              className="tw-w-full"
-              min={1}
-              step={1}
-              placeholder="예: DEATH_PARENT = 30"
-            />
-          </Form.Item>
-
-          <div className="tw-grid tw-grid-cols-1 tw-gap-3 md:tw-grid-cols-3">
-            <Form.Item label="유급 여부" name="isPaidYn" rules={[{ required: true }]}>
+            <Form.Item label="유급 여부" name="isPaidYn" rules={[{ required: true }]} className="!tw-mb-0">
               <Select
                 options={[
-                  { value: 'Y', label: '유급' },
-                  { value: 'N', label: '무급' },
+                  { value: 'Y', label: '유급 (급여 지급)' },
+                  { value: 'N', label: '무급 (급여 차감)' },
                 ]}
               />
             </Form.Item>
+          </div>
+
+          {/* ── 2. 사용 한도·기한 ─────────────────── */}
+          <Typography.Text strong className="tw-text-slate-700 tw-text-sm">
+            사용 한도·기한 <Typography.Text type="secondary" className="tw-text-xs">(선택)</Typography.Text>
+          </Typography.Text>
+          <div className="tw-mt-2 tw-mb-4 tw-grid tw-grid-cols-2 tw-gap-3">
+            <Form.Item
+              label="연간 최대 일수"
+              name="maxDaysPerYear"
+              extra="비우면 한도 없음"
+              className="!tw-mb-0"
+            >
+              <InputNumber className="tw-w-full" min={0.5} step={0.5} placeholder="예: 5" />
+            </Form.Item>
 
             <Form.Item
-              label="증빙 필수"
+              label="사유 발생일로부터"
+              name="usageDeadlineDays"
+              extra="결혼·사망 등 N일 이내. 비우면 기한 없음"
+              className="!tw-mb-0"
+            >
+              <InputNumber
+                className="tw-w-full"
+                min={1}
+                step={1}
+                placeholder="예: 30"
+                addonAfter="일"
+              />
+            </Form.Item>
+          </div>
+
+          {/* ── 3. 신청 시 부가 ─────────────────── */}
+          <Typography.Text strong className="tw-text-slate-700 tw-text-sm">
+            신청 시 부가
+          </Typography.Text>
+          <div className="tw-mt-2 tw-grid tw-grid-cols-2 tw-gap-3">
+            <Form.Item
+              label="증빙 첨부"
               name="requireEvidenceYn"
               rules={[{ required: true }]}
+              className="!tw-mb-0"
             >
               <Select
                 options={[
-                  { value: 'Y', label: '필수' },
-                  { value: 'N', label: '선택' },
+                  { value: 'N', label: '선택 (첨부 안 해도 됨)' },
+                  { value: 'Y', label: '필수 (진단서·증명서 등)' },
                 ]}
               />
             </Form.Item>
@@ -384,11 +813,12 @@ export function AdminCompanyLeaveTypesPage() {
               label="정렬 순서"
               name="displayOrder"
               rules={[{ required: true, message: '순서를 입력하세요.' }]}
+              extra="목록에서 위/아래 위치"
+              className="!tw-mb-0"
             >
               <InputNumber className="tw-w-full" min={0} step={1} />
             </Form.Item>
           </div>
-
         </Form>
       </Modal>
     </Space>

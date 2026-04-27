@@ -28,6 +28,10 @@ import type { AccrualBaseCode, LeavePolicy } from '@/features/salary-service/typ
 type FormValues = {
   accrualBase: AccrualBaseCode;
   defaultAnnualDays: number;
+  // 근속별 가산 룰 (근로기준법 60조)
+  extraDaysPerInterval: number;
+  extraIntervalYears: number;
+  maxAnnualDays: number;
   isPromotionYn: boolean;
   promotion1stBeforeDays?: number | null;
   promotion2ndBeforeDays?: number | null;
@@ -83,6 +87,9 @@ export function AdminLeavePoliciesPage() {
   const buildPayload = (v: FormValues) => ({
     accrualBase: v.accrualBase,
     defaultAnnualDays: v.defaultAnnualDays,
+    extraDaysPerInterval: v.extraDaysPerInterval,
+    extraIntervalYears: v.extraIntervalYears,
+    maxAnnualDays: v.maxAnnualDays,
     isPromotionYn: toYn(v.isPromotionYn),
     promotion1stBeforeDays: v.isPromotionYn ? (v.promotion1stBeforeDays ?? null) : null,
     promotion2ndBeforeDays: v.isPromotionYn ? (v.promotion2ndBeforeDays ?? null) : null,
@@ -176,6 +183,9 @@ export function AdminLeavePoliciesPage() {
                 form.setFieldsValue({
                   accrualBase: (r.accrualBase as AccrualBaseCode) ?? 'FISCAL',
                   defaultAnnualDays: r.defaultAnnualDays ?? 15,
+                  extraDaysPerInterval: r.extraDaysPerInterval ?? 1,
+                  extraIntervalYears: r.extraIntervalYears ?? 2,
+                  maxAnnualDays: r.maxAnnualDays ?? 25,
                   isPromotionYn: yn(r.isPromotionYn),
                   promotion1stBeforeDays: r.promotion1stBeforeDays ?? undefined,
                   promotion2ndBeforeDays: r.promotion2ndBeforeDays ?? undefined,
@@ -273,6 +283,9 @@ export function AdminLeavePoliciesPage() {
               form.setFieldsValue({
                 accrualBase: 'FISCAL',
                 defaultAnnualDays: 15,
+                extraDaysPerInterval: 1,
+                extraIntervalYears: 2,
+                maxAnnualDays: 25,
                 isPromotionYn: false,
                 isCarryoverYn: false,
                 isCarryoverConsentYn: false,
@@ -346,6 +359,22 @@ function PolicyForm({ form }: PolicyFormProps) {
   const carryoverDays = Form.useWatch('carryoverDays', form);
   const promo1st = Form.useWatch('promotion1stBeforeDays', form);
   const promo2nd = Form.useWatch('promotion2ndBeforeDays', form);
+  // 근속 가산 미리보기
+  const extraDays = Form.useWatch('extraDaysPerInterval', form);
+  const intervalYears = Form.useWatch('extraIntervalYears', form);
+  const maxDays = Form.useWatch('maxAnnualDays', form);
+
+  // 백엔드 LeavePolicy.calculateAnnualDays 와 동일 공식 미리보기 전용
+  const previewDays = (years: number): number => {
+    if (years < 1) return 0;
+    const interval = (intervalYears && intervalYears > 0) ? intervalYears : 2;
+    const extra = extraDays ?? 1;
+    const base = defaultDays ?? 15;
+    const cap = maxDays ?? 25;
+    const steps = Math.max(0, Math.floor((years - 1) / interval));
+    return Math.min(base + steps * extra, cap);
+  };
+  const previewSamples = [1, 3, 5, 10, 15, 21];
 
   /** 미사용 연차가 그냥 사라지는 위험 조합 */
   const isLossRisk = isCarryover === false && isPayout === false;
@@ -375,7 +404,7 @@ function PolicyForm({ form }: PolicyFormProps) {
           />
         </Form.Item>
         <Form.Item
-          label="기본 부여 일수"
+          label="기본 부여 일수 (1년차)"
           name="defaultAnnualDays"
           rules={[{ required: true, message: '부여 일수를 입력해주세요.' }]}
           style={{ width: 200 }}
@@ -384,6 +413,50 @@ function PolicyForm({ form }: PolicyFormProps) {
           <InputNumber min={0} step={0.5} addonAfter="일" style={{ width: '100%' }} />
         </Form.Item>
       </Space>
+
+      {/* 근속 가산 룰 (근로기준법 60조) */}
+      <Space className="tw-w-full !tw-mt-2" size={16} align="start" wrap>
+        <Form.Item
+          label="추가 부여 주기"
+          name="extraIntervalYears"
+          rules={[{ required: true, message: '주기를 입력해주세요.' }, { type: 'number', min: 1 }]}
+          style={{ width: 180 }}
+          extra="근로기준법 = 2년"
+        >
+          <InputNumber min={1} step={1} addonBefore="매" addonAfter="년마다" style={{ width: '100%' }} />
+        </Form.Item>
+        <Form.Item
+          label="추가 일수"
+          name="extraDaysPerInterval"
+          rules={[{ required: true, message: '추가 일수를 입력해주세요.' }, { type: 'number', min: 0 }]}
+          style={{ width: 180 }}
+          extra="근로기준법 = 1일"
+        >
+          <InputNumber min={0} step={0.5} addonBefore="+" addonAfter="일" style={{ width: '100%' }} />
+        </Form.Item>
+        <Form.Item
+          label="최대 한도"
+          name="maxAnnualDays"
+          rules={[{ required: true, message: '한도를 입력해주세요.' }, { type: 'number', min: 0 }]}
+          style={{ width: 180 }}
+          extra="근로기준법 = 25일"
+        >
+          <InputNumber min={0} step={0.5} addonAfter="일" style={{ width: '100%' }} />
+        </Form.Item>
+      </Space>
+
+      {/* 미리보기 — 근속별 연차 시뮬레이터 */}
+      <div className="tw-rounded tw-bg-slate-50 tw-border tw-border-slate-200 tw-px-3 tw-py-2 tw-mt-2">
+        <div className="tw-text-xs tw-text-slate-500 tw-mb-1">근속별 연차 미리보기</div>
+        <Space size={[12, 4]} wrap>
+          {previewSamples.map((years) => (
+            <span key={years} className="tw-text-sm">
+              <span className="tw-text-slate-500">{years}년차</span>{' '}
+              <span className="tw-font-medium tw-text-[#2563EB]">{previewDays(years)}일</span>
+            </span>
+          ))}
+        </Space>
+      </div>
 
       <Divider />
 

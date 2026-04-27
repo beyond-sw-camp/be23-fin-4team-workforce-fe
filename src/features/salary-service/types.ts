@@ -144,7 +144,7 @@ export type FlexibleTimeSlot = {
 
 export type FlexibleTimeSlotCreatePayload = {
   workScheduleId: string;
-  slotCode: string;
+  slotCode?: string;
   slotLabel: string;
   startTime: string;
   endTime: string;
@@ -398,6 +398,12 @@ export type LeavePolicy = {
   carryoverDays?: number | null;
   isPayoutYn?: string | null;
   defaultAnnualDays?: number | null;
+  /** 매 N년마다 추가 부여 단위 근로기준법 디폴트 1 */
+  extraDaysPerInterval?: number | null;
+  /** 추가 부여 주기 년 단위 근로기준법 디폴트 2 */
+  extraIntervalYears?: number | null;
+  /** 연차 상한 근로기준법 25 */
+  maxAnnualDays?: number | null;
   accrualBase?: AccrualBaseCode | null;
 };
 
@@ -458,6 +464,9 @@ export type LeavePolicyCreatePayload = {
   carryoverDays?: number | null;
   isPayoutYn?: string | null;
   defaultAnnualDays?: number | null;
+  extraDaysPerInterval?: number | null;
+  extraIntervalYears?: number | null;
+  maxAnnualDays?: number | null;
   accrualBase: AccrualBaseCode;
 };
 
@@ -680,6 +689,8 @@ export type RetirementPolicyUpdatePayload = {
 
 /** 퇴직금 시뮬 요청 (직원 본인용 — memberId 는 헤더에서 자동) */
 export type RetirementSimReq = {
+  /** 입사일 옵션 — 미지정 시 백엔드가 member-service 에서 자동 조회 */
+  joinDate?: string;  // YYYY-MM-DD
   resignDate: string; // YYYY-MM-DD
 };
 

@@ -1,25 +1,33 @@
 /** /app/attendance/flexible-slots - 시차출퇴근 슬롯 관리 (시스템 관리자) */
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Card, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, Typography } from 'antd';
+import { Alert, App, Button, Card, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, TimePicker, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import dayjs, { type Dayjs } from 'dayjs';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import type { FlexibleTimeSlot, WorkSchedule } from '@/features/salary-service/types';
 
 type FormValues = {
   workScheduleId: string;
-  slotCode: string;
   slotLabel: string;
-  startTime: string;
-  endTime: string;
+  startTime: Dayjs | null;
+  endTime: Dayjs | null;
   workMinutes: number;
   breakMinutes: number;
   isDefault: boolean;
 };
 
-function parseHHmmToMinutes(value?: string): number | null {
+function normalizeTimeText(value?: string | Dayjs | null): string | null {
   if (!value) return null;
-  const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(value.trim());
+  if (typeof value === 'string') return value;
+  if (dayjs.isDayjs(value)) return value.format('HH:mm');
+  return null;
+}
+
+function parseHHmmToMinutes(value?: string | Dayjs | null): number | null {
+  const text = normalizeTimeText(value);
+  if (!text) return null;
+  const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(text.trim());
   if (!m) return null;
   const hh = m[1];
   const mm = m[2];
@@ -27,13 +35,30 @@ function parseHHmmToMinutes(value?: string): number | null {
   return Number(hh) * 60 + Number(mm);
 }
 
-function calcWorkMinutes(startTime?: string, endTime?: string, breakMinutes?: number): number {
+function calcWorkMinutes(startTime?: string | Dayjs | null, endTime?: string | Dayjs | null, breakMinutes?: number): number {
   const start = parseHHmmToMinutes(startTime);
   const end = parseHHmmToMinutes(endTime);
   if (start == null || end == null) return 0;
   const total = end >= start ? end - start : 24 * 60 - start + end;
   const breaks = breakMinutes ?? 0;
   return Math.max(total - breaks, 0);
+}
+
+function buildAutoSlotCode(slotLabel?: string, startTime?: string | Dayjs | null, endTime?: string | Dayjs | null): string {
+  const baseRaw = (slotLabel ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9가-힣]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '');
+  const strictBase = (baseRaw || 'SCHEDULE')
+    .replace(/[^A-Z0-9_]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '') || 'SCHEDULE';
+  const s = (normalizeTimeText(startTime) ?? '0900').replace(':', '');
+  const e = (normalizeTimeText(endTime) ?? '1800').replace(':', '');
+  const seed = `${Date.now()}`.slice(-4);
+  return `${strictBase}_${s}_${e}_${seed}`.slice(0, 30);
 }
 
 export function AdminFlexibleSlotsPage() {
@@ -84,6 +109,9 @@ export function AdminFlexibleSlotsPage() {
     mutationFn: (v: FormValues) =>
       attendanceApi.flexibleSlot.create({
         ...v,
+        slotCode: buildAutoSlotCode(v.slotLabel, v.startTime, v.endTime),
+        startTime: normalizeTimeText(v.startTime) ?? '09:00',
+        endTime: normalizeTimeText(v.endTime) ?? '18:00',
         workMinutes: calcWorkMinutes(v.startTime, v.endTime, v.breakMinutes),
       }),
     onSuccess: () => {
@@ -98,10 +126,9 @@ export function AdminFlexibleSlotsPage() {
   const updateM = useMutation({
     mutationFn: ({ id, v }: { id: string; v: FormValues }) =>
       attendanceApi.flexibleSlot.update(id, {
-        slotCode: v.slotCode,
         slotLabel: v.slotLabel,
-        startTime: v.startTime,
-        endTime: v.endTime,
+        startTime: normalizeTimeText(v.startTime) ?? '09:00',
+        endTime: normalizeTimeText(v.endTime) ?? '18:00',
         workMinutes: calcWorkMinutes(v.startTime, v.endTime, v.breakMinutes),
         breakMinutes: v.breakMinutes,
         isDefault: v.isDefault,
@@ -134,10 +161,26 @@ export function AdminFlexibleSlotsPage() {
     onError: (e: Error) => message.error(e.message || '기본 지정에 실패했습니다.'),
   });
 
+  const hasDuplicateTimeRange = (
+    startTime: string | Dayjs | null | undefined,
+    endTime: string | Dayjs | null | undefined,
+    excludeSlotId?: string,
+  ) => {
+    const start = normalizeTimeText(startTime);
+    const end = normalizeTimeText(endTime);
+    if (!start || !end) return false;
+    return (slotsQ.data ?? []).some((slot) => {
+      if (excludeSlotId && slot.slotId === excludeSlotId) return false;
+      const s = (slot.startTime ?? '').slice(0, 5);
+      const e = (slot.endTime ?? '').slice(0, 5);
+      return s === start && e === end;
+    });
+  };
+
   const columns = useMemo<ColumnsType<FlexibleTimeSlot>>(
     () => [
-      { title: '코드', dataIndex: 'slotCode', key: 'slotCode', width: 140 },
-      { title: '라벨', dataIndex: 'slotLabel', key: 'slotLabel', width: 180 },
+      { title: '코드(자동)', dataIndex: 'slotCode', key: 'slotCode', width: 140 },
+      { title: '스케줄명', dataIndex: 'slotLabel', key: 'slotLabel', width: 180 },
       { title: '시간', key: 'time', width: 170, render: (_, r) => `${r.startTime ?? '-'} ~ ${r.endTime ?? '-'}` },
       { title: '근무분', dataIndex: 'workMinutes', key: 'workMinutes', width: 90 },
       { title: '휴게분', dataIndex: 'breakMinutes', key: 'breakMinutes', width: 90 },
@@ -160,10 +203,9 @@ export function AdminFlexibleSlotsPage() {
                     setOpen(true);
                     form.setFieldsValue({
                       workScheduleId: r.workScheduleId ?? selectedScheduleId,
-                      slotCode: r.slotCode ?? '',
                       slotLabel: r.slotLabel ?? '',
-                      startTime: r.startTime ?? '09:00',
-                      endTime: r.endTime ?? '18:00',
+                      startTime: dayjs(r.startTime ?? '09:00', 'HH:mm'),
+                      endTime: dayjs(r.endTime ?? '18:00', 'HH:mm'),
                       workMinutes: calcWorkMinutes(r.startTime ?? '09:00', r.endTime ?? '18:00', r.breakMinutes ?? 60),
                       breakMinutes: r.breakMinutes ?? 60,
                       isDefault: Boolean(r.isDefault),
@@ -172,24 +214,39 @@ export function AdminFlexibleSlotsPage() {
                 >
                   수정
                 </Button>
-                <Popconfirm title="슬롯을 삭제할까요?" onConfirm={() => deleteM.mutate(r.slotId!)}>
-                  <Button size="small" danger>삭제</Button>
-                </Popconfirm>
+                {r.isDefault ? (
+                  <Button size="small" danger disabled>삭제</Button>
+                ) : (
+                  <Popconfirm
+                    title="스케줄을 삭제할까요?"
+                    description={
+                      (slotsQ.data ?? []).length <= 1
+                        ? '시차 스케줄은 최소 1개 이상 유지되어야 합니다.'
+                        : undefined
+                    }
+                    okText="삭제"
+                    cancelText="취소"
+                    disabled={(slotsQ.data ?? []).length <= 1}
+                    onConfirm={() => deleteM.mutate(r.slotId!)}
+                  >
+                    <Button size="small" danger disabled={(slotsQ.data ?? []).length <= 1}>삭제</Button>
+                  </Popconfirm>
+                )}
               </>
             ) : null}
           </Space>
         ),
       },
     ],
-    [defaultM, deleteM, form, selectedScheduleId],
+    [defaultM, deleteM, form, selectedScheduleId, slotsQ.data],
   );
 
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
       <div>
-        <Typography.Title level={4} className="!tw-m-0">시차 슬롯</Typography.Title>
+        <Typography.Title level={4} className="!tw-m-0">시차 스케줄</Typography.Title>
         <Typography.Paragraph type="secondary" className="!tw-mt-1 !tw-mb-0">
-          근무 스케줄별 선택 가능한 출퇴근 슬롯을 관리합니다.
+          근무 스케줄별 선택 가능한 출퇴근 스케줄을 관리합니다.
         </Typography.Paragraph>
       </div>
       <Card className="tw-border-slate-200/80 tw-shadow-sm">
@@ -212,17 +269,16 @@ export function AdminFlexibleSlotsPage() {
               form.resetFields();
               form.setFieldsValue({
                 workScheduleId: selectedScheduleId,
-                slotCode: '',
                 slotLabel: '',
-                startTime: '09:00',
-                endTime: '18:00',
+                startTime: dayjs('09:00', 'HH:mm'),
+                endTime: dayjs('18:00', 'HH:mm'),
                 breakMinutes: 60,
                 workMinutes: calcWorkMinutes('09:00', '18:00', 60),
                 isDefault: false,
               });
             }}
           >
-            슬롯 등록
+            스케줄 등록
           </Button>
         </Space>
 
@@ -247,6 +303,10 @@ export function AdminFlexibleSlotsPage() {
         }}
         onOk={() => form.submit()}
         confirmLoading={createM.isPending || updateM.isPending}
+        okText={editing ? '수정' : '등록'}
+        cancelText="취소"
+        width={680}
+        destroyOnClose
       >
         <Form<FormValues>
           form={form}
@@ -256,33 +316,87 @@ export function AdminFlexibleSlotsPage() {
               form.setFieldValue('workMinutes', calcWorkMinutes(all.startTime, all.endTime, all.breakMinutes));
             }
           }}
-          onFinish={(v) => (editing?.slotId ? updateM.mutate({ id: editing.slotId, v }) : createM.mutate(v))}
+          onFinish={(v) => {
+            const duplicate = hasDuplicateTimeRange(v.startTime, v.endTime, editing?.slotId);
+            if (duplicate) {
+              message.warning('이미 동일한 시간대의 스케줄이 있습니다.');
+              return;
+            }
+            if (editing?.slotId) {
+              updateM.mutate({ id: editing.slotId, v });
+              return;
+            }
+            createM.mutate(v);
+          }}
         >
-          <Form.Item name="workScheduleId" label="근무 스케줄" rules={[{ required: true }]}>
+          <Alert
+            type="info"
+            showIcon
+            className="tw-mb-3"
+            message="시작/종료/휴게 시간을 입력하면 근무시간은 자동 계산됩니다."
+          />
+          <Form.Item name="workScheduleId" label="근무 스케줄" rules={[{ required: true, message: '근무 스케줄을 선택해 주세요.' }]}>
             <Select options={scheduleOptions} disabled={Boolean(editing)} />
           </Form.Item>
-          <Space wrap size={12} className="tw-w-full">
-            <Form.Item name="slotCode" label="코드" rules={[{ required: true }]}><Input placeholder="SLOT_0900" /></Form.Item>
-            <Form.Item name="slotLabel" label="표시명" rules={[{ required: true }]}><Input placeholder="09:00-18:00" /></Form.Item>
-          </Space>
-          <Space wrap size={12} className="tw-w-full">
-            <Form.Item name="startTime" label="시작(HH:mm)" rules={[{ required: true }]}><Input placeholder="09:00" /></Form.Item>
-            <Form.Item name="endTime" label="종료(HH:mm)" rules={[{ required: true }]}><Input placeholder="18:00" /></Form.Item>
-          </Space>
-          <Space wrap size={12} className="tw-w-full">
+          <div className="tw-grid tw-grid-cols-1 md:tw-grid-cols-2 tw-gap-3">
+            <Form.Item
+              name="slotLabel"
+              label="스케줄명"
+              rules={[
+                { required: true, message: '스케줄명을 입력해 주세요.' },
+                { max: 40, message: '스케줄명은 40자 이내로 입력해 주세요.' },
+              ]}
+            >
+              <Input placeholder="예: 조기 출근, 표준 근무, 늦은 출근" />
+            </Form.Item>
+            <div />
+            <Form.Item
+              name="startTime"
+              label="시작 시간 (HH:mm)"
+              rules={[{ required: true, message: '시작 시간을 선택해 주세요.' }]}
+            >
+              <TimePicker
+                format="HH:mm"
+                minuteStep={10}
+                showNow={false}
+                needConfirm={false}
+                className="tw-w-full"
+              />
+            </Form.Item>
+            <Form.Item
+              name="endTime"
+              label="종료 시간 (HH:mm)"
+              rules={[{ required: true, message: '종료 시간을 선택해 주세요.' }]}
+            >
+              <TimePicker
+                format="HH:mm"
+                minuteStep={10}
+                showNow={false}
+                needConfirm={false}
+                className="tw-w-full"
+              />
+            </Form.Item>
+          </div>
+          <div className="tw-grid tw-grid-cols-1 md:tw-grid-cols-3 tw-gap-3">
             <Form.Item
               name="workMinutes"
-              label="근무분"
+              label="근무 시간 (분)"
               rules={[{ required: true }]}
-              extra="시작/종료/휴게분 기준 자동 계산"
+              extra="자동 계산"
             >
-              <InputNumber min={0} disabled />
+              <InputNumber min={0} disabled className="tw-w-full" />
             </Form.Item>
-            <Form.Item name="breakMinutes" label="휴게분" rules={[{ required: true }]}><InputNumber min={0} /></Form.Item>
-            <Form.Item name="isDefault" label="기본 슬롯" rules={[{ required: true }]}>
+            <Form.Item
+              name="breakMinutes"
+              label="휴게 시간 (분)"
+              rules={[{ required: true, message: '휴게 시간을 입력해 주세요.' }]}
+            >
+              <InputNumber min={0} step={10} className="tw-w-full" />
+            </Form.Item>
+            <Form.Item name="isDefault" label="기본 스케줄" rules={[{ required: true }]}>
               <Select options={[{ value: true, label: '예' }, { value: false, label: '아니오' }]} />
             </Form.Item>
-          </Space>
+          </div>
         </Form>
       </Modal>
     </Space>
