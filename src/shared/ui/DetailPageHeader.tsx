@@ -75,7 +75,7 @@ export function DetailPageHeader({
             type="default"
             icon={<ShareAltOutlined className="tw-text-slate-600" />}
             onClick={() => void handleShare()}
-            className="tw-shrink-0 !tw-size-11 !tw-min-h-11 !tw-min-w-11 !tw-rounded-xl !tw-border-slate-200 !tw-bg-white hover:!tw-border-slate-300 hover:!tw-bg-slate-50"
+            className="tw-shrink-0 !tw-h-10 !tw-w-10 !tw-min-h-10 !tw-min-w-10 !tw-rounded-xl !tw-border !tw-border-slate-200 !tw-bg-white !tw-text-slate-600 !tw-shadow-sm !tw-transition-all !tw-duration-200 hover:!tw-border-slate-300 hover:!tw-bg-slate-50 hover:!tw-text-slate-900 active:!tw-scale-95"
             aria-label="이 페이지 공유"
             title="공유"
           />

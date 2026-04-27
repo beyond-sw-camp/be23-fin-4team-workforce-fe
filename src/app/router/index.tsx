@@ -309,6 +309,8 @@ const myApprovalRequestsRoute = createRoute({
 
 const departmentApprovalsSearchSchema = z.object({
   organizationId: z.string().optional(),
+  /** 부서 문서함 탭(기안/발송/수신) — `DepartmentApprovalsInboxPage` 등 */
+  deptView: z.enum(['draft', 'sent', 'received']).optional(),
   query: z.string().optional(),
   status: z.string().optional(),
   requestType: z.string().optional(),

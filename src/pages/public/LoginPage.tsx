@@ -74,11 +74,11 @@ function LoginPage({ embedded = false }: LoginPageProps) {
   };
 
   const shellClass = embedded
-    ? 'tw-relative tw-flex tw-w-full tw-min-h-screen tw-items-start tw-justify-center tw-bg-slate-50 tw-pt-20 sm:tw-pt-24 tw-pb-8 sm:tw-pb-10 tw-px-3 sm:tw-px-4'
-    : 'tw-relative tw-flex tw-min-h-screen tw-items-center tw-justify-center tw-overflow-hidden tw-bg-slate-50 tw-p-6';
+    ? 'tw-relative tw-flex tw-w-full tw-min-h-screen tw-items-start tw-justify-center tw-overflow-x-hidden tw-bg-slate-50 tw-pt-20 sm:tw-pt-24 tw-pb-8 sm:tw-pb-10 tw-px-3 sm:tw-px-4'
+    : 'tw-relative tw-flex tw-min-h-screen tw-items-center tw-justify-center tw-overflow-x-hidden tw-overflow-y-hidden tw-bg-slate-50 tw-p-6';
 
   return (
-    <div className={shellClass}>
+    <div className={`${shellClass} tw-max-w-full`}>
       {embedded ? null : (
         <>
           <div className="tw-absolute tw-left-[-10%] tw-top-[-10%] tw-h-[45%] tw-w-[45%] tw-rounded-full tw-bg-blue-100 tw-blur-[120px]" />
@@ -87,8 +87,8 @@ function LoginPage({ embedded = false }: LoginPageProps) {
       )}
 
       {embedded ? (
-        <div className="tw-z-10 tw-w-full tw-max-w-[460px] tw-mx-auto">
-          <div className="tw-p-5 sm:tw-p-6 md:tw-p-8">
+        <div className="tw-z-10 tw-mx-auto tw-w-full tw-max-w-[460px] tw-min-w-0">
+          <div className="tw-min-w-0 tw-p-5 sm:tw-p-6 md:tw-p-8">
             <div className="tw-mb-5 sm:tw-mb-6 tw-flex tw-flex-col tw-items-center tw-gap-2">
             <img
               src={brandLogo}

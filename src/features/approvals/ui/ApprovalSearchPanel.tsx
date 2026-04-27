@@ -18,10 +18,12 @@ import {
   APPROVAL_TYPE_LABEL,
 } from '@/features/approvals/lib/approvalSearchMeta';
 
-type FilterState = {
+export type ApprovalSearchPanelFilters = {
   query?: string;
   status?: ApprovalSearchStatus;
   requestType?: ApprovalSearchRequestType;
+  /** iframe 등에서 URL에만 유지할 때 사용 */
+  embed?: string;
   page: number;
   size: number;
 };
@@ -61,8 +63,8 @@ export function ApprovalSearchPanel({
   queryResult,
   onRowClick,
 }: {
-  filters: FilterState;
-  onFiltersChange: (next: FilterState) => void;
+  filters: ApprovalSearchPanelFilters;
+  onFiltersChange: (next: ApprovalSearchPanelFilters) => void;
   queryResult: UseQueryResult<ApprovalSearchPage, Error>;
   onRowClick?: (requestId: string) => void;
 }) {
@@ -130,7 +132,11 @@ export function ApprovalSearchPanel({
         <Select
           value={filters.status ?? 'ALL'}
           className="tw-w-[150px]"
-          onChange={(next) => onFiltersChange({ ...filters, status: next === 'ALL' ? undefined : next, page: 0 })}
+          onChange={(next) => {
+            const status: ApprovalSearchStatus | undefined =
+              next === 'ALL' ? undefined : (next as ApprovalSearchStatus);
+            onFiltersChange({ ...filters, status, page: 0 });
+          }}
           options={[
             { label: '전체 상태', value: 'ALL' },
             ...APPROVAL_SEARCH_STATUSES.map((s) => ({ label: APPROVAL_STATUS_LABEL[s], value: s })),
@@ -139,9 +145,11 @@ export function ApprovalSearchPanel({
         <Select
           value={filters.requestType ?? 'ALL'}
           className="tw-w-[150px]"
-          onChange={(next) =>
-            onFiltersChange({ ...filters, requestType: next === 'ALL' ? undefined : next, page: 0 })
-          }
+          onChange={(next) => {
+            const requestType: ApprovalSearchRequestType | undefined =
+              next === 'ALL' ? undefined : (next as ApprovalSearchRequestType);
+            onFiltersChange({ ...filters, requestType, page: 0 });
+          }}
           options={[
             { label: '전체 타입', value: 'ALL' },
             ...APPROVAL_SEARCH_TYPES.map((t) => ({ label: APPROVAL_TYPE_LABEL[t], value: t })),
