@@ -41,6 +41,16 @@ export function NotificationsPage() {
     if (item.isRead !== 'YES') {
       await markAsRead.mutateAsync(item.notificationId);
     }
+    const t = String(item.notificationType ?? '').toUpperCase();
+    // 연차 사용 촉진 통보 강제 지정 알림은 회신 페이지로 딥링크
+    if (
+      t === 'LEAVE_PROMOTION_FIRST' ||
+      t === 'LEAVE_PROMOTION_SECOND' ||
+      t === 'LEAVE_DESIGNATION'
+    ) {
+      await navigate({ to: '/app/leave/my-promotion' });
+      return;
+    }
     await navigate(
       buildApprovalNotificationNavigate({
         notificationType: item.notificationType,
@@ -54,7 +64,12 @@ export function NotificationsPage() {
 
   const isApprovalNotification = (type: string) => {
     const t = String(type ?? '').toUpperCase();
-    return t.startsWith('APPROVAL_');
+    return (
+      t.startsWith('APPROVAL_') ||
+      t === 'LEAVE_PROMOTION_FIRST' ||
+      t === 'LEAVE_PROMOTION_SECOND' ||
+      t === 'LEAVE_DESIGNATION'
+    );
   };
 
   return (

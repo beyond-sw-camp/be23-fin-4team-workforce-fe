@@ -1,9 +1,10 @@
 import { DeleteOutlined, InboxOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Card, Popconfirm, Space, Spin, Table, Typography, Upload } from 'antd';
+import { App, Card, Popconfirm, Space, Spin, Table, Upload } from 'antd';
 import type { UploadProps } from 'antd';
 import dayjs from 'dayjs';
 import { aiApi } from '@/features/ai/api/aiApi';
+import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const ACCEPT_EXT = /\.(pdf|docx|txt)$/i;
@@ -63,14 +64,12 @@ export function AiDocumentsAdminPage() {
 
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
-      <div>
-        <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
-          HR 정책 문서 (AI)
-        </Typography.Title>
-        <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-sm">
-          pdf, docx, txt만 업로드 가능하며 최대 10MB입니다. 업로드된 문서는 AI 비서 답변에 반영됩니다.
-        </Typography.Paragraph>
-      </div>
+      <AppWorkspacePageTitle
+        className="!tw-mb-0"
+        eyebrow="HR"
+        title="HR 정책 문서 (AI)"
+        subtitle="pdf, docx, txt만 업로드 가능하며 최대 10MB입니다. 업로드된 문서는 AI 비서 답변에 반영됩니다."
+      />
 
       <Card className="tw-border-slate-200/80 tw-shadow-sm" title="문서 업로드">
         <Upload.Dragger {...uploadProps} accept=".pdf,.docx,.txt">

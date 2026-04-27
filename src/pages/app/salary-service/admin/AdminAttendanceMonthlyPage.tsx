@@ -1,6 +1,6 @@
 /** /app/attendance/company/monthly — 전사 월별 일자별 근태 (관리자) */
 import { useQuery } from '@tanstack/react-query';
-import { Card, DatePicker, Table, Typography } from 'antd';
+import { Card, DatePicker, Input, Space, Table, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useMemo, useState } from 'react';
@@ -17,6 +17,7 @@ function shortId(id?: string | null) {
 export function AdminAttendanceMonthlyPage() {
   const [month, setMonth] = useState<Dayjs>(() => dayjs().startOf('month'));
   const [page, setPage] = useState(0);
+  const [memberSearch, setMemberSearch] = useState('');
   const pageSize = 50;
   const from = month.startOf('month').format('YYYY-MM-DD');
   const to = month.endOf('month').format('YYYY-MM-DD');
@@ -34,6 +35,15 @@ export function AdminAttendanceMonthlyPage() {
 
   const normalized = useMemo(() => normalizeSpringPage(listQ.data), [listQ.data]);
 
+  // 현재 페이지 내 구성원 ID 부분문자열 필터, 서버 페이지네이션과 병행
+  const filteredContent = useMemo(() => {
+    const q = memberSearch.trim().toLowerCase();
+    if (!q) return normalized.content;
+    return normalized.content.filter((r) =>
+      (r.memberId ?? '').toLowerCase().includes(q),
+    );
+  }, [normalized.content, memberSearch]);
+
   const columns: ColumnsType<DailyAttendance> = useMemo(
     () => [
       {
@@ -42,14 +52,31 @@ export function AdminAttendanceMonthlyPage() {
         key: 'memberId',
         render: (v: string) => shortId(v),
       },
-      { title: '일자', dataIndex: 'attendanceDate', key: 'attendanceDate' },
+      {
+        title: '일자',
+        dataIndex: 'attendanceDate',
+        key: 'attendanceDate',
+        sorter: (a, b) => (a.attendanceDate ?? '').localeCompare(b.attendanceDate ?? ''),
+      },
       {
         title: '상태',
         dataIndex: 'status',
         key: 'status',
+        filters: [
+          { text: '정상', value: 'NORMAL' },
+          { text: '연차', value: 'LEAVE' },
+          { text: '반차', value: 'HALF' },
+          { text: '결근', value: 'ABSENT' },
+        ],
+        onFilter: (value, record) => record.status === value,
         render: (s: string) => <AttendanceStatusTag status={s} />,
       },
-      { title: '근무(분)', dataIndex: 'workedMinutes', key: 'workedMinutes' },
+      {
+        title: '근무(분)',
+        dataIndex: 'workedMinutes',
+        key: 'workedMinutes',
+        sorter: (a, b) => (a.workedMinutes ?? 0) - (b.workedMinutes ?? 0),
+      },
     ],
     [],
   );
@@ -65,31 +92,49 @@ export function AdminAttendanceMonthlyPage() {
         </Typography.Paragraph>
       </div>
       <Card className="tw-border-slate-200/80 tw-shadow-sm" title="조회 월">
-        <DatePicker
-          picker="month"
-          value={month}
-          onChange={(d) => {
-            if (d) {
-              setMonth(d.startOf('month'));
-              setPage(0);
-            }
-          }}
-          allowClear={false}
-        />
+        <Space wrap>
+          <DatePicker
+            picker="month"
+            value={month}
+            onChange={(d) => {
+              if (d) {
+                setMonth(d.startOf('month'));
+                setPage(0);
+              }
+            }}
+            allowClear={false}
+          />
+          <Input.Search
+            placeholder="구성원 UUID 일부로 필터"
+            value={memberSearch}
+            onChange={(e) => setMemberSearch(e.target.value)}
+            allowClear
+            style={{ width: 280 }}
+          />
+        </Space>
       </Card>
       <Card className="tw-border-slate-200/80 tw-shadow-sm" title="일자별">
         <Table<DailyAttendance>
           rowKey={(r) => r.dailyAttendanceId ?? `${r.memberId}-${r.attendanceDate}`}
           loading={listQ.isLoading}
           columns={columns}
-          dataSource={normalized.content}
+          dataSource={filteredContent}
           size="small"
-          pagination={{
-            current: normalized.page + 1,
-            pageSize: normalized.pageSize,
-            total: normalized.totalElements,
-            showSizeChanger: false,
-            onChange: (p) => setPage(p - 1),
+          pagination={
+            memberSearch.trim()
+              ? { pageSize: 20 }
+              : {
+                  current: normalized.page + 1,
+                  pageSize: normalized.pageSize,
+                  total: normalized.totalElements,
+                  showSizeChanger: false,
+                  onChange: (p) => setPage(p - 1),
+                }
+          }
+          locale={{
+            emptyText: memberSearch.trim()
+              ? `'${memberSearch}' 로 검색된 근태가 없습니다.`
+              : '해당 월 근태 데이터가 없습니다.',
           }}
         />
       </Card>

@@ -8,15 +8,21 @@ export const FORM_SCHEMA_FIELD_TYPES = [
   'select',
   'datetime-local',
   'time',
+  'hidden',
 ] as const;
 
 export type FormFieldType = (typeof FORM_SCHEMA_FIELD_TYPES)[number];
+
+/** select 필드의 options 를 동적으로 로드하는 소스 식별자 */
+export type FormFieldSource = 'companyLeaveType' | string;
 
 export type FormFieldSchema = {
   name: string;
   label: string;
   type: FormFieldType;
   options?: string[];
+  /** source 가 지정되면 options 대신 런타임에 API 로 옵션 로드. 예: "companyLeaveType" */
+  source?: FormFieldSource;
   placeholder?: string;
   /** true면 양식 수정 API에서 삭제·라벨·타입·순서·잠금 해제 불가 */
   locked?: boolean;
@@ -35,8 +41,9 @@ export function findApprovalFormFieldByLabel(
   fields: FormFieldSchema[],
   label: string,
 ): FormFieldSchema | undefined {
-  const t = label.trim();
-  return fields.find((f) => f.label.trim() === t);
+  const normalize = (v: string) => v.trim().replace(/\s+/g, '').toUpperCase();
+  const target = normalize(label);
+  return fields.find((f) => normalize(f.label) === target);
 }
 
 export function parseFormSchema(raw: string): FormSchema {
@@ -56,6 +63,7 @@ export function parseFormSchema(raw: string): FormSchema {
             const options = Array.isArray(o.options)
               ? o.options.filter((v): v is string => typeof v === 'string').map((v) => v.trim())
               : undefined;
+            const source = typeof o.source === 'string' && o.source.trim() ? o.source.trim() : undefined;
             const placeholder = typeof o.placeholder === 'string' ? o.placeholder.trim() : undefined;
             const locked = o.locked === true;
             if (!name || !label) return null;
@@ -64,6 +72,7 @@ export function parseFormSchema(raw: string): FormSchema {
               label,
               type,
               ...(options?.length ? { options } : {}),
+              ...(source ? { source } : {}),
               ...(placeholder ? { placeholder } : {}),
               ...(locked ? { locked: true } : {}),
             };

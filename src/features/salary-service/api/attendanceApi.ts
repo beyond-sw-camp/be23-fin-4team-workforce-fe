@@ -2,9 +2,16 @@
 import type {
   AttendanceLog,
   AttendanceLogCreatePayload,
+  ComprehensiveOvertimeStatus,
   CompanyHoliday,
+  LeaveOfAbsenceSubmitPayload,
+  LeaveRequest,
+  LeaveRequestSubmitPayload,
   CompanyHolidayCreatePayload,
   CompanyHolidayUpdatePayload,
+  CompanyLeaveType,
+  CompanyLeaveTypeCreatePayload,
+  CompanyLeaveTypeUpdatePayload,
   OvertimeRequest,
   OvertimeRequestCreatePayload,
   OvertimePolicy,
@@ -16,15 +23,22 @@ import type {
   MemberScheduleSelection,
   MemberScheduleSelectionCreatePayload,
   DailyAttendance,
+  LeaveOfAbsence,
+  LeaveOfAbsenceApprovalStatusCode,
   LeavePolicy,
   LeavePolicyCreatePayload,
   LeavePolicyUpdatePayload,
+  LeavePromotionMy,
+  LeavePromotionNoResponse,
+  LeavePromotionRespondPayload,
+  LeavePromotionDesignatePayload,
   MemberBalance,
   MemberBalanceGrantPayload,
   SpringPage,
   WorkSchedule,
   WorkScheduleCreatePayload,
   WorkScheduleUpdatePayload,
+  WorkTimeSummary,
   WorkTrip,
   WorkTripCreatePayload,
   WorkTripUpdatePayload,
@@ -114,6 +128,14 @@ export const attendanceApi = {
       });
       return unwrapApiResponse<SpringPage<DailyAttendance>>(data);
     },
+
+    /** 본인 주간 근무시간 요약, date 기준 월요일~일요일 집계. date 생략 시 오늘 */
+    async getMyWorkTimeSummary(date?: string): Promise<WorkTimeSummary> {
+      const { data } = await httpClient.get(`${BASE}/attendance/my/work-time-summary`, {
+        params: date ? { date } : undefined,
+      });
+      return unwrapApiResponse<WorkTimeSummary>(data);
+    },
   },
 
   /** /member-balance — 휴가 잔여 */
@@ -166,6 +188,43 @@ export const attendanceApi = {
     },
   },
 
+  // 연차 사용 촉진 통보 회신 강제지정
+  leavePromotion: {
+    // 직원 본인 통보 목록 응답 필요한 것 우선
+    async listMy(): Promise<LeavePromotionMy[]> {
+      const { data } = await httpClient.get(`${BASE}/leave-promotions/my`);
+      const unwrapped = unwrapApiResponse<LeavePromotionMy[] | null>(data);
+      return Array.isArray(unwrapped) ? unwrapped : [];
+    },
+
+    // 직원 사용계획 회신 LeaveRequest 자동생성 안 함 잔여 차감 없음
+    async respond(promotionLogId: string,
+                  payload: LeavePromotionRespondPayload): Promise<void> {
+      const { data } = await httpClient.post(
+        `${BASE}/leave-promotions/${encodeURIComponent(promotionLogId)}/respond`,
+        payload,
+      );
+      unwrapMessage(data);
+    },
+
+    // 관리자 무응답자 리스트 2차 통보 후 10일 경과만 노출
+    async listNoResponse(): Promise<LeavePromotionNoResponse[]> {
+      const { data } = await httpClient.get(`${BASE}/leave-promotions/admin/no-response`);
+      const unwrapped = unwrapApiResponse<LeavePromotionNoResponse[] | null>(data);
+      return Array.isArray(unwrapped) ? unwrapped : [];
+    },
+
+    // 관리자 강제 지정 노무수령 거부 LeaveRequest 자동 생성 잔여 차감
+    async designate(promotionLogId: string,
+                    payload: LeavePromotionDesignatePayload): Promise<void> {
+      const { data } = await httpClient.post(
+        `${BASE}/leave-promotions/${encodeURIComponent(promotionLogId)}/designate`,
+        payload,
+      );
+      unwrapMessage(data);
+    },
+  },
+
   /** /company-holidays — 회사 공휴일 관리 */
   companyHoliday: {
     async list(): Promise<CompanyHoliday[]> {
@@ -188,6 +247,115 @@ export const attendanceApi = {
 
     async delete(holidayId: string): Promise<void> {
       await httpClient.delete(`${BASE}/company-holidays/${encodeURIComponent(holidayId)}`);
+    },
+
+    /** 지정 연도 법정 공휴일 재수집, 커스텀 휴일은 보존 */
+    async refreshLegal(year: number): Promise<{ year: number; importedCount: number }> {
+      /** POST 본문 `null`은 일부 프록시/서버에서 이상 동작할 수 있어 본문 생략 */
+      const { data } = await httpClient.post(`${BASE}/company-holidays/refresh-legal`, undefined, {
+        params: { year },
+      });
+      unwrapMessage(data);
+      return unwrapApiResponse<{ year: number; importedCount: number }>(data);
+    },
+  },
+
+  /** /attendance/leave-types — 회사 휴가 종류 */
+  companyLeaveType: {
+    async list(): Promise<CompanyLeaveType[]> {
+      const { data } = await httpClient.get(`${BASE}/attendance/leave-types`);
+      const unwrapped = unwrapApiResponse<CompanyLeaveType[] | null>(data);
+      return Array.isArray(unwrapped) ? unwrapped : [];
+    },
+
+    async getById(companyLeaveTypeId: string): Promise<CompanyLeaveType> {
+      const { data } = await httpClient.get(
+        `${BASE}/attendance/leave-types/${encodeURIComponent(companyLeaveTypeId)}`,
+      );
+      return unwrapApiResponse<CompanyLeaveType>(data);
+    },
+
+    async create(payload: CompanyLeaveTypeCreatePayload): Promise<CompanyLeaveType> {
+      const { data } = await httpClient.post(`${BASE}/attendance/leave-types/create`, payload);
+      unwrapMessage(data);
+      return unwrapApiResponse<CompanyLeaveType>(data);
+    },
+
+    async update(
+      companyLeaveTypeId: string,
+      payload: CompanyLeaveTypeUpdatePayload,
+    ): Promise<CompanyLeaveType> {
+      const { data } = await httpClient.put(
+        `${BASE}/attendance/leave-types/${encodeURIComponent(companyLeaveTypeId)}`,
+        payload,
+      );
+      unwrapMessage(data);
+      return unwrapApiResponse<CompanyLeaveType>(data);
+    },
+
+    async delete(companyLeaveTypeId: string): Promise<void> {
+      await httpClient.delete(
+        `${BASE}/attendance/leave-types/${encodeURIComponent(companyLeaveTypeId)}`,
+      );
+    },
+
+    /** 회사 기본 휴가(연차/반차/경조 등) 시드 */
+    async initDefaults(companyId: string): Promise<void> {
+      await httpClient.post(`${BASE}/attendance/leave-types/init`, undefined, {
+        params: { companyId },
+      });
+    },
+  },
+
+  /** /attendance/leave-of-absence — 휴직 */
+  leaveOfAbsence: {
+    /** 본인 휴직 신청, 결재 연계 pre-action 전용 */
+    async submit(payload: LeaveOfAbsenceSubmitPayload): Promise<LeaveOfAbsence> {
+      const { data } = await httpClient.post(`${BASE}/attendance/leave-of-absence/my`, payload);
+      const unwrapped = unwrapApiResponse<LeaveOfAbsence | null>(data);
+      if (!unwrapped) throw new Error('휴직 신청 생성에 실패했습니다.');
+      return unwrapped;
+    },
+
+    /** 결재 생성 후 approvalRequestId 역링크 */
+    async linkApproval(leaveOfAbsenceId: string, approvalRequestId: string): Promise<void> {
+      await httpClient.patch(
+        `${BASE}/attendance/leave-of-absence/my/${encodeURIComponent(leaveOfAbsenceId)}/approval-link`,
+        { approvalRequestId },
+      );
+    },
+
+    /** 결재 생성 실패 시 best-effort 롤백 (본인 철회) */
+    async cancel(leaveOfAbsenceId: string): Promise<void> {
+      await httpClient.delete(
+        `${BASE}/attendance/leave-of-absence/my/${encodeURIComponent(leaveOfAbsenceId)}`,
+      );
+    },
+
+    /** 내 휴직 이력 전체 */
+    async listMy(): Promise<LeaveOfAbsence[]> {
+      const { data } = await httpClient.get(`${BASE}/attendance/leave-of-absence/my`);
+      const unwrapped = unwrapApiResponse<LeaveOfAbsence[] | null>(data);
+      return Array.isArray(unwrapped) ? unwrapped : [];
+    },
+
+    /** 상태별 목록, REQUESTED/ACTIVE/ENDED/REJECTED/CANCELLED (관리자) */
+    async listByStatus(status: LeaveOfAbsenceApprovalStatusCode): Promise<LeaveOfAbsence[]> {
+      const { data } = await httpClient.get(`${BASE}/attendance/leave-of-absence/admin`, {
+        params: { status },
+      });
+      const unwrapped = unwrapApiResponse<LeaveOfAbsence[] | null>(data);
+      return Array.isArray(unwrapped) ? unwrapped : [];
+    },
+
+    /** 조기 복직 처리, actualEndDate 지정 (관리자) */
+    async endEarly(leaveOfAbsenceId: string, actualEndDate: string): Promise<void> {
+      const { data } = await httpClient.patch(
+        `${BASE}/attendance/leave-of-absence/admin/${encodeURIComponent(leaveOfAbsenceId)}/end`,
+        null,
+        { params: { actualEndDate } },
+      );
+      unwrapMessage(data);
     },
   },
 
@@ -399,6 +567,63 @@ export const attendanceApi = {
       });
       const unwrapped = unwrapApiResponse<MemberScheduleSelection[] | null>(data);
       return Array.isArray(unwrapped) ? unwrapped : [];
+    },
+  },
+
+  /** /attendance/leave-requests — 휴가 신청 (결재 연계 pre-action 전용) */
+  leaveRequest: {
+    // 결재 올리기 전 LeaveRequest 먼저 생성, 잔여·날짜·한도 사전 검증
+    async submit(payload: LeaveRequestSubmitPayload): Promise<LeaveRequest> {
+      const { data } = await httpClient.post(`${BASE}/attendance/leave-requests/my`, payload);
+      const unwrapped = unwrapApiResponse<LeaveRequest | null>(data);
+      if (!unwrapped) throw new Error('휴가 신청 생성에 실패했습니다.');
+      return unwrapped;
+    },
+
+    // 내 휴가 신청 이력 페이지 조회 휴가계획 관리 화면 신청내용 표 데이터 소스
+    async listMyHistory(params?: {
+      page?: number;
+      size?: number;
+    }): Promise<SpringPage<LeaveRequest>> {
+      const { data } = await httpClient.get(`${BASE}/attendance/leave-requests/my`, {
+        params: { page: params?.page ?? 0, size: params?.size ?? 20 },
+      });
+      return unwrapApiResponse<SpringPage<LeaveRequest>>(data);
+    },
+
+    // 결재 생성 후 approvalRequestId 역링크
+    async linkApproval(leaveRequestId: string, approvalRequestId: string): Promise<void> {
+      await httpClient.patch(
+        `${BASE}/attendance/leave-requests/my/${encodeURIComponent(leaveRequestId)}/approval-link`,
+        { approvalRequestId },
+      );
+    },
+
+    // 결재 생성 실패 시 best-effort 롤백
+    async cancel(leaveRequestId: string): Promise<void> {
+      await httpClient.delete(
+        `${BASE}/attendance/leave-requests/my/${encodeURIComponent(leaveRequestId)}`,
+      );
+    },
+  },
+
+  /** /attendance/comprehensive-overtime — 포괄임금 OT 한도 현황 */
+  comprehensiveOvertime: {
+    // 관리자 전체 현황 (사용률 50% 이상만, 내림차순)
+    async getStatus(baseDate?: string): Promise<ComprehensiveOvertimeStatus[]> {
+      const { data } = await httpClient.get(`${BASE}/attendance/comprehensive-overtime/status`, {
+        params: baseDate ? { baseDate } : undefined,
+      });
+      const unwrapped = unwrapApiResponse<ComprehensiveOvertimeStatus[] | null>(data);
+      return Array.isArray(unwrapped) ? unwrapped : [];
+    },
+
+    // 내 포괄임금 초과 근무 현황
+    async getMy(baseDate?: string): Promise<ComprehensiveOvertimeStatus | null> {
+      const { data } = await httpClient.get(`${BASE}/attendance/comprehensive-overtime/my`, {
+        params: baseDate ? { baseDate } : undefined,
+      });
+      return unwrapApiResponse<ComprehensiveOvertimeStatus | null>(data);
     },
   },
 };

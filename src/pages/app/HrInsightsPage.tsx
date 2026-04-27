@@ -9,6 +9,7 @@ import {
 import { Card, Col, Progress, Row, Space, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import clsx from 'clsx';
+import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 
 /** HR insights — sample metrics until APIs are wired */
 
@@ -129,16 +130,13 @@ const deptColumns: ColumnsType<DeptRow> = [
 export function HrInsightsPage() {
   return (
     <Space direction="vertical" className="tw-w-full" size={20}>
-      <div>
-        <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
-          {'\uc778\uc0ac\uc774\ud2b8'}
-        </Typography.Title>
-        <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-sm">
-          {
-            '\uc6cc\ud06c\ud3ec\uc2a4 HR \uc778\uc0ac\xb7\uc870\uc9c1\xb7\uadfc\ubb34\xb7\uacb0\uc7ac\xb7\uc778\uc7ac \ud5c8\ube0c\ub97c \uc544\uc6b0\ub974\ub294 \uc694\uc57d \uc9c0\ud45c\uc785\ub2c8\ub2e4. \uc544\ub798 \uc218\uce58\ub294 UI \uc2dc\uc5f0\uc6a9 \ub354\ubbf8\uc774\uba70, \ucd94\ud6c4 member-service\xb7\uacb0\uc7ac\xb7\uadfc\ud0dc API\uc640 \uc5f0\ub3d9\ud569\ub2c8\ub2e4.'
-          }
-        </Typography.Paragraph>
-      </div>
+      <AppWorkspacePageTitle
+        eyebrow="Insights"
+        title={'\uc778\uc0ac\uc774\ud2b8'}
+        subtitle={
+          '\uc6cc\ud06c\ud3ec\uc2a4 HR \uc778\uc0ac\xb7\uc870\uc9c1\xb7\uadfc\ubb34\xb7\uacb0\uc7ac\xb7\uc778\uc7ac \ud5c8\ube0c\ub97c \uc544\uc6b0\ub974\ub294 \uc694\uc57d \uc9c0\ud45c\uc785\ub2c8\ub2e4. \uc544\ub798 \uc218\uce58\ub294 UI \uc2dc\uc5f0\uc6a9 \ub354\ubbf8\uc774\uba70, \ucd94\ud6c4 member-service\xb7\uacb0\uc7ac\xb7\uadfc\ud0dc API\uc640 \uc5f0\ub3d9\ud569\ub2c8\ub2e4.'
+        }
+      />
 
       <Row gutter={[16, 16]}>
         {KPI_STATS.map((k) => (

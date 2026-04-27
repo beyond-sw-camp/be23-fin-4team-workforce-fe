@@ -8,7 +8,10 @@ import {
   type ApprovalSearchStatus,
 } from '@/features/approvals/api/approvalSearchApi';
 import { ApprovalRequestReadOnlyModal } from '@/features/approvals/ui/ApprovalRequestReadOnlyModal';
-import { ApprovalSearchPanel } from '@/features/approvals/ui/ApprovalSearchPanel';
+import {
+  ApprovalSearchPanel,
+  type ApprovalSearchPanelFilters,
+} from '@/features/approvals/ui/ApprovalSearchPanel';
 import { useAuth } from '@/features/auth/useAuth';
 import { memberApi } from '@/features/member/api/memberApi';
 import { organizationApi } from '@/features/organization/api/organizationApi';
@@ -81,15 +84,16 @@ export function DepartmentApprovalSearchPage() {
     queryKey: ['approval-search', 'department', resolvedOrganizationId, filters],
     queryFn: () => approvalSearchApi.searchDepartmentRequests(resolvedOrganizationId!, filters),
     enabled: Boolean(resolvedOrganizationId),
-    keepPreviousData: true,
+    placeholderData: (prev) => prev,
   });
 
   const updateFilters = useCallback(
-    (next: Omit<typeof filters, 'organizationId'> & { organizationId?: string }) => {
+    (next: ApprovalSearchPanelFilters) => {
+      const embed = next.embed ?? filters.embed;
       navigate({
         to: '/app/approvals/department',
         search: {
-          ...(filters.embed ? { embed: filters.embed } : {}),
+          ...(embed ? { embed } : {}),
           ...(resolvedOrganizationId ? { organizationId: resolvedOrganizationId } : {}),
           ...(next.query ? { query: next.query } : {}),
           ...(next.status ? { status: next.status } : {}),
@@ -122,6 +126,7 @@ export function DepartmentApprovalSearchPage() {
             query: filters.query,
             status: filters.status,
             requestType: filters.requestType,
+            embed: filters.embed,
             page: filters.page,
             size: filters.size,
           }}

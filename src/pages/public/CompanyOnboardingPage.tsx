@@ -217,13 +217,13 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
   };
 
   const outerClass = embedded
-    ? 'tw-min-h-screen tw-w-full tw-bg-[#F8FAFC] tw-pt-20 sm:tw-pt-24 tw-pb-8 sm:tw-pb-10 tw-px-3 sm:tw-px-4'
-    : 'tw-min-h-screen tw-bg-[#F8FAFC] tw-px-6 tw-py-10';
+    ? 'tw-min-h-screen tw-w-full tw-overflow-x-hidden tw-bg-[#F8FAFC] tw-pt-20 sm:tw-pt-24 tw-pb-8 sm:tw-pb-10 tw-px-3 sm:tw-px-4'
+    : 'tw-min-h-screen tw-overflow-x-hidden tw-bg-[#F8FAFC] tw-px-6 tw-py-10';
 
   return (
-    <div className={outerClass}>
-      <div className="tw-mx-auto tw-w-full tw-max-w-[760px]">
-        <div className="tw-px-0">
+    <div className={`${outerClass} tw-max-w-full`}>
+      <div className="tw-mx-auto tw-w-full tw-max-w-[760px] tw-min-w-0">
+        <div className="tw-min-w-0 tw-px-0">
           <div className="tw-mb-5 sm:tw-mb-6 tw-flex tw-flex-wrap tw-items-start tw-justify-between tw-gap-2 sm:tw-gap-3">
             <div>
               <Typography.Text className="tw-text-xs tw-font-bold tw-uppercase tw-tracking-[0.16em] tw-text-[#2563EB]">
@@ -236,9 +236,16 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
                 사업자번호·이메일 인증 후 회사·관리자 정보를 입력해 가입을 완료해요.
               </Typography.Text>
             </div>
-            <AppButton variant="text" className="max-sm:!tw-px-0" onClick={() => navigate({ to: '/' })}>
-              홈으로 돌아가기
-            </AppButton>
+            <div className="tw-flex tw-items-center tw-gap-1 tw-text-sm tw-text-slate-500">
+              <span>이미 계정이 있으신가요?</span>
+              <AppButton
+                variant="text"
+                className="tw-h-auto tw-rounded-none tw-border-0 tw-bg-transparent tw-p-0 tw-font-semibold tw-text-[#2563EB] tw-shadow-none hover:tw-bg-transparent hover:tw-text-[#1D4ED8] max-sm:!tw-px-0"
+                onClick={() => navigate({ to: '/login' })}
+              >
+                로그인 하러 가기
+              </AppButton>
+            </div>
           </div>
 
           {error ? <Alert type="error" showIcon message={error} className="tw-mb-3" /> : null}
@@ -251,7 +258,7 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
             onFinish={(values) => void submitOnboarding(values)}
             requiredMark={false}
           >
-            <Space direction="vertical" className="tw-w-full" size={16}>
+            <Space direction="vertical" className="tw-w-full [&_.ant-space-item]:tw-min-w-0" size={16}>
               <div>
                 <div className="tw-mb-2 tw-flex tw-items-center tw-justify-between tw-rounded-2xl tw-bg-[#EFF6FF] tw-px-4 tw-py-3">
                   <Typography.Text className="tw-font-semibold tw-text-[#2563EB]">사업자번호</Typography.Text>
@@ -276,7 +283,7 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
                 <div className="tw-flex tw-justify-end">
                   <AppButton
                     size="large"
-                    className="tw-min-w-[160px]"
+                    className="tw-w-full sm:tw-w-auto sm:tw-min-w-[160px]"
                     loading={checkingBusiness}
                     onClick={() => void checkBusinessNumber()}
                   >
@@ -376,7 +383,7 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
                   name="companyDomain"
                   label="회사 도메인"
                   extra={
-                    <Typography.Text type="secondary" className="tw-block tw-text-xs tw-leading-relaxed">
+                    <Typography.Text type="secondary" className="tw-block tw-text-xs tw-leading-relaxed tw-break-words">
                       영문·숫자만 입력 가능합니다. 직원 이메일 자동 생성에 사용됩니다. (예: workforce → emp0001.홍길동@workforce.company)
                     </Typography.Text>
                   }

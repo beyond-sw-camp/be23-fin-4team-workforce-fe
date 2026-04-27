@@ -195,7 +195,7 @@ export function DepartmentApprovalsInboxPage() {
                 onClick={() =>
                   navigate({
                     to: '/app/approvals',
-                    search: { tab: 'compose', sideNav: 'request-compose' },
+                    search: {},
                     replace: true,
                   })
                 }

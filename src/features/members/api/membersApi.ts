@@ -23,11 +23,22 @@ function mapRawToMember(raw: unknown): Member | null {
   const email = strField(r, 'email');
   const department =
     strField(r, 'department', 'organizationName', 'organization_name', 'dept') || '';
+  const sabun =
+    strField(
+      r,
+      'sabun',
+      'employeeNumber',
+      'employee_number',
+      'empNo',
+      'emp_no',
+      'staffNumber',
+      'staff_number',
+    ) || undefined;
   const statusRaw = strField(r, 'status', 'memberStatus', 'member_status') || 'ACTIVE';
   const u = statusRaw.toUpperCase();
   const status: Member['status'] =
     u === 'DORMANT' ? 'DORMANT' : u === 'LEAVE' ? 'LEAVE' : 'ACTIVE';
-  return { id, name, email, department, status };
+  return { id, name, email, department, ...(sabun ? { sabun } : {}), status };
 }
 
 function normalizeListPayload(
@@ -73,10 +84,24 @@ function mapRowToMember(row: unknown): Member {
         : typeof r.departmentName === 'string'
           ? r.departmentName
           : '';
+  const sabunRaw =
+    r.sabun ??
+    r.employeeNumber ??
+    r.employee_number ??
+    r.empNo ??
+    r.emp_no ??
+    r.staffNumber ??
+    r.staff_number;
+  const sabun =
+    typeof sabunRaw === 'string' && sabunRaw.trim()
+      ? sabunRaw.trim()
+      : typeof sabunRaw === 'number' && Number.isFinite(sabunRaw)
+        ? String(sabunRaw)
+        : undefined;
   const statusRaw = r.status ?? r.memberStatus;
   const status: Member['status'] =
     statusRaw === 'ACTIVE' || statusRaw === 'DORMANT' || statusRaw === 'LEAVE' ? statusRaw : 'ACTIVE';
-  return { id, name, email, department, status };
+  return { id, name, email, department, ...(sabun ? { sabun } : {}), status };
 }
 
 export const membersApi = {

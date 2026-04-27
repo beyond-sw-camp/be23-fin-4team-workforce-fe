@@ -1,5 +1,5 @@
 /** /app/attendance/flexible-slots - 시차출퇴근 슬롯 관리 (시스템 관리자) */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Button, Card, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
@@ -16,6 +16,25 @@ type FormValues = {
   breakMinutes: number;
   isDefault: boolean;
 };
+
+function parseHHmmToMinutes(value?: string): number | null {
+  if (!value) return null;
+  const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(value.trim());
+  if (!m) return null;
+  const hh = m[1];
+  const mm = m[2];
+  if (!hh || !mm) return null;
+  return Number(hh) * 60 + Number(mm);
+}
+
+function calcWorkMinutes(startTime?: string, endTime?: string, breakMinutes?: number): number {
+  const start = parseHHmmToMinutes(startTime);
+  const end = parseHHmmToMinutes(endTime);
+  if (start == null || end == null) return 0;
+  const total = end >= start ? end - start : 24 * 60 - start + end;
+  const breaks = breakMinutes ?? 0;
+  return Math.max(total - breaks, 0);
+}
 
 export function AdminFlexibleSlotsPage() {
   const { message } = App.useApp();
@@ -36,19 +55,39 @@ export function AdminFlexibleSlotsPage() {
     enabled: Boolean(selectedScheduleId),
   });
 
+  /** 유연근무는 스케줄 단계에서 시간을 입력하지 않으므로 라벨에 시간을 노출하지 않는다.
+   *  실제 시간은 슬롯 단위로 정의·표시. */
   const scheduleOptions = useMemo(
     () =>
-      (schedulesQ.data ?? []).map((s: WorkSchedule) => ({
-        value: s.workScheduleId!,
-        label: `${s.scheduleName ?? '스케줄'} (${s.startTime ?? '--:--'}-${s.endTime ?? '--:--'})`,
-      })),
+      (schedulesQ.data ?? [])
+        .filter((s: WorkSchedule) => s.workType === 'FLEXIBLE')
+        .map((s: WorkSchedule) => ({
+          value: s.workScheduleId!,
+          label: s.scheduleName ?? '스케줄',
+        })),
     [schedulesQ.data],
   );
 
+  useEffect(() => {
+    if (!scheduleOptions.length) {
+      if (selectedScheduleId) setSelectedScheduleId('');
+      return;
+    }
+    const exists = scheduleOptions.some((opt) => opt.value === selectedScheduleId);
+    if (!exists) {
+      const first = scheduleOptions[0];
+      if (first?.value) setSelectedScheduleId(first.value);
+    }
+  }, [scheduleOptions, selectedScheduleId]);
+
   const createM = useMutation({
-    mutationFn: (v: FormValues) => attendanceApi.flexibleSlot.create(v),
+    mutationFn: (v: FormValues) =>
+      attendanceApi.flexibleSlot.create({
+        ...v,
+        workMinutes: calcWorkMinutes(v.startTime, v.endTime, v.breakMinutes),
+      }),
     onSuccess: () => {
-      message.success('슬롯이 등록되었습니다.');
+      message.success('스케줄이 등록되었습니다.');
       setOpen(false);
       form.resetFields();
       void qc.invalidateQueries({ queryKey: ['salary', 'attendance', 'flexible-slots', selectedScheduleId] });
@@ -63,12 +102,12 @@ export function AdminFlexibleSlotsPage() {
         slotLabel: v.slotLabel,
         startTime: v.startTime,
         endTime: v.endTime,
-        workMinutes: v.workMinutes,
+        workMinutes: calcWorkMinutes(v.startTime, v.endTime, v.breakMinutes),
         breakMinutes: v.breakMinutes,
         isDefault: v.isDefault,
       }),
     onSuccess: () => {
-      message.success('슬롯이 수정되었습니다.');
+      message.success('스케줄이 수정되었습니다.');
       setOpen(false);
       setEditing(null);
       form.resetFields();
@@ -80,7 +119,7 @@ export function AdminFlexibleSlotsPage() {
   const deleteM = useMutation({
     mutationFn: (id: string) => attendanceApi.flexibleSlot.delete(id),
     onSuccess: () => {
-      message.success('슬롯이 삭제되었습니다.');
+      message.success('스케줄이 삭제되었습니다.');
       void qc.invalidateQueries({ queryKey: ['salary', 'attendance', 'flexible-slots', selectedScheduleId] });
     },
     onError: (e: Error) => message.error(e.message || '삭제에 실패했습니다.'),
@@ -89,7 +128,7 @@ export function AdminFlexibleSlotsPage() {
   const defaultM = useMutation({
     mutationFn: (id: string) => attendanceApi.flexibleSlot.setDefault(id),
     onSuccess: () => {
-      message.success('기본 슬롯이 변경되었습니다.');
+      message.success('기본 스케줄이 변경되었습니다.');
       void qc.invalidateQueries({ queryKey: ['salary', 'attendance', 'flexible-slots', selectedScheduleId] });
     },
     onError: (e: Error) => message.error(e.message || '기본 지정에 실패했습니다.'),
@@ -125,7 +164,7 @@ export function AdminFlexibleSlotsPage() {
                       slotLabel: r.slotLabel ?? '',
                       startTime: r.startTime ?? '09:00',
                       endTime: r.endTime ?? '18:00',
-                      workMinutes: r.workMinutes ?? 480,
+                      workMinutes: calcWorkMinutes(r.startTime ?? '09:00', r.endTime ?? '18:00', r.breakMinutes ?? 60),
                       breakMinutes: r.breakMinutes ?? 60,
                       isDefault: Boolean(r.isDefault),
                     });
@@ -156,12 +195,13 @@ export function AdminFlexibleSlotsPage() {
       <Card className="tw-border-slate-200/80 tw-shadow-sm">
         <Space className="tw-w-full tw-justify-between tw-mb-3" wrap>
           <Select
-            placeholder="스케줄 선택"
+            placeholder="유연근무(시차출퇴근) 스케줄 선택"
             options={scheduleOptions}
             value={selectedScheduleId || undefined}
             onChange={(v) => setSelectedScheduleId(v)}
             className="tw-min-w-[320px]"
             loading={schedulesQ.isLoading}
+            notFoundContent="유연근무(시차출퇴근) 스케줄이 없습니다. 근무 스케줄 관리에서 먼저 생성해 주세요."
           />
           <Button
             type="primary"
@@ -176,8 +216,8 @@ export function AdminFlexibleSlotsPage() {
                 slotLabel: '',
                 startTime: '09:00',
                 endTime: '18:00',
-                workMinutes: 480,
                 breakMinutes: 60,
+                workMinutes: calcWorkMinutes('09:00', '18:00', 60),
                 isDefault: false,
               });
             }}
@@ -191,7 +231,7 @@ export function AdminFlexibleSlotsPage() {
           dataSource={slotsQ.data ?? []}
           columns={columns}
           loading={slotsQ.isLoading}
-          locale={{ emptyText: selectedScheduleId ? '등록된 슬롯이 없습니다.' : '먼저 스케줄을 선택하세요.' }}
+          locale={{ emptyText: selectedScheduleId ? '등록된 스케줄이 없습니다.' : '유연근무(시차출퇴근) 스케줄을 먼저 등록해 주세요.' }}
           pagination={{ pageSize: 10 }}
           scroll={{ x: 920 }}
         />
@@ -199,7 +239,7 @@ export function AdminFlexibleSlotsPage() {
 
       <Modal
         open={open}
-        title={editing ? '슬롯 수정' : '슬롯 등록'}
+        title={editing ? '스케줄 수정' : '스케줄 등록'}
         onCancel={() => {
           setOpen(false);
           setEditing(null);
@@ -211,6 +251,11 @@ export function AdminFlexibleSlotsPage() {
         <Form<FormValues>
           form={form}
           layout="vertical"
+          onValuesChange={(changed, all) => {
+            if ('startTime' in changed || 'endTime' in changed || 'breakMinutes' in changed) {
+              form.setFieldValue('workMinutes', calcWorkMinutes(all.startTime, all.endTime, all.breakMinutes));
+            }
+          }}
           onFinish={(v) => (editing?.slotId ? updateM.mutate({ id: editing.slotId, v }) : createM.mutate(v))}
         >
           <Form.Item name="workScheduleId" label="근무 스케줄" rules={[{ required: true }]}>
@@ -225,7 +270,14 @@ export function AdminFlexibleSlotsPage() {
             <Form.Item name="endTime" label="종료(HH:mm)" rules={[{ required: true }]}><Input placeholder="18:00" /></Form.Item>
           </Space>
           <Space wrap size={12} className="tw-w-full">
-            <Form.Item name="workMinutes" label="근무분" rules={[{ required: true }]}><InputNumber min={1} /></Form.Item>
+            <Form.Item
+              name="workMinutes"
+              label="근무분"
+              rules={[{ required: true }]}
+              extra="시작/종료/휴게분 기준 자동 계산"
+            >
+              <InputNumber min={0} disabled />
+            </Form.Item>
             <Form.Item name="breakMinutes" label="휴게분" rules={[{ required: true }]}><InputNumber min={0} /></Form.Item>
             <Form.Item name="isDefault" label="기본 슬롯" rules={[{ required: true }]}>
               <Select options={[{ value: true, label: '예' }, { value: false, label: '아니오' }]} />

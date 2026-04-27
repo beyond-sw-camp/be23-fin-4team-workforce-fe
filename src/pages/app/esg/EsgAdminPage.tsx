@@ -33,6 +33,7 @@ import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { useEffect, useMemo, useState } from 'react';
 import type { ApiError } from '@/shared/api/types';
+import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import type { EsgActivity, EsgShopItem, EsgShopOrder, EsgSubject, EsgSubjectCategory } from '@/features/esg/api/esgApi';
 import { esgApi } from '@/features/esg/api/esgApi';
 import { esgCardLinkButtonClass, esgIconAccentClass, esgPrimaryButtonClass } from '@/features/esg/esgUiTokens';
@@ -465,14 +466,12 @@ export function EsgAdminPage() {
 
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
-      <div>
-        <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
-          ESG 관리
-        </Typography.Title>
-        <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-0.5 !tw-text-xs">
-          요약 카드에서 각 영역을 열어 설정·승인·샵·점수를 관리합니다.
-        </Typography.Paragraph>
-      </div>
+      <AppWorkspacePageTitle
+        className="!tw-mb-0"
+        eyebrow="ESG"
+        title="ESG 관리"
+        subtitle="요약 카드에서 각 영역을 열어 설정·승인·샵·점수를 관리합니다."
+      />
 
       {cfgQuery.isSuccess && cfg?.esgEnabledYn === 'NO' ? (
         <Alert

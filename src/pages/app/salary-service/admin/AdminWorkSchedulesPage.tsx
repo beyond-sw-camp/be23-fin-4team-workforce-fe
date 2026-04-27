@@ -1,7 +1,9 @@
 /** /app/attendance/schedules — 근무 스케줄 CRUD (시스템 관리자) */
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from '@tanstack/react-router';
 import {
+  Alert,
   App,
   Button,
   Card,
@@ -21,34 +23,46 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
+import { membersApi } from '@/features/members/api/membersApi';
+import type { Member } from '@/features/members/model/types';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import type { WorkSchedule, WorkTypeCode } from '@/features/salary-service/types';
 
 type FormValues = {
-  memberId?: string;
   scheduleName: string;
   workType: WorkTypeCode;
-  timeRange: [dayjs.Dayjs, dayjs.Dayjs];
-  workMinutes: number;
+  /** workType=FIXED 일 때만 사용. FLEXIBLE 이면 undefined → 페이로드에서 null 전송. */
+  timeRange?: [dayjs.Dayjs, dayjs.Dayjs];
+  /** timeRange 기준 자동 계산. FLEXIBLE 이면 undefined → null 전송. */
+  workMinutes?: number;
   effectiveRange: [dayjs.Dayjs, dayjs.Dayjs | null];
 };
 
 const QK = ['salary', 'work-schedules'] as const;
 
 const WORK_TYPE_OPTIONS = [
-  { value: 'FIXED', label: '고정 (FIXED)' },
-  { value: 'FLEXIBLE', label: '유연 (FLEXIBLE)' },
-  { value: 'SHIFT', label: '교대 (SHIFT)' },
+  { value: 'FIXED', label: '고정' },
+  { value: 'FLEXIBLE', label: '유연근무(시차출퇴근)' },
 ];
 
 const WORK_TYPE_KO: Record<string, string> = {
   FIXED: '고정',
-  FLEXIBLE: '유연',
-  SHIFT: '교대',
+  FLEXIBLE: '유연근무(시차출퇴근)',
 };
+const LUNCH_BREAK_MINUTES = 60;
+
+function calcNetWorkMinutes(timeRange?: [dayjs.Dayjs, dayjs.Dayjs]): number {
+  if (!timeRange) return 0;
+  const [start, end] = timeRange;
+  if (!start || !end) return 0;
+  const adjustedEnd = end.isBefore(start) ? end.add(1, 'day') : end;
+  const totalMinutes = adjustedEnd.diff(start, 'minute');
+  return Math.max(totalMinutes - LUNCH_BREAK_MINUTES, 0);
+}
 
 export function AdminWorkSchedulesPage() {
   const { message } = App.useApp();
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<WorkSchedule | null>(null);
@@ -59,15 +73,38 @@ export function AdminWorkSchedulesPage() {
     queryFn: () => attendanceApi.workSchedule.list(),
   });
 
+  // 직원 이름 매핑용 회사 멤버 목록 5분 캐시
+  const membersQ = useQuery({
+    queryKey: ['members', 'list', 'work-schedule-name-map'],
+    queryFn: () => membersApi.list({ page: 1, pageSize: 1000 }),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const memberMap = useMemo(() => {
+    const map = new Map<string, Member>();
+    membersQ.data?.items.forEach((m) => map.set(m.id, m));
+    return map;
+  }, [membersQ.data]);
+
+  /** FLEXIBLE 일 때는 시간 필드를 null 로 전송. 백엔드는 workType 분기로 검증. */
+  const buildTimePayload = (v: FormValues) => {
+    if (v.workType === 'FLEXIBLE' || !v.timeRange) {
+      return { startTime: null, endTime: null, workMinutes: null };
+    }
+    return {
+      startTime: v.timeRange[0].format('HH:mm:ss'),
+      endTime: v.timeRange[1].format('HH:mm:ss'),
+      workMinutes: calcNetWorkMinutes(v.timeRange),
+    };
+  };
+
   const createM = useMutation({
     mutationFn: (v: FormValues) =>
       attendanceApi.workSchedule.create({
-        memberId: v.memberId?.trim() || null,
+        memberId: null,
         scheduleName: v.scheduleName.trim(),
         workType: v.workType,
-        startTime: v.timeRange[0].format('HH:mm:ss'),
-        endTime: v.timeRange[1].format('HH:mm:ss'),
-        workMinutes: v.workMinutes,
+        ...buildTimePayload(v),
         effectiveFrom: v.effectiveRange[0].format('YYYY-MM-DD'),
         effectiveTo: v.effectiveRange[1] ? v.effectiveRange[1].format('YYYY-MM-DD') : null,
       }),
@@ -85,9 +122,7 @@ export function AdminWorkSchedulesPage() {
       attendanceApi.workSchedule.update(input.id, {
         scheduleName: input.v.scheduleName.trim(),
         workType: input.v.workType,
-        startTime: input.v.timeRange[0].format('HH:mm:ss'),
-        endTime: input.v.timeRange[1].format('HH:mm:ss'),
-        workMinutes: input.v.workMinutes,
+        ...buildTimePayload(input.v),
         effectiveFrom: input.v.effectiveRange[0].format('YYYY-MM-DD'),
         effectiveTo: input.v.effectiveRange[1] ? input.v.effectiveRange[1].format('YYYY-MM-DD') : null,
       }),
@@ -110,6 +145,11 @@ export function AdminWorkSchedulesPage() {
     onError: (e: Error) => message.error(e.message || '삭제에 실패했습니다.'),
   });
 
+  const hasFlexibleSchedule = useMemo(
+    () => (listQ.data ?? []).some((s) => s.workType === 'FLEXIBLE'),
+    [listQ.data],
+  );
+
   const columns = useMemo<ColumnsType<WorkSchedule>>(
     () => [
       {
@@ -128,28 +168,50 @@ export function AdminWorkSchedulesPage() {
         title: '대상',
         dataIndex: 'memberId',
         key: 'memberId',
-        width: 160,
-        // TODO: memberId 대신 이름 매핑 표시 필요
-        render: (v) =>
-          v ? (
-            <Tooltip title={v}>
-              <Tag color="blue">개인</Tag>
+        width: 200,
+        render: (v) => {
+          if (!v) return <Tag>회사 기본</Tag>;
+          const m = memberMap.get(v as string);
+          if (!m) {
+            return (
+              <Tooltip title={v}>
+                <Tag color="blue">개인</Tag>
+              </Tooltip>
+            );
+          }
+          return (
+            <Tooltip title={`${m.name} ${m.email ?? ''}`}>
+              <span>
+                <Tag color="blue">개인</Tag>
+                <span className="tw-text-sm tw-text-slate-700">{m.name}</span>
+                {m.department ? (
+                  <span className="tw-ml-1 tw-text-xs tw-text-slate-500">
+                    ({m.department})
+                  </span>
+                ) : null}
+              </span>
             </Tooltip>
-          ) : (
-            <Tag>회사 기본</Tag>
-          ),
+          );
+        },
       },
       {
         title: '시간',
         key: 'time',
         width: 180,
-        render: (_, r) => `${(r.startTime ?? '').slice(0, 5)} ~ ${(r.endTime ?? '').slice(0, 5)}`,
+        render: (_, r) =>
+          r.workType === 'FLEXIBLE' ? (
+            <Tag color="purple">시간대별 운영</Tag>
+          ) : (
+            `${(r.startTime ?? '').slice(0, 5)} ~ ${(r.endTime ?? '').slice(0, 5)}`
+          ),
       },
       {
         title: '근무(분)',
         dataIndex: 'workMinutes',
         key: 'workMinutes',
         width: 100,
+        render: (v, r) =>
+          r.workType === 'FLEXIBLE' ? <span className="tw-text-slate-400">—</span> : v,
       },
       {
         title: '적용기간',
@@ -168,15 +230,20 @@ export function AdminWorkSchedulesPage() {
               onClick={() => {
                 setEditing(r);
                 setOpen(true);
+                const isFlexible = r.workType === 'FLEXIBLE';
+                /** FLEXIBLE 은 시간 필드를 사용하지 않으므로 폼에도 비워둔다. */
+                const timeRange =
+                  isFlexible || !r.startTime || !r.endTime
+                    ? undefined
+                    : ([
+                        dayjs(`1970-01-01T${r.startTime}`),
+                        dayjs(`1970-01-01T${r.endTime}`),
+                      ] as [dayjs.Dayjs, dayjs.Dayjs]);
                 form.setFieldsValue({
-                  memberId: r.memberId ?? undefined,
                   scheduleName: r.scheduleName ?? '',
                   workType: (r.workType as WorkTypeCode) ?? 'FIXED',
-                  timeRange: [
-                    dayjs(`1970-01-01T${r.startTime ?? '09:00:00'}`),
-                    dayjs(`1970-01-01T${r.endTime ?? '18:00:00'}`),
-                  ],
-                  workMinutes: r.workMinutes ?? 480,
+                  timeRange,
+                  workMinutes: timeRange ? calcNetWorkMinutes(timeRange) : undefined,
                   effectiveRange: [
                     r.effectiveFrom ? dayjs(r.effectiveFrom) : dayjs(),
                     r.effectiveTo ? dayjs(r.effectiveTo) : null,
@@ -200,7 +267,7 @@ export function AdminWorkSchedulesPage() {
         ),
       },
     ],
-    [deleteM, form],
+    [deleteM, form, memberMap],
   );
 
   return (
@@ -211,32 +278,52 @@ export function AdminWorkSchedulesPage() {
             근무 스케줄 관리
           </Typography.Title>
           <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-sm">
-            <Typography.Text code>/work-schedules</Typography.Text> — 회사 기본/개인별 근무 스케줄을 등록·관리합니다.
+            회사 전체에 공통으로 적용되는 기본 근무 스케줄을 등록·수정합니다. 적용 기간, 근무 유형, 출퇴근 시각을
+            설정하면 이후 일일 근태에 반영됩니다.
           </Typography.Paragraph>
         </div>
-        <Button
-          type="primary"
-          onClick={() => {
-            setEditing(null);
-            form.resetFields();
-            form.setFieldsValue({
-              workType: 'FIXED',
-              timeRange: [dayjs('1970-01-01T09:00:00'), dayjs('1970-01-01T18:00:00')],
-              workMinutes: 480,
-              effectiveRange: [dayjs(), null],
-            });
-            setOpen(true);
-          }}
-        >
-          스케줄 추가
-        </Button>
+        <Space>
+          <Button
+            onClick={() => {
+              void navigate({ to: '/app/attendance/flexible-slots' });
+            }}
+            disabled={!hasFlexibleSchedule}
+          >
+            시차 출퇴근 시간대 관리
+          </Button>
+          <Button
+            type="primary"
+            onClick={() => {
+              setEditing(null);
+              form.resetFields();
+              const defaultTimeRange: [dayjs.Dayjs, dayjs.Dayjs] = [
+                dayjs('1970-01-01T09:00:00'),
+                dayjs('1970-01-01T18:00:00'),
+              ];
+              form.setFieldsValue({
+                workType: 'FIXED',
+                timeRange: defaultTimeRange,
+                workMinutes: calcNetWorkMinutes(defaultTimeRange),
+                effectiveRange: [dayjs(), null],
+              });
+              setOpen(true);
+            }}
+          >
+            스케줄 추가
+          </Button>
+        </Space>
       </div>
+      {!hasFlexibleSchedule ? (
+        <Typography.Text type="secondary">
+          유연근무(시차출퇴근제) 스케줄을 먼저 생성하면 시차 출퇴근 시간대 관리 버튼이 활성화됩니다.
+        </Typography.Text>
+      ) : null}
 
       <Card>
         {/* TODO: 서버 페이지네이션 전환 필요(현재는 전체 조회 후 프론트 페이징) */}
         <Table<WorkSchedule>
           rowKey={(r) => r.workScheduleId ?? `${r.scheduleName}-${r.effectiveFrom}`}
-          loading={listQ.isLoading}
+          loading={listQ.isLoading || membersQ.isLoading}
           dataSource={listQ.data ?? []}
           columns={columns}
           pagination={{ pageSize: 20 }}
@@ -259,36 +346,108 @@ export function AdminWorkSchedulesPage() {
         destroyOnClose
         width={560}
       >
-        <Form<FormValues>
+        <ScheduleForm
           form={form}
-          layout="vertical"
-          onFinish={(v) => {
+          editing={editing}
+          onSubmit={(v) => {
             if (editing?.workScheduleId) updateM.mutate({ id: editing.workScheduleId, v });
             else createM.mutate(v);
           }}
-        >
-          {!editing && (
-            <Form.Item label="멤버 UUID (비우면 회사 기본)" name="memberId">
-              <Input placeholder="개인 적용시만" allowClear />
-            </Form.Item>
-          )}
-          <Form.Item label="이름" name="scheduleName" rules={[{ required: true, message: '이름을 입력하세요.' }]}>
-            <Input placeholder="예: 본사 표준 근무" maxLength={60} />
-          </Form.Item>
-          <Form.Item label="유형" name="workType" rules={[{ required: true }]}>
-            <Select options={WORK_TYPE_OPTIONS} />
-          </Form.Item>
+          onGoToFlexibleSlots={() => {
+            void navigate({ to: '/app/attendance/flexible-slots' });
+          }}
+        />
+      </Modal>
+    </Space>
+  );
+}
+
+type ScheduleFormProps = {
+  form: ReturnType<typeof Form.useForm<FormValues>>[0];
+  editing: WorkSchedule | null;
+  onSubmit: (v: FormValues) => void;
+  onGoToFlexibleSlots: () => void;
+};
+
+/** Form.useWatch 로 workType 변화를 감지하기 위해 자식 컴포넌트로 분리. */
+function ScheduleForm({ form, editing, onSubmit, onGoToFlexibleSlots }: ScheduleFormProps) {
+  const workType = Form.useWatch('workType', form);
+  const isFlexible = workType === 'FLEXIBLE';
+
+  return (
+    <Form<FormValues>
+      form={form}
+      layout="vertical"
+      onValuesChange={(changed) => {
+        /** FIXED 모드에서 시간 변경 시 근무분 자동 재계산. FLEXIBLE 은 시간 자체를 받지 않음. */
+        if ('timeRange' in changed) {
+          const nextTimeRange = changed.timeRange as [dayjs.Dayjs, dayjs.Dayjs] | undefined;
+          form.setFieldValue('workMinutes', calcNetWorkMinutes(nextTimeRange));
+        }
+      }}
+      onFinish={onSubmit}
+    >
+      <Form.Item
+        label="스케줄 명"
+        name="scheduleName"
+        rules={[{ required: true, message: '이름을 입력하세요.' }]}
+      >
+        <Input placeholder="예: ㅇㅇ 컴퍼니 근무 스케줄" maxLength={60} />
+      </Form.Item>
+      <Form.Item label="근무 유형" name="workType" rules={[{ required: true }]}>
+        <Select options={WORK_TYPE_OPTIONS} />
+      </Form.Item>
+
+      {isFlexible ? (
+        <Alert
+          type="info"
+          showIcon
+          className="!tw-mb-4"
+          message="유연근무는 시간대 관리에서 시간을 정의합니다."
+          description={
+            <span>
+              스케줄 등록 후{' '}
+              <Button type="link" size="small" className="!tw-p-0" onClick={onGoToFlexibleSlots}>
+                시차 출퇴근 시간대 관리
+              </Button>
+              에서 운영할 시간대(예: 08-17, 09-18, 10-19)를 추가해 주세요.
+            </span>
+          }
+        />
+      ) : (
+        <>
           <Form.Item label="출퇴근 시각" name="timeRange" rules={[{ required: true }]}>
             <TimePicker.RangePicker format="HH:mm" minuteStep={5} style={{ width: '100%' }} />
           </Form.Item>
-          <Form.Item label="근무시간(분)" name="workMinutes" rules={[{ required: true }]}>
-            <InputNumber min={0} step={30} style={{ width: '100%' }} />
+          <Form.Item
+            label="근무시간(분)"
+            name="workMinutes"
+            rules={[{ required: true }]}
+            extra="출퇴근 시각 기준 자동 계산 (점심 60분 차감). 예: 09:00~18:00 → 480분(8시간)"
+          >
+            <InputNumber min={0} step={30} style={{ width: '100%' }} disabled />
           </Form.Item>
-          <Form.Item label="적용 기간 (종료일 비울 수 있음)" name="effectiveRange" rules={[{ required: true }]}>
-            <DatePicker.RangePicker format="YYYY-MM-DD" allowEmpty={[false, true]} style={{ width: '100%' }} />
-          </Form.Item>
-        </Form>
-      </Modal>
-    </Space>
+        </>
+      )}
+
+      <Form.Item
+        label="스케줄 운영 기간 (종료일 미입력 시 계속 적용)"
+        name="effectiveRange"
+        rules={[{ required: true }]}
+      >
+        <DatePicker.RangePicker
+          format="YYYY-MM-DD"
+          allowEmpty={[false, true]}
+          style={{ width: '100%' }}
+        />
+      </Form.Item>
+
+      {/* 수정 모드에서 기존 스케줄 안내 */}
+      {editing && isFlexible ? (
+        <Typography.Text type="secondary" className="tw-text-xs">
+          이 스케줄의 실제 운영 시간대는 「시차 출퇴근 시간대 관리」에서 확인·수정합니다.
+        </Typography.Text>
+      ) : null}
+    </Form>
   );
 }

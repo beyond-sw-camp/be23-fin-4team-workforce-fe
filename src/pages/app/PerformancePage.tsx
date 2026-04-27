@@ -1250,7 +1250,6 @@ function PerformancePage() {
       capPct: Number(parent.capPct ?? 120),
       baseline: Number(parent.baseline ?? 0),
       targetValue: Number(parent.targetValue ?? 100),
-      actualValue: 0,
       autoUpdate: parent.autoUpdate ?? false,
       range: [dayjs(parent.startDate), dayjs(parent.endDate)],
       title: '',

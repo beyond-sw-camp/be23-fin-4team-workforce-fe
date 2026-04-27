@@ -194,7 +194,6 @@ export function GroupParticipantsDrawer({
     <>
       <Modal
         title={roomTitle ? `${roomTitle} · 참여자` : '참여자'}
-        extra={undefined}
         open={showParticipantsModal}
         onCancel={onClose}
         footer={null}

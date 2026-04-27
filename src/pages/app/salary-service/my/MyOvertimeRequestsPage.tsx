@@ -1,9 +1,30 @@
-/** /app/attendance/overtime - 연장근로 신청/조회 (사원) */
+/** /app/attendance/overtime — 초과근무 관리 (사원)
+ *
+ *  기간/상태 필터 + 신청 이력 테이블 + 신청 모달 + 상세 모달
+ *  신청은 전자결재 시스템과 연동 (모달 안에서 결재 자동 발의)
+ */
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Card, DatePicker, Form, Input, InputNumber, Popconfirm, Select, Space, Table, Tag, Typography } from 'antd';
+import {
+  App,
+  Button,
+  Card,
+  DatePicker,
+  Descriptions,
+  Form,
+  Input,
+  InputNumber,
+  Modal,
+  Popconfirm,
+  Select,
+  Space,
+  Table,
+  Tag,
+  Typography,
+} from 'antd';
+import { PlusOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
-import dayjs from 'dayjs';
+import dayjs, { type Dayjs } from 'dayjs';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import type { OvertimeRequest, OvertimeRequestCreatePayload } from '@/features/salary-service/types';
 
@@ -27,30 +48,71 @@ const STATUS_KO: Record<string, string> = {
   EXPIRED: '만료',
 };
 
+const STATUS_COLOR: Record<string, string> = {
+  PENDING: 'default',
+  APPROVED: 'green',
+  REJECTED: 'red',
+  CANCELLED: 'default',
+  EXPIRED: 'default',
+};
+
 const TYPE_KO: Record<string, string> = {
   PRE: '사전',
   POST: '사후',
 };
+
+// 평일 / 주말 자동 판정 공휴일 정보 없으므로 요일 기준
+function isWeekend(dateStr: string | undefined): boolean {
+  if (!dateStr) return false;
+  const d = dayjs(dateStr);
+  const dow = d.day();
+  return dow === 0 || dow === 6;
+}
+
+// 시작 시간이 22 이후 또는 종료가 06 이전이면 야간 OT 로 간주
+function isNightShift(start: string | undefined | null, end: string | undefined | null): boolean {
+  if (!start || !end) return false;
+  const sh = parseInt(start.split(':')[0] ?? '0', 10);
+  const eh = parseInt(end.split(':')[0] ?? '0', 10);
+  return sh >= 22 || eh <= 6 || (sh < eh && eh >= 22);
+}
+
+function formatHours(minutes: number | null | undefined): string {
+  if (minutes == null || minutes === 0) return '0';
+  return (minutes / 60).toFixed(2).replace(/\.?0+$/, '');
+}
 
 export function MyOvertimeRequestsPage() {
   const { message } = App.useApp();
   const qc = useQueryClient();
   const [form] = Form.useForm<FormValues>();
 
+  // 필터 상태
+  const [period, setPeriod] = useState<[Dayjs, Dayjs]>(() => [
+    dayjs().startOf('month'),
+    dayjs().endOf('month'),
+  ]);
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+
+  // 모달 상태
+  const [createOpen, setCreateOpen] = useState(false);
+  const [detailRow, setDetailRow] = useState<OvertimeRequest | null>(null);
+
   const listQ = useQuery({
     queryKey: ['salary', 'attendance', 'overtime', 'my'],
-    queryFn: () => attendanceApi.overtimeRequest.listMy({ page: 0, size: 20 }),
+    queryFn: () => attendanceApi.overtimeRequest.listMy({ page: 0, size: 100 }),
   });
 
   const createM = useMutation({
     mutationFn: (payload: OvertimeRequestCreatePayload) => attendanceApi.overtimeRequest.createMy(payload),
     onSuccess: () => {
-      message.success('연장근로 신청이 등록되었습니다.');
+      message.success('초과근무 신청이 등록되었습니다. (전자결재 자동 발의)');
       form.resetFields();
       form.setFieldsValue({ requestType: 'PRE', targetDate: dayjs() });
+      setCreateOpen(false);
       void qc.invalidateQueries({ queryKey: ['salary', 'attendance', 'overtime', 'my'] });
     },
-    onError: (e: Error) => message.error(e.message || '신청에 실패했습니다.'),
+    onError: (e: Error) => message.error(e.message || '신청 실패'),
   });
 
   const cancelM = useMutation({
@@ -59,61 +121,139 @@ export function MyOvertimeRequestsPage() {
       message.success('신청이 취소되었습니다.');
       void qc.invalidateQueries({ queryKey: ['salary', 'attendance', 'overtime', 'my'] });
     },
-    onError: (e: Error) => message.error(e.message || '취소에 실패했습니다.'),
+    onError: (e: Error) => message.error(e.message || '취소 실패'),
   });
 
+  // 필터 적용
   const rows = listQ.data?.content ?? [];
-  const sortedRows = useMemo(
-    () => [...rows].sort((a, b) => (b.targetDate ?? '').localeCompare(a.targetDate ?? '')),
-    [rows],
-  );
+  const filteredRows = useMemo(() => {
+    return [...rows]
+      .filter((r) => {
+        if (!r.targetDate) return false;
+        const d = dayjs(r.targetDate);
+        if (d.isBefore(period[0], 'day') || d.isAfter(period[1], 'day')) return false;
+        if (statusFilter !== 'ALL' && r.approvalStatus !== statusFilter) return false;
+        return true;
+      })
+      .sort((a, b) => (b.targetDate ?? '').localeCompare(a.targetDate ?? ''));
+  }, [rows, period, statusFilter]);
 
+  // 컬럼 구조 사용자 지정
   const columns = useMemo<ColumnsType<OvertimeRequest>>(
     () => [
-      { title: '일자', dataIndex: 'targetDate', key: 'targetDate', width: 120 },
       {
-        title: '구분',
-        dataIndex: 'requestType',
-        key: 'requestType',
-        width: 80,
-        render: (v) => TYPE_KO[v ?? ''] ?? (v ?? '-'),
+        title: '근무일',
+        dataIndex: 'targetDate',
+        key: 'targetDate',
+        width: 110,
+        align: 'center',
       },
       {
-        title: '시간',
+        title: '근무스케줄타입',
+        key: 'scheduleType',
+        width: 120,
+        align: 'center',
+        render: () => '기본근무',
+      },
+      {
+        title: '근무시간타입',
+        key: 'timeType',
+        width: 100,
+        align: 'center',
+        render: (_, r) => (isWeekend(r.targetDate) ? '주말' : '평일'),
+      },
+      {
+        title: '근무시간',
         key: 'time',
-        render: (_, r) =>
-          r.requestType === 'POST'
-            ? `${r.actualStartTime ?? '-'} ~ ${r.actualEndTime ?? '-'}`
-            : `${r.plannedStartTime ?? '-'} ~ ${r.plannedEndTime ?? '-'}`,
+        width: 140,
+        align: 'center',
+        render: (_, r) => {
+          const isPost = r.requestType === 'POST';
+          const start = isPost ? r.actualStartTime : r.plannedStartTime;
+          const end = isPost ? r.actualEndTime : r.plannedEndTime;
+          if (!start || !end) return '-';
+          return `${start} ~ ${end}`;
+        },
       },
       {
-        title: '분',
-        key: 'minutes',
-        width: 90,
-        render: (_, r) => (r.requestType === 'POST' ? r.actualMinutes : r.requestedMinutes) ?? '-',
+        title: '연장',
+        key: 'extOver',
+        width: 70,
+        align: 'right',
+        render: (_, r) => {
+          const minutes = (r.requestType === 'POST' ? r.actualMinutes : r.requestedMinutes) ?? 0;
+          if (isWeekend(r.targetDate)) return '0';
+          return formatHours(minutes);
+        },
       },
-      { title: '사유', dataIndex: 'reason', key: 'reason', ellipsis: true },
+      {
+        title: '휴일',
+        key: 'extHoliday',
+        width: 70,
+        align: 'right',
+        render: (_, r) => {
+          const minutes = (r.requestType === 'POST' ? r.actualMinutes : r.requestedMinutes) ?? 0;
+          if (!isWeekend(r.targetDate)) return '0';
+          return formatHours(minutes);
+        },
+      },
+      {
+        title: '야간',
+        key: 'extNight',
+        width: 70,
+        align: 'right',
+        render: (_, r) => {
+          const isPost = r.requestType === 'POST';
+          const start = isPost ? r.actualStartTime : r.plannedStartTime;
+          const end = isPost ? r.actualEndTime : r.plannedEndTime;
+          const minutes = (isPost ? r.actualMinutes : r.requestedMinutes) ?? 0;
+          if (isNightShift(start, end)) return formatHours(minutes);
+          return '0';
+        },
+      },
       {
         title: '상태',
         dataIndex: 'approvalStatus',
         key: 'approvalStatus',
-        width: 100,
-        render: (v) => <Tag>{STATUS_KO[v ?? ''] ?? (v ?? '-')}</Tag>,
+        width: 90,
+        align: 'center',
+        render: (v) => (
+          <Tag color={STATUS_COLOR[v ?? ''] ?? 'default'}>
+            {STATUS_KO[v ?? ''] ?? (v ?? '-')}
+          </Tag>
+        ),
       },
       {
-        title: '액션',
-        key: 'action',
-        width: 90,
+        title: '취소여부',
+        key: 'cancelled',
+        width: 80,
+        align: 'center',
         render: (_, r) =>
-          r.overtimeRequestId && r.approvalStatus === 'PENDING' ? (
-            <Popconfirm title="신청을 철회할까요?" onConfirm={() => cancelM.mutate(r.overtimeRequestId!)}>
-              <Button danger size="small">
+          r.approvalStatus === 'CANCELLED' ? (
+            <Tag>취소</Tag>
+          ) : r.approvalStatus === 'PENDING' ? (
+            <Popconfirm
+              title="신청을 철회할까요?"
+              onConfirm={() => r.overtimeRequestId && cancelM.mutate(r.overtimeRequestId)}
+            >
+              <Button type="link" size="small" danger className="!tw-p-0">
                 철회
               </Button>
             </Popconfirm>
           ) : (
-            '-'
+            <Typography.Text type="secondary">-</Typography.Text>
           ),
+      },
+      {
+        title: '상세내역',
+        key: 'detail',
+        width: 90,
+        align: 'center',
+        render: (_, r) => (
+          <Button type="link" size="small" className="!tw-p-0" onClick={() => setDetailRow(r)}>
+            상세 ›
+          </Button>
+        ),
       },
     ],
     [cancelM],
@@ -121,16 +261,78 @@ export function MyOvertimeRequestsPage() {
 
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
-      <div>
-        <Typography.Title level={4} className="!tw-m-0">
-          연장근로
+      {/* 헤더 */}
+      <div className="tw-flex tw-flex-wrap tw-justify-between tw-items-center tw-gap-2">
+        <Typography.Title level={2} className="!tw-m-0 !tw-text-slate-900">
+          초과근무 관리
         </Typography.Title>
-        <Typography.Paragraph type="secondary" className="!tw-mt-1 !tw-mb-0">
-          사전/사후 연장근로 신청을 등록하고 내 신청 이력을 확인합니다.
-        </Typography.Paragraph>
+        <Button
+          type="primary"
+          icon={<PlusOutlined />}
+          onClick={() => {
+            form.resetFields();
+            form.setFieldsValue({ requestType: 'PRE', targetDate: dayjs() });
+            setCreateOpen(true);
+          }}
+        >
+          초과근무 신청
+        </Button>
       </div>
 
-      <Card title="신청 등록" className="tw-border-slate-200/80 tw-shadow-sm">
+      <Card title="초과근무 관리 내역" className="tw-border-slate-200/80 tw-shadow-sm">
+        {/* 필터 */}
+        <Space wrap className="tw-mb-4">
+          <span className="tw-text-sm tw-text-slate-600">기간</span>
+          <DatePicker.RangePicker
+            value={period}
+            onChange={(v) => v && v[0] && v[1] && setPeriod([v[0], v[1]])}
+            format="YYYY.MM.DD"
+            allowClear={false}
+          />
+          <span className="tw-text-sm tw-text-slate-600 tw-ml-2">상태</span>
+          <Select
+            value={statusFilter}
+            onChange={setStatusFilter}
+            style={{ width: 130 }}
+            options={[
+              { value: 'ALL', label: '전체' },
+              { value: 'PENDING', label: '대기' },
+              { value: 'APPROVED', label: '승인' },
+              { value: 'REJECTED', label: '반려' },
+              { value: 'CANCELLED', label: '취소' },
+            ]}
+          />
+          <Button type="primary" onClick={() => listQ.refetch()}>
+            조회
+          </Button>
+        </Space>
+
+        <Table<OvertimeRequest>
+          rowKey={(r) => r.overtimeRequestId ?? `${r.targetDate}-${r.createdAt}`}
+          dataSource={filteredRows}
+          columns={columns}
+          pagination={{ pageSize: 10 }}
+          loading={listQ.isLoading}
+          locale={{ emptyText: '신청 내역이 없습니다.' }}
+          size="middle"
+        />
+      </Card>
+
+      {/* 신청 모달 (전자결재 자동 발의) */}
+      <Modal
+        open={createOpen}
+        onCancel={() => setCreateOpen(false)}
+        onOk={() => form.submit()}
+        confirmLoading={createM.isPending}
+        okText="신청 (결재 발의)"
+        cancelText="취소"
+        title="초과근무 신청"
+        destroyOnClose
+        width={620}
+      >
+        <Typography.Paragraph type="secondary" className="!tw-text-xs">
+          신청 시 전자결재 시스템에 자동으로 결재 문서가 발의됩니다.
+        </Typography.Paragraph>
         <Form<FormValues>
           form={form}
           layout="vertical"
@@ -149,7 +351,7 @@ export function MyOvertimeRequestsPage() {
             })
           }
         >
-          <Space wrap align="start" size={12} className="tw-w-full">
+          <Space wrap align="start" size={12}>
             <Form.Item name="targetDate" label="대상일" rules={[{ required: true }]}>
               <DatePicker format="YYYY-MM-DD" />
             </Form.Item>
@@ -162,55 +364,77 @@ export function MyOvertimeRequestsPage() {
                 ]}
               />
             </Form.Item>
-            <Form.Item noStyle shouldUpdate={(p, c) => p.requestType !== c.requestType}>
-              {({ getFieldValue }) =>
-                getFieldValue('requestType') === 'PRE' ? (
-                  <>
-                    <Form.Item name="plannedStartTime" label="시작(HH:mm)" rules={[{ required: true }]}>
-                      <Input style={{ width: 110 }} placeholder="18:00" />
-                    </Form.Item>
-                    <Form.Item name="plannedEndTime" label="종료(HH:mm)" rules={[{ required: true }]}>
-                      <Input style={{ width: 110 }} placeholder="21:00" />
-                    </Form.Item>
-                    <Form.Item name="requestedMinutes" label="신청분" rules={[{ required: true }]}>
-                      <InputNumber min={1} style={{ width: 110 }} />
-                    </Form.Item>
-                  </>
-                ) : (
-                  <>
-                    <Form.Item name="actualStartTime" label="실근무 시작(HH:mm)" rules={[{ required: true }]}>
-                      <Input style={{ width: 130 }} placeholder="18:00" />
-                    </Form.Item>
-                    <Form.Item name="actualEndTime" label="실근무 종료(HH:mm)" rules={[{ required: true }]}>
-                      <Input style={{ width: 130 }} placeholder="21:00" />
-                    </Form.Item>
-                    <Form.Item name="actualMinutes" label="실근무분" rules={[{ required: true }]}>
-                      <InputNumber min={1} style={{ width: 110 }} />
-                    </Form.Item>
-                  </>
-                )
-              }
-            </Form.Item>
           </Space>
-          <Form.Item name="reason" label="사유" rules={[{ required: true, message: '사유를 입력하세요.' }]}>
-            <Input.TextArea rows={2} maxLength={300} showCount />
+          <Form.Item noStyle shouldUpdate={(p, c) => p.requestType !== c.requestType}>
+            {({ getFieldValue }) =>
+              getFieldValue('requestType') === 'PRE' ? (
+                <Space wrap align="start" size={12}>
+                  <Form.Item name="plannedStartTime" label="시작(HH:mm)" rules={[{ required: true }]}>
+                    <Input style={{ width: 120 }} placeholder="18:00" />
+                  </Form.Item>
+                  <Form.Item name="plannedEndTime" label="종료(HH:mm)" rules={[{ required: true }]}>
+                    <Input style={{ width: 120 }} placeholder="21:00" />
+                  </Form.Item>
+                  <Form.Item name="requestedMinutes" label="신청분" rules={[{ required: true }]}>
+                    <InputNumber min={1} style={{ width: 120 }} />
+                  </Form.Item>
+                </Space>
+              ) : (
+                <Space wrap align="start" size={12}>
+                  <Form.Item name="actualStartTime" label="실근무 시작(HH:mm)" rules={[{ required: true }]}>
+                    <Input style={{ width: 130 }} placeholder="18:00" />
+                  </Form.Item>
+                  <Form.Item name="actualEndTime" label="실근무 종료(HH:mm)" rules={[{ required: true }]}>
+                    <Input style={{ width: 130 }} placeholder="21:00" />
+                  </Form.Item>
+                  <Form.Item name="actualMinutes" label="실근무분" rules={[{ required: true }]}>
+                    <InputNumber min={1} style={{ width: 120 }} />
+                  </Form.Item>
+                </Space>
+              )
+            }
           </Form.Item>
-          <Button type="primary" htmlType="submit" loading={createM.isPending}>
-            신청
-          </Button>
+          <Form.Item name="reason" label="사유" rules={[{ required: true, message: '사유를 입력하세요.' }]}>
+            <Input.TextArea rows={3} maxLength={300} showCount />
+          </Form.Item>
         </Form>
-      </Card>
+      </Modal>
 
-      <Card title="내 신청 이력" className="tw-border-slate-200/80 tw-shadow-sm" loading={listQ.isLoading}>
-        <Table<OvertimeRequest>
-          rowKey={(r) => r.overtimeRequestId ?? `${r.targetDate}-${r.createdAt}`}
-          dataSource={sortedRows}
-          columns={columns}
-          pagination={{ pageSize: 10 }}
-          scroll={{ x: 920 }}
-          locale={{ emptyText: '신청 내역이 없습니다.' }}
-        />
-      </Card>
+      {/* 상세 모달 */}
+      <Modal
+        open={Boolean(detailRow)}
+        onCancel={() => setDetailRow(null)}
+        footer={[
+          <Button key="close" onClick={() => setDetailRow(null)}>
+            닫기
+          </Button>,
+        ]}
+        title="초과근무 신청 상세"
+        width={520}
+      >
+        {detailRow && (
+          <Descriptions column={1} bordered size="small">
+            <Descriptions.Item label="근무일">{detailRow.targetDate}</Descriptions.Item>
+            <Descriptions.Item label="구분">
+              {TYPE_KO[detailRow.requestType ?? ''] ?? detailRow.requestType}
+            </Descriptions.Item>
+            <Descriptions.Item label="시간">
+              {detailRow.requestType === 'POST'
+                ? `${detailRow.actualStartTime ?? '-'} ~ ${detailRow.actualEndTime ?? '-'}`
+                : `${detailRow.plannedStartTime ?? '-'} ~ ${detailRow.plannedEndTime ?? '-'}`}
+            </Descriptions.Item>
+            <Descriptions.Item label="시간(분)">
+              {detailRow.requestType === 'POST' ? detailRow.actualMinutes : detailRow.requestedMinutes}
+            </Descriptions.Item>
+            <Descriptions.Item label="상태">
+              <Tag color={STATUS_COLOR[detailRow.approvalStatus ?? ''] ?? 'default'}>
+                {STATUS_KO[detailRow.approvalStatus ?? ''] ?? detailRow.approvalStatus}
+              </Tag>
+            </Descriptions.Item>
+            <Descriptions.Item label="사유">{detailRow.reason ?? '-'}</Descriptions.Item>
+          </Descriptions>
+        )}
+      </Modal>
     </Space>
   );
 }
