@@ -1,5 +1,6 @@
 /** 급여·정책·템플릿·세율만 쪼개 둔 API (salaryServiceApi랑 경로 동일) */
 import type {
+  AnnualSalarySummary,
   MemberAllowance,
   MemberAllowanceCreatePayload,
   PayGradeTable,
@@ -8,11 +9,19 @@ import type {
   PayGradeTableUpdatePayload,
   Payroll,
   PayrollCreatePayload,
+  TaxSummary,
   PayrollItem,
   PayrollItemCreatePayload,
   PayrollItemUpdatePayload,
+  PayrollAdminListItem,
   PayrollRecalculatePayload,
   PayrollRecalculateResult,
+  BulkPayrollActionResult,
+  RetirementPolicy,
+  RetirementSimReq,
+  RetirementSimRes,
+  RetirementPolicyCreatePayload,
+  RetirementPolicyUpdatePayload,
   Salary,
   SalaryBootstrapPayload,
   SalaryCreatePayload,
@@ -45,10 +54,26 @@ function unwrapMessage(payload: unknown): string | undefined {
 export const salaryApi = {
   /** /salary/payroll — 급여명세 */
   payroll: {
+    // 4대보험 + 원천세 월별 집계 yearMonth 형식 YYYY-MM
+    async taxSummary(yearMonth?: string): Promise<TaxSummary> {
+      const { data } = await httpClient.get(`${BASE}/salary/payroll/tax-summary`, {
+        params: yearMonth ? { yearMonth } : undefined,
+      });
+      return unwrapApiResponse<TaxSummary>(data);
+    },
+
     async listByMember(memberId: string): Promise<Payroll[]> {
       const { data } = await httpClient.get(`${BASE}/salary/payroll/member/${encodeURIComponent(memberId)}`);
       const unwrapped = unwrapApiResponse<Payroll[] | null>(data);
       return Array.isArray(unwrapped) ? unwrapped : [];
+    },
+
+    // 직원 본인 연봉 조회 연도 합계 + 월별 + 항목별 누적
+    async myAnnual(year?: number): Promise<AnnualSalarySummary> {
+      const { data } = await httpClient.get(`${BASE}/salary/payroll/my/annual`, {
+        params: typeof year === 'number' ? { year } : undefined,
+      });
+      return unwrapApiResponse<AnnualSalarySummary>(data);
     },
 
     async getById(payrollId: string): Promise<Payroll> {
@@ -68,6 +93,7 @@ export const salaryApi = {
       const { data } = await httpClient.post(`${BASE}/salary/payroll/create`, {
         memberId: payload.memberId,
         payrollYearMonthDay: payload.payrollYearMonthDay,
+        payrollType: payload.payrollType ?? undefined,
       });
       unwrapMessage(data);
       return unwrapApiResponse<Payroll>(data);
@@ -136,6 +162,52 @@ export const salaryApi = {
       });
       unwrapMessage(data);
       return unwrapApiResponse<PayrollRecalculateResult>(data);
+    },
+
+    /** 회사 월 단위 급여대장 엑셀(XLSX) 다운로드 (관리자).
+     *  yearMonth 형식 YYYY-MM, 미지정 시 백엔드가 현재 월 사용 */
+    async exportXlsx(yearMonth?: string): Promise<Blob> {
+      const { data } = await httpClient.get(`${BASE}/salary/payroll/export`, {
+        params: yearMonth ? { yearMonth } : undefined,
+        responseType: 'blob',
+      });
+      return data as Blob;
+    },
+
+    /** 세금·4대보험 월별 집계 엑셀(XLSX) 다운로드 신고용 자료 */
+    async exportTaxSummaryXlsx(yearMonth?: string): Promise<Blob> {
+      const { data } = await httpClient.get(`${BASE}/salary/payroll/tax-summary/export`, {
+        params: yearMonth ? { yearMonth } : undefined,
+        responseType: 'blob',
+      });
+      return data as Blob;
+    },
+
+    /** 회사 월 단위 급여대장 전체 조회 (관리자) */
+    async listByCompanyMonth(yearMonth?: string): Promise<PayrollAdminListItem[]> {
+      const { data } = await httpClient.get(`${BASE}/salary/payroll/admin/list`, {
+        params: yearMonth ? { yearMonth } : undefined,
+      });
+      const unwrapped = unwrapApiResponse<PayrollAdminListItem[] | null>(data);
+      return Array.isArray(unwrapped) ? unwrapped : [];
+    },
+
+    /** 다중 선택 일괄 확정 (DRAFT → CONFIRMED) */
+    async bulkConfirm(payrollIds: string[]): Promise<BulkPayrollActionResult> {
+      const { data } = await httpClient.post(`${BASE}/salary/payroll/bulk-confirm`, {
+        payrollIds,
+      });
+      unwrapMessage(data);
+      return unwrapApiResponse<BulkPayrollActionResult>(data);
+    },
+
+    /** 다중 선택 일괄 지급 (CONFIRMED → PAID) */
+    async bulkPay(payrollIds: string[]): Promise<BulkPayrollActionResult> {
+      const { data } = await httpClient.post(`${BASE}/salary/payroll/bulk-pay`, {
+        payrollIds,
+      });
+      unwrapMessage(data);
+      return unwrapApiResponse<BulkPayrollActionResult>(data);
     },
   },
 
@@ -288,6 +360,90 @@ export const salaryApi = {
 
     async delete(id: string): Promise<void> {
       await httpClient.delete(`${BASE}/salary/salary-policies/${encodeURIComponent(id)}`);
+    },
+  },
+
+  /** /salary/simplified-tax-table — 간이세액표 (국세청 고시 표) 관리 */
+  simplifiedTaxTable: {
+    // 엑셀 업로드 multipart 같은 연도 재업로드 시 갱신
+    async upload(effectiveYear: number, file: File): Promise<{ effectiveYear: number; inserted: number }> {
+      const form = new FormData();
+      form.append('effectiveYear', String(effectiveYear));
+      form.append('file', file);
+      const { data } = await httpClient.post(
+        `${BASE}/salary/simplified-tax-table/upload`,
+        form,
+        { headers: { 'Content-Type': 'multipart/form-data' } },
+      );
+      return unwrapApiResponse<{ effectiveYear: number; inserted: number }>(data);
+    },
+
+    async listYears(): Promise<number[]> {
+      const { data } = await httpClient.get(`${BASE}/salary/simplified-tax-table/years`);
+      const unwrapped = unwrapApiResponse<number[] | null>(data);
+      return Array.isArray(unwrapped) ? unwrapped : [];
+    },
+
+    async countByYear(year: number): Promise<{ year: number; count: number }> {
+      const { data } = await httpClient.get(`${BASE}/salary/simplified-tax-table/count`, {
+        params: { year },
+      });
+      return unwrapApiResponse<{ year: number; count: number }>(data);
+    },
+  },
+
+  /** /salary/retirement — 직원 본인 퇴직금 시뮬레이션 */
+  retirement: {
+    /** 본인 퇴직금 시뮬 회사 정책 자동 적용 */
+    async simulateMine(payload: RetirementSimReq): Promise<RetirementSimRes> {
+      const { data } = await httpClient.post(`${BASE}/salary/retirement/simulate/me`, payload);
+      unwrapMessage(data);
+      return unwrapApiResponse<RetirementSimRes>(data);
+    },
+  },
+
+  /** /salary/retirement — 퇴직금 시뮬레이션 (직원 본인용) */
+  retirement: {
+    async simulateMine(payload: RetirementSimReq): Promise<RetirementSimRes> {
+      const { data } = await httpClient.post(
+        `${BASE}/salary/retirement/simulate/me`,
+        payload,
+      );
+      return unwrapApiResponse<RetirementSimRes>(data);
+    },
+  },
+
+  /** /salary/retirement-policy — 퇴직급여 제도 정책 */
+  retirementPolicy: {
+    async list(): Promise<RetirementPolicy[]> {
+      const { data } = await httpClient.get(`${BASE}/salary/retirement-policy`);
+      const unwrapped = unwrapApiResponse<RetirementPolicy[] | null>(data);
+      return Array.isArray(unwrapped) ? unwrapped : [];
+    },
+
+    // 활성 정책 조회 — 없으면 백엔드가 기본 LEGAL 자동 생성 후 반환
+    async getActive(): Promise<RetirementPolicy> {
+      const { data } = await httpClient.get(`${BASE}/salary/retirement-policy/active`);
+      return unwrapApiResponse<RetirementPolicy>(data);
+    },
+
+    async create(payload: RetirementPolicyCreatePayload): Promise<RetirementPolicy> {
+      const { data } = await httpClient.post(`${BASE}/salary/retirement-policy`, payload);
+      unwrapMessage(data);
+      return unwrapApiResponse<RetirementPolicy>(data);
+    },
+
+    async update(id: string, payload: RetirementPolicyUpdatePayload): Promise<RetirementPolicy> {
+      const { data } = await httpClient.patch(
+        `${BASE}/salary/retirement-policy/${encodeURIComponent(id)}`,
+        payload,
+      );
+      unwrapMessage(data);
+      return unwrapApiResponse<RetirementPolicy>(data);
+    },
+
+    async delete(id: string): Promise<void> {
+      await httpClient.delete(`${BASE}/salary/retirement-policy/${encodeURIComponent(id)}`);
     },
   },
 
