@@ -30,6 +30,12 @@ export function NotificationsPage() {
       void queryClient.invalidateQueries({ queryKey: ['notifications'] });
     },
   });
+  const deleteNotificationM = useMutation({
+    mutationFn: (id: string) => notificationApi.deleteNotification(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    },
+  });
 
   const routeApprovalNotification = async (item: (typeof notifications)[number]) => {
     if (item.isRead !== 'YES') {
@@ -107,6 +113,19 @@ export function NotificationsPage() {
                     읽음 처리
                   </AppButton>
                 ) : null,
+                <AppButton
+                  key={`${item.notificationId}-delete`}
+                  type="link"
+                  className="!tw-text-rose-600 hover:!tw-text-rose-700"
+                  loading={deleteNotificationM.isPending}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    void deleteNotificationM.mutateAsync(item.notificationId);
+                  }}
+                >
+                  삭제
+                </AppButton>,
               ]}
             >
               <List.Item.Meta

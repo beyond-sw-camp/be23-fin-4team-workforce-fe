@@ -735,6 +735,7 @@ export function ApprovalRequestReadOnlyModal({
                       drafterOrg={dOrg}
                       drafterJobTitle={dTitle}
                       writtenDate={dayjs(detail.createdAt).format('YYYY-MM-DD')}
+                      documentNumber={detail.documentNumber ?? undefined}
                       stampColumn={
                         <ApprovalFormStampColumn
                           drafterName={dName}

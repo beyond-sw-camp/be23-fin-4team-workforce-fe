@@ -1064,6 +1064,12 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
             void queryClient.invalidateQueries({queryKey: ['notifications']});
         },
     });
+    const deleteNotificationM = useMutation({
+        mutationFn: (notificationId: string) => notificationApi.deleteNotification(notificationId),
+        onSuccess: () => {
+            void queryClient.invalidateQueries({queryKey: ['notifications']});
+        },
+    });
 
     /**
      * 헤더 채팅 아이콘 뱃지 — 내 모든 방의 unreadCount 합.
@@ -1193,19 +1199,32 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
                                     </div>
                                     <div className="tw-mt-1 tw-line-clamp-2 tw-text-xs tw-text-slate-600">{item.content}</div>
                                 </div>
-                                {item.isRead !== 'YES' ? (
+                                <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-2">
+                                    {item.isRead !== 'YES' ? (
+                                        <button
+                                            type="button"
+                                            className="tw-cursor-pointer tw-border-0 tw-bg-transparent tw-text-[11px] tw-font-medium tw-text-blue-600 hover:tw-text-blue-700"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                void markNotificationAsRead.mutateAsync(item.notificationId);
+                                            }}
+                                        >
+                                            읽음
+                                        </button>
+                                    ) : null}
                                     <button
                                         type="button"
-                                        className="tw-shrink-0 tw-cursor-pointer tw-border-0 tw-bg-transparent tw-text-[11px] tw-font-medium tw-text-blue-600 hover:tw-text-blue-700"
+                                        className="tw-cursor-pointer tw-border-0 tw-bg-transparent tw-text-[11px] tw-font-medium tw-text-rose-600 hover:tw-text-rose-700"
                                         onClick={(e) => {
                                             e.preventDefault();
                                             e.stopPropagation();
-                                            void markNotificationAsRead.mutateAsync(item.notificationId);
+                                            void deleteNotificationM.mutateAsync(item.notificationId);
                                         }}
                                     >
-                                        읽음
+                                        삭제
                                     </button>
-                                ) : null}
+                                </div>
                             </div>
                         </div>
                     ))

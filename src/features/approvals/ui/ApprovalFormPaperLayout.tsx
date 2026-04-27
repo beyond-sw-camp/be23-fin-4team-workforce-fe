@@ -18,6 +18,8 @@ export type ApprovalFormPaperLayoutProps = PropsWithChildren<{
   drafterJobTitle?: string;
   /** 표시용 작성일 — 없으면 오늘 */
   writtenDate?: string;
+  /** 문서번호 — 없으면 안내 문구 표시 */
+  documentNumber?: string;
   /** 우측 결재란(신청/승인) */
   stampColumn?: ReactNode;
 }>;
@@ -34,6 +36,7 @@ export function ApprovalFormPaperLayout({
   drafterOrg = '—',
   drafterJobTitle = '—',
   writtenDate,
+  documentNumber,
   stampColumn,
   children,
 }: ApprovalFormPaperLayoutProps) {
@@ -69,7 +72,7 @@ export function ApprovalFormPaperLayout({
                   문서번호
                 </th>
                 <td className={`${cellBorder} tw-bg-white tw-px-1.5 tw-py-1.5 tw-text-[11px] tw-text-slate-700 sm:tw-px-2`} colSpan={3}>
-                  (제출 시 부여)
+                  {documentNumber?.trim() || '(제출 시 부여)'}
                 </td>
               </tr>
               <tr>
