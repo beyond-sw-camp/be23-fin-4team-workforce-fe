@@ -1,8 +1,8 @@
 import { DeleteOutlined, EditOutlined, MoreOutlined, PlusOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Alert, Button, Checkbox, Dropdown, Form, Input, Modal, Radio, Table, Typography } from 'antd';
+import { App, Alert, Button, Checkbox, Dropdown, Form, Input, Modal, Popover, Radio, Table, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   memberApi,
   type MemberRoleDetail,
@@ -109,12 +109,18 @@ function toPermissionRows(items: RolePermissionItem[]): FormValues['permissions'
 }
 
 /** 조직 설정 페이지의 「역할·권한」탭 본문 */
-export function OrganizationRolesSection() {
+export function OrganizationRolesSection(props: { onMoveToEsgStep?: () => void }) {
+  const { onMoveToEsgStep } = props;
   const { message, modal: appModal } = App.useApp();
   const { hasPermission } = usePermissions();
   const qc = useQueryClient();
   const [roleModal, setRoleModal] = useState<ModalMode | null>(null);
+  const [roleGuideStep, setRoleGuideStep] = useState<0 | 1 | 2 | 3 | 4 | 5 | 6>(0);
+  const [openedActionMenuRoleId, setOpenedActionMenuRoleId] = useState<string | null>(null);
   const [form] = Form.useForm<FormValues>();
+  const roleActionGuideRef = useRef<HTMLSpanElement | null>(null);
+  const modalPermissionGuideRef = useRef<HTMLDivElement | null>(null);
+  const roleAddBtnGuideRef = useRef<HTMLSpanElement | null>(null);
 
   const { data: roles = [], isFetching } = useQuery({
     queryKey: ROLES_QUERY_KEY,
@@ -125,7 +131,6 @@ export function OrganizationRolesSection() {
     mutationFn: memberApi.createRole,
     onSuccess: async () => {
       message.success('역할이 등록되었습니다.');
-      setRoleModal(null);
       await qc.invalidateQueries({ queryKey: ROLES_QUERY_KEY });
     },
     onError: (e: Error) => message.error(e.message || '등록에 실패했습니다.'),
@@ -136,7 +141,6 @@ export function OrganizationRolesSection() {
       memberApi.updateRole(roleId, payload),
     onSuccess: async () => {
       message.success('역할이 수정되었습니다.');
-      setRoleModal(null);
       await qc.invalidateQueries({ queryKey: ROLES_QUERY_KEY });
     },
     onError: (e: Error) => message.error(e.message || '수정에 실패했습니다.'),
@@ -153,6 +157,7 @@ export function OrganizationRolesSection() {
 
   const openCreate = useCallback(() => {
     setRoleModal({ type: 'create' });
+    setRoleGuideStep((prev) => (prev >= 4 ? 5 : prev));
     form.setFieldsValue({
       name: '',
       description: '',
@@ -208,6 +213,8 @@ export function OrganizationRolesSection() {
           description: (v.description ?? '').trim(),
           permissions,
         });
+        setRoleModal(null);
+        setRoleGuideStep(6);
       } else if (roleModal?.type === 'edit') {
         await updateM.mutateAsync({
           roleId: roleModal.roleId,
@@ -217,11 +224,42 @@ export function OrganizationRolesSection() {
             permissions,
           },
         });
+        setRoleModal(null);
+        setRoleGuideStep(4);
       }
     } catch {
-      // validation
+      message.warning('필수 항목을 입력/선택해 주세요.');
     }
   };
+
+  const guideRoleId = roles[0]?.id?.trim() || null;
+
+  useEffect(() => {
+    if (!guideRoleId) {
+      if (roleGuideStep === 4 || roleGuideStep === 5 || roleGuideStep === 6) return;
+      setRoleGuideStep(0);
+      return;
+    }
+    if (roleModal == null) {
+      setRoleGuideStep((prev) => (prev >= 4 ? prev : prev >= 2 ? 0 : prev));
+      return;
+    }
+    setRoleGuideStep((prev) => (prev < 2 ? 2 : prev));
+  }, [guideRoleId, roleGuideStep, roleModal]);
+
+  useEffect(() => {
+    if (roleGuideStep <= 1) {
+      roleActionGuideRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      return;
+    }
+    if (roleGuideStep === 2) {
+      modalPermissionGuideRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      return;
+    }
+    if (roleGuideStep === 4 || roleGuideStep === 6) {
+      roleAddBtnGuideRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [roleGuideStep]);
 
   const columns: ColumnsType<MemberRoleListItem> = [
     {
@@ -242,6 +280,10 @@ export function OrganizationRolesSection() {
       key: 'actions',
       width: 90,
       render: (_, row) => {
+        const rowId = row.id?.trim() || '';
+        const isGuideRow = guideRoleId != null && rowId === guideRoleId;
+        const step1Open = isGuideRow && roleGuideStep === 0 && roleModal == null;
+        const step2Open = isGuideRow && roleGuideStep === 1 && openedActionMenuRoleId === rowId && roleModal == null;
         const canEdit = hasPermission(PERM.ROLE_UPDATE);
         const canDelete = hasPermission(PERM.ROLE_DELETE);
         if (!canEdit && !canDelete) {
@@ -250,6 +292,13 @@ export function OrganizationRolesSection() {
         return (
           <Dropdown
             trigger={['click']}
+            onOpenChange={(open) => {
+              if (!isGuideRow) return;
+              setOpenedActionMenuRoleId(open ? rowId : null);
+              if (open && roleGuideStep === 0) {
+                setRoleGuideStep(1);
+              }
+            }}
             menu={{
               items: [
                 ...(canEdit
@@ -269,6 +318,7 @@ export function OrganizationRolesSection() {
               onClick: ({ key, domEvent }) => {
                 domEvent.stopPropagation();
                 if (key === 'edit') {
+                  if (isGuideRow) setRoleGuideStep(2);
                   void openEdit(row);
                   return;
                 }
@@ -289,13 +339,34 @@ export function OrganizationRolesSection() {
               },
             }}
           >
-            <Button
-              type="text"
-              size="small"
-              icon={<MoreOutlined />}
-              className="!tw-px-1 tw-text-slate-600"
-              aria-label="역할 작업 메뉴"
-            />
+            <Popover
+              title={step1Open ? '1단계: 역할 작업 메뉴 열기' : '2단계: 수정 선택'}
+              content={
+                <Typography.Paragraph className="!tw-mb-0 tw-max-w-[280px] tw-text-sm">
+                  {step1Open
+                    ? '권한을 설정할 역할 행의 작업 메뉴(⋯) 버튼을 눌러 주세요.'
+                    : '열린 메뉴에서 "수정"을 선택해 역할 수정 모달로 이동해 주세요.'}
+                </Typography.Paragraph>
+              }
+              open={step1Open || step2Open}
+              placement="left"
+              overlayStyle={{ zIndex: 1080 }}
+            >
+              <span
+                ref={isGuideRow ? roleActionGuideRef : undefined}
+                className={`tw-inline-block tw-rounded-lg ${
+                  step1Open || step2Open ? 'tw-ring-2 tw-ring-blue-500 tw-ring-offset-2 tw-ring-offset-white' : ''
+                }`}
+              >
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<MoreOutlined />}
+                  className="!tw-px-1 tw-text-slate-600"
+                  aria-label="역할 작업 메뉴"
+                />
+              </span>
+            </Popover>
           </Dropdown>
         );
       },
@@ -307,7 +378,6 @@ export function OrganizationRolesSection() {
       <Typography.Paragraph type="secondary" className="!tw-mb-4 !tw-text-sm">
         역할을 만들고 리소스별 권한(조회·수정 범위)을 설정합니다.
       </Typography.Paragraph>
-
       <PermissionGuard
         required={PERM.ROLE_READ}
         fallback={
@@ -324,9 +394,28 @@ export function OrganizationRolesSection() {
             총 {roles.length}개 역할
           </Typography.Text>
           <PermissionGuard required={PERM.ROLE_CREATE}>
-            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate} className={roleCtaButtonClass}>
-              역할 추가
-            </Button>
+            <Popover
+              title="5단계: 새 역할 추가"
+              content={
+                <Typography.Paragraph className="!tw-mb-0 tw-max-w-[300px] tw-text-sm">
+                  저장이 완료되었습니다. 필요하면 역할 추가 버튼으로 새 역할을 계속 등록해 주세요.
+                </Typography.Paragraph>
+              }
+              open={roleGuideStep === 4 && roleModal == null}
+              placement="left"
+              overlayStyle={{ zIndex: 1080 }}
+            >
+              <span
+                ref={roleAddBtnGuideRef}
+                className={`tw-inline-block tw-rounded-xl ${
+                  roleGuideStep === 4 && roleModal == null ? 'tw-ring-2 tw-ring-blue-500 tw-ring-offset-2 tw-ring-offset-white' : ''
+                }`}
+              >
+                <Button type="primary" icon={<PlusOutlined />} onClick={openCreate} className={roleCtaButtonClass}>
+                  역할 추가
+                </Button>
+              </span>
+            </Popover>
           </PermissionGuard>
         </div>
         <div className="tw-overflow-hidden tw-rounded-xl tw-border tw-border-slate-200/90">
@@ -340,6 +429,34 @@ export function OrganizationRolesSection() {
             className="[&_.ant-table-thead>tr>th]:!tw-bg-slate-50/90 [&_.ant-table-thead>tr>th]:!tw-text-xs [&_.ant-table-thead>tr>th]:!tw-font-semibold [&_.ant-table-thead>tr>th]:!tw-text-slate-600"
           />
         </div>
+        {roleGuideStep === 6 && roleModal == null ? (
+          <div className="tw-mt-4 tw-flex tw-justify-end">
+            <Popover
+              title="7단계: ESG 그린장터로 이동"
+              content={
+                <Typography.Paragraph className="!tw-mb-0 tw-max-w-[300px] tw-text-sm">
+                  역할 등록이 끝났습니다. 다음 단계 버튼으로 ESG 그린장터 탭으로 이동해 주세요.
+                </Typography.Paragraph>
+              }
+              open
+              placement="left"
+              overlayStyle={{ zIndex: 1080 }}
+            >
+              <span className="tw-inline-block tw-rounded-xl tw-ring-2 tw-ring-blue-500 tw-ring-offset-2 tw-ring-offset-white">
+                <Button
+                  type="primary"
+                  className={roleCtaButtonClass}
+                  onClick={() => {
+                    onMoveToEsgStep?.();
+                    setRoleGuideStep(0);
+                  }}
+                >
+                  다음 단계: ESG 그린장터
+                </Button>
+              </span>
+            </Popover>
+          </div>
+        ) : null}
       </PermissionGuard>
 
       {/* `destroyOnHidden` 모달이 닫히면 Form이 제거되어 useForm 경고가 난다. */}
@@ -350,14 +467,55 @@ export function OrganizationRolesSection() {
         open={roleModal != null}
         onCancel={() => setRoleModal(null)}
         onOk={() => void handleModalOk()}
-        okText={roleModal?.type === 'edit' ? '저장' : '등록'}
-        cancelText="취소"
         width={960}
         destroyOnHidden
         confirmLoading={createM.isPending || updateM.isPending}
-        okButtonProps={{ className: roleCtaButtonClass }}
+        footer={
+          <div className="tw-flex tw-justify-end tw-gap-2">
+            <Button onClick={() => setRoleModal(null)}>취소</Button>
+            <Popover
+              title={roleGuideStep === 5 ? '6단계: 등록' : '4단계: 저장'}
+              trigger={[]}
+              content={
+                <Typography.Paragraph className="!tw-mb-0 tw-max-w-[300px] tw-text-sm">
+                  {roleGuideStep === 5
+                    ? '역할명을 입력하고 권한을 지정한 뒤 등록 버튼을 눌러 새 역할을 생성해 주세요.'
+                    : '설정이 끝나면 저장 버튼을 눌러 반영하고, 목록에서 적용 여부를 확인해 주세요.'}
+                </Typography.Paragraph>
+              }
+              open={roleGuideStep === 3 || roleGuideStep === 5}
+              placement="top"
+              overlayStyle={{ zIndex: 1100 }}
+            >
+              <Button
+                type="primary"
+                loading={createM.isPending || updateM.isPending}
+                onClick={() => void handleModalOk()}
+                className={`${roleCtaButtonClass} ${roleGuideStep === 3 || roleGuideStep === 5 ? 'tw-ring-2 tw-ring-blue-500 tw-ring-offset-2' : ''}`}
+              >
+                {roleModal?.type === 'edit' ? '저장' : '등록'}
+              </Button>
+            </Popover>
+          </div>
+        }
       >
-        <Form<FormValues> form={form} layout="vertical" className="tw-pt-2">
+        <Form<FormValues>
+          form={form}
+          layout="vertical"
+          className="tw-pt-2"
+          onValuesChange={(changed) => {
+            if (roleGuideStep === 2 && changed.permissions) {
+              setRoleGuideStep(3);
+            }
+          }}
+        >
+          <Alert
+            type="info"
+            showIcon
+            className="!tw-mb-3 tw-rounded-lg"
+            message="권한 부여 방법"
+            description="리소스별로 액션(생성/조회/수정/삭제)을 먼저 고르고, 액션을 선택한 리소스에는 범위(전사/같은 조직/본인만)를 반드시 지정해 주세요."
+          />
           <Form.Item name="name" label="역할명" rules={[{ required: true, message: '역할명을 입력하세요.' }]}>
             <Input placeholder="예: 인사 담당" maxLength={100} showCount />
           </Form.Item>
@@ -368,8 +526,24 @@ export function OrganizationRolesSection() {
           <Typography.Text className="tw-mb-2 tw-block tw-text-sm tw-font-semibold tw-text-slate-800">
             권한
           </Typography.Text>
-          <div className="tw-flex tw-flex-col tw-gap-3">
-            {ROLE_RESOURCES.map((resource, idx) => (
+          <Popover
+            title="3단계: 권한 부여"
+            content={
+              <Typography.Paragraph className="!tw-mb-0 tw-max-w-[300px] tw-text-sm">
+                각 리소스의 액션(생성/조회/수정/삭제)과 범위(전사/같은 조직/본인만)를 선택해 주세요.
+              </Typography.Paragraph>
+            }
+            open={roleGuideStep === 2}
+            placement="bottomLeft"
+            overlayStyle={{ zIndex: 1100 }}
+          >
+            <div
+              ref={modalPermissionGuideRef}
+              className={`tw-flex tw-flex-col tw-gap-3 ${
+                roleGuideStep >= 2 ? 'tw-rounded-lg tw-ring-2 tw-ring-blue-500 tw-ring-offset-2' : ''
+              }`}
+            >
+              {ROLE_RESOURCES.map((resource, idx) => (
               <div key={resource} className="tw-rounded-lg tw-border tw-border-slate-200 tw-bg-slate-50/80 tw-p-3">
                 <Form.Item name={['permissions', idx, 'resource']} initialValue={resource} hidden>
                   <Input />
@@ -418,8 +592,9 @@ export function OrganizationRolesSection() {
                   </Form.Item>
                 </div>
               </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          </Popover>
         </Form>
       </Modal>
     </>

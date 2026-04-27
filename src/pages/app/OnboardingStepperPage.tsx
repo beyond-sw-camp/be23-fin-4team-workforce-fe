@@ -1,7 +1,7 @@
-import { useMemo, useState, type Key } from 'react';
+import { useEffect, useMemo, useRef, useState, type Key } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { App, Button, Card, Dropdown, Form, Input, InputNumber, Modal, Popconfirm, Progress, Radio, Select, Space, Spin, Steps, Table, Tag, Tree, Typography, Upload } from 'antd';
+import { App, Button, Card, Dropdown, Form, Input, InputNumber, Modal, Popconfirm, Popover, Progress, Radio, Select, Space, Spin, Steps, Table, Tag, Tree, Typography, Upload } from 'antd';
 import type { DataNode } from 'antd/es/tree';
 import type { UploadProps } from 'antd';
 import type { UploadFile } from 'antd/es/upload/interface';
@@ -77,6 +77,15 @@ const ONBOARDING_STEPS: OnboardingStep[] = [
 ];
 
 const INITIAL_STEP_STATUS: StepStatus[] = ONBOARDING_STEPS.map(() => 'pending');
+/** 조직 설정 가이드 Popover(2·3단계): 뷰포트 기준으로 위치 보정 */
+const ORG_GUIDE_POPOVER_SHARED = {
+  getPopupContainer: () => document.body,
+  autoAdjustOverflow: { adjustX: 1 as const, adjustY: 1 as const },
+  overlayInnerStyle: { maxWidth: 320 },
+} as const;
+/** 1단계 안내: Popover 대신 트리 위 인라인(동일 320px 폭, 화면 밖 좌표 버그 방지) */
+const ORG_GUIDE_CALLOUT_CLASS =
+  'tw-w-full tw-max-w-[320px] tw-shrink-0 tw-rounded-lg tw-border tw-border-solid tw-border-slate-200 tw-bg-white tw-shadow-md';
 const HR_DOC_MAX_BYTES = 10 * 1024 * 1024;
 const HR_DOC_ACCEPT_EXT = /\.(pdf|docx|txt)$/i;
 
@@ -181,11 +190,27 @@ export default function OnboardingStepperPage() {
   const [esgApiActivated, setEsgApiActivated] = useState(false);
   const [selectedOrgKeys, setSelectedOrgKeys] = useState<Key[]>([]);
   const [orgModal, setOrgModal] = useState<null | { mode: 'create'; parentId: string | null } | { mode: 'edit'; id: string; name: string }>(null);
+  /** 조직 설정 3단계(하위 조직 생성)까지 완료한 뒤 하단 '다음 단계' 노출 */
+  const [orgCreateFlowDone, setOrgCreateFlowDone] = useState(false);
   const [gradeModalOpen, setGradeModalOpen] = useState(false);
   const [titleModalOpen, setTitleModalOpen] = useState(false);
   const [orgForm] = Form.useForm<{ name: string }>();
+  /** 조직 설정(스텝 0) 안내: 0=상위 선택, 1=하위 추가 클릭, 2=조직명 입력, 3=다음 단계 이동 */
+  const [orgGuideStep, setOrgGuideStep] = useState<0 | 1 | 2 | 3>(0);
+  const orgTreeWrapRef = useRef<HTMLDivElement>(null);
+  const orgAddBtnRef = useRef<HTMLDivElement>(null);
   const [gradeForm] = Form.useForm<{ name: string; displayOrder: number }>();
   const [titleForm] = Form.useForm<{ name: string; displayOrder: number }>();
+  /** 직급/직책(스텝 1) 안내: 0=직급추가, 1=직책추가, 2=다음단계 */
+  const [jobGuideStep, setJobGuideStep] = useState<0 | 1 | 2>(0);
+  /** ESG 그린장터(스텝 6) 안내: 0=ON/OFF 선택, 1=상한 입력/다음, 2=저장, 3=다음 */
+  const [esgGuideStep, setEsgGuideStep] = useState<0 | 1 | 2 | 3>(0);
+  const gradeAddBtnRef = useRef<HTMLDivElement>(null);
+  const titleAddBtnRef = useRef<HTMLDivElement>(null);
+  const jobNextBtnRef = useRef<HTMLDivElement>(null);
+  const esgMonthlyLimitWrapRef = useRef<HTMLSpanElement>(null);
+  const esgNextBtnWrapRef = useRef<HTMLSpanElement>(null);
+  const esgSaveBtnWrapRef = useRef<HTMLSpanElement>(null);
   const orgPrimaryBtnClass =
     '!tw-h-10 !tw-min-h-10 !tw-rounded-xl !tw-border-0 !tw-bg-[#1e3a5f] !tw-text-white !tw-font-semibold !tw-shadow-none hover:!tw-bg-[#152a45] hover:!tw-text-white disabled:!tw-opacity-60';
 
@@ -231,6 +256,7 @@ export default function OnboardingStepperPage() {
     mutationFn: organizationApi.create,
     onSuccess: () => {
       message.success('조직이 생성되었습니다.');
+      setOrgCreateFlowDone(true);
       void queryClient.invalidateQueries({ queryKey: ['onboarding', 'organizations'] });
     },
   });
@@ -256,7 +282,35 @@ export default function OnboardingStepperPage() {
     },
   });
   const treeData = useMemo(() => toTreeNodes(orgQuery.data ?? []), [orgQuery.data]);
+  const orgStep0TreeHighlight = current === 0 && orgGuideStep === 0 && orgModal == null;
   const selectedOrgId = selectedOrgKeys[0] != null ? String(selectedOrgKeys[0]) : '';
+
+  useEffect(() => {
+    if (current !== 0) {
+      setOrgGuideStep(0);
+    }
+  }, [current]);
+
+  useEffect(() => {
+    if (current !== 0) return;
+    if (orgModal?.mode === 'create') {
+      setOrgGuideStep(2);
+      return;
+    }
+    if (orgModal == null) {
+      setOrgGuideStep((s) => {
+        if (s !== 2) return s;
+        return orgCreateFlowDone ? 3 : selectedOrgId ? 1 : 0;
+      });
+    }
+  }, [current, orgModal, selectedOrgId, orgCreateFlowDone]);
+
+  useEffect(() => {
+    if (current !== 0) return;
+    if (orgGuideStep === 2 || orgGuideStep === 3) return;
+    const el = orgGuideStep === 0 ? orgTreeWrapRef.current : orgAddBtnRef.current;
+    el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [current, orgGuideStep]);
 
   const gradeQuery = useQuery({
     queryKey: ['onboarding', 'job-grades'],
@@ -283,6 +337,45 @@ export default function OnboardingStepperPage() {
       void queryClient.invalidateQueries({ queryKey: ['onboarding', 'job-titles'] });
     },
   });
+  const hasGrades = (gradeQuery.data?.length ?? 0) > 0;
+  const hasTitles = (titleQuery.data?.length ?? 0) > 0;
+
+  useEffect(() => {
+    // 스텝바에서 '직급/직책 설정'으로 들어오면 항상 1단계(직급 추가)부터 시작
+    if (current === 1) {
+      setJobGuideStep(0);
+      return;
+    }
+    setJobGuideStep(0);
+  }, [current]);
+
+  useEffect(() => {
+    if (current !== 1) return;
+    const el = jobGuideStep === 0 ? gradeAddBtnRef.current : jobGuideStep === 1 ? titleAddBtnRef.current : jobNextBtnRef.current;
+    el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [current, jobGuideStep]);
+
+  useEffect(() => {
+    if (current === 6) {
+      setEsgGuideStep(0);
+      return;
+    }
+    setEsgGuideStep(0);
+  }, [current]);
+
+  useEffect(() => {
+    if (current !== 6 || esgGuideStep !== 1) return;
+    if (onboardingEsgEnabledYn === 'YES') {
+      esgMonthlyLimitWrapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      return;
+    }
+    esgNextBtnWrapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [current, esgGuideStep, onboardingEsgEnabledYn]);
+
+  useEffect(() => {
+    if (current !== 6 || esgGuideStep !== 2 || onboardingEsgEnabledYn !== 'YES') return;
+    esgSaveBtnWrapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [current, esgGuideStep, onboardingEsgEnabledYn]);
 
   const esgConfigQuery = useQuery({
     queryKey: ['onboarding', 'esg-config'],
@@ -352,76 +445,114 @@ export default function OnboardingStepperPage() {
 
   const renderStepContent = () => {
     if (current === 0) {
+      const btnHighlight = current === 0 && orgGuideStep === 1 && orgModal == null;
+      const nameHighlight = current === 0 && orgGuideStep === 2 && orgModal?.mode === 'create';
       return (
         <Space direction="vertical" className="tw-w-full">
-          <Space>
-            <Button
-              className={orgPrimaryBtnClass}
-              onClick={() => {
-                if (!selectedOrgId) {
-                  message.warning('상위 조직을 먼저 선택해 주세요.');
-                  return;
-                }
-                orgForm.resetFields();
-                setOrgModal({ mode: 'create', parentId: selectedOrgId });
-              }}
+          <div ref={orgTreeWrapRef} className="tw-flex tw-w-full tw-flex-col tw-gap-4">
+            {orgStep0TreeHighlight ? (
+              <aside className={`${ORG_GUIDE_CALLOUT_CLASS} tw-self-start`} role="note" aria-live="polite">
+                <div className="tw-border-b tw-border-slate-100 tw-px-4 tw-py-2.5 tw-text-sm tw-font-semibold tw-text-slate-900">
+                  1단계: 상위 조직 선택
+                </div>
+                <div className="tw-px-4 tw-py-3">
+                  <Typography.Paragraph className="!tw-mb-0 tw-text-sm tw-text-slate-700">
+                    하위 조직을 넣을 <strong>상위 조직</strong>을 트리에서 체크로 선택해 주세요. 한 번에 한 곳만 선택됩니다.
+                  </Typography.Paragraph>
+                </div>
+              </aside>
+            ) : null}
+            <div
+              className={`tw-min-h-[220px] tw-min-w-0 tw-w-full tw-rounded-xl tw-border tw-border-slate-200/90 tw-bg-slate-50/40 tw-p-3 tw-transition-shadow ${
+                orgStep0TreeHighlight ? 'tw-ring-2 tw-ring-blue-500 tw-ring-offset-2 tw-ring-offset-slate-50' : ''
+              }`}
             >
-              하위 조직 추가
-            </Button>
-          </Space>
-          <div className="tw-min-h-[220px] tw-rounded-xl tw-border tw-border-slate-200/90 tw-bg-slate-50/40 tw-p-3">
-            <Tree
-              checkable
-              checkStrictly
-              showLine={{ showLeafIcon: false }}
-              switcherIcon={({ expanded }) => (
-                <RightOutlined
-                  className={`tw-text-[11px] tw-text-slate-400 tw-transition-transform tw-duration-200 tw-ease-out ${expanded ? 'tw-rotate-90' : ''}`}
-                />
-              )}
-              className="tw-bg-transparent [&_.ant-tree-switcher]:tw-flex [&_.ant-tree-switcher]:tw-w-5 [&_.ant-tree-switcher]:tw-shrink-0 [&_.ant-tree-switcher]:tw-items-center [&_.ant-tree-switcher]:tw-justify-center [&_.ant-tree-switcher]:tw-bg-transparent [&_.ant-tree-node-content-wrapper]:tw-rounded-md"
-              treeData={treeData}
-              titleRender={(node) => {
-                const id = String(node.key);
-                const name = typeof node.title === 'string' ? node.title : String(node.title ?? '');
-                return (
-                  <Dropdown
-                    trigger={['click']}
-                    menu={{
-                      items: [
-                        { key: 'edit', label: '수정', icon: <EditOutlined /> },
-                        { key: 'delete', label: '삭제', icon: <DeleteOutlined />, danger: true },
-                      ],
-                      onClick: ({ key, domEvent }) => {
-                        domEvent.stopPropagation();
-                        if (key === 'edit') {
-                          orgForm.setFieldsValue({ name });
-                          setOrgModal({ mode: 'edit', id, name });
-                          return;
-                        }
-                        modal.confirm({
-                          title: '선택한 조직을 삭제할까요?',
-                          okText: '삭제',
-                          okType: 'danger',
-                          cancelText: '취소',
-                          onOk: () => orgDelete.mutateAsync(id),
-                        });
-                      },
-                    }}
-                  >
-                    <span className="tw-cursor-pointer">{name}</span>
-                  </Dropdown>
-                );
-              }}
-              checkedKeys={selectedOrgKeys}
-              onCheck={(checked) => {
-                const raw = Array.isArray(checked) ? checked : checked.checked;
-                const keys = raw.filter((k): k is Key => k != null);
-                const last = keys.at(-1);
-                setSelectedOrgKeys(last != null ? [last] : []);
-              }}
-              defaultExpandAll
-            />
+              <Tree
+                checkable
+                checkStrictly
+                showLine={{ showLeafIcon: false }}
+                switcherIcon={({ expanded }) => (
+                  <RightOutlined
+                    className={`tw-text-[11px] tw-text-slate-400 tw-transition-transform tw-duration-200 tw-ease-out ${expanded ? 'tw-rotate-90' : ''}`}
+                  />
+                )}
+                className="tw-bg-transparent [&_.ant-tree-switcher]:tw-flex [&_.ant-tree-switcher]:tw-w-5 [&_.ant-tree-switcher]:tw-shrink-0 [&_.ant-tree-switcher]:tw-items-center [&_.ant-tree-switcher]:tw-justify-center [&_.ant-tree-switcher]:tw-bg-transparent [&_.ant-tree-node-content-wrapper]:tw-rounded-md"
+                treeData={treeData}
+                titleRender={(node) => {
+                  const id = String(node.key);
+                  const name = typeof node.title === 'string' ? node.title : String(node.title ?? '');
+                  return (
+                    <Dropdown
+                      trigger={['click']}
+                      menu={{
+                        items: [
+                          { key: 'edit', label: '수정', icon: <EditOutlined /> },
+                          { key: 'delete', label: '삭제', icon: <DeleteOutlined />, danger: true },
+                        ],
+                        onClick: ({ key, domEvent }) => {
+                          domEvent.stopPropagation();
+                          if (key === 'edit') {
+                            orgForm.setFieldsValue({ name });
+                            setOrgModal({ mode: 'edit', id, name });
+                            return;
+                          }
+                          modal.confirm({
+                            title: '선택한 조직을 삭제할까요?',
+                            okText: '삭제',
+                            okType: 'danger',
+                            cancelText: '취소',
+                            onOk: () => orgDelete.mutateAsync(id),
+                          });
+                        },
+                      }}
+                    >
+                      <span className="tw-cursor-pointer">{name}</span>
+                    </Dropdown>
+                  );
+                }}
+                checkedKeys={selectedOrgKeys}
+                onCheck={(checked) => {
+                  const raw = Array.isArray(checked) ? checked : checked.checked;
+                  const keys = raw.filter((k): k is Key => k != null);
+                  const last = keys.at(-1);
+                  setSelectedOrgKeys(last != null ? [last] : []);
+                  setOrgGuideStep(last != null ? 1 : 0);
+                }}
+                defaultExpandAll
+              />
+            </div>
+          </div>
+          <div ref={orgAddBtnRef} className="tw-inline-flex">
+            <Popover
+              {...ORG_GUIDE_POPOVER_SHARED}
+              title="2단계: 하위 조직 추가"
+              content={
+                <Typography.Paragraph className="!tw-mb-0 tw-max-w-[280px] tw-text-sm">
+                  1단계에서 선택한 조직 아래에 새 조직을 만들려면 이 버튼을 눌러 주세요.
+                </Typography.Paragraph>
+              }
+              open={btnHighlight}
+              placement="bottomLeft"
+              overlayStyle={{ zIndex: 1060 }}
+            >
+              <span
+                className={`tw-inline-block tw-rounded-xl tw-transition-shadow ${btnHighlight ? 'tw-ring-2 tw-ring-blue-500 tw-ring-offset-2' : ''}`}
+              >
+                <Button
+                  className={orgPrimaryBtnClass}
+                  onClick={() => {
+                    if (!selectedOrgId) {
+                      message.warning('상위 조직을 먼저 선택해 주세요.');
+                      return;
+                    }
+                    orgForm.resetFields();
+                    setOrgModal({ mode: 'create', parentId: selectedOrgId });
+                  }}
+                >
+                  하위 조직 추가
+                </Button>
+              </span>
+            </Popover>
           </div>
           <Modal
             title={orgModal?.mode === 'edit' ? '조직명 수정' : orgModal?.parentId ? '하위 조직 추가' : '최상위 조직 추가'}
@@ -431,40 +562,75 @@ export default function OnboardingStepperPage() {
               const v = await orgForm.validateFields();
               if (!orgModal) return;
               if (orgModal.mode === 'edit') {
-                void orgUpdate.mutateAsync({ id: orgModal.id, name: v.name.trim() });
-              } else {
-                void orgCreate.mutateAsync({ name: v.name.trim(), parentId: orgModal.parentId });
+                await orgUpdate.mutateAsync({ id: orgModal.id, name: v.name.trim() });
+                setOrgModal(null);
+                return;
               }
+              await orgCreate.mutateAsync({ name: v.name.trim(), parentId: orgModal.parentId });
+              setOrgGuideStep(3);
               setOrgModal(null);
             }}
             confirmLoading={orgCreate.isPending || orgUpdate.isPending}
             destroyOnHidden
           >
             <Form form={orgForm} layout="vertical">
-              <Form.Item name="name" label="조직명" rules={[{ required: true, message: '조직명을 입력해 주세요.' }]}>
-                <Input placeholder="예: 본사, 개발팀" />
-              </Form.Item>
+              <Popover
+                {...ORG_GUIDE_POPOVER_SHARED}
+                title="3단계: 조직명 입력"
+                content={
+                  <Typography.Paragraph className="!tw-mb-0 tw-max-w-[280px] tw-text-sm">
+                    추가할 조직 이름을 입력한 뒤 확인을 누르면 저장됩니다. (예: 개발팀, 인사팀)
+                  </Typography.Paragraph>
+                }
+                open={nameHighlight}
+                placement="topLeft"
+                overlayStyle={{ zIndex: 1100 }}
+              >
+                <Form.Item name="name" label="조직명" rules={[{ required: true, message: '조직명을 입력해 주세요.' }]}>
+                  <Input
+                    placeholder="예: 본사, 개발팀"
+                    classNames={{
+                      input: nameHighlight
+                        ? 'tw-rounded-md tw-ring-2 tw-ring-blue-500 tw-ring-offset-2 tw-ring-offset-[var(--ant-color-bg-container)]'
+                        : '',
+                    }}
+                  />
+                </Form.Item>
+              </Popover>
             </Form>
           </Modal>
         </Space>
       );
     }
     if (current === 1) {
+      const gradeBtnHighlight = current === 1 && jobGuideStep === 0 && !gradeModalOpen;
+      const titleBtnHighlight = current === 1 && jobGuideStep === 1 && !titleModalOpen;
       return (
         <Space direction="vertical" className="tw-w-full">
           <div className="tw-grid tw-grid-cols-1 tw-gap-5 lg:tw-grid-cols-2">
             <Card size="small" title="직급">
-              <div className="tw-mb-3 tw-flex tw-justify-end">
-                <Button
-                  type="primary"
-                  className={orgPrimaryBtnClass}
-                  onClick={() => {
-                    gradeForm.resetFields();
-                    setGradeModalOpen(true);
-                  }}
+              <div ref={gradeAddBtnRef} className="tw-mb-3 tw-flex tw-justify-end">
+                <Popover
+                  {...ORG_GUIDE_POPOVER_SHARED}
+                  title="1단계: 직급 추가"
+                  content={<Typography.Paragraph className="!tw-mb-0 tw-max-w-[280px] tw-text-sm">직급을 먼저 하나 추가해 주세요.</Typography.Paragraph>}
+                  open={gradeBtnHighlight}
+                  placement="bottomRight"
+                  overlayStyle={{ zIndex: 1060 }}
                 >
-                  직급 추가
-                </Button>
+                  <span className={gradeBtnHighlight ? 'tw-inline-block tw-rounded-xl tw-ring-2 tw-ring-blue-500 tw-ring-offset-2' : 'tw-inline-block'}>
+                    <Button
+                      type="primary"
+                      className={orgPrimaryBtnClass}
+                      onClick={() => {
+                        gradeForm.resetFields();
+                        setGradeModalOpen(true);
+                      }}
+                    >
+                      직급 추가
+                    </Button>
+                  </span>
+                </Popover>
               </div>
               <Table<Record<string, unknown>>
                 rowKey={(row) => String(row.id ?? row.jobGradeId ?? row.job_grade_id ?? JSON.stringify(row))}
@@ -484,17 +650,32 @@ export default function OnboardingStepperPage() {
               />
             </Card>
             <Card size="small" title="직책">
-              <div className="tw-mb-3 tw-flex tw-justify-end">
-                <Button
-                  type="primary"
-                  className={orgPrimaryBtnClass}
-                  onClick={() => {
-                    titleForm.resetFields();
-                    setTitleModalOpen(true);
-                  }}
+              <div ref={titleAddBtnRef} className="tw-mb-3 tw-flex tw-justify-end">
+                <Popover
+                  {...ORG_GUIDE_POPOVER_SHARED}
+                  title="2단계: 직책 추가"
+                  content={
+                    <Typography.Paragraph className="!tw-mb-0 tw-max-w-[280px] tw-text-sm">
+                      직급을 만들었으면 직책도 추가해 주세요.
+                    </Typography.Paragraph>
+                  }
+                  open={titleBtnHighlight}
+                  placement="bottomRight"
+                  overlayStyle={{ zIndex: 1060 }}
                 >
-                  직책 추가
-                </Button>
+                  <span className={titleBtnHighlight ? 'tw-inline-block tw-rounded-xl tw-ring-2 tw-ring-blue-500 tw-ring-offset-2' : 'tw-inline-block'}>
+                    <Button
+                      type="primary"
+                      className={orgPrimaryBtnClass}
+                      onClick={() => {
+                        titleForm.resetFields();
+                        setTitleModalOpen(true);
+                      }}
+                    >
+                      직책 추가
+                    </Button>
+                  </span>
+                </Popover>
               </div>
               <Table<Record<string, unknown>>
                 rowKey={(row) => String(row.id ?? row.jobTitleId ?? row.job_title_id ?? JSON.stringify(row))}
@@ -520,7 +701,8 @@ export default function OnboardingStepperPage() {
             onCancel={() => setGradeModalOpen(false)}
             onOk={async () => {
               const v = await gradeForm.validateFields();
-              void gradeCreate.mutateAsync({ name: v.name.trim(), displayOrder: Number(v.displayOrder) });
+              await gradeCreate.mutateAsync({ name: v.name.trim(), displayOrder: Number(v.displayOrder) });
+              setJobGuideStep(1);
               setGradeModalOpen(false);
             }}
             confirmLoading={gradeCreate.isPending}
@@ -541,7 +723,8 @@ export default function OnboardingStepperPage() {
             onCancel={() => setTitleModalOpen(false)}
             onOk={async () => {
               const v = await titleForm.validateFields();
-              void titleCreate.mutateAsync({ name: v.name.trim(), displayOrder: Number(v.displayOrder) });
+              await titleCreate.mutateAsync({ name: v.name.trim(), displayOrder: Number(v.displayOrder) });
+              setJobGuideStep(2);
               setTitleModalOpen(false);
             }}
             confirmLoading={titleCreate.isPending}
@@ -560,7 +743,7 @@ export default function OnboardingStepperPage() {
       );
     }
     if (current === 2) {
-      return <OrganizationRolesSection />;
+      return <OrganizationRolesSection onMoveToEsgStep={() => setCurrent(6)} />;
     }
     if (current === 3) {
       return (
@@ -581,6 +764,9 @@ export default function OnboardingStepperPage() {
       );
     }
     if (current === 6) {
+      const esgOnOffGuideOpen = current === 6 && esgGuideStep === 0;
+      const esgMonthlyGuideOpen = current === 6 && esgGuideStep === 1 && onboardingEsgEnabledYn === 'YES';
+      const esgSaveGuideOpen = current === 6 && esgGuideStep === 2 && onboardingEsgEnabledYn === 'YES';
       return (
         <Space direction="vertical" className="tw-w-full">
           <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-text-xs">
@@ -606,6 +792,7 @@ export default function OnboardingStepperPage() {
                   esgEnabledYn: nextYn,
                   monthlyPointLimit: Number(v.monthlyPointLimit) || 0,
                 });
+                setEsgGuideStep(3);
               }}
             >
               <Form.Item
@@ -613,23 +800,81 @@ export default function OnboardingStepperPage() {
                 label="ESG 그린장터"
                 extra="ON이면 활동 인증, 포인트, 포인트샵이 활성화되고 OFF면 비활성화됩니다."
               >
-                <Radio.Group
-                  onChange={(e) => {
-                    const nextYn = e.target.value as 'YES' | 'NO';
-                    setOnboardingEsgEnabledYn(nextYn);
-                    if (nextYn === 'NO') setEsgApiActivated(false);
-                  }}
+                <Popover
+                  {...ORG_GUIDE_POPOVER_SHARED}
+                  title="1단계: ESG ON/OFF 선택"
+                  content={
+                    <Typography.Paragraph className="!tw-mb-0 tw-max-w-[280px] tw-text-sm">
+                      ESG 기능 사용 여부를 먼저 선택해 주세요.
+                    </Typography.Paragraph>
+                  }
+                  open={esgOnOffGuideOpen}
+                  placement="rightTop"
+                  overlayStyle={{ zIndex: 1060 }}
                 >
-                  <Radio value="YES">ON</Radio>
-                  <Radio value="NO">OFF</Radio>
-                </Radio.Group>
+                  <span className={esgOnOffGuideOpen ? 'tw-inline-block tw-rounded-lg tw-ring-2 tw-ring-blue-500 tw-ring-offset-2' : 'tw-inline-block'}>
+                    <Radio.Group
+                      onChange={(e) => {
+                        const nextYn = e.target.value as 'YES' | 'NO';
+                        setOnboardingEsgEnabledYn(nextYn);
+                        setEsgGuideStep(1);
+                        if (nextYn === 'NO') setEsgApiActivated(false);
+                      }}
+                    >
+                      <Radio value="YES">ON</Radio>
+                      <Radio value="NO">OFF</Radio>
+                    </Radio.Group>
+                  </span>
+                </Popover>
               </Form.Item>
               <Form.Item name="monthlyPointLimit" label="월간 포인트 상한">
-                <InputNumber min={0} className="tw-w-full" />
+                <Popover
+                  {...ORG_GUIDE_POPOVER_SHARED}
+                  title="2단계: 월간 포인트 상한 설정"
+                  content={
+                    <Typography.Paragraph className="!tw-mb-0 tw-max-w-[280px] tw-text-sm">
+                      ON을 선택했다면 월간 포인트 상한 값을 입력해 주세요.
+                    </Typography.Paragraph>
+                  }
+                  open={esgMonthlyGuideOpen}
+                  placement="rightTop"
+                  overlayStyle={{ zIndex: 1060 }}
+                >
+                  <span
+                    ref={esgMonthlyLimitWrapRef}
+                    className={esgMonthlyGuideOpen ? 'tw-inline-block tw-w-full tw-rounded-lg tw-ring-2 tw-ring-blue-500 tw-ring-offset-2' : 'tw-inline-block tw-w-full'}
+                  >
+                    <InputNumber
+                      min={0}
+                      className="tw-w-full"
+                      onChange={() => {
+                        if (onboardingEsgEnabledYn === 'YES') setEsgGuideStep(2);
+                      }}
+                    />
+                  </span>
+                </Popover>
               </Form.Item>
-              <AppButton variant="secondary" className={orgPrimaryBtnClass} htmlType="submit" loading={esgConfigUpdate.isPending}>
-                저장
-              </AppButton>
+              <Popover
+                {...ORG_GUIDE_POPOVER_SHARED}
+                title="3단계: 저장"
+                content={
+                  <Typography.Paragraph className="!tw-mb-0 tw-max-w-[280px] tw-text-sm">
+                    월간 포인트 상한 값을 확인한 뒤 저장 버튼을 눌러 반영해 주세요.
+                  </Typography.Paragraph>
+                }
+                open={esgSaveGuideOpen}
+                placement="rightTop"
+                overlayStyle={{ zIndex: 1060 }}
+              >
+                <span
+                  ref={esgSaveBtnWrapRef}
+                  className={esgSaveGuideOpen ? 'tw-inline-block tw-rounded-xl tw-ring-2 tw-ring-blue-500 tw-ring-offset-2' : 'tw-inline-block'}
+                >
+                  <AppButton variant="secondary" className={orgPrimaryBtnClass} htmlType="submit" loading={esgConfigUpdate.isPending}>
+                    저장
+                  </AppButton>
+                </span>
+              </Popover>
             </Form>
           </Card>
         </Space>
@@ -792,13 +1037,99 @@ export default function OnboardingStepperPage() {
             <AppButton variant="secondary" onClick={gotoPrev} disabled={current === 0}>
               이전
             </AppButton>
-            <AppButton variant="secondary" onClick={gotoNext} disabled={isLast}>
-              다음
-            </AppButton>
+            <Popover
+              {...ORG_GUIDE_POPOVER_SHARED}
+              title={current === 6 && esgGuideStep === 3 && onboardingEsgEnabledYn === 'YES' ? '4단계: 다음 단계 이동' : '2단계: 다음 단계 이동'}
+              content={
+                <Typography.Paragraph className="!tw-mb-0 tw-max-w-[280px] tw-text-sm">
+                  {current === 6 && esgGuideStep === 3 && onboardingEsgEnabledYn === 'YES'
+                    ? '저장이 완료되었습니다. 다음 버튼으로 다음 단계로 이동해 주세요.'
+                    : 'OFF를 선택했다면 저장 없이 다음 버튼으로 이동해 주세요.'}
+                </Typography.Paragraph>
+              }
+              open={
+                current === 6 &&
+                ((esgGuideStep === 1 && onboardingEsgEnabledYn === 'NO') ||
+                  (esgGuideStep === 3 && onboardingEsgEnabledYn === 'YES'))
+              }
+              placement="topRight"
+              overlayStyle={{ zIndex: 1060 }}
+            >
+              <span
+                ref={esgNextBtnWrapRef}
+                className={
+                  current === 6 &&
+                  ((esgGuideStep === 1 && onboardingEsgEnabledYn === 'NO') ||
+                    (esgGuideStep === 3 && onboardingEsgEnabledYn === 'YES'))
+                    ? 'tw-inline-block tw-rounded-xl tw-ring-2 tw-ring-blue-500 tw-ring-offset-2'
+                    : 'tw-inline-block'
+                }
+              >
+                <AppButton variant="secondary" onClick={gotoNext} disabled={isLast}>
+                  다음
+                </AppButton>
+              </span>
+            </Popover>
           </Space>
         </Space>
       </Card>
 
+      {current === 0 && orgCreateFlowDone ? (
+        <div className="tw-flex tw-w-full tw-justify-end tw-pt-2">
+          <Popover
+            {...ORG_GUIDE_POPOVER_SHARED}
+            title="다음 단계 이동"
+            content={
+              <Typography.Paragraph className="!tw-mb-0 tw-max-w-[280px] tw-text-sm">
+                조직 설정이 완료되었습니다. 이 버튼으로 직급/직책 설정 단계로 이동해 주세요.
+              </Typography.Paragraph>
+            }
+            open={current === 0 && orgGuideStep === 3 && orgCreateFlowDone}
+            placement="topRight"
+            overlayStyle={{ zIndex: 1060 }}
+          >
+            <span
+              className={
+                current === 0 && orgGuideStep === 3 && orgCreateFlowDone
+                  ? 'tw-inline-block tw-rounded-xl tw-ring-2 tw-ring-blue-500 tw-ring-offset-2'
+                  : 'tw-inline-block'
+              }
+            >
+              <AppButton variant="primary" className="tw-min-w-[280px]" onClick={() => gotoNext()}>
+                다음 단계: 직급/직책 설정
+              </AppButton>
+            </span>
+          </Popover>
+        </div>
+      ) : null}
+      {current === 1 && hasGrades && hasTitles && jobGuideStep === 2 ? (
+        <div ref={jobNextBtnRef} className="tw-flex tw-w-full tw-justify-end tw-pt-2">
+          <Popover
+            {...ORG_GUIDE_POPOVER_SHARED}
+            title="3단계: 다음 단계 이동"
+            content={
+              <Typography.Paragraph className="!tw-mb-0 tw-max-w-[280px] tw-text-sm">
+                직급/직책 설정이 완료되었습니다. 다음 단계로 이동해 주세요.
+              </Typography.Paragraph>
+            }
+            open={current === 1 && jobGuideStep === 2}
+            placement="topRight"
+            overlayStyle={{ zIndex: 1060 }}
+          >
+            <span
+              className={
+                current === 1 && jobGuideStep === 2
+                  ? 'tw-inline-block tw-rounded-xl tw-ring-2 tw-ring-blue-500 tw-ring-offset-2'
+                  : 'tw-inline-block'
+              }
+            >
+              <AppButton variant="primary" className="tw-min-w-[280px]" onClick={() => gotoNext()}>
+                다음 단계: 역할/권한 설정
+              </AppButton>
+            </span>
+          </Popover>
+        </div>
+      ) : null}
     </Space>
   );
 }
