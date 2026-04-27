@@ -26,6 +26,9 @@ type FormValues = {
   date: dayjs.Dayjs;
   workTripType: WorkTripTypeCode;
   destination?: string;
+  destinationLat?: number | null;
+  destinationLng?: number | null;
+  destinationRadiusMeters?: number | null;
   purpose?: string;
   expenseAmount?: number;
   expenseType?: ExpenseTypeCode;
@@ -82,6 +85,9 @@ export function MyWorkTripsPage() {
         date: v.date.format('YYYY-MM-DD'),
         workTripType: v.workTripType,
         destination: v.destination?.trim() || null,
+        destinationLat: v.destinationLat ?? null,
+        destinationLng: v.destinationLng ?? null,
+        destinationRadiusMeters: v.destinationRadiusMeters ?? null,
         purpose: v.purpose?.trim() || null,
         expenseAmount: v.expenseAmount ?? null,
         expenseType: v.expenseType ?? null,
@@ -100,6 +106,9 @@ export function MyWorkTripsPage() {
       attendanceApi.workTrip.update(input.id, {
         workTripType: input.v.workTripType,
         destination: input.v.destination?.trim() || null,
+        destinationLat: input.v.destinationLat ?? null,
+        destinationLng: input.v.destinationLng ?? null,
+        destinationRadiusMeters: input.v.destinationRadiusMeters ?? null,
         purpose: input.v.purpose?.trim() || null,
         expenseAmount: input.v.expenseAmount ?? null,
         expenseType: input.v.expenseType ?? null,
@@ -191,6 +200,9 @@ export function MyWorkTripsPage() {
                   date: r.attendanceDate ? dayjs(r.attendanceDate) : dayjs(),
                   workTripType: (r.workTripType as WorkTripTypeCode) ?? 'BUSINESS_TRIP',
                   destination: r.destination ?? '',
+                  destinationLat: r.destinationLat ?? null,
+                  destinationLng: r.destinationLng ?? null,
+                  destinationRadiusMeters: r.destinationRadiusMeters ?? null,
                   purpose: r.purpose ?? '',
                   expenseAmount: r.expenseAmount ?? undefined,
                   expenseType: (r.expenseType as ExpenseTypeCode) ?? undefined,
@@ -283,6 +295,68 @@ export function MyWorkTripsPage() {
           <Form.Item label="목적지" name="destination">
             <Input placeholder="예: 부산 해운대 오피스" maxLength={100} />
           </Form.Item>
+
+          {/* GPS 좌표 + 반경 (출근 GPS 검증용) */}
+          <div className="tw-rounded tw-border tw-border-slate-200 tw-p-3 tw-mb-3">
+            <div className="tw-flex tw-items-center tw-justify-between tw-mb-2">
+              <Typography.Text strong className="!tw-text-sm">출장지 GPS 좌표 (선택)</Typography.Text>
+              <Button
+                size="small"
+                onClick={() => {
+                  if (!navigator.geolocation) {
+                    message.error('이 브라우저는 위치 정보를 지원하지 않습니다.');
+                    return;
+                  }
+                  navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                      form.setFieldsValue({
+                        destinationLat: Number(pos.coords.latitude.toFixed(7)),
+                        destinationLng: Number(pos.coords.longitude.toFixed(7)),
+                      });
+                      message.success('현재 위치가 입력되었습니다.');
+                    },
+                    (err) => {
+                      message.error(`위치 정보 획득 실패: ${err.message}`);
+                    },
+                    { enableHighAccuracy: true, timeout: 10000 },
+                  );
+                }}
+              >
+                현재 위치 사용
+              </Button>
+            </div>
+            <div className="tw-grid tw-grid-cols-2 tw-gap-2">
+              <Form.Item label="위도 (lat)" name="destinationLat" className="!tw-mb-0">
+                <InputNumber
+                  style={{ width: '100%' }}
+                  step={0.000001}
+                  placeholder="예: 37.495472"
+                />
+              </Form.Item>
+              <Form.Item label="경도 (lng)" name="destinationLng" className="!tw-mb-0">
+                <InputNumber
+                  style={{ width: '100%' }}
+                  step={0.000001}
+                  placeholder="예: 127.028857"
+                />
+              </Form.Item>
+            </div>
+            <Form.Item
+              label="허용 반경 (미터)"
+              name="destinationRadiusMeters"
+              className="!tw-mb-0 !tw-mt-2"
+              extra="미입력 시 기본 200m. 출근 시 이 반경 밖이면 차단"
+            >
+              <InputNumber
+                min={50}
+                max={5000}
+                step={50}
+                style={{ width: '100%' }}
+                placeholder="200"
+              />
+            </Form.Item>
+          </div>
+
           <Form.Item label="목적" name="purpose">
             <Input.TextArea rows={2} maxLength={300} placeholder="출장/외근 목적" />
           </Form.Item>

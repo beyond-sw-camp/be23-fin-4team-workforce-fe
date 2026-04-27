@@ -10,6 +10,9 @@ export type NotificationType =
   | 'LEAVE_REQUESTED'
   | 'LEAVE_APPROVED'
   | 'LEAVE_REJECTED'
+  | 'LEAVE_PROMOTION_FIRST'
+  | 'LEAVE_PROMOTION_SECOND'
+  | 'LEAVE_DESIGNATION'
   | 'APPROVAL_REQUESTED'
   | 'APPROVAL_APPROVED'
   | 'APPROVAL_REJECTED'
@@ -48,6 +51,9 @@ const NOTIFICATION_TYPE_KO: Record<string, string> = {
   LEAVE_REQUESTED: '연차 신청',
   LEAVE_APPROVED: '연차 승인',
   LEAVE_REJECTED: '연차 반려',
+  LEAVE_PROMOTION_FIRST: '연차 사용 1차 통보',
+  LEAVE_PROMOTION_SECOND: '연차 사용 2차 통보',
+  LEAVE_DESIGNATION: '연차 강제 지정',
   APPROVAL_REQUESTED: '결재 요청',
   APPROVAL_APPROVED: '결재 승인',
   APPROVAL_REJECTED: '결재 반려',
@@ -69,6 +75,7 @@ const NOTIFICATION_TYPE_KO: Record<string, string> = {
   CALENDAR_TEAM_EVENT_CREATED: '팀 일정 등록됨',
   MEMBER_ROLE_CHANGED: '역할 변경됨',
   MEMBER_INFO_UPDATED: '인사 정보 수정됨',
+  LABOR_LAW_WEEKLY_VIOLATION: '주 52시간 초과',
 };
 
 function normalizeYesNo(v: unknown): 'YES' | 'NO' {

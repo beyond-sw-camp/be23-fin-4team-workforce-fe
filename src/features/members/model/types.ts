@@ -15,5 +15,7 @@ export type Member = {
   name: string;
   email: string;
   department: string;
+  /** 사번 — 백엔드 필드명이 `sabun` / `employeeNumber` 등으로 올 수 있음 */
+  sabun?: string;
   status: 'ACTIVE' | 'DORMANT' | 'LEAVE';
 };

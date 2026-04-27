@@ -116,6 +116,8 @@ import {
   type ViewerType,
 } from '@/features/approvals/api/approvalRequestApi';
 import { memberApi } from '@/features/member/api/memberApi';
+import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
+import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import {
   buildOrgTreeWithMemberLeaves,
   flattenDirectMembersDeduped,
@@ -167,10 +169,265 @@ async function maybeUploadApprovalAttachments(
 async function createApprovalRequestWithAttachments(
   payload: CreateApprovalRequestPayload,
   attachmentFiles?: File[],
+  options?: { documentName?: string | null },
 ): Promise<ApprovalRequestDetail> {
+  const config = options?.documentName
+    ? PRE_ACTION_CONFIGS.find((c) => c.documentName === options.documentName)
+    : null;
+  if (config) {
+    return await createApprovalWithPreAction(config, payload, attachmentFiles);
+  }
   const res = await approvalRequestApi.createRequest(payload);
   await maybeUploadApprovalAttachments(res.requestId, String(res.requestStatus), attachmentFiles);
   return res;
+}
+
+/**
+ * salary-service 엔티티와 연동되는 결재 문서 pre-action 설정
+ * - submitEntity: 결재 생성 전 salary 엔티티를 먼저 만들고 ID 반환
+ * - entityIdField: contentJson 에 주입할 필드명 (consumer 가 이걸로 찾음)
+ * - cancelEntity: 결재 생성 실패 시 best-effort 롤백
+ * - linkApproval: 결재 생성 후 entity 에 approvalRequestId 역링크
+ *                 null 이면 consumer 가 entityId 로 직접 찾기 때문에 생략
+ */
+type PreActionConfig = {
+  documentName: string;
+  entityIdField: string;
+  submitEntity: (content: Record<string, unknown>) => Promise<string>;
+  cancelEntity: (id: string) => Promise<void>;
+  linkApproval: ((id: string, approvalRequestId: string) => Promise<void>) | null;
+};
+
+const SCHEDULE_SELECTION_PREFILL_STORAGE_KEY = 'wf-approval-prefill-schedule-selection';
+
+function readStr(content: Record<string, unknown>, key: string): string {
+  const v = content[key];
+  return typeof v === 'string' ? v : '';
+}
+function readNum(content: Record<string, unknown>, key: string): number | null {
+  const v = content[key];
+  if (typeof v === 'number') return v;
+  if (typeof v === 'string' && v.trim() !== '' && !Number.isNaN(Number(v))) return Number(v);
+  return null;
+}
+
+/** HH:mm 또는 HH:mm:ss 시간 문자열을 LocalDateTime 파싱용 ISO 로 조합 */
+function toLocalDateTime(date: string, time: string): string {
+  if (!date || !time) return '';
+  const t = time.length === 5 ? `${time}:00` : time;
+  return `${date}T${t}`;
+}
+
+/** 휴직 신청서 한글 type → 백엔드 enum 매핑 */
+const LEAVE_OF_ABSENCE_TYPE_MAP: Record<string, string> = {
+  '출산휴가': 'MATERNITY',
+  '육아휴직': 'PATERNAL',
+  '장기병가': 'SICK',
+  '무급휴직': 'UNPAID',
+  '학업휴직': 'STUDY',
+  '군복무': 'MILITARY',
+};
+
+/** HH:mm 두 개의 분 차이, 자정 넘어가면 다음날로 보정 */
+function minutesBetweenTimes(start: string, end: string): number {
+  const [shRaw, smRaw] = start.split(':').map((v) => Number(v));
+  const [ehRaw, emRaw] = end.split(':').map((v) => Number(v));
+  const sh = shRaw ?? 0;
+  const sm = smRaw ?? 0;
+  const eh = ehRaw ?? 0;
+  const em = emRaw ?? 0;
+  if (Number.isNaN(sh) || Number.isNaN(sm) || Number.isNaN(eh) || Number.isNaN(em)) return 0;
+  let diff = eh * 60 + em - (sh * 60 + sm);
+  if (diff < 0) diff += 24 * 60;
+  return diff;
+}
+
+const PRE_ACTION_CONFIGS: PreActionConfig[] = [
+  {
+    documentName: '연차신청서',
+    entityIdField: 'leaveRequestId',
+    submitEntity: async (content) => {
+      const companyLeaveTypeId = readStr(content, 'vacationType');
+      const startDate = readStr(content, 'startDate');
+      const endDate = readStr(content, 'endDate');
+      if (!companyLeaveTypeId || !startDate || !endDate) {
+        throw new Error('휴가 종류·시작일·종료일은 필수입니다.');
+      }
+      const r = await attendanceApi.leaveRequest.submit({
+        companyLeaveTypeId,
+        startDate,
+        endDate,
+        reason: readStr(content, 'reason') || '휴가 신청',
+        evidenceFileUrl: null,
+      });
+      if (!r.leaveRequestId) throw new Error('휴가 신청 ID 를 받지 못했습니다.');
+      return r.leaveRequestId;
+    },
+    cancelEntity: (id) => attendanceApi.leaveRequest.cancel(id),
+    linkApproval: (id, aid) => attendanceApi.leaveRequest.linkApproval(id, aid),
+  },
+  {
+    documentName: '연장근무신청',
+    entityIdField: 'overtimeRequestId',
+    submitEntity: async (content) => {
+      const timing = readStr(content, 'timing');
+      const workType = readStr(content, 'workType');
+      const workDate = readStr(content, 'workDate');
+      const startTime = readStr(content, 'startTime');
+      const endTime = readStr(content, 'endTime');
+      if (!timing || !workType || !workDate || !startTime || !endTime) {
+        throw new Error('신청 구분·근무구분·근무일자·시간은 필수입니다.');
+      }
+      // 사전=PRE / 사후=POST 매핑, 사전이면 planned*, 사후면 actual* 전송
+      const isPost = timing === '사후';
+      const startDt = toLocalDateTime(workDate, startTime);
+      const endDt = toLocalDateTime(workDate, endTime);
+      const minutes = minutesBetweenTimes(startTime, endTime);
+      const reason = readStr(content, 'requestReason') || `${workType} 근무 신청`;
+      const r = await attendanceApi.overtimeRequest.createMy({
+        targetDate: workDate,
+        requestType: isPost ? 'POST' : 'PRE',
+        plannedStartTime: isPost ? null : startDt,
+        plannedEndTime: isPost ? null : endDt,
+        requestedMinutes: isPost ? null : minutes,
+        actualStartTime: isPost ? startDt : null,
+        actualEndTime: isPost ? endDt : null,
+        actualMinutes: isPost ? minutes : null,
+        reason,
+      });
+      if (!r.overtimeRequestId) throw new Error('연장근무 신청 ID 를 받지 못했습니다.');
+      return r.overtimeRequestId;
+    },
+    cancelEntity: (id) => attendanceApi.overtimeRequest.cancelMy(id),
+    linkApproval: (id, aid) => attendanceApi.overtimeRequest.updateApprovalLink(id, aid),
+  },
+  {
+    documentName: '수당 변경 신청',
+    entityIdField: 'memberAllowanceId',
+    submitEntity: async (content) => {
+      const salaryItemTemplateId = readStr(content, 'salaryItemTemplateId');
+      const amount = readNum(content, 'amount');
+      const effectiveFrom = readStr(content, 'effectiveFrom');
+      if (!salaryItemTemplateId || amount == null || !effectiveFrom) {
+        throw new Error('수당 항목·금액·적용 시작일은 필수입니다.');
+      }
+      const r = await salaryApi.memberAllowance.createMy({
+        salaryItemTemplateId,
+        amount,
+        effectiveFrom,
+        reason: readStr(content, 'reason') || null,
+      });
+      if (!r.memberAllowanceId) throw new Error('수당 신청 ID 를 받지 못했습니다.');
+      return r.memberAllowanceId;
+    },
+    cancelEntity: (id) => salaryApi.memberAllowance.cancelMy(id),
+    linkApproval: (id, aid) => salaryApi.memberAllowance.updateApprovalLink(id, aid),
+  },
+
+  {
+    documentName: '출퇴근시간 변경 신청서',
+    entityIdField: 'selectionId',
+    submitEntity: async (content) => {
+      const targetYearMonth = readStr(content, 'targetYearMonth');
+      const slotId = readStr(content, 'slotId');
+      if (!targetYearMonth || !slotId) {
+        throw new Error('대상 연월·슬롯은 필수입니다.');
+      }
+      const r = await attendanceApi.scheduleSelection.createMy({
+        targetYearMonth,
+        slotId,
+        requestReason: readStr(content, 'requestReason') || null,
+      });
+      if (!r.selectionId) throw new Error('슬롯 선택 ID 를 받지 못했습니다.');
+      return r.selectionId;
+    },
+    cancelEntity: (id) => attendanceApi.scheduleSelection.cancelMy(id),
+    // consumer 가 selectionId 로 직접 찾음, 역링크는 applyApproval 내부에서 설정
+    linkApproval: null,
+  },
+  {
+    documentName: '휴직 신청서',
+    entityIdField: 'leaveOfAbsenceId',
+    submitEntity: async (content) => {
+      const typeKo = readStr(content, 'type');
+      const type = LEAVE_OF_ABSENCE_TYPE_MAP[typeKo];
+      const startDate = readStr(content, 'startDate');
+      const endDate = readStr(content, 'endDate');
+      const isPaidYn = readStr(content, 'isPaidYn');
+      if (!type || !startDate || !endDate || !isPaidYn) {
+        throw new Error('휴직 종류·기간·유급 여부는 필수입니다.');
+      }
+      const r = await attendanceApi.leaveOfAbsence.submit({
+        type,
+        startDate,
+        endDate,
+        isPaidYn,
+        reason: readStr(content, 'reason') || null,
+        evidenceFileUrl: readStr(content, 'evidenceFileUrl') || null,
+      });
+      if (!r.leaveOfAbsenceId) throw new Error('휴직 신청 ID 를 받지 못했습니다.');
+      return r.leaveOfAbsenceId;
+    },
+    cancelEntity: (id) => attendanceApi.leaveOfAbsence.cancel(id),
+    linkApproval: (id, aid) => attendanceApi.leaveOfAbsence.linkApproval(id, aid),
+  },
+];
+
+/**
+ * pre-action 공통 흐름
+ * 1. salary 엔티티 생성 (검증 통과해야 함)
+ * 2. contentJson 에 entityId 주입 후 결재 생성
+ * 3. (선택) 엔티티에 approvalRequestId 역링크
+ * 실패 시 best-effort 롤백
+ */
+async function createApprovalWithPreAction(
+  config: PreActionConfig,
+  payload: CreateApprovalRequestPayload,
+  attachmentFiles?: File[],
+): Promise<ApprovalRequestDetail> {
+  const content = (() => {
+    try {
+      return JSON.parse(payload.contentJson ?? '{}') as Record<string, unknown>;
+    } catch {
+      return {};
+    }
+  })();
+
+  // Step 1
+  const entityId = await config.submitEntity(content);
+
+  // Step 2
+  const enriched: CreateApprovalRequestPayload = {
+    ...payload,
+    contentJson: JSON.stringify({ ...content, [config.entityIdField]: entityId }),
+  };
+  let approval: ApprovalRequestDetail;
+  try {
+    approval = await approvalRequestApi.createRequest(enriched);
+  } catch (err) {
+    try {
+      await config.cancelEntity(entityId);
+    } catch {
+      // 롤백 실패는 무시, 서버측 고아 레코드는 별도 정리
+    }
+    throw err;
+  }
+
+  // Step 3 (linkApproval null 이면 consumer 가 entityId 로 찾으므로 생략)
+  if (config.linkApproval) {
+    try {
+      await config.linkApproval(entityId, approval.requestId);
+    } catch (err) {
+      console.warn(`[${config.documentName}] approval-link failed, consumer fallback used`, err);
+    }
+  }
+
+  await maybeUploadApprovalAttachments(
+    approval.requestId,
+    String(approval.requestStatus),
+    attachmentFiles,
+  );
+  return approval;
 }
 
 async function updateApprovalRequestWithAttachments(
@@ -1192,6 +1449,76 @@ export function ApprovalsPage() {
     queryFn: () => approvalApi.listActiveDocuments(),
   });
 
+  // 연차신청서 vacationType 필드의 동적 옵션, source="companyLeaveType"
+  const { data: companyLeaveTypes = [] } = useQuery({
+    queryKey: ['salary', 'company-leave-types'],
+    queryFn: () => attendanceApi.companyLeaveType.list(),
+    staleTime: 60_000,
+  });
+  const companyLeaveTypeOptions = useMemo(
+    () =>
+      companyLeaveTypes
+        .slice()
+        .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
+        .map((t) => ({ value: t.companyLeaveTypeId ?? '', label: t.name ?? '—' }))
+        .filter((o) => o.value),
+    [companyLeaveTypes],
+  );
+
+  // 수당 변경 신청 salaryItemTemplateId 동적 옵션, source="salaryItemTemplate"
+  const { data: salaryItemTemplates = [] } = useQuery({
+    queryKey: ['salary', 'salary-item-templates'],
+    queryFn: () => salaryApi.salaryItemTemplate.list(),
+    staleTime: 60_000,
+  });
+  const salaryItemTemplateOptions = useMemo(
+    () =>
+      salaryItemTemplates
+        .filter((t) => t.delYn !== 'Y' && t.itemType === 'EARNING')
+        .slice()
+        .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
+        .map((t) => ({ value: t.salaryItemTemplateId ?? '', label: t.itemName ?? '—' }))
+        .filter((o) => o.value),
+    [salaryItemTemplates],
+  );
+
+  // 출퇴근시간 변경 slotId 동적 옵션, source="flexibleTimeSlot"
+  // 본인 적용 가능한 FLEXIBLE WorkSchedule 만 (본인 개인 스케줄 + 회사 기본)
+  const { data: workSchedules = [] } = useQuery({
+    queryKey: ['salary', 'work-schedules'],
+    queryFn: () => attendanceApi.workSchedule.list(),
+    staleTime: 60_000,
+  });
+  const flexibleWorkScheduleIds = useMemo(
+    () =>
+      workSchedules
+        .filter((s) => s.workType === 'FLEXIBLE' && s.workScheduleId)
+        .filter((s) => !s.memberId || s.memberId === user?.id)
+        .map((s) => s.workScheduleId!),
+    [workSchedules, user?.id],
+  );
+  const flexibleSlotQueries = useQueries({
+    queries: flexibleWorkScheduleIds.map((wsId) => ({
+      queryKey: ['salary', 'flexible-slots', wsId] as const,
+      queryFn: () => attendanceApi.flexibleSlot.listByWorkSchedule(wsId),
+      staleTime: 60_000,
+    })),
+  });
+  const flexibleTimeSlotOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const opts: { value: string; label: string }[] = [];
+    for (const q of flexibleSlotQueries) {
+      for (const slot of q.data ?? []) {
+        const id = slot.slotId ?? '';
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        const label = `${slot.slotLabel ?? slot.slotCode ?? '—'} (${(slot.startTime ?? '').slice(0, 5)}~${(slot.endTime ?? '').slice(0, 5)})`;
+        opts.push({ value: id, label });
+      }
+    }
+    return opts;
+  }, [flexibleSlotQueries]);
+
   const composeHubVisibleDocuments = activeDocuments;
 
   const selectedDocument = useMemo(
@@ -1473,7 +1800,9 @@ export function ApprovalsPage() {
 
   const createRequestM = useMutation({
     mutationFn: (vars: { payload: CreateApprovalRequestPayload; attachmentFiles?: File[] }) =>
-      createApprovalRequestWithAttachments(vars.payload, vars.attachmentFiles),
+      createApprovalRequestWithAttachments(vars.payload, vars.attachmentFiles, {
+        documentName: selectedDocument?.documentName ?? null,
+      }),
     onSuccess: async (res) => {
       setComposeAttachmentFiles([]);
       await qc.invalidateQueries({ queryKey: ['approval', 'attachments'] });
@@ -1821,7 +2150,7 @@ export function ApprovalsPage() {
 
   const embedDocId = typeof routeSearch.docId === 'string' ? routeSearch.docId.trim() : '';
   useEffect(() => {
-    if (!isEmbedComposeModal || tab !== 'compose') return;
+    if (tab !== 'compose') return;
     if (!embedDocId) return;
     if (!activeDocuments.length) return;
     if (selectedDocumentId === embedDocId && composePhase === 'fill') return;
@@ -1832,7 +2161,6 @@ export function ApprovalsPage() {
       navigateCompose: false,
     });
   }, [
-    isEmbedComposeModal,
     tab,
     embedDocId,
     activeDocuments,
@@ -1840,6 +2168,35 @@ export function ApprovalsPage() {
     composePhase,
     initializeComposeForDocument,
   ]);
+
+  useEffect(() => {
+    if (tab !== 'compose' || composePhase !== 'fill') return;
+    if (!selectedDocument || selectedDocument.documentName !== '출퇴근시간 변경 신청서') return;
+    const raw = sessionStorage.getItem(SCHEDULE_SELECTION_PREFILL_STORAGE_KEY);
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw) as {
+        targetYearMonth?: string;
+        slotId?: string;
+        requestReason?: string | null;
+      };
+      if (!parsed.targetYearMonth || !parsed.slotId) return;
+      const current = (form.getFieldValue('content') ?? {}) as Record<string, unknown>;
+      form.setFieldsValue({
+        content: {
+          ...current,
+          targetYearMonth: parsed.targetYearMonth,
+          slotId: parsed.slotId,
+          requestReason: parsed.requestReason ?? '',
+        },
+      });
+      message.info('스케줄 변경 신청 값이 자동 입력되었습니다.');
+    } catch {
+      // ignore bad prefill payload
+    } finally {
+      sessionStorage.removeItem(SCHEDULE_SELECTION_PREFILL_STORAGE_KEY);
+    }
+  }, [composePhase, form, message, selectedDocument, tab]);
 
   const toggleBookmark = useCallback((requestId: string) => {
     setBookmarkedRequestIds((prev) => {
@@ -2626,7 +2983,7 @@ export function ApprovalsPage() {
   const navigateViewerInboxTab = (key: string) => {
     navigate({
       to: '/app/approvals',
-      search: (prev) => ({
+      search: (prev: Record<string, string | undefined>) => ({
         ...(prev as Record<string, string | undefined>),
         tab: 'my',
         box: 'per-viewers',
@@ -4085,6 +4442,8 @@ export function ApprovalsPage() {
                               showFamilyEventSubtypeInCompose,
                           )
                           .map((field) => {
+                          // hidden 필드는 제출 시 프론트가 auto-populate (예: leaveRequestId), UI 에 미표시
+                          if (field.type === 'hidden') return null;
                           const namePath: (string | number)[] = ['content', field.name];
                           const ph = field.placeholder;
                           const fieldLocked = field.locked === true;
@@ -4140,13 +4499,42 @@ export function ApprovalsPage() {
                             );
                           }
                           if (field.type === 'select') {
+                            // source 지정된 select 는 API 로드 옵션 사용, 기본은 정적 options
+                            const normalizedLabel = String(field.label ?? '')
+                              .trim()
+                              .replace(/\s+/g, '')
+                              .toUpperCase();
+                            const leaveKindLabel = APPROVAL_VACATION_LEAVE_KIND_FIELD_LABEL
+                              .trim()
+                              .replace(/\s+/g, '')
+                              .toUpperCase();
+                            const normalizedSource = String(field.source ?? '')
+                              .trim()
+                              .toLowerCase()
+                              .replace(/[-_\s]/g, '');
+                            const isCompanyLeaveTypeSource =
+                              normalizedSource === 'companyleavetype' ||
+                              normalizedSource === 'companyleavetypes' ||
+                              normalizedSource === 'leavetype' ||
+                              normalizedSource === 'leavetypes';
+                            const isLeaveKindFieldByLabel = normalizedLabel === leaveKindLabel;
+                            const dynamicOptions =
+                              (isCompanyLeaveTypeSource || isLeaveKindFieldByLabel) ? companyLeaveTypeOptions
+                              : field.source === 'salaryItemTemplate' ? salaryItemTemplateOptions
+                              : field.source === 'flexibleTimeSlot' ? flexibleTimeSlotOptions
+                              : null;
+                            const selectOptions = dynamicOptions
+                              ? dynamicOptions
+                              : (field.options ?? []).map((opt) => ({ value: opt, label: opt }));
                             return (
                               <ApprovalFormPaperFieldRow key={field.name} label={field.label} required={fieldLocked}>
                                 <Form.Item name={namePath} rules={selectRules} className="!tw-mb-0">
                                   <Select
                                     className="!tw-max-w-md"
                                     placeholder={ph}
-                                    options={(field.options ?? []).map((opt) => ({ value: opt, label: opt }))}
+                                    options={selectOptions}
+                                    showSearch
+                                    optionFilterProp="label"
                                   />
                                 </Form.Item>
                               </ApprovalFormPaperFieldRow>
@@ -4249,7 +4637,7 @@ export function ApprovalsPage() {
                       >
                         <PaperClipOutlined className="tw-text-2xl tw-text-slate-400" />
                         <div className="tw-mt-2 tw-text-sm tw-leading-relaxed tw-text-[#333]">
-                          첨부 슬롯이 가득 찼습니다.
+                          첨부 스케줄이 가득 찼습니다.
                         </div>
                         <Typography.Paragraph type="secondary" className="!tw-mb-0 tw-mt-1 tw-text-xs">
                           최대 {APPROVAL_ATTACHMENT_MAX_COUNT}개, 파일당 10MB 이하, 합계 50MB 이하 (jpg, png, pdf, Office,
