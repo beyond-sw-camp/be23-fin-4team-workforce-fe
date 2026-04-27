@@ -15,11 +15,14 @@ import {
   InboxOutlined,
   MinusOutlined,
   MoreOutlined,
+  PlusOutlined,
   PaperClipOutlined,
   SafetyCertificateOutlined,
   SaveOutlined,
   SearchOutlined,
   SendOutlined,
+  SettingOutlined,
+  InfoCircleOutlined,
 } from '@ant-design/icons';
 import {
   DndContext,
@@ -153,6 +156,7 @@ import { ApprovalFormSelectModal } from '@/features/approvals/ui/ApprovalFormSel
 import { ApprovalRequestReadOnlyModal } from '@/features/approvals/ui/ApprovalRequestReadOnlyModal';
 import { PendingApprovalInboxModalContent } from '@/features/approvals/ui/PendingApprovalInboxModal';
 import { getRefreshIdentityHeaders } from '@/shared/stores/authRefreshIdentityStore';
+import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 
 async function maybeUploadApprovalAttachments(
   requestId: string,
@@ -845,6 +849,7 @@ const REQUEST_TYPE_ICON: Record<ApprovalRequestType, ComponentType<{ className?:
 
 const APPROVAL_RECENT_FORMS_KEY = 'workforce.approval.recentForms';
 const APPROVAL_HOME_BOOKMARKS_KEY = 'workforce.approval.homeBookmarks';
+const APPROVAL_HOME_QUICK_FORMS_KEY = 'workforce.approval.homeQuickForms';
 
 type RecentFormEntry = { documentId: string; documentName: string; requestType: string };
 
@@ -868,6 +873,26 @@ function loadRecentForms(): RecentFormEntry[] {
 function saveRecentForms(entries: RecentFormEntry[]) {
   try {
     localStorage.setItem(APPROVAL_RECENT_FORMS_KEY, JSON.stringify(entries.slice(0, 5)));
+  } catch {
+    /* ignore */
+  }
+}
+
+function loadQuickHomeForms(): string[] {
+  try {
+    const raw = localStorage.getItem(APPROVAL_HOME_QUICK_FORMS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((v): v is string => typeof v === 'string').map((v) => v.trim()).filter(Boolean).slice(0, 3);
+  } catch {
+    return [];
+  }
+}
+
+function saveQuickHomeForms(ids: string[]) {
+  try {
+    localStorage.setItem(APPROVAL_HOME_QUICK_FORMS_KEY, JSON.stringify(ids.slice(0, 3)));
   } catch {
     /* ignore */
   }
@@ -1341,6 +1366,9 @@ export function ApprovalsPage() {
     | { kind: 'pending-inbox'; title: string }
     | null
   >(null);
+  const [quickHomeForms, setQuickHomeForms] = useState<string[]>(() => loadQuickHomeForms());
+  const [quickHomeFormsSettingOpen, setQuickHomeFormsSettingOpen] = useState(false);
+  const [quickHomeFormsDraft, setQuickHomeFormsDraft] = useState<string[]>([]);
   const [composeFormSelectModalOpen, setComposeFormSelectModalOpen] = useState(false);
   const [composeFormSelectInitialId, setComposeFormSelectInitialId] = useState<string | undefined>(undefined);
   /** 저장 시 업로드할 로컬 파일 — 임시저장/제출 직후 POST /approval/attachments */
@@ -1392,7 +1420,8 @@ export function ApprovalsPage() {
     const rawTab = routeSearch.tab;
     return typeof rawTab === 'string' && allowedTabs.includes(rawTab) ? rawTab : 'compose';
   }, [routeSearch.tab, allowedTabs]);
-  const onComposeHub = tab === 'compose' && routeSearch.sideNav === 'request-compose';
+  const sideNav = typeof routeSearch.sideNav === 'string' ? routeSearch.sideNav.trim() : '';
+  const onComposeHub = tab === 'compose' && !isEmbedComposeModal && (sideNav === '' || sideNav === 'request-compose');
   const approvalNotificationModal = useMemo<ApprovalNotificationModal | null>(() => {
     const raw = String(routeSearch.approvalModal ?? '')
       .trim()
@@ -1520,6 +1549,43 @@ export function ApprovalsPage() {
   }, [flexibleSlotQueries]);
 
   const composeHubVisibleDocuments = activeDocuments;
+  const quickHomeFormOptions = useMemo(
+    () =>
+      composeHubVisibleDocuments.map((doc) => ({
+        value: doc.documentId,
+        label: `${formatApprovalDocumentName(doc.documentName)} · ${
+          REQUEST_TYPE_LABEL[normalizeApprovalRequestType(doc.requestType)]
+        }`,
+      })),
+    [composeHubVisibleDocuments],
+  );
+  const quickHomeFormDocs = useMemo(() => {
+    const byId = new Map(composeHubVisibleDocuments.map((doc) => [doc.documentId, doc]));
+    const picked = quickHomeForms.map((id) => byId.get(id)).filter((doc): doc is ApprovalDocument => doc != null);
+    if (picked.length >= 2) return picked.slice(0, 3);
+    const fallback = composeHubVisibleDocuments.filter((doc) => !picked.some((p) => p.documentId === doc.documentId));
+    return [...picked, ...fallback].slice(0, Math.min(3, composeHubVisibleDocuments.length));
+  }, [composeHubVisibleDocuments, quickHomeForms]);
+  const quickHomeDraftDocs = useMemo(() => {
+    const byId = new Map(composeHubVisibleDocuments.map((doc) => [doc.documentId, doc]));
+    return quickHomeFormsDraft
+      .map((id) => byId.get(id))
+      .filter((doc): doc is ApprovalDocument => doc != null)
+      .slice(0, 3);
+  }, [composeHubVisibleDocuments, quickHomeFormsDraft]);
+  const quickHomeDraftRemainingOptions = useMemo(() => {
+    const selected = new Set(quickHomeDraftDocs.map((doc) => doc.documentId));
+    return quickHomeFormOptions.filter((opt) => !selected.has(opt.value));
+  }, [quickHomeFormOptions, quickHomeDraftDocs]);
+
+  useEffect(() => {
+    const available = new Set(composeHubVisibleDocuments.map((doc) => doc.documentId));
+    const valid = quickHomeForms.filter((id) => available.has(id)).slice(0, 3);
+    const next = valid.length >= 2 ? valid : quickHomeFormDocs.map((doc) => doc.documentId);
+    if (next.join('|') === quickHomeForms.join('|')) return;
+    setQuickHomeForms(next);
+    saveQuickHomeForms(next);
+  }, [composeHubVisibleDocuments, quickHomeForms, quickHomeFormDocs]);
 
   const selectedDocument = useMemo(
     () => activeDocuments.find((d) => d.documentId === selectedDocumentId) ?? null,
@@ -3663,8 +3729,8 @@ export function ApprovalsPage() {
     );
   };
 
-  const isComposeHubEntry = tab === 'compose' && routeSearch.sideNav === 'request-compose';
-  const composePhaseView = isComposeHubEntry ? 'select' : composePhase;
+  const isComposeHubEntry = tab === 'compose' && !isEmbedComposeModal && (sideNav === '' || sideNav === 'request-compose');
+  const composePhaseView = isEmbedComposeModal ? 'fill' : isComposeHubEntry ? 'select' : composePhase;
   const showComposeWorkbench =
     composePhaseView === 'fill' && selectedDocument != null && selectedSchema.fields.length > 0;
 
@@ -3788,80 +3854,63 @@ export function ApprovalsPage() {
   };
 
   const renderHomeApprovalFormsCard = () => {
-    const accentClass = 'tw-bg-slate-50/80 tw-border-slate-200';
     return (
-      <Card className={APPROVAL_HOME_COMPOSE_FORMS_CARD_CLASS}>
+      <Card className={clsx(APPROVAL_HOME_COMPOSE_FORMS_CARD_CLASS, 'tw-h-full')} styles={{ body: { height: '100%' } }}>
         <div className="tw-mb-3 tw-flex tw-items-center tw-justify-between tw-gap-2">
           <Typography.Text strong className="tw-min-w-0">
-            결재 양식
+            Quick Menu
           </Typography.Text>
-          <Button
-            type="primary"
-            size="small"
-            className="!tw-h-8 !tw-min-w-[5.5rem] !tw-shrink-0 !tw-rounded-lg !tw-px-3 !tw-text-sm !tw-font-semibold tw-shadow-sm"
-            onClick={() => {
-              setComposeFormSelectInitialId(undefined);
-              setComposeFormSelectModalOpen(true);
-            }}
-          >
-            결재 생성
-          </Button>
+          <div className="tw-flex tw-items-center tw-gap-2">
+            <Tooltip title="퀵 메뉴 설정">
+              <Button
+                size="small"
+                icon={<SettingOutlined />}
+                onClick={() => {
+                  setQuickHomeFormsDraft(quickHomeFormDocs.map((doc) => doc.documentId));
+                  setQuickHomeFormsSettingOpen(true);
+                }}
+              />
+            </Tooltip>
+          </div>
         </div>
         {docsLoading ? (
-          <div
-            className={clsx(
-              APPROVAL_HOME_TOP_ROW_MATCH_SCROLL,
-              'tw-flex tw-items-center tw-justify-center tw-py-4',
-            )}
-          >
+          <div className="tw-flex tw-min-h-[6.5rem] tw-items-center tw-justify-center tw-py-2">
             <Spin />
           </div>
-        ) : composeHubVisibleDocuments.length === 0 ? (
-          <div
-            className={clsx(
-              APPROVAL_HOME_TOP_ROW_MATCH_SCROLL,
-              'tw-flex tw-items-center tw-justify-center tw-py-4',
-            )}
-          >
+        ) : quickHomeFormDocs.length === 0 ? (
+          <div className="tw-flex tw-min-h-[6.5rem] tw-items-center tw-justify-center tw-py-2">
             <Typography.Text type="secondary">사용 가능한 활성 양식이 없습니다.</Typography.Text>
           </div>
         ) : (
-          <div className={APPROVAL_HOME_TOP_ROW_MATCH_SCROLL}>
-            <Space direction="vertical" size={8} className="tw-w-full">
-              {composeHubVisibleDocuments.map((doc) => {
-                const cat = normalizeApprovalRequestType(doc.requestType);
-                return (
-                  <div
-                    key={doc.documentId}
-                    role="button"
-                    tabIndex={0}
-                    className={`tw-flex tw-cursor-pointer tw-items-center tw-justify-between tw-gap-2 tw-rounded-lg tw-border tw-px-3 tw-py-2 ${accentClass} tw-transition-colors hover:tw-bg-white/60`}
-                    onClick={() => {
-                      setComposeFormSelectInitialId(doc.documentId);
-                      setComposeFormSelectModalOpen(true);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        setComposeFormSelectInitialId(doc.documentId);
-                        setComposeFormSelectModalOpen(true);
-                      }
-                    }}
-                  >
-                    <div className="tw-min-w-0">
-                      <Typography.Text strong className="!tw-block tw-truncate">
-                        {doc.documentName?.trim() || '—'}
-                      </Typography.Text>
-                      <Typography.Text type="secondary" className="!tw-block tw-text-xs">
-                        {REQUEST_TYPE_LABEL[cat]} · {cat}
-                      </Typography.Text>
-                    </div>
-                  </div>
-                );
-              })}
-            </Space>
+          <div className="tw-space-y-2">
+            {quickHomeFormDocs.map((doc) => {
+              const cat = normalizeApprovalRequestType(doc.requestType);
+              return (
+                <button
+                  key={doc.documentId}
+                  type="button"
+                  className="tw-flex tw-w-full tw-items-center tw-justify-between tw-rounded-md tw-border tw-border-slate-200 tw-bg-white tw-px-3 tw-py-2 tw-text-left tw-transition-colors hover:tw-bg-slate-50 focus-visible:tw-ring-2 focus-visible:tw-ring-blue-400 focus-visible:tw-ring-offset-1"
+                  onClick={() => {
+                    setComposeFormSelectInitialId(doc.documentId);
+                    setComposeFormSelectModalOpen(true);
+                  }}
+                >
+                  <span className="tw-min-w-0">
+                    <span className="tw-block tw-truncate tw-text-sm tw-font-semibold tw-text-slate-900">
+                      {doc.documentName?.trim() || '—'}
+                    </span>
+                    <span className="tw-block tw-text-xs tw-text-slate-500">{REQUEST_TYPE_LABEL[cat]}</span>
+                  </span>
+                  <PlusOutlined className="tw-text-slate-300" />
+                </button>
+              );
+            })}
           </div>
         )}
+        <div className="tw-mt-2 tw-flex tw-items-center tw-gap-1.5 tw-rounded-md tw-bg-slate-50 tw-px-2.5 tw-py-2 tw-text-xs tw-text-slate-500">
+          <InfoCircleOutlined />
+          <span>자주 사용하는 결재 양식을 설정하면 업무 효율을 높일 수 있습니다.</span>
+        </div>
       </Card>
     );
   };
@@ -3969,9 +4018,12 @@ export function ApprovalsPage() {
 
     return (
       <div className="tw-space-y-4">
-        <div className="tw-grid tw-grid-cols-1 tw-items-start tw-gap-4 xl:tw-grid-cols-3">
+        <div className="tw-grid tw-grid-cols-1 tw-gap-4 xl:tw-grid-cols-3">
           <div className="tw-min-w-0 tw-w-full xl:tw-col-span-2">
-            <Card className="tw-w-full tw-rounded-2xl tw-border tw-border-slate-200/90 tw-shadow-sm tw-shadow-slate-900/5">
+            <Card
+              className="tw-h-full tw-w-full tw-rounded-2xl tw-border tw-border-slate-200/90 tw-shadow-sm tw-shadow-slate-900/5"
+              styles={{ body: { height: '100%', display: 'flex', flexDirection: 'column' } }}
+            >
             <div className="tw-mb-3 tw-flex tw-items-center tw-justify-between">
               <Typography.Text strong>결재 대기 문서 리스트</Typography.Text>
               <Button
@@ -3987,12 +4039,12 @@ export function ApprovalsPage() {
                 전체
               </Button>
             </div>
-            <div className={APPROVAL_HOME_TOP_ROW_MATCH_SCROLL}>
+            <div className="tw-min-h-0 tw-flex-1 tw-overflow-y-auto wf-scrollbar tw-pr-1 [scrollbar-gutter:stable]">
               {composeHomePendingTable(pendingRequests.slice(0, 20))}
             </div>
             </Card>
           </div>
-          <div className="tw-min-w-0 tw-w-full xl:tw-col-span-1 xl:tw-shrink-0 xl:tw-self-start">
+          <div className="tw-min-w-0 tw-w-full xl:tw-col-span-1 xl:tw-shrink-0">
             {renderHomeApprovalFormsCard()}
           </div>
         </div>
@@ -4189,6 +4241,78 @@ export function ApprovalsPage() {
           initialDocumentId={composeFormSelectInitialId}
           onConfirm={handleApprovalFormSelectConfirm}
         />
+        <Modal
+          title="퀵 메뉴 설정"
+          open={quickHomeFormsSettingOpen}
+          onCancel={() => setQuickHomeFormsSettingOpen(false)}
+          onOk={() => {
+            const picked = Array.from(new Set(quickHomeFormsDraft.map((v) => v.trim()).filter(Boolean))).slice(0, 3);
+            if (picked.length < 2) {
+              message.warning('퀵 메뉴 양식을 최소 2개 선택해 주세요.');
+              return;
+            }
+            setQuickHomeForms(picked);
+            saveQuickHomeForms(picked);
+            setQuickHomeFormsSettingOpen(false);
+          }}
+          okText="저장"
+          cancelText="취소"
+          destroyOnHidden
+        >
+          <Typography.Paragraph type="secondary" className="!tw-mb-2 !tw-text-sm">
+            슬롯 3개 중 2~3개를 채워 빠르게 실행할 양식을 구성하세요.
+          </Typography.Paragraph>
+          <div className="tw-mb-3 tw-flex tw-items-center tw-justify-between tw-text-xs tw-text-slate-500">
+            <span>선택된 양식</span>
+            <span>{quickHomeDraftDocs.length}/3</span>
+          </div>
+          <div className="tw-space-y-2">
+            {quickHomeDraftDocs.map((doc) => {
+              const cat = REQUEST_TYPE_LABEL[normalizeApprovalRequestType(doc.requestType)];
+              return (
+                <div key={doc.documentId} className="tw-flex tw-items-center tw-justify-between tw-rounded-md tw-border tw-border-slate-200 tw-bg-slate-50 tw-px-3 tw-py-2">
+                  <div className="tw-min-w-0">
+                    <Typography.Text strong className="!tw-block tw-truncate tw-text-sm">
+                      {formatApprovalDocumentName(doc.documentName)}
+                    </Typography.Text>
+                    <Typography.Text type="secondary" className="!tw-block tw-text-xs">
+                      {cat}
+                    </Typography.Text>
+                  </div>
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<DeleteOutlined />}
+                    aria-label={`${formatApprovalDocumentName(doc.documentName)} 제거`}
+                    onClick={() =>
+                      setQuickHomeFormsDraft((prev) => prev.filter((id) => id !== doc.documentId))
+                    }
+                  />
+                </div>
+              );
+            })}
+          </div>
+          {quickHomeDraftDocs.length < 3 ? (
+            <div className="tw-mt-3">
+              <Select
+                className="tw-w-full"
+                value={undefined}
+                options={quickHomeDraftRemainingOptions}
+                placeholder="양식 추가 (최대 3개)"
+                optionFilterProp="label"
+                onSelect={(val) =>
+                  setQuickHomeFormsDraft((prev) =>
+                    prev.includes(val) || prev.length >= 3 ? prev : [...prev, val],
+                  )
+                }
+              />
+            </div>
+          ) : (
+            <Typography.Text type="secondary" className="tw-mt-3 tw-block tw-text-xs">
+              최대 3개까지 선택되었습니다.
+            </Typography.Text>
+          )}
+        </Modal>
       </div>
     );
   };
@@ -4202,31 +4326,40 @@ export function ApprovalsPage() {
           : 'tw-flex tw-flex-col tw-gap-4',
       )}
     >
-      <div className={clsx(isEmbedComposeModal && 'tw-flex-shrink-0')}>
-        <div className="tw-flex tw-items-center tw-gap-2">
-          {!onComposeHub && !isEmbedComposeModal && tab !== 'admin' ? (
+      {!isEmbedComposeModal ? (
+        <div className="tw-flex tw-items-center tw-justify-between tw-gap-3">
+          <div className="tw-flex tw-min-w-0 tw-items-start tw-gap-2">
+            {!onComposeHub && tab !== 'admin' ? (
+              <Button
+                type="text"
+                icon={<ArrowLeftOutlined />}
+                aria-label="전자결재로 돌아가기"
+                className="!tw-shrink-0 !tw-text-slate-600 hover:!tw-text-slate-900"
+                onClick={() =>
+                  navigate({
+                    to: '/app/approvals',
+                    search: {},
+                    replace: true,
+                  })
+                }
+              />
+            ) : null}
+            <AppWorkspacePageTitle className="!tw-mb-0" eyebrow="Approvals" title={pageTitle} subtitle={pageDescription} />
+          </div>
+          {tab === 'compose' && onComposeHub ? (
             <Button
-              type="text"
-              icon={<ArrowLeftOutlined />}
-              aria-label="전자결재로 돌아가기"
-              className="!tw-shrink-0 !tw-text-slate-600 hover:!tw-text-slate-900"
-              onClick={() =>
-                navigate({
-                  to: '/app/approvals',
-                  search: { tab: 'compose', sideNav: 'request-compose' },
-                  replace: true,
-                })
-              }
-            />
+              type="primary"
+              className="tw-h-11 tw-rounded-2xl tw-font-bold tw-border-0 !tw-bg-[#1e3a5f] hover:!tw-bg-[#152a45] disabled:!tw-cursor-not-allowed disabled:!tw-border disabled:!tw-border-slate-200 disabled:!tw-bg-white disabled:!tw-text-slate-400 disabled:!tw-opacity-100 disabled:!tw-shadow-none disabled:hover:!tw-bg-white disabled:hover:!tw-text-slate-400"
+              onClick={() => {
+                setComposeFormSelectInitialId(undefined);
+                setComposeFormSelectModalOpen(true);
+              }}
+            >
+              결재 생성
+            </Button>
           ) : null}
-          <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
-            {pageTitle}
-          </Typography.Title>
         </div>
-        <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-sm">
-          {pageDescription}
-        </Typography.Paragraph>
-      </div>
+      ) : null}
 
       {/* `Form.useForm()`은 항상 살아 있는데, 실제 <Form>은 작성 워크벤치(tab=compose·비허브)에서만 마운트되어 경고가 난다. 비표시 시 숨김 Form으로 인스턴스만 연결한다. */}
       {!(tab === 'compose' && !isComposeHubEntry) ? (
@@ -4243,6 +4376,11 @@ export function ApprovalsPage() {
           )}
           styles={{ body: { padding: showComposeWorkbench ? 0 : undefined } }}
         >
+          {isEmbedComposeModal && !selectedDocument ? (
+            <div className="tw-flex tw-min-h-[260px] tw-items-center tw-justify-center tw-bg-white">
+              <Spin size="large" />
+            </div>
+          ) : (
           <Form
             form={form}
             layout="vertical"
@@ -4752,6 +4890,7 @@ export function ApprovalsPage() {
             ) : null}
 
           </Form>
+          )}
         </Card>
       ) : tab === 'admin' && canAdmin ? (
         <ApprovalsAdminPage />

@@ -58,7 +58,7 @@ export function AppWorkspacePageTitle({
 
   if (extra) {
     return (
-      <div className={['tw-flex tw-items-start tw-justify-between tw-gap-3', rowClassName].filter(Boolean).join(' ')}>
+      <div className={['tw-flex tw-items-center tw-justify-between tw-gap-3', rowClassName].filter(Boolean).join(' ')}>
         <div className="tw-min-w-0 tw-flex-1">{head}</div>
         <div className="tw-shrink-0">{extra}</div>
       </div>
