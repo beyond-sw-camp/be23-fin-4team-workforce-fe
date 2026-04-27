@@ -6,6 +6,7 @@ import { useNavigate, useSearch } from '@tanstack/react-router';
 import { useMemo, useState, type Key } from 'react';
 import { type OrganizationTreeNode, organizationApi } from '@/features/organization/api/organizationApi';
 import { OrganizationRolesSection } from '@/features/organization/ui/OrganizationRolesSection';
+import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 
 type OrgSettingsTab = 'structure' | 'grades' | 'titles' | 'roles';
 
@@ -423,15 +424,12 @@ export function OrganizationPage() {
   return (
     <div className="tw-w-full">
       <div className="tw-mb-5">
-        <Typography.Title
-          level={4}
-          className="!tw-mb-1.5 !tw-text-xl !tw-font-semibold !tw-tracking-tight !tw-text-[#1e3a5f] sm:!tw-text-2xl"
-        >
-          조직
-        </Typography.Title>
-        <Typography.Paragraph className="!tw-mb-0 !tw-max-w-3xl !tw-text-sm !tw-leading-relaxed !tw-text-slate-600">
-          조직 구조·직급·직책·역할·권한을 탭에서 설정합니다. 조직도 조회는 왼쪽 메뉴의 조직도에서 열 수 있습니다.
-        </Typography.Paragraph>
+        <AppWorkspacePageTitle
+          className="!tw-mb-0"
+          eyebrow="Organization"
+          title="조직"
+          subtitle="조직 구조·직급·직책·역할·권한을 탭에서 설정합니다. 조직도 조회는 왼쪽 메뉴의 조직도에서 열 수 있습니다."
+        />
       </div>
 
       {/* `destroyOnHidden` 모달이 닫히면 내부 Form이 제거되어 useForm 인스턴스가 끊긴다. */}

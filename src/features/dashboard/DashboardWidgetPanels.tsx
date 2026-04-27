@@ -342,7 +342,6 @@ export function DashboardCalendarBlock() {
                   size="small"
                   dataSource={sortedEvents}
                   split={false}
-                  className="tw-max-h-[220px] tw-overflow-y-auto"
                   renderItem={(e) => (
                     <List.Item className="!tw-px-0 !tw-py-1.5">
                       <div className="tw-min-w-0 tw-flex-1">
@@ -497,7 +496,7 @@ export function DashboardNotificationsBlock() {
     <Link to="/app/notifications" className="tw-text-xs tw-font-medium tw-text-blue-600">
       전체 보기
     </Link>,
-    <div className="tw-max-h-[280px] tw-space-y-4 tw-overflow-y-auto tw-pr-1">
+    <div className="tw-space-y-4 tw-pr-1">
       {days.map((day) => (
         <div key={day}>
           <Typography.Text type="secondary" className="tw-mb-2 tw-block tw-text-xs">
