@@ -22,6 +22,7 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
+import { useAuth } from '@/features/auth/useAuth';
 import type {
   BalanceTypeCode,
   CompanyLeaveType,
@@ -30,7 +31,6 @@ import type {
 type FormValues = {
   name: string;
   balanceType: BalanceTypeCode | 'NONE';
-  daysPerUse: number;
   isPaidYn: 'Y' | 'N';
   maxDaysPerYear?: number | null;
   requireEvidenceYn: 'Y' | 'N';
@@ -55,6 +55,7 @@ const QK = ['salary', 'company-leave-types'] as const;
 
 export function AdminCompanyLeaveTypesPage() {
   const { message } = App.useApp();
+  const { user } = useAuth();
   const qc = useQueryClient();
   const [editing, setEditing] = useState<CompanyLeaveType | null>(null);
   const [open, setOpen] = useState(false);
@@ -70,7 +71,7 @@ export function AdminCompanyLeaveTypesPage() {
       attendanceApi.companyLeaveType.create({
         name: v.name.trim(),
         balanceType: v.balanceType === 'NONE' ? null : v.balanceType,
-        daysPerUse: v.daysPerUse,
+        daysPerUse: 1,
         isPaidYn: v.isPaidYn,
         maxDaysPerYear: v.maxDaysPerYear ?? null,
         requireEvidenceYn: v.requireEvidenceYn,
@@ -87,16 +88,15 @@ export function AdminCompanyLeaveTypesPage() {
   });
 
   const updateM = useMutation({
-    mutationFn: (input: { id: string; v: FormValues; isSystemDefault: boolean }) =>
+    mutationFn: (input: { id: string; v: FormValues; daysPerUse: number }) =>
       attendanceApi.companyLeaveType.update(input.id, {
         name: input.v.name.trim(),
-        balanceType:
-          input.isSystemDefault || input.v.balanceType === 'NONE' ? null : input.v.balanceType,
-        daysPerUse: input.isSystemDefault ? null : input.v.daysPerUse,
-        isPaidYn: input.isSystemDefault ? null : input.v.isPaidYn,
-        maxDaysPerYear: input.isSystemDefault ? null : input.v.maxDaysPerYear ?? null,
-        requireEvidenceYn: input.isSystemDefault ? null : input.v.requireEvidenceYn,
-        usageDeadlineDays: input.isSystemDefault ? null : input.v.usageDeadlineDays ?? null,
+        balanceType: input.v.balanceType === 'NONE' ? null : input.v.balanceType,
+        daysPerUse: input.daysPerUse,
+        isPaidYn: input.v.isPaidYn,
+        maxDaysPerYear: input.v.maxDaysPerYear ?? null,
+        requireEvidenceYn: input.v.requireEvidenceYn,
+        usageDeadlineDays: input.v.usageDeadlineDays ?? null,
         displayOrder: input.v.displayOrder,
       }),
     onSuccess: () => {
@@ -118,12 +118,26 @@ export function AdminCompanyLeaveTypesPage() {
     onError: (e: Error) => message.error(e.message || '삭제에 실패했습니다.'),
   });
 
+  const initDefaultsM = useMutation({
+    mutationFn: async () => {
+      const companyId = user?.companyId?.trim();
+      if (!companyId) {
+        throw new Error('회사 정보가 없어 기본 휴가를 불러올 수 없습니다.');
+      }
+      await attendanceApi.companyLeaveType.initDefaults(companyId);
+    },
+    onSuccess: async () => {
+      message.success('기본 휴가 불러오기가 완료되었습니다.');
+      await qc.invalidateQueries({ queryKey: QK });
+    },
+    onError: (e: Error) => message.error(e.message || '기본 휴가 불러오기에 실패했습니다.'),
+  });
+
   const openCreate = () => {
     setEditing(null);
     form.resetFields();
     form.setFieldsValue({
       balanceType: 'NONE',
-      daysPerUse: 1,
       isPaidYn: 'Y',
       requireEvidenceYn: 'N',
       displayOrder: (listQ.data ?? []).length + 1,
@@ -136,7 +150,6 @@ export function AdminCompanyLeaveTypesPage() {
     form.setFieldsValue({
       name: record.name ?? '',
       balanceType: (record.balanceType ?? 'NONE') as FormValues['balanceType'],
-      daysPerUse: record.daysPerUse ?? 1,
       isPaidYn: (record.isPaidYn as 'Y' | 'N') ?? 'Y',
       maxDaysPerYear: record.maxDaysPerYear ?? undefined,
       requireEvidenceYn: (record.requireEvidenceYn as 'Y' | 'N') ?? 'N',
@@ -151,7 +164,7 @@ export function AdminCompanyLeaveTypesPage() {
       updateM.mutate({
         id: editing.companyLeaveTypeId,
         v,
-        isSystemDefault: Boolean(editing.isSystemDefault),
+        daysPerUse: editing.daysPerUse ?? 1,
       });
     } else {
       createM.mutate(v);
@@ -178,14 +191,6 @@ export function AdminCompanyLeaveTypesPage() {
         key: 'balanceType',
         width: 120,
         render: (v: string | null) => (v ? BALANCE_KO[v] ?? v : <Typography.Text type="secondary">차감 없음</Typography.Text>),
-      },
-      {
-        title: '1회당 차감',
-        dataIndex: 'daysPerUse',
-        key: 'daysPerUse',
-        width: 100,
-        align: 'right',
-        render: (v: number) => (v === 0.5 ? '0.5일 (반차)' : `${v ?? 0}일`),
       },
       {
         title: '유급',
@@ -264,8 +269,6 @@ export function AdminCompanyLeaveTypesPage() {
     [deleteM],
   );
 
-  const isSystemDefault = Boolean(editing?.isSystemDefault);
-
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
       <div className="tw-flex tw-flex-wrap tw-items-end tw-justify-between tw-gap-3">
@@ -274,13 +277,23 @@ export function AdminCompanyLeaveTypesPage() {
             휴가 관리
           </Typography.Title>
           <Typography.Text type="secondary" className="tw-text-xs">
-            직원이 휴가 신청 시 선택하는 휴가 종류를 관리합니다. 시스템 기본은 이름과 순서만 수정
-            가능합니다.
+            직원이 휴가 신청 시 선택하는 휴가 종류를 관리합니다.
           </Typography.Text>
         </div>
-        <Button type="primary" onClick={openCreate}>
-          휴가 종류 추가
-        </Button>
+        <Space>
+          <Popconfirm
+            title="기본 휴가를 불러올까요?"
+            description="이미 있는 코드(연차/반차 등)는 유지되고, 없는 기본 휴가만 추가됩니다."
+            okText="불러오기"
+            cancelText="취소"
+            onConfirm={() => initDefaultsM.mutate()}
+          >
+            <Button loading={initDefaultsM.isPending}>기본 휴가 불러오기</Button>
+          </Popconfirm>
+          <Button type="primary" onClick={openCreate}>
+            휴가 종류 추가
+          </Button>
+        </Space>
       </div>
 
       <Card className="tw-border-slate-200/80 tw-shadow-sm">
@@ -306,7 +319,7 @@ export function AdminCompanyLeaveTypesPage() {
         confirmLoading={createM.isPending || updateM.isPending}
         okText={editing ? '수정' : '등록'}
         cancelText="취소"
-        title={editing ? (isSystemDefault ? '시스템 기본 휴가 수정' : '휴가 종류 수정') : '휴가 종류 추가'}
+        title={editing ? '휴가 종류 수정' : '휴가 종류 추가'}
         destroyOnClose
         width={560}
       >
@@ -324,25 +337,11 @@ export function AdminCompanyLeaveTypesPage() {
             name="balanceType"
             extra="잔고에서 차감할 풀. '차감 없음' 선택 시 잔고와 무관하게 부여됩니다(경조·예비군 등)."
           >
-            <Select disabled={isSystemDefault} options={BALANCE_OPTIONS} />
-          </Form.Item>
-
-          <Form.Item
-            label="1회당 차감 일수"
-            name="daysPerUse"
-            rules={[{ required: true, message: '차감 일수를 입력하세요.' }]}
-            extra="반차는 0.5, 전일은 1.0."
-          >
-            <InputNumber
-              disabled={isSystemDefault}
-              className="tw-w-full"
-              min={0.1}
-              step={0.5}
-            />
+            <Select options={BALANCE_OPTIONS} />
           </Form.Item>
 
           <Form.Item label="연간 한도 (선택)" name="maxDaysPerYear" extra="비워두면 연간 한도 없음.">
-            <InputNumber disabled={isSystemDefault} className="tw-w-full" min={0.5} step={0.5} />
+            <InputNumber className="tw-w-full" min={0.5} step={0.5} />
           </Form.Item>
 
           <Form.Item
@@ -351,7 +350,6 @@ export function AdminCompanyLeaveTypesPage() {
             extra="설정하면 신청 시 사유 발생일(eventDate) 필수 + N일 이내만 사용 가능. 경조사/출산 등에 사용. 비워두면 기한 없음."
           >
             <InputNumber
-              disabled={isSystemDefault}
               className="tw-w-full"
               min={1}
               step={1}
@@ -362,7 +360,6 @@ export function AdminCompanyLeaveTypesPage() {
           <div className="tw-grid tw-grid-cols-1 tw-gap-3 md:tw-grid-cols-3">
             <Form.Item label="유급 여부" name="isPaidYn" rules={[{ required: true }]}>
               <Select
-                disabled={isSystemDefault}
                 options={[
                   { value: 'Y', label: '유급' },
                   { value: 'N', label: '무급' },
@@ -376,7 +373,6 @@ export function AdminCompanyLeaveTypesPage() {
               rules={[{ required: true }]}
             >
               <Select
-                disabled={isSystemDefault}
                 options={[
                   { value: 'Y', label: '필수' },
                   { value: 'N', label: '선택' },
@@ -393,11 +389,6 @@ export function AdminCompanyLeaveTypesPage() {
             </Form.Item>
           </div>
 
-          {isSystemDefault && (
-            <Typography.Paragraph type="secondary" className="!tw-mb-0 tw-text-xs">
-              시스템 기본 휴가는 이름과 정렬 순서만 수정됩니다. 차감 규칙 등은 변경되지 않습니다.
-            </Typography.Paragraph>
-          )}
         </Form>
       </Modal>
     </Space>

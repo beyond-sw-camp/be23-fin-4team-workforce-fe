@@ -4500,8 +4500,26 @@ export function ApprovalsPage() {
                           }
                           if (field.type === 'select') {
                             // source 지정된 select 는 API 로드 옵션 사용, 기본은 정적 options
+                            const normalizedLabel = String(field.label ?? '')
+                              .trim()
+                              .replace(/\s+/g, '')
+                              .toUpperCase();
+                            const leaveKindLabel = APPROVAL_VACATION_LEAVE_KIND_FIELD_LABEL
+                              .trim()
+                              .replace(/\s+/g, '')
+                              .toUpperCase();
+                            const normalizedSource = String(field.source ?? '')
+                              .trim()
+                              .toLowerCase()
+                              .replace(/[-_\s]/g, '');
+                            const isCompanyLeaveTypeSource =
+                              normalizedSource === 'companyleavetype' ||
+                              normalizedSource === 'companyleavetypes' ||
+                              normalizedSource === 'leavetype' ||
+                              normalizedSource === 'leavetypes';
+                            const isLeaveKindFieldByLabel = normalizedLabel === leaveKindLabel;
                             const dynamicOptions =
-                              field.source === 'companyLeaveType' ? companyLeaveTypeOptions
+                              (isCompanyLeaveTypeSource || isLeaveKindFieldByLabel) ? companyLeaveTypeOptions
                               : field.source === 'salaryItemTemplate' ? salaryItemTemplateOptions
                               : field.source === 'flexibleTimeSlot' ? flexibleTimeSlotOptions
                               : null;

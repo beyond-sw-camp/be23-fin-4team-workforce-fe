@@ -79,27 +79,23 @@ export function MyRetirementInquiryPage() {
     enabled: Boolean(memberId),
   });
 
-  const joinDate = meQ.data?.joinDate ?? null;
+  const profileJoinDate = meQ.data?.joinDate ?? null;
 
   const simulateM = useMutation({
-    mutationFn: (date: Dayjs) => {
-      if (!joinDate) {
-        return Promise.reject(new Error('입사일 정보를 불러오지 못했습니다.'));
-      }
-      return salaryApi.retirement.simulateMine({
-        joinDate,
+    mutationFn: (date: Dayjs) =>
+      salaryApi.retirement.simulateMine({
         resignDate: date.format('YYYY-MM-DD'),
-      });
-    },
+      }),
     onSuccess: (res) => setResult(res),
     onError: (e: Error) => message.error(e.message || '시뮬레이션 실패'),
   });
 
-  // 입사일 로딩 후 오늘 날짜로 자동 시뮬
+  // 화면 진입 시 오늘 날짜로 자동 시뮬 (joinDate는 응답에서 받음)
   useEffect(() => {
-    if (joinDate) simulateM.mutate(dayjs());
+    if (!memberId) return;
+    simulateM.mutate(dayjs());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [joinDate]);
+  }, [memberId]);
 
   const handleReset = () => {
     const today = dayjs();
@@ -111,7 +107,7 @@ export function MyRetirementInquiryPage() {
     simulateM.mutate(resignDate);
   };
 
-  const joinDateText = formatDateDot(joinDate);
+  const joinDateText = formatDateDot(result?.joinDate ?? profileJoinDate);
   const estimated = result?.estimatedAmount ?? 0;
   const days = result?.serviceDays;
 

@@ -1085,7 +1085,7 @@ function SalaryItemTemplateTab() {
 }
 
 /* ======================================================================
- * 5. 포괄임금 OT 현황 (ComprehensiveOvertime)
+ * 5. 초과 근무 현황 (ComprehensiveOvertime)
  *    - 포괄임금제 회사만 의미, 비포괄이면 빈 테이블
  *    - 이번 달 1일 ~ 기준일 누적 승인 OT vs 고정 OT 한도
  * ====================================================================== */
@@ -1148,7 +1148,7 @@ export function ComprehensiveOvertimeTab() {
       <Alert
         type="info"
         showIcon
-        message="포괄임금제 정책을 적용받는 구성원의 이번 달 누적 OT 현황입니다."
+        message="직원들의 이번 달 누적 초과 근무 현황입니다."
         description="사용률 50% 이상만 표시됩니다. 80% 이상은 주황, 초과(100%+)는 빨간색으로 강조됩니다. 배치가 매주 월요일 04:00 기준 알림도 발송합니다."
       />
       <div className="tw-flex tw-items-center tw-gap-3">

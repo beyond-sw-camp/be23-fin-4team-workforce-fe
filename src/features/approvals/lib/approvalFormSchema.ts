@@ -41,8 +41,9 @@ export function findApprovalFormFieldByLabel(
   fields: FormFieldSchema[],
   label: string,
 ): FormFieldSchema | undefined {
-  const t = label.trim();
-  return fields.find((f) => f.label.trim() === t);
+  const normalize = (v: string) => v.trim().replace(/\s+/g, '').toUpperCase();
+  const target = normalize(label);
+  return fields.find((f) => normalize(f.label) === target);
 }
 
 export function parseFormSchema(raw: string): FormSchema {

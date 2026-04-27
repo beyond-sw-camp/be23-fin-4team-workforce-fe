@@ -10,8 +10,10 @@
  *  - 행 클릭 시 우측 Drawer 로 일자별 상세 표시
  */
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from '@tanstack/react-router';
 import {
   Alert,
+  Button,
   Card,
   DatePicker,
   Descriptions,
@@ -64,6 +66,7 @@ function shortId(id?: string | null) {
 }
 
 export function AdminAttendancePage() {
+  const navigate = useNavigate();
   const today = useMemo(() => dayjs(), []);
   const [mode, setMode] = useState<PeriodMode>('day');
   const [singleDate, setSingleDate] = useState<Dayjs>(today);
@@ -299,13 +302,18 @@ export function AdminAttendancePage() {
 
   return (
     <div className="tw-space-y-4">
-      <div>
-        <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
-          전사 근태 현황
-        </Typography.Title>
-        <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-sm">
-          기간을 선택해 일별·월별 근태를 한 화면에서 조회합니다.
-        </Typography.Paragraph>
+      <div className="tw-flex tw-flex-wrap tw-items-start tw-justify-between tw-gap-3">
+        <div>
+          <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
+            전사 근태 현황
+          </Typography.Title>
+          <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-sm">
+            기간을 선택해 일별·월별 근태를 한 화면에서 조회합니다.
+          </Typography.Paragraph>
+        </div>
+        <Button onClick={() => navigate({ to: '/app/attendance/comprehensive-ot' })}>
+          초과 근무 현황
+        </Button>
       </div>
 
       <Card className="tw-border-slate-200/80 tw-shadow-sm" size="small">

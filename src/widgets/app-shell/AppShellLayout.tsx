@@ -363,12 +363,6 @@ function buildAppShellMenuItems(
                             label: APP_MENU_LABEL['/app/attendance/overtime-policies'],
                             title: APP_MENU_LABEL['/app/attendance/overtime-policies'],
                         },
-                        {
-                            key: '/app/attendance/comprehensive-ot',
-                            icon: <ClockCircleOutlined className="tw-text-lg"/>,
-                            label: APP_MENU_LABEL['/app/attendance/comprehensive-ot'],
-                            title: APP_MENU_LABEL['/app/attendance/comprehensive-ot'],
-                        },
                     );
                 }
                 items.push({
@@ -1407,7 +1401,7 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
     if (pathname === '/app/attendance/schedules') return ['/app/attendance/schedules'];
     if (pathname === '/app/attendance/overtime-policies') return ['/app/attendance/overtime-policies'];
     if (pathname === '/app/attendance/flexible-slots') return ['/app/attendance/schedules'];
-    if (pathname === '/app/attendance/comprehensive-ot') return ['/app/attendance/comprehensive-ot'];
+    if (pathname === '/app/attendance/comprehensive-ot') return ['/app/attendance/company'];
     if (pathname === '/app/attendance') return ['/app/attendance'];
     if (pathname === '/app/work-trips') return ['/app/work-trips'];
     if (pathname === '/app/leave/policies') return ['/app/leave/policies'];

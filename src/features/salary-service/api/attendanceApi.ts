@@ -298,6 +298,13 @@ export const attendanceApi = {
         `${BASE}/attendance/leave-types/${encodeURIComponent(companyLeaveTypeId)}`,
       );
     },
+
+    /** 회사 기본 휴가(연차/반차/경조 등) 시드 */
+    async initDefaults(companyId: string): Promise<void> {
+      await httpClient.post(`${BASE}/attendance/leave-types/init`, undefined, {
+        params: { companyId },
+      });
+    },
   },
 
   /** /attendance/leave-of-absence — 휴직 */
@@ -611,7 +618,7 @@ export const attendanceApi = {
       return Array.isArray(unwrapped) ? unwrapped : [];
     },
 
-    // 내 포괄임금 OT 현황, 비포괄제이거나 해당 없음이면 null
+    // 내 포괄임금 초과 근무 현황
     async getMy(baseDate?: string): Promise<ComprehensiveOvertimeStatus | null> {
       const { data } = await httpClient.get(`${BASE}/attendance/comprehensive-overtime/my`, {
         params: baseDate ? { baseDate } : undefined,
