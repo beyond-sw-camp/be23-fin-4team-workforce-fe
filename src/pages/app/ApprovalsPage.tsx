@@ -4434,11 +4434,6 @@ export function ApprovalsPage() {
                           />
                         }
                       >
-<<<<<<< HEAD
-                        {selectedSchema.fields.map((field) => {
-                          // hidden 필드는 제출 시 프론트가 auto-populate (예: leaveRequestId), UI 에 미표시
-                          if (field.type === 'hidden') return null;
-=======
                         {selectedSchema.fields
                           .filter(
                             (field) =>
@@ -4447,7 +4442,8 @@ export function ApprovalsPage() {
                               showFamilyEventSubtypeInCompose,
                           )
                           .map((field) => {
->>>>>>> 7b931a6b42fe3a6ce18f829b16298b0d9b4c5449
+                          // hidden 필드는 제출 시 프론트가 auto-populate (예: leaveRequestId), UI 에 미표시
+                          if (field.type === 'hidden') return null;
                           const namePath: (string | number)[] = ['content', field.name];
                           const ph = field.placeholder;
                           const fieldLocked = field.locked === true;

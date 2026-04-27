@@ -41,29 +41,16 @@ export function NotificationsPage() {
     if (item.isRead !== 'YES') {
       await markAsRead.mutateAsync(item.notificationId);
     }
-<<<<<<< HEAD
     const t = String(item.notificationType ?? '').toUpperCase();
-    if (t === 'APPROVAL_REQUESTED') {
-      await navigate({
-        to: '/app/approvals',
-        search: { tab: 'pending' },
-      });
-      return;
-    }
-    if (t === 'APPROVAL_APPROVED' || t === 'APPROVAL_REJECTED') {
-      await navigate({
-        to: '/app/approvals',
-        search: { tab: 'my', box: 'per-all' },
-      });
-      return;
-    }
     // 연차 사용 촉진 통보 강제 지정 알림은 회신 페이지로 딥링크
-    if (t === 'LEAVE_PROMOTION_FIRST'
-        || t === 'LEAVE_PROMOTION_SECOND'
-        || t === 'LEAVE_DESIGNATION') {
+    if (
+      t === 'LEAVE_PROMOTION_FIRST' ||
+      t === 'LEAVE_PROMOTION_SECOND' ||
+      t === 'LEAVE_DESIGNATION'
+    ) {
       await navigate({ to: '/app/leave/my-promotion' });
+      return;
     }
-=======
     await navigate(
       buildApprovalNotificationNavigate({
         notificationType: item.notificationType,
@@ -73,21 +60,16 @@ export function NotificationsPage() {
         targetId: item.targetId,
       }),
     );
->>>>>>> 7b931a6b42fe3a6ce18f829b16298b0d9b4c5449
   };
 
   const isApprovalNotification = (type: string) => {
     const t = String(type ?? '').toUpperCase();
-<<<<<<< HEAD
-    return t === 'APPROVAL_REQUESTED'
-        || t === 'APPROVAL_APPROVED'
-        || t === 'APPROVAL_REJECTED'
-        || t === 'LEAVE_PROMOTION_FIRST'
-        || t === 'LEAVE_PROMOTION_SECOND'
-        || t === 'LEAVE_DESIGNATION';
-=======
-    return t.startsWith('APPROVAL_');
->>>>>>> 7b931a6b42fe3a6ce18f829b16298b0d9b4c5449
+    return (
+      t.startsWith('APPROVAL_') ||
+      t === 'LEAVE_PROMOTION_FIRST' ||
+      t === 'LEAVE_PROMOTION_SECOND' ||
+      t === 'LEAVE_DESIGNATION'
+    );
   };
 
   return (
