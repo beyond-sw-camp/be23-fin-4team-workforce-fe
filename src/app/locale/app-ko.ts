@@ -9,11 +9,13 @@ export const APP_MENU_LABEL: Record<string, string> = {
   '/app/members': '구성원',
   '/app/organization': '조직',
   '/app/roles': '역할·권한',
-  '/app/attendance': '출퇴근',
-  '/app/leave': '휴가 잔여/이력',
+  '/app/attendance': '내 근태',
+  '/app/leave': '휴가계획 관리',
   '/app/approvals': '결재함',
   '/app/approvals/department': '부서 문서함',
   '/app/payroll': '급여 조회',
+  '/app/payroll/annual': '연봉 조회',
+  '/app/income': '소득관리',
   '/app/notifications': '알림',
   '/app/performance': '성과',
   '/app/evaluations': '평가',
@@ -21,27 +23,30 @@ export const APP_MENU_LABEL: Record<string, string> = {
   '/app/settings': '설정',
   '/app/ai-documents': 'HR 정책 문서',
   '/app/work-trips': '출장 신청/이력',
-  '/app/attendance/monthly': '내 근태 이력',
-  '/app/attendance/schedules/my': '스케줄/시차',
-  '/app/attendance/overtime': '연장근로 신청/이력',
+  '/app/attendance/monthly': '개인 월근태근무',
+  '/app/attendance/schedules/my': '개인 근무 스케줄',
+  '/app/attendance/overtime': '초과근무 관리',
   '/app/attendance/work-time': '내 주간 근무시간',
-  '/app/attendance/company': '오늘 출근 현황',
-  '/app/attendance/company/monthly': '월별 근태 현황',
-  '/app/attendance/holidays': '휴무일/공휴일',
-  '/app/attendance/ip-whitelist': '출퇴근 허용 IP',
-  '/app/attendance/schedules': '근무 스케줄',
+  '/app/attendance/company': '근태 현황',
+  '/app/attendance/holidays': '휴무일/공휴일 관리',
+  '/app/attendance/schedules': '근무스케줄 관리',
   '/app/attendance/overtime-policies': '연장근로 정책',
   '/app/attendance/flexible-slots': '시차 출퇴근 시간대',
-  '/app/leave/grant': '휴가 부여',
-  '/app/leave/policies': '연차 정책',
+  '/app/attendance/comprehensive-ot': '포괄임금 OT 현황',
+  '/app/leave/grant': '특별휴가 일괄 부여',
+  '/app/leave/policies': '연차 정책 관리',
   '/app/leave/absence': '휴직 관리',
-  '/app/leave/types': '휴가 종류 관리',
+  '/app/leave/types': '휴가 관리',
+  '/app/leave/my-promotion': '내 연차 사용 통보',
+  '/app/leave/promotion-no-response': '연차 통보 미응답자 관리',
   '/app/payroll/admin': '급여 정산 관리',
+  '/app/payroll/tax-summary': '세금·4대보험',
   '/app/payroll/allowances': '수당 변경 신청',
-  '/app/payroll/allowances/admin': '수당 요청 관리',
+  '/app/payroll/retirement': '퇴직금 조회',
   '/app/salary/unused-leave': '연차수당 정산',
-  '/app/salary/settings': '급여 정책/기준',
+  '/app/salary/settings': '급여 정책',
   '/app/salary/pay-grade-table': '호봉표 관리',
+  '/app/salary/retirement-policy': '퇴직급여 정책',
 };
 
 /** 사이드 메뉴 표시 순서 */
@@ -107,28 +112,27 @@ export function appHeaderTitleFromPath(
   if (exact) return exact;
   if (pathname === '/app/me') return '마이페이지';
   if (pathname === '/app/me/edit') return '내 정보 수정';
-  if (pathname === '/app/attendance/monthly') return '내 근태 이력';
-  if (pathname === '/app/attendance/schedules/my') return '스케줄/시차';
-  if (pathname === '/app/attendance/overtime') return '연장근로 신청/이력';
+  if (pathname === '/app/attendance/monthly') return '개인 월근태근무';
+  if (pathname === '/app/attendance/schedules/my') return '개인 근무 스케줄';
+  if (pathname === '/app/attendance/overtime') return '초과근무 관리';
   if (pathname === '/app/attendance/work-time') return '내 주간 근무시간';
-  if (pathname === '/app/attendance/company/monthly') return '월별 근태 현황';
-  if (pathname === '/app/attendance/company') return '오늘 출근 현황';
+  if (pathname === '/app/attendance/company') return '근태 현황';
   if (pathname === '/app/attendance/overtime-policies') return '연장근로 정책';
   if (pathname === '/app/attendance/flexible-slots') return '시차 출퇴근 시간대';
-  if (pathname === '/app/leave/grant') return '휴가 부여';
+  if (pathname === '/app/leave/grant') return '특별휴가 일괄 부여';
   if (pathname === '/app/leave/policies') return '연차 정책 관리';
   if (pathname === '/app/leave/absence') return '휴직 관리';
   if (pathname === '/app/leave/types') return '휴가 종류 관리';
   if (pathname === '/app/attendance/holidays') return '휴무일/공휴일 관리';
-  if (pathname === '/app/attendance/ip-whitelist') return '출퇴근 허용 IP 관리';
   if (pathname === '/app/attendance/schedules') return '근무 스케줄 관리';
   if (pathname === '/app/work-trips') return '출장 신청/이력';
   if (pathname === '/app/payroll/allowances') return '수당 변경 신청';
-  if (pathname === '/app/salary/settings') return '급여 정책/기준';
+  if (pathname === '/app/salary/settings') return '급여 정책 설정';
   if (pathname === '/app/salary/pay-grade-table') return '호봉표 관리';
   if (pathname === '/app/payroll') return '급여 조회';
+  if (pathname === '/app/payroll/annual') return '연봉 조회';
+  if (pathname === '/app/income') return '소득관리';
   if (pathname === '/app/payroll/admin') return '급여 정산 관리';
-  if (pathname === '/app/payroll/allowances/admin') return '수당 요청 관리';
   if (/^\/app\/payroll\/admin\/[^/]+$/.test(pathname)) return '급여대장 편집';
   if (/^\/app\/payroll\/[^/]+$/.test(pathname)) return '급여 명세';
   if (/^\/app\/members\/[^/]+$/.test(pathname)) return '구성원 상세';
