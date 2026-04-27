@@ -402,17 +402,6 @@ export const salaryApi = {
     },
   },
 
-  /** /salary/retirement — 퇴직금 시뮬레이션 (직원 본인용) */
-  retirement: {
-    async simulateMine(payload: RetirementSimReq): Promise<RetirementSimRes> {
-      const { data } = await httpClient.post(
-        `${BASE}/salary/retirement/simulate/me`,
-        payload,
-      );
-      return unwrapApiResponse<RetirementSimRes>(data);
-    },
-  },
-
   /** /salary/retirement-policy — 퇴직급여 제도 정책 */
   retirementPolicy: {
     async list(): Promise<RetirementPolicy[]> {
