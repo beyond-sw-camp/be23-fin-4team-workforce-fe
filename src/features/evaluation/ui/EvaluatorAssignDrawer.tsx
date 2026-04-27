@@ -1,6 +1,6 @@
 import {useEffect, useMemo, useRef, useState} from 'react';
 import {useMutation} from '@tanstack/react-query';
-import {App, Avatar, Button, Modal, Popconfirm, Select, Space, Tag, Tooltip, Typography} from 'antd';
+import {App, Avatar, Button, Popconfirm, Select, Space, Tag, Tooltip, Typography} from 'antd';
 import {
     EditOutlined,
     MinusCircleOutlined,
@@ -13,10 +13,15 @@ import type {EvaluationGroup, EvaluatorMap, EvalType} from '@/features/evaluatio
 import {evalTypeLabel} from '@/features/evaluation/lib/evaluationLabels';
 import {parseApiError} from '@/shared/api/error-parser';
 import {MemberRemoteSelect} from '@/features/members/ui/MemberRemoteSelect';
+import {AppDoubleActionModal} from '@/shared/ui/AppDoubleActionModal';
 
 const {Text} = Typography;
 
-export type AssignDrawerState = { open: boolean; group: EvaluationGroup | null };
+export type AssignDrawerState = {
+    open: boolean;
+    group: EvaluationGroup | null;
+    initialTargetMemberId?: string | null;
+};
 type DraftMapping = { targetMemberId: string; evaluatorId: string; evaluationType: EvalType; _key: number };
 
 type Props = {
@@ -43,13 +48,29 @@ export function EvaluatorAssignDrawer({state, onClose, seasonId, labelFor, evalT
     const {message} = App.useApp();
     const group = state.group;
     const [mappings, setMappings] = useState<DraftMapping[]>([]);
+    const [showAllTargets, setShowAllTargets] = useState(false);
     const keyRef = useRef(0);
+
+    useEffect(() => {
+        if (!state.open) {
+            setShowAllTargets(false);
+        }
+    }, [state.open]);
 
     const effectiveEvalTypes = useMemo<EvalType[]>(() => {
         // 그룹에 지정된 평가 유형만 사용. 없으면 4종 전부 허용
         if (evalTypes && evalTypes.length > 0) return evalTypes;
         return ['SELF', 'DOWNWARD', 'UPWARD', 'PEER'];
     }, [evalTypes]);
+    const targetProfileById = useMemo(() => {
+        const map = new Map<string, string>();
+        for (const em of group?.evaluatorMaps ?? []) {
+            if (em?.targetMemberId && em.targetMemberProfileUrl && !map.has(em.targetMemberId)) {
+                map.set(em.targetMemberId, em.targetMemberProfileUrl);
+            }
+        }
+        return map;
+    }, [group?.evaluatorMaps]);
 
     /**
      * 드로어 오픈 시 드래프트 초기화.
@@ -185,9 +206,15 @@ export function EvaluatorAssignDrawer({state, onClose, seasonId, labelFor, evalT
 
     if (!group) return null;
     const targets = group.targetMemberIds ?? [];
+    const focusedTargetId = String(state.initialTargetMemberId ?? '').trim();
+    const isFocusedMode = focusedTargetId.length > 0 && !showAllTargets;
+    const visibleTargets = focusedTargetId
+        ? (showAllTargets ? targets : targets.filter((t) => t === focusedTargetId))
+        : targets;
+    const focusLabel = focusedTargetId ? labelFor(focusedTargetId) : '';
 
     return (
-        <Modal
+        <AppDoubleActionModal
             title={
                 <Space>
                     <EditOutlined />
@@ -195,30 +222,34 @@ export function EvaluatorAssignDrawer({state, onClose, seasonId, labelFor, evalT
                 </Space>
             }
             open={state.open}
-            onCancel={onClose}
+            onClose={onClose}
             width={880}
             destroyOnHidden
-            centered
-            footer={
-                <div className="tw-flex tw-items-center tw-justify-between tw-gap-2">
-                    <Text type="secondary" className="tw-text-xs">
-                        그룹 유형: {effectiveEvalTypes.map((t) => evalTypeLabel(t)).join(' · ')}
-                    </Text>
-                    <div className="tw-flex tw-gap-2">
-                        <Button onClick={onClose}>취소</Button>
-                        <Button
-                            type="primary"
-                            onClick={handleSave}
-                            loading={updateMapMut.isPending}
-                            className="!tw-bg-[#6366F1] hover:!tw-bg-[#4F46E5]"
-                        >
-                            저장
-                        </Button>
-                    </div>
-                </div>
-            }
+            onConfirm={handleSave}
+            confirmText="저장"
+            confirmLoading={updateMapMut.isPending}
         >
-            {/* 안내 배너 + 자동 지정 */}            <div className="tw-mb-4 tw-flex tw-items-center tw-justify-between tw-gap-3 tw-rounded-2xl tw-bg-indigo-50 tw-px-4 tw-py-3">
+            <div className="tw-px-5 tw-py-4">
+            {isFocusedMode ? (
+                <div className="tw-mb-3 tw-flex tw-items-center tw-gap-2">
+                    <Tag color="blue" className="!tw-m-0 !tw-rounded-full">
+                        대상자 기준 열기: {focusLabel}
+                    </Tag>
+                    <Button
+                        size="small"
+                        className="!tw-rounded-[50px]"
+                        onClick={() => setShowAllTargets(true)}
+                    >
+                        전체 보기로 다시 열기
+                    </Button>
+                </div>
+            ) : null}
+            <Text type="secondary" className="tw-text-xs">
+                그룹 유형: {effectiveEvalTypes.map((t) => evalTypeLabel(t)).join(' · ')}
+            </Text>
+            {/* 안내 배너 + 자동 지정 (전체 지정 모드에서만 노출) */}
+            {!isFocusedMode ? (
+            <div className="tw-mb-4 tw-flex tw-items-center tw-justify-between tw-gap-3 tw-rounded-2xl tw-bg-indigo-50 tw-px-4 tw-py-3">
                 <div>
                     <Text strong className="tw-text-slate-900">
                         대상 인원 {targets.length}명
@@ -246,21 +277,26 @@ export function EvaluatorAssignDrawer({state, onClose, seasonId, labelFor, evalT
                     </Popconfirm>
                 </Tooltip>
             </div>
+            ) : null}
 
             <div className="tw-space-y-4">
-                {targets.length === 0 && (
+                {visibleTargets.length === 0 && (
                     <div className="tw-rounded-2xl tw-border tw-border-dashed tw-border-slate-200 tw-py-10 tw-text-center tw-text-sm tw-text-slate-400">
                         대상 인원이 없습니다. 그룹에 대상 인원을 먼저 추가해 주세요.
                     </div>
                 )}
-                {targets.map((tid) => {
+                {visibleTargets.map((tid) => {
                     const rows = mappings.filter((m) => m.targetMemberId === tid);
                     const targetName = labelFor(tid);
                     const initial = targetName.trim().charAt(0);
                     return (
                         <div key={tid} className="tw-rounded-2xl tw-border tw-border-slate-200 tw-bg-white tw-p-4">
                             <div className="tw-mb-3 tw-flex tw-items-center tw-gap-3">
-                                <Avatar size={36} style={{backgroundColor: '#EEF2FF', color: '#6366F1', fontWeight: 600}}>
+                                <Avatar
+                                    size={36}
+                                    src={targetProfileById.get(tid)}
+                                    style={{backgroundColor: '#E6F0FF', color: '#1e3a5f', fontWeight: 600}}
+                                >
                                     {initial}
                                 </Avatar>
                                 <div className="tw-flex-1">
@@ -326,6 +362,7 @@ export function EvaluatorAssignDrawer({state, onClose, seasonId, labelFor, evalT
                     );
                 })}
             </div>
-        </Modal>
+            </div>
+        </AppDoubleActionModal>
     );
 }

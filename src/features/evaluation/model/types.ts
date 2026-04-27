@@ -45,6 +45,8 @@ export type EvaluatorMap = {
   targetMemberId: string;
   evaluatorId: string;
   evaluationType: EvalType;
+  targetMemberProfileUrl?: string;
+  evaluatorProfileUrl?: string;
 };
 
 export type EvaluationGroup = {
@@ -263,4 +265,23 @@ export type CalibrationAdjustPayload = {
 export type CalibrationBaselinePayload = {
   range: string;
   baselineValue: number;
+};
+
+export type CalibrationDistributionOverview = {
+  targetDistribution: Record<string, number>;
+  currentDistribution: Record<string, number>;
+};
+
+export type RelativePreviewAdjustment = {
+  responseId: string;
+  normalizedScore?: number;
+  currentGrade?: string;
+  predictedGrade?: string;
+};
+
+export type RelativeDistributionPreview = {
+  targetDistribution: Record<string, number>;
+  currentDistribution: Record<string, number>;
+  predictedDistribution: Record<string, number>;
+  adjustments: RelativePreviewAdjustment[];
 };

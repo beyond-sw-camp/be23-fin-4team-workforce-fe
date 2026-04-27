@@ -4,7 +4,7 @@ import {
   MailOutlined,
   SafetyCertificateOutlined,
 } from '@ant-design/icons';
-import { Alert, Card, Divider, Form, Input, Typography } from 'antd';
+import { Alert, Divider, Form, Input, Typography } from 'antd';
 import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { memberApi } from '@/features/member/api/memberApi';
@@ -99,17 +99,17 @@ export function FindPasswordPage() {
   };
 
   return (
-    <div className="tw-flex tw-min-h-screen tw-items-center tw-justify-center tw-bg-slate-50 tw-p-6">
-      <Card className="tw-w-full tw-max-w-[520px] tw-rounded-[32px] tw-border tw-border-slate-100 tw-shadow-2xl tw-shadow-blue-900/5">
-        <div className="tw-p-8 md:tw-p-10">
+    <div className="tw-flex tw-min-h-screen tw-items-start tw-justify-center tw-bg-slate-50 tw-pt-20 sm:tw-pt-24 tw-pb-8 sm:tw-pb-10 tw-px-3 sm:tw-px-4">
+      <div className="tw-z-10 tw-w-full tw-max-w-[520px]">
+        <div className="tw-p-5 sm:tw-p-6 md:tw-p-8">
           <AppButton
             type="text"
             variant="text"
             onClick={() => navigate({ to: '/login' })}
-            className="tw-mb-4 tw-flex tw-items-center tw-gap-2 tw-text-xs tw-font-bold tw-uppercase tw-tracking-wide tw-text-slate-500 hover:tw-text-slate-900"
+            className="tw-mb-3 tw-flex tw-items-center tw-gap-2 tw-text-xs tw-font-bold tw-uppercase tw-tracking-wide tw-text-slate-500 hover:tw-text-slate-900"
           >
             <ArrowLeftOutlined />
-            Back to Login
+            로그인으로 돌아가기
           </AppButton>
 
           <Typography.Title level={3} className="!tw-mb-1 !tw-tracking-tight">
@@ -130,7 +130,7 @@ export function FindPasswordPage() {
           {!done && error ? <Alert type="error" showIcon message={error} className="tw-mt-4" /> : null}
 
           {!done ? (
-            <Form form={form} className="tw-mt-6" layout="vertical" requiredMark={false}>
+            <Form form={form} className="tw-mt-4 sm:tw-mt-5" layout="vertical" requiredMark={false}>
               <Form.Item
                 label={<span className="tw-text-[11px] tw-font-bold tw-uppercase tw-tracking-[0.15em] tw-text-slate-400">Email</span>}
                 name="email"
@@ -145,19 +145,35 @@ export function FindPasswordPage() {
                 />
               </Form.Item>
 
-              <AppButton
-                size="large"
-                loading={sendingMail}
-                variant="primary"
-                className="tw-h-12 tw-w-full !tw-font-black"
-                onClick={() => void handleSendMail()}
-              >
-                인증 메일 발송
-              </AppButton>
+              <div className="tw-flex tw-flex-wrap tw-gap-2">
+                <AppButton
+                  size="large"
+                  loading={sendingMail}
+                  variant="primary"
+                  className="tw-h-12 tw-flex-1 !tw-font-black"
+                  onClick={() => void handleSendMail()}
+                >
+                  {codeSent ? '인증 메일 재발송' : '인증 메일 발송'}
+                </AppButton>
+                {codeSent ? (
+                  <AppButton
+                    size="large"
+                    variant="secondary"
+                    className="tw-h-12 tw-whitespace-nowrap"
+                    onClick={() => {
+                      setCodeSent(false);
+                      setCodeVerified(false);
+                      form.setFieldsValue({ code: undefined, newPassword: undefined, confirmPassword: undefined });
+                    }}
+                  >
+                    이메일 수정
+                  </AppButton>
+                ) : null}
+              </div>
 
               {codeSent ? (
                 <>
-                  <Divider className="!tw-my-6">인증번호</Divider>
+                  <Divider className="!tw-my-5">인증번호</Divider>
                   <Alert
                     type="info"
                     showIcon
@@ -191,7 +207,7 @@ export function FindPasswordPage() {
 
                   {codeVerified ? (
                     <>
-                      <Divider className="!tw-my-6">새 비밀번호</Divider>
+                      <Divider className="!tw-my-5">새 비밀번호</Divider>
 
                       <Form.Item
                         name="newPassword"
@@ -246,7 +262,7 @@ export function FindPasswordPage() {
             </Form>
           ) : null}
         </div>
-      </Card>
+      </div>
     </div>
   );
 }

@@ -8,7 +8,10 @@ import {
   type ApprovalSearchStatus,
 } from '@/features/approvals/api/approvalSearchApi';
 import { ApprovalRequestReadOnlyModal } from '@/features/approvals/ui/ApprovalRequestReadOnlyModal';
-import { ApprovalSearchPanel } from '@/features/approvals/ui/ApprovalSearchPanel';
+import {
+  ApprovalSearchPanel,
+  type ApprovalSearchPanelFilters,
+} from '@/features/approvals/ui/ApprovalSearchPanel';
 
 function parseSearch(search: Record<string, unknown>) {
   const page = Number(search.page ?? 0);
@@ -40,15 +43,15 @@ export function MyApprovalRequestsPage() {
   const queryResult = useQuery({
     queryKey: ['approval-search', 'my-requests', filters],
     queryFn: () => approvalSearchApi.searchMyRequests(filters),
-    keepPreviousData: true,
+    placeholderData: (prev) => prev,
   });
 
   const updateFilters = useCallback(
-    (next: typeof filters) => {
+    (next: ApprovalSearchPanelFilters) => {
       navigate({
         to: '/app/approvals/my-requests',
         search: {
-          ...(next.embed ? { embed: next.embed } : {}),
+          ...((next.embed ?? filters.embed) ? { embed: next.embed ?? filters.embed } : {}),
           ...(next.query ? { query: next.query } : {}),
           ...(next.status ? { status: next.status } : {}),
           ...(next.requestType ? { requestType: next.requestType } : {}),
@@ -58,7 +61,7 @@ export function MyApprovalRequestsPage() {
         replace: true,
       });
     },
-    [navigate],
+    [navigate, filters.embed],
   );
 
   return (

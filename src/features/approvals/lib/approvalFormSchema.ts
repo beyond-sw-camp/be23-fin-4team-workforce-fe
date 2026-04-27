@@ -32,6 +32,19 @@ export type FormSchema = {
   fields: FormFieldSchema[];
 };
 
+/** 연차신청서 등 휴가 양식: 휴가종류 select와 경조사 구분 필드 연동 시 라벨 기준 */
+export const APPROVAL_VACATION_LEAVE_KIND_FIELD_LABEL = '휴가종류';
+export const APPROVAL_FAMILY_EVENT_SUBTYPE_FIELD_LABEL = '경조사 구분';
+export const APPROVAL_FAMILY_EVENT_LEAVE_KIND_OPTION = '경조사';
+
+export function findApprovalFormFieldByLabel(
+  fields: FormFieldSchema[],
+  label: string,
+): FormFieldSchema | undefined {
+  const t = label.trim();
+  return fields.find((f) => f.label.trim() === t);
+}
+
 export function parseFormSchema(raw: string): FormSchema {
   try {
     const parsed = JSON.parse(raw) as { fields?: unknown };

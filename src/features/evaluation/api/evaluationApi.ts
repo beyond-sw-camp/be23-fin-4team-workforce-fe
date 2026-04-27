@@ -13,7 +13,9 @@ import type {
   SaveResponsePayload,
   CalibrationAdjustPayload,
   CalibrationBaselinePayload,
+  CalibrationDistributionOverview,
   QuestionType,
+  RelativeDistributionPreview,
   DesignQuestion,
   DesignSection,
   SectionType,
@@ -68,6 +70,8 @@ function mapEvaluatorMapsFromApi(raw: Record<string, unknown>): EvaluationGroup[
       targetMemberId: String(m.targetMemberId ?? m.target_member_id ?? ''),
       evaluatorId: String(m.evaluatorId ?? m.evaluator_id ?? ''),
       evaluationType: (m.evaluationType ?? m.evaluation_type) as EvaluationGroup['evaluatorMaps'][number]['evaluationType'],
+      targetMemberProfileUrl: m.targetMemberProfileUrl ?? m.target_member_profile_url ?? undefined,
+      evaluatorProfileUrl: m.evaluatorProfileUrl ?? m.evaluator_profile_url ?? undefined,
     }));
   }
   const legacy = raw.evaluatorMapsJson ?? raw.evaluator_maps_json;
@@ -651,6 +655,51 @@ export const evaluationApi = {
   async getCalibrationOverview(seasonId: string): Promise<EvaluationResponse[]> {
     const res = await httpClient.get(`/evaluation/evaluation-responses/seasons/${seasonId}/calibration`);
     return normalizeArray(unwrapApiResponse<unknown>(res.data), mapResponse);
+  },
+
+  async getCalibrationDistributionOverview(seasonId: string): Promise<CalibrationDistributionOverview> {
+    const res = await httpClient.get(
+      `/evaluation/evaluation-responses/seasons/${seasonId}/calibration/overview`,
+    );
+    const raw = unwrapApiResponse<any>(res.data) ?? {};
+    return {
+      targetDistribution:
+        raw.targetDistribution && typeof raw.targetDistribution === 'object'
+          ? (raw.targetDistribution as Record<string, number>)
+          : {},
+      currentDistribution:
+        raw.currentDistribution && typeof raw.currentDistribution === 'object'
+          ? (raw.currentDistribution as Record<string, number>)
+          : {},
+    };
+  },
+
+  async previewRelativeDistribution(seasonId: string): Promise<RelativeDistributionPreview> {
+    const res = await httpClient.get(
+      `/evaluation/evaluation-responses/seasons/${seasonId}/calibration/preview-relative`,
+    );
+    const raw = unwrapApiResponse<any>(res.data) ?? {};
+    const adjustmentsRaw = Array.isArray(raw.adjustments) ? raw.adjustments : [];
+    return {
+      targetDistribution:
+        raw.targetDistribution && typeof raw.targetDistribution === 'object'
+          ? (raw.targetDistribution as Record<string, number>)
+          : {},
+      currentDistribution:
+        raw.currentDistribution && typeof raw.currentDistribution === 'object'
+          ? (raw.currentDistribution as Record<string, number>)
+          : {},
+      predictedDistribution:
+        raw.predictedDistribution && typeof raw.predictedDistribution === 'object'
+          ? (raw.predictedDistribution as Record<string, number>)
+          : {},
+      adjustments: adjustmentsRaw.map((a: any) => ({
+        responseId: String(a.responseId),
+        normalizedScore: typeof a.normalizedScore === 'number' ? a.normalizedScore : undefined,
+        currentGrade: a.currentGrade ?? undefined,
+        predictedGrade: a.predictedGrade ?? undefined,
+      })),
+    };
   },
 
   async applyBaseline(seasonId: string, body: CalibrationBaselinePayload): Promise<void> {

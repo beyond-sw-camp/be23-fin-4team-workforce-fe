@@ -54,7 +54,10 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
   const someAgreementChecked = agreeTermsOn || agreePrivacyOn;
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [checkingBusiness, setCheckingBusiness] = useState(false);
+  const [sendingCode, setSendingCode] = useState(false);
+  const [verifyingCode, setVerifyingCode] = useState(false);
+  const [submittingOnboarding, setSubmittingOnboarding] = useState(false);
   const [businessChecked, setBusinessChecked] = useState(false);
   const [emailVerified, setEmailVerified] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
@@ -89,7 +92,7 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
     setSuccess(null);
     const values = await form.validateFields(['businessNumber']).catch(() => null);
     if (!values?.businessNumber) return;
-    setLoading(true);
+    setCheckingBusiness(true);
     try {
       const response = await companyApi.checkBusinessNumber(values.businessNumber);
       if (!response?.success) {
@@ -104,7 +107,7 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
     } catch (e) {
       setError((e as { message?: string }).message ?? '사업자번호 검증에 실패했습니다.');
     } finally {
-      setLoading(false);
+      setCheckingBusiness(false);
     }
   };
 
@@ -113,7 +116,7 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
     setSuccess(null);
     const values = await form.validateFields(['adminEmail', 'companyName']).catch(() => null);
     if (!values?.adminEmail) return;
-    setLoading(true);
+    setSendingCode(true);
     try {
       const res = await companyApi.sendVerificationCode(values.adminEmail);
       if (!res.success) {
@@ -125,7 +128,7 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
     } catch (e) {
       setError((e as { message?: string }).message ?? '인증 코드 발송에 실패했습니다.');
     } finally {
-      setLoading(false);
+      setSendingCode(false);
     }
   };
 
@@ -134,7 +137,7 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
     setSuccess(null);
     const values = await form.validateFields(['adminEmail', 'code']).catch(() => null);
     if (!values?.adminEmail || !values?.code) return;
-    setLoading(true);
+    setVerifyingCode(true);
     try {
       const res = await companyApi.verifyCode(values.adminEmail, values.code);
       if (!res.success) {
@@ -146,7 +149,7 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
     } catch (e) {
       setError((e as { message?: string }).message ?? '인증 코드 확인에 실패했습니다.');
     } finally {
-      setLoading(false);
+      setVerifyingCode(false);
     }
   };
 
@@ -165,7 +168,7 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
       setError('필수 약관에 모두 동의해 주세요.');
       return;
     }
-    setLoading(true);
+    setSubmittingOnboarding(true);
     try {
       const res = await companyApi.onboarding({
         companyName: values.companyName,
@@ -209,19 +212,19 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
     } catch (e) {
       setError((e as { message?: string }).message ?? '온보딩 처리에 실패했습니다.');
     } finally {
-      setLoading(false);
+      setSubmittingOnboarding(false);
     }
   };
 
   const outerClass = embedded
-    ? 'tw-min-h-screen tw-w-full tw-bg-[#F8FAFC] tw-pt-24 tw-pb-10'
-    : 'tw-min-h-screen tw-bg-[#F8FAFC] tw-px-6 tw-py-10';
+    ? 'tw-min-h-screen tw-w-full tw-overflow-x-hidden tw-bg-[#F8FAFC] tw-pt-20 sm:tw-pt-24 tw-pb-8 sm:tw-pb-10 tw-px-3 sm:tw-px-4'
+    : 'tw-min-h-screen tw-overflow-x-hidden tw-bg-[#F8FAFC] tw-px-6 tw-py-10';
 
   return (
-    <div className={outerClass}>
-      <div className="tw-mx-auto tw-w-full tw-max-w-[760px]">
-        <Card className="tw-rounded-[28px] tw-border-0 tw-bg-white tw-shadow-[0_16px_60px_rgba(15,23,42,0.08)]">
-          <div className="tw-mb-8 tw-flex tw-items-start tw-justify-between">
+    <div className={`${outerClass} tw-max-w-full`}>
+      <div className="tw-mx-auto tw-w-full tw-max-w-[760px] tw-min-w-0">
+        <div className="tw-min-w-0 tw-px-0">
+          <div className="tw-mb-5 sm:tw-mb-6 tw-flex tw-flex-wrap tw-items-start tw-justify-between tw-gap-2 sm:tw-gap-3">
             <div>
               <Typography.Text className="tw-text-xs tw-font-bold tw-uppercase tw-tracking-[0.16em] tw-text-[#2563EB]">
                 Workforce Onboarding
@@ -233,13 +236,20 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
                 사업자번호·이메일 인증 후 회사·관리자 정보를 입력해 가입을 완료해요.
               </Typography.Text>
             </div>
-            <AppButton variant="text" onClick={() => navigate({ to: '/' })}>
-              홈으로 돌아가기
-            </AppButton>
+            <div className="tw-flex tw-items-center tw-gap-1 tw-text-sm tw-text-slate-500">
+              <span>이미 계정이 있으신가요?</span>
+              <AppButton
+                variant="text"
+                className="tw-h-auto tw-rounded-none tw-border-0 tw-bg-transparent tw-p-0 tw-font-semibold tw-text-[#2563EB] tw-shadow-none hover:tw-bg-transparent hover:tw-text-[#1D4ED8] max-sm:!tw-px-0"
+                onClick={() => navigate({ to: '/login' })}
+              >
+                로그인 하러 가기
+              </AppButton>
+            </div>
           </div>
 
-          {error ? <Alert type="error" showIcon message={error} className="tw-mb-4" /> : null}
-          {success ? <Alert type="success" showIcon message={success} className="tw-mb-4" /> : null}
+          {error ? <Alert type="error" showIcon message={error} className="tw-mb-3" /> : null}
+          {success ? <Alert type="success" showIcon message={success} className="tw-mb-3" /> : null}
 
           <Form
             form={form}
@@ -248,9 +258,9 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
             onFinish={(values) => void submitOnboarding(values)}
             requiredMark={false}
           >
-            <Space direction="vertical" className="tw-w-full" size={20}>
+            <Space direction="vertical" className="tw-w-full [&_.ant-space-item]:tw-min-w-0" size={16}>
               <div>
-                <div className="tw-mb-3 tw-flex tw-items-center tw-justify-between tw-rounded-2xl tw-bg-[#EFF6FF] tw-px-4 tw-py-3">
+                <div className="tw-mb-2 tw-flex tw-items-center tw-justify-between tw-rounded-2xl tw-bg-[#EFF6FF] tw-px-4 tw-py-3">
                   <Typography.Text className="tw-font-semibold tw-text-[#2563EB]">사업자번호</Typography.Text>
                   {businessChecked ? <Tag color="green">검증 완료</Tag> : <Tag>미검증</Tag>}
                 </div>
@@ -271,14 +281,19 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
                   />
                 </Form.Item>
                 <div className="tw-flex tw-justify-end">
-                  <AppButton size="large" className="tw-min-w-[160px]" loading={loading} onClick={() => void checkBusinessNumber()}>
+                  <AppButton
+                    size="large"
+                    className="tw-w-full sm:tw-w-auto sm:tw-min-w-[160px]"
+                    loading={checkingBusiness}
+                    onClick={() => void checkBusinessNumber()}
+                  >
                     사업자번호 검증
                   </AppButton>
                 </div>
               </div>
 
               <div>
-                <div className="tw-mb-3 tw-flex tw-items-center tw-justify-between tw-rounded-2xl tw-bg-[#EFF6FF] tw-px-4 tw-py-3">
+                <div className="tw-mb-2 tw-flex tw-items-center tw-justify-between tw-rounded-2xl tw-bg-[#EFF6FF] tw-px-4 tw-py-3">
                   <Typography.Text className="tw-font-semibold tw-text-[#2563EB]">회사·이메일 인증</Typography.Text>
                   {emailVerified ? <Tag color="green">인증 완료</Tag> : <Tag>미인증</Tag>}
                 </div>
@@ -311,7 +326,7 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
                     size="large"
                     variant="secondary"
                     disabled={resendCooldown > 0}
-                    loading={loading}
+                    loading={sendingCode}
                     onClick={() => void sendCode()}
                   >
                     {resendCooldown > 0 ? `재발송 (${resendCooldown}s)` : '인증 코드 발송'}
@@ -328,7 +343,7 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
                   />
                 </Form.Item>
                 <div className="tw-flex tw-justify-end">
-                  <AppButton size="large" loading={loading} onClick={() => void verifyCode()}>
+                  <AppButton size="large" loading={verifyingCode} onClick={() => void verifyCode()}>
                     인증 코드 확인
                   </AppButton>
                 </div>
@@ -356,7 +371,7 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
               ) : null}
 
               <div>
-                <Typography.Text className="tw-mb-3 tw-block tw-text-xs tw-font-bold tw-uppercase tw-tracking-[0.12em] tw-text-slate-400">
+                <Typography.Text className="tw-mb-2 tw-block tw-text-xs tw-font-bold tw-uppercase tw-tracking-[0.12em] tw-text-slate-400">
                   회사 · 관리자 정보
                 </Typography.Text>
                 {!businessChecked || !emailVerified ? (
@@ -368,7 +383,7 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
                   name="companyDomain"
                   label="회사 도메인"
                   extra={
-                    <Typography.Text type="secondary" className="tw-block tw-text-xs tw-leading-relaxed">
+                    <Typography.Text type="secondary" className="tw-block tw-text-xs tw-leading-relaxed tw-break-words">
                       영문·숫자만 입력 가능합니다. 직원 이메일 자동 생성에 사용됩니다. (예: workforce → emp0001.홍길동@workforce.company)
                     </Typography.Text>
                   }
@@ -503,7 +518,7 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
                   <Input size="large" />
                 </Form.Item>
 
-                <div className="tw-mt-6 tw-rounded-2xl tw-border tw-border-slate-100 tw-bg-slate-50/80 tw-p-4">
+                <div className="tw-mt-5 tw-rounded-2xl tw-border tw-border-slate-100 tw-bg-slate-50/80 tw-p-4">
                   <Typography.Text className="tw-mb-3 tw-block tw-text-xs tw-font-bold tw-uppercase tw-tracking-[0.12em] tw-text-slate-400">
                     약관 동의
                   </Typography.Text>
@@ -573,7 +588,7 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
                   <AppButton
                     size="large"
                     htmlType="submit"
-                    loading={loading}
+                    loading={submittingOnboarding}
                     disabled={!businessChecked || !emailVerified}
                   >
                     회사 온보딩 완료
@@ -582,7 +597,7 @@ export function CompanyOnboardingPage({ embedded = false }: CompanyOnboardingPag
               </div>
             </Space>
           </Form>
-        </Card>
+        </div>
       </div>
 
       <AppModal

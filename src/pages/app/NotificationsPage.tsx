@@ -2,6 +2,7 @@ import { Badge, Card, List, Space, Typography } from 'antd';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { notificationApi } from '@/features/notification/api/notificationApi';
+import { buildApprovalNotificationNavigate } from '@/features/notification/lib/approvalNotificationRoute';
 import { AppButton } from '@/shared/ui/AppButton';
 
 export function NotificationsPage() {
@@ -29,11 +30,18 @@ export function NotificationsPage() {
       void queryClient.invalidateQueries({ queryKey: ['notifications'] });
     },
   });
+  const deleteNotificationM = useMutation({
+    mutationFn: (id: string) => notificationApi.deleteNotification(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    },
+  });
 
   const routeApprovalNotification = async (item: (typeof notifications)[number]) => {
     if (item.isRead !== 'YES') {
       await markAsRead.mutateAsync(item.notificationId);
     }
+<<<<<<< HEAD
     const t = String(item.notificationType ?? '').toUpperCase();
     if (t === 'APPROVAL_REQUESTED') {
       await navigate({
@@ -55,16 +63,31 @@ export function NotificationsPage() {
         || t === 'LEAVE_DESIGNATION') {
       await navigate({ to: '/app/leave/my-promotion' });
     }
+=======
+    await navigate(
+      buildApprovalNotificationNavigate({
+        notificationType: item.notificationType,
+        targetType: item.targetType,
+        title: item.title,
+        content: item.content,
+        targetId: item.targetId,
+      }),
+    );
+>>>>>>> 7b931a6b42fe3a6ce18f829b16298b0d9b4c5449
   };
 
   const isApprovalNotification = (type: string) => {
     const t = String(type ?? '').toUpperCase();
+<<<<<<< HEAD
     return t === 'APPROVAL_REQUESTED'
         || t === 'APPROVAL_APPROVED'
         || t === 'APPROVAL_REJECTED'
         || t === 'LEAVE_PROMOTION_FIRST'
         || t === 'LEAVE_PROMOTION_SECOND'
         || t === 'LEAVE_DESIGNATION';
+=======
+    return t.startsWith('APPROVAL_');
+>>>>>>> 7b931a6b42fe3a6ce18f829b16298b0d9b4c5449
   };
 
   return (
@@ -123,6 +146,19 @@ export function NotificationsPage() {
                     읽음 처리
                   </AppButton>
                 ) : null,
+                <AppButton
+                  key={`${item.notificationId}-delete`}
+                  type="link"
+                  className="!tw-text-rose-600 hover:!tw-text-rose-700"
+                  loading={deleteNotificationM.isPending}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    void deleteNotificationM.mutateAsync(item.notificationId);
+                  }}
+                >
+                  삭제
+                </AppButton>,
               ]}
             >
               <List.Item.Meta

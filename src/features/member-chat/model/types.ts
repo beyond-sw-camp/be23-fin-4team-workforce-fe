@@ -50,6 +50,17 @@ export type MemberChatMessage = {
   readerCount?: number;
 };
 
+/**
+ * 타이핑 인디케이터 — 영속화 X. STOMP 단발 broadcast 만 사용.
+ * 서버가 토픽 전체로 fan-out 하므로 본인은 클라이언트에서 senderId 로 필터한다.
+ */
+export type MemberChatTypingEvent = {
+  roomId: number;
+  memberId: string;
+  /** 서버 송신 시각 (ISO). 클라이언트의 만료 타이머 보정에 쓰인다. */
+  at?: string;
+};
+
 export type MemberChatReadEvent = {
   roomId: number;
   memberId: string;
