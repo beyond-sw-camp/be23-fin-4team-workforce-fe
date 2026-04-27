@@ -1580,8 +1580,8 @@ function AppShellLayout() {
         typeof search?.embed === 'string' && search.embed === 'compose-modal' && isApprovalsShellPathname(pathname);
     if (embedComposeModal) {
         return (
-            <Layout className="tw-flex tw-h-[100dvh] tw-min-h-0 tw-bg-slate-50">
-                <Layout.Content className="wf-scrollbar tw-min-h-0 tw-flex-1 tw-overflow-y-auto tw-bg-transparent tw-p-4">
+            <Layout className="tw-flex tw-h-[100dvh] tw-min-h-0 tw-bg-white">
+                <Layout.Content className="wf-scrollbar tw-min-h-0 tw-flex-1 tw-overflow-y-auto tw-bg-white tw-p-0">
                     <Outlet />
                 </Layout.Content>
             </Layout>
