@@ -40,13 +40,11 @@ import { DepartmentApprovalSearchPage } from '@/pages/app/DepartmentApprovalSear
 import { MyApprovalRequestsPage } from '@/pages/app/MyApprovalRequestsPage';
 import { GenericPage } from '@/pages/app/GenericPage';
 import { AiDocumentsAdminPage } from '@/pages/app/AiDocumentsAdminPage';
-import { AdminAttendanceDailyPage } from '@/pages/app/salary-service/admin/AdminAttendanceDailyPage';
-import { AdminAllowanceRequestsPage } from '@/pages/app/salary-service/admin/AdminAllowanceRequestsPage';
-import { AdminAttendanceMonthlyPage } from '@/pages/app/salary-service/admin/AdminAttendanceMonthlyPage';
+import { AdminAttendancePage } from '@/pages/app/salary-service/admin/AdminAttendancePage';
+import { AdminComprehensiveOvertimePage } from '@/pages/app/salary-service/admin/AdminComprehensiveOvertimePage';
 import { AdminCompanyHolidaysPage } from '@/pages/app/salary-service/admin/AdminCompanyHolidaysPage';
-import { AdminCompanyIpWhitelistPage } from '@/pages/app/salary-service/admin/AdminCompanyIpWhitelistPage';
 import { AdminFlexibleSlotsPage } from '@/pages/app/salary-service/admin/AdminFlexibleSlotsPage';
-import { AdminLeaveGrantPage } from '@/pages/app/salary-service/admin/AdminLeaveGrantPage';
+import { AdminLeavePromotionNoResponsePage } from '@/pages/app/salary-service/admin/AdminLeavePromotionNoResponsePage';
 import { AdminCompanyLeaveTypesPage } from '@/pages/app/salary-service/admin/AdminCompanyLeaveTypesPage';
 import { AdminLeaveOfAbsencePage } from '@/pages/app/salary-service/admin/AdminLeaveOfAbsencePage';
 import { AdminPayGradeTablePage } from '@/pages/app/salary-service/admin/AdminPayGradeTablePage';
@@ -54,14 +52,20 @@ import { AdminLeavePoliciesPage } from '@/pages/app/salary-service/admin/AdminLe
 import { AdminOvertimePoliciesPage } from '@/pages/app/salary-service/admin/AdminOvertimePoliciesPage';
 import { AdminPayrollManagePage } from '@/pages/app/salary-service/admin/AdminPayrollManagePage';
 import { AdminPayrollPage } from '@/pages/app/salary-service/admin/AdminPayrollPage';
+import { AdminPayrollTaxSummaryPage } from '@/pages/app/salary-service/admin/AdminPayrollTaxSummaryPage';
+import { AdminRetirementPolicyPage } from '@/pages/app/salary-service/admin/AdminRetirementPolicyPage';
 import { AdminSalarySettingsPage } from '@/pages/app/salary-service/admin/AdminSalarySettingsPage';
 import { AdminUnusedLeavePayoutPage } from '@/pages/app/salary-service/admin/AdminUnusedLeavePayoutPage';
 import { AdminWorkSchedulesPage } from '@/pages/app/salary-service/admin/AdminWorkSchedulesPage';
 import { MyAttendanceMonthlyPage } from '@/pages/app/salary-service/my/MyAttendanceMonthlyPage';
 import { MyAttendancePage } from '@/pages/app/salary-service/my/MyAttendancePage';
 import { MyLeavePage } from '@/pages/app/salary-service/my/MyLeavePage';
+import { MyLeavePromotionPage } from '@/pages/app/salary-service/my/MyLeavePromotionPage';
 import { MyOvertimeRequestsPage } from '@/pages/app/salary-service/my/MyOvertimeRequestsPage';
+import { MyAnnualSalaryPage } from '@/pages/app/salary-service/my/MyAnnualSalaryPage';
+import { MyIncomeManagementPage } from '@/pages/app/salary-service/my/MyIncomeManagementPage';
 import { MyPayrollPage } from '@/pages/app/salary-service/my/MyPayrollPage';
+import { MyRetirementInquiryPage } from '@/pages/app/salary-service/my/MyRetirementInquiryPage';
 import { MyScheduleSelectionsPage } from '@/pages/app/salary-service/my/MyScheduleSelectionsPage';
 import { MyWorkTimePage } from '@/pages/app/salary-service/my/MyWorkTimePage';
 import { MyWorkTripsPage } from '@/pages/app/salary-service/my/MyWorkTripsPage';
@@ -277,6 +281,7 @@ const approvalsSearchSchema = z.object({
   myStatus: z.string().optional(),
   compose: z.string().optional(),
   sideNav: z.string().optional(),
+  docId: z.string().optional(),
   box: z.string().optional(),
   /** 참조/공람 문서함: `cc` 참조만, `circ` 공람만, 없으면 참조 탭 */
   viewerSub: z.string().optional(),
@@ -460,21 +465,23 @@ const myWorkTimeRoute = createRoute({
   component: MyWorkTimePage,
 });
 
+/** 구 monthly 라우트 → 통합 페이지로 영구 리다이렉트 (북마크/외부 링크 호환) */
 const adminAttendanceMonthlyRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/attendance/company/monthly',
-  component: AdminAttendanceMonthlyPage,
   beforeLoad: ({ context }) => {
     if (!context.auth.user?.isSystemAdmin) {
       throw redirect({ to: '/app/attendance' });
     }
+    throw redirect({ to: '/app/attendance/company' });
   },
+  component: AdminAttendancePage,
 });
 
 const adminAttendanceDailyRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/attendance/company',
-  component: AdminAttendanceDailyPage,
+  component: AdminAttendancePage,
   beforeLoad: ({ context }) => {
     if (!context.auth.user?.isSystemAdmin) {
       throw redirect({ to: '/app/attendance' });
@@ -486,17 +493,6 @@ const adminCompanyHolidaysRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/attendance/holidays',
   component: AdminCompanyHolidaysPage,
-  beforeLoad: ({ context }) => {
-    if (!context.auth.user?.isSystemAdmin) {
-      throw redirect({ to: '/app/attendance' });
-    }
-  },
-});
-
-const adminCompanyIpWhitelistRoute = createRoute({
-  getParentRoute: () => appBaseRoute,
-  path: '/attendance/ip-whitelist',
-  component: AdminCompanyIpWhitelistPage,
   beforeLoad: ({ context }) => {
     if (!context.auth.user?.isSystemAdmin) {
       throw redirect({ to: '/app/attendance' });
@@ -537,16 +533,34 @@ const adminFlexibleSlotsRoute = createRoute({
   },
 });
 
+const adminComprehensiveOvertimeRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/attendance/comprehensive-ot',
+  component: AdminComprehensiveOvertimePage,
+  beforeLoad: ({ context }) => {
+    if (!context.auth.user?.isSystemAdmin) {
+      throw redirect({ to: '/app/attendance' });
+    }
+  },
+});
+
 const myLeaveRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/leave',
   component: MyLeavePage,
 });
 
-const adminLeaveGrantRoute = createRoute({
+// 직원 본인이 받은 연차 사용 촉진 통보 회신 페이지
+const myLeavePromotionRoute = createRoute({
   getParentRoute: () => appBaseRoute,
-  path: '/leave/grant',
-  component: AdminLeaveGrantPage,
+  path: '/leave/my-promotion',
+  component: MyLeavePromotionPage,
+});
+
+const adminLeavePoliciesRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/leave/policies',
+  component: AdminLeavePoliciesPage,
   beforeLoad: ({ context }) => {
     if (!context.auth.user?.isSystemAdmin) {
       throw redirect({ to: '/app/leave' });
@@ -554,10 +568,11 @@ const adminLeaveGrantRoute = createRoute({
   },
 });
 
-const adminLeavePoliciesRoute = createRoute({
+// 관리자 연차 통보 미응답자 강제 지정 페이지
+const adminLeavePromotionNoResponseRoute = createRoute({
   getParentRoute: () => appBaseRoute,
-  path: '/leave/policies',
-  component: AdminLeavePoliciesPage,
+  path: '/leave/promotion-no-response',
+  component: AdminLeavePromotionNoResponsePage,
   beforeLoad: ({ context }) => {
     if (!context.auth.user?.isSystemAdmin) {
       throw redirect({ to: '/app/leave' });
@@ -615,6 +630,18 @@ const payrollAdminRoute = createRoute({
   },
 });
 
+// 4대보험 + 원천세 월별 집계 화면
+const payrollTaxSummaryRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/payroll/tax-summary',
+  component: AdminPayrollTaxSummaryPage,
+  beforeLoad: ({ context }) => {
+    if (!context.auth.user?.isSystemAdmin) {
+      throw redirect({ to: '/app/payroll' });
+    }
+  },
+});
+
 const payrollDetailRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/payroll/$payrollId',
@@ -633,15 +660,24 @@ const myAllowancesRoute = createRoute({
   component: MyAllowancesPage,
 });
 
-const adminAllowanceRequestsRoute = createRoute({
+// 직원 본인 연봉 조회
+const myAnnualSalaryRoute = createRoute({
   getParentRoute: () => appBaseRoute,
-  path: '/payroll/allowances/admin',
-  component: AdminAllowanceRequestsPage,
-  beforeLoad: ({ context }) => {
-    if (!context.auth.user?.isSystemAdmin) {
-      throw redirect({ to: '/app/payroll' });
-    }
-  },
+  path: '/payroll/annual',
+  component: MyAnnualSalaryPage,
+});
+
+// 직원 본인 소득관리 (은행 계좌 + 원천징수 세액 조정)
+const myIncomeManagementRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/income',
+  component: MyIncomeManagementPage,
+});
+
+const myRetirementInquiryRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/payroll/retirement',
+  component: MyRetirementInquiryPage,
 });
 
 const adminSalarySettingsRoute = createRoute({
@@ -670,6 +706,17 @@ const adminUnusedLeavePayoutRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/salary/unused-leave',
   component: AdminUnusedLeavePayoutPage,
+  beforeLoad: ({ context }) => {
+    if (!context.auth.user?.isSystemAdmin) {
+      throw redirect({ to: '/app/payroll' });
+    }
+  },
+});
+
+const adminRetirementPolicyRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/salary/retirement-policy',
+  component: AdminRetirementPolicyPage,
   beforeLoad: ({ context }) => {
     if (!context.auth.user?.isSystemAdmin) {
       throw redirect({ to: '/app/payroll' });
@@ -738,25 +785,30 @@ const routeTree = rootRoute.addChildren([
       adminAttendanceMonthlyRoute,
       adminAttendanceDailyRoute,
       adminCompanyHolidaysRoute,
-      adminCompanyIpWhitelistRoute,
       adminWorkSchedulesRoute,
       adminOvertimePoliciesRoute,
       adminFlexibleSlotsRoute,
+      adminComprehensiveOvertimeRoute,
       myLeaveRoute,
-      adminLeaveGrantRoute,
+      myLeavePromotionRoute,
       adminLeavePoliciesRoute,
+      adminLeavePromotionNoResponseRoute,
       adminLeaveOfAbsenceRoute,
       adminCompanyLeaveTypesRoute,
       myWorkTripsRoute,
       payrollAdminManageRoute,
       payrollAdminRoute,
+      payrollTaxSummaryRoute,
       payrollDetailRoute,
       myPayrollRoute,
+      myAnnualSalaryRoute,
+      myIncomeManagementRoute,
       myAllowancesRoute,
-      adminAllowanceRequestsRoute,
+      myRetirementInquiryRoute,
       adminSalarySettingsRoute,
       adminPayGradeTableRoute,
       adminUnusedLeavePayoutRoute,
+      adminRetirementPolicyRoute,
       ...genericRoutes,
     ]),
   ]),

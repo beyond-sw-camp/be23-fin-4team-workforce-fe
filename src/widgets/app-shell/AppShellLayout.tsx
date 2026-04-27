@@ -1,5 +1,7 @@
 import {
     ApartmentOutlined,
+    AuditOutlined,
+    BankOutlined,
     BarChartOutlined,
     BellOutlined,
     CalendarOutlined,
@@ -54,6 +56,7 @@ import {companyApi} from '@/features/organization/api/companyApi';
 import {searchApi} from '@/features/search/api/searchApi';
 import {organizationApi} from '@/features/organization/api/organizationApi';
 import {memberApi} from '@/features/member/api/memberApi';
+import {attendanceApi} from '@/features/salary-service/api/attendanceApi';
 import {
     canAccessMemberDirectory,
     canAccessMemberDirectoryFromPermissionStrings,
@@ -129,8 +132,9 @@ const APP_MENU_ICONS: Record<string, ReactNode> = {
     '/app/approvals': <FileDoneOutlined className="tw-text-lg"/>,
     '/app/approvals/department': <FolderOpenOutlined className="tw-text-lg"/>,
     '/app/payroll': <DollarOutlined className="tw-text-lg"/>,
+    '/app/payroll/annual': <BarChartOutlined className="tw-text-lg"/>,
     '/app/payroll/allowances': <GiftOutlined className="tw-text-lg"/>,
-    '/app/payroll/allowances/admin': <GiftOutlined className="tw-text-lg"/>,
+    '/app/income': <BankOutlined className="tw-text-lg"/>,
     '/app/notifications': <BellOutlined className="tw-text-lg"/>,
     '/app/performance': <LineChartOutlined className="tw-text-lg"/>,
     '/app/evaluations': <StarOutlined className="tw-text-lg"/>,
@@ -235,6 +239,7 @@ function buildAppShellMenuItems(
     approvalMenuChildren: NonNullable<MenuProps['items']> | undefined,
     canAccessMemberDirectory: boolean,
     hrGroupExtraChildren?: NonNullable<MenuProps['items']>,
+    leavePromotionEnabled = false,
 ): NonNullable<MenuProps['items']> {
     const items: NonNullable<MenuProps['items']> = [];
     let hubInserted = false;
@@ -302,10 +307,10 @@ function buildAppShellMenuItems(
                             title: APP_MENU_LABEL['/app/attendance'],
                         },
                         {
-                            key: '/app/attendance/monthly',
-                            icon: <CalendarOutlined className="tw-text-lg"/>,
-                            label: APP_MENU_LABEL['/app/attendance/monthly'],
-                            title: APP_MENU_LABEL['/app/attendance/monthly'],
+                            key: '/app/attendance/overtime',
+                            icon: APP_MENU_ICONS['/app/attendance/overtime'],
+                            label: APP_MENU_LABEL['/app/attendance/overtime'],
+                            title: APP_MENU_LABEL['/app/attendance/overtime'],
                         },
                         {
                             key: '/app/attendance/schedules/my',
@@ -314,23 +319,27 @@ function buildAppShellMenuItems(
                             title: APP_MENU_LABEL['/app/attendance/schedules/my'],
                         },
                         {
-                            key: '/app/attendance/overtime',
-                            icon: APP_MENU_ICONS['/app/attendance/overtime'],
-                            label: APP_MENU_LABEL['/app/attendance/overtime'],
-                            title: APP_MENU_LABEL['/app/attendance/overtime'],
+                            key: '/app/attendance/monthly',
+                            icon: <CalendarOutlined className="tw-text-lg"/>,
+                            label: APP_MENU_LABEL['/app/attendance/monthly'],
+                            title: APP_MENU_LABEL['/app/attendance/monthly'],
                         },
                         {
-                            key: '/app/attendance/work-time',
-                            icon: APP_MENU_ICONS['/app/attendance/work-time'],
-                            label: APP_MENU_LABEL['/app/attendance/work-time'],
-                            title: APP_MENU_LABEL['/app/attendance/work-time'],
+                            key: '/app/leave',
+                            icon: APP_MENU_ICONS['/app/leave'],
+                            label: APP_MENU_LABEL['/app/leave'],
+                            title: APP_MENU_LABEL['/app/leave'],
                         },
-                        {
-                            key: '/app/work-trips',
-                            icon: APP_MENU_ICONS['/app/work-trips'],
-                            label: APP_MENU_LABEL['/app/work-trips'],
-                            title: APP_MENU_LABEL['/app/work-trips'],
-                        },
+                        ...(leavePromotionEnabled
+                            ? [
+                                {
+                                    key: '/app/leave/my-promotion',
+                                    icon: <BellOutlined className="tw-text-lg"/>,
+                                    label: APP_MENU_LABEL['/app/leave/my-promotion'],
+                                    title: APP_MENU_LABEL['/app/leave/my-promotion'],
+                                },
+                            ]
+                            : []),
                     );
                 }
                 if (isAdmin) {
@@ -340,12 +349,6 @@ function buildAppShellMenuItems(
                             icon: <TeamOutlined className="tw-text-lg"/>,
                             label: APP_MENU_LABEL['/app/attendance/company'],
                             title: APP_MENU_LABEL['/app/attendance/company'],
-                        },
-                        {
-                            key: '/app/attendance/company/monthly',
-                            icon: <BarChartOutlined className="tw-text-lg"/>,
-                            label: APP_MENU_LABEL['/app/attendance/company/monthly'],
-                            title: APP_MENU_LABEL['/app/attendance/company/monthly'],
                         },
                         {
                             key: '/app/attendance/schedules',
@@ -360,16 +363,10 @@ function buildAppShellMenuItems(
                             title: APP_MENU_LABEL['/app/attendance/overtime-policies'],
                         },
                         {
-                            key: '/app/attendance/flexible-slots',
-                            icon: APP_MENU_ICONS['/app/attendance/flexible-slots'],
-                            label: APP_MENU_LABEL['/app/attendance/flexible-slots'],
-                            title: APP_MENU_LABEL['/app/attendance/flexible-slots'],
-                        },
-                        {
-                            key: '/app/attendance/ip-whitelist',
-                            icon: <SafetyCertificateOutlined className="tw-text-lg"/>,
-                            label: APP_MENU_LABEL['/app/attendance/ip-whitelist'],
-                            title: APP_MENU_LABEL['/app/attendance/ip-whitelist'],
+                            key: '/app/attendance/comprehensive-ot',
+                            icon: <ClockCircleOutlined className="tw-text-lg"/>,
+                            label: APP_MENU_LABEL['/app/attendance/comprehensive-ot'],
+                            title: APP_MENU_LABEL['/app/attendance/comprehensive-ot'],
                         },
                     );
                 }
@@ -389,12 +386,7 @@ function buildAppShellMenuItems(
                 leaveInserted = true;
                 const leaveChildren: NonNullable<MenuProps['items']> = [];
                 if (!isAdmin) {
-                    leaveChildren.push({
-                        key: '/app/leave',
-                        icon: APP_MENU_ICONS['/app/leave'],
-                        label: APP_MENU_LABEL['/app/leave'],
-                        title: APP_MENU_LABEL['/app/leave'],
-                    });
+                    // 직원 메뉴의 휴가는 '근태' 그룹으로 이동.
                 }
                 if (isAdmin) {
                     leaveChildren.push(
@@ -405,10 +397,10 @@ function buildAppShellMenuItems(
                             title: APP_MENU_LABEL['/app/attendance/holidays'],
                         },
                         {
-                            key: '/app/leave/grant',
-                            icon: <GiftOutlined className="tw-text-lg"/>,
-                            label: APP_MENU_LABEL['/app/leave/grant'],
-                            title: APP_MENU_LABEL['/app/leave/grant'],
+                            key: '/app/leave/types',
+                            icon: <ProfileOutlined className="tw-text-lg"/>,
+                            label: APP_MENU_LABEL['/app/leave/types'],
+                            title: APP_MENU_LABEL['/app/leave/types'],
                         },
                         {
                             key: '/app/leave/policies',
@@ -416,19 +408,10 @@ function buildAppShellMenuItems(
                             label: APP_MENU_LABEL['/app/leave/policies'],
                             title: APP_MENU_LABEL['/app/leave/policies'],
                         },
-                        {
-                            key: '/app/leave/absence',
-                            icon: <PauseCircleOutlined className="tw-text-lg"/>,
-                            label: APP_MENU_LABEL['/app/leave/absence'],
-                            title: APP_MENU_LABEL['/app/leave/absence'],
-                        },
-                        {
-                            key: '/app/leave/types',
-                            icon: <ProfileOutlined className="tw-text-lg"/>,
-                            label: APP_MENU_LABEL['/app/leave/types'],
-                            title: APP_MENU_LABEL['/app/leave/types'],
-                        },
                     );
+                }
+                if (leaveChildren.length === 0) {
+                    continue;
                 }
                 items.push({
                     key: LEAVE_GROUP_KEY,
@@ -496,15 +479,9 @@ function buildAppShellMenuItems(
                     key: PAYROLL_GROUP_KEY,
                     label: (
                         <SiderGroupedMenuLabel icon={<DollarOutlined className="tw-text-lg"/>}
-                                               text="급여"/>
+                                               text="급여 관리"/>
                     ),
                     children: [
-                        {
-                            key: '/app/payroll',
-                            icon: APP_MENU_ICONS['/app/payroll'],
-                            label: APP_MENU_LABEL['/app/payroll'],
-                            title: APP_MENU_LABEL['/app/payroll'],
-                        },
                         {
                             key: '/app/payroll/admin',
                             icon: <DollarOutlined className="tw-text-lg"/>,
@@ -512,10 +489,10 @@ function buildAppShellMenuItems(
                             title: APP_MENU_LABEL['/app/payroll/admin'],
                         },
                         {
-                            key: '/app/salary/unused-leave',
-                            icon: <GiftOutlined className="tw-text-lg"/>,
-                            label: APP_MENU_LABEL['/app/salary/unused-leave'],
-                            title: APP_MENU_LABEL['/app/salary/unused-leave'],
+                            key: '/app/payroll/tax-summary',
+                            icon: <AuditOutlined className="tw-text-lg"/>,
+                            label: APP_MENU_LABEL['/app/payroll/tax-summary'],
+                            title: APP_MENU_LABEL['/app/payroll/tax-summary'],
                         },
                         {
                             key: '/app/salary/settings',
@@ -524,16 +501,10 @@ function buildAppShellMenuItems(
                             title: APP_MENU_LABEL['/app/salary/settings'],
                         },
                         {
-                            key: '/app/salary/pay-grade-table',
-                            icon: <BarChartOutlined className="tw-text-lg"/>,
-                            label: APP_MENU_LABEL['/app/salary/pay-grade-table'],
-                            title: APP_MENU_LABEL['/app/salary/pay-grade-table'],
-                        },
-                        {
-                            key: '/app/payroll/allowances/admin',
-                            icon: APP_MENU_ICONS['/app/payroll/allowances/admin'],
-                            label: APP_MENU_LABEL['/app/payroll/allowances/admin'],
-                            title: APP_MENU_LABEL['/app/payroll/allowances/admin'],
+                            key: '/app/salary/retirement-policy',
+                            icon: <BankOutlined className="tw-text-lg"/>,
+                            label: APP_MENU_LABEL['/app/salary/retirement-policy'],
+                            title: APP_MENU_LABEL['/app/salary/retirement-policy'],
                         },
                     ],
                 });
@@ -552,10 +523,22 @@ function buildAppShellMenuItems(
                             title: APP_MENU_LABEL['/app/payroll'],
                         },
                         {
-                            key: '/app/payroll/allowances',
-                            icon: APP_MENU_ICONS['/app/payroll/allowances'],
-                            label: APP_MENU_LABEL['/app/payroll/allowances'],
-                            title: APP_MENU_LABEL['/app/payroll/allowances'],
+                            key: '/app/payroll/annual',
+                            icon: APP_MENU_ICONS['/app/payroll/annual'],
+                            label: APP_MENU_LABEL['/app/payroll/annual'],
+                            title: APP_MENU_LABEL['/app/payroll/annual'],
+                        },
+                        {
+                            key: '/app/income',
+                            icon: APP_MENU_ICONS['/app/income'],
+                            label: APP_MENU_LABEL['/app/income'],
+                            title: APP_MENU_LABEL['/app/income'],
+                        },
+                        {
+                            key: '/app/payroll/retirement',
+                            icon: <BankOutlined className="tw-text-lg"/>,
+                            label: APP_MENU_LABEL['/app/payroll/retirement'],
+                            title: APP_MENU_LABEL['/app/payroll/retirement'],
                         },
                     ],
                 });
@@ -608,6 +591,13 @@ function useAppShellSiderMenuItems(currentPathname: string): NonNullable<MenuPro
         staleTime: 300_000,
     });
 
+    const {data: leavePoliciesForMenu} = useQuery({
+        queryKey: ['salary', 'leave-policies'],
+        queryFn: () => attendanceApi.leavePolicy.list(),
+        enabled: status === 'authenticated',
+        staleTime: 60_000,
+    });
+
     return useMemo(() => {
         const esgPaths = ESG_MENU_PATH_ORDER.filter((p) => shouldShowEsgMenuItem(p, esgConfig ?? null, isAdmin));
         const approvalMenuChildren = buildApprovalMenuGroupChildren(approvalOrgChart?.organizations ?? [], {
@@ -626,13 +616,25 @@ function useAppShellSiderMenuItems(currentPathname: string): NonNullable<MenuPro
                       label: '결재 양식 설정',
                       title: '결재 양식 설정',
                   },
+                  ...(isAdmin
+                      ? [
+                            {
+                                key: '/app/leave/absence',
+                                icon: <PauseCircleOutlined className="tw-text-lg"/>,
+                                label: APP_MENU_LABEL['/app/leave/absence'],
+                                title: APP_MENU_LABEL['/app/leave/absence'],
+                            },
+                        ]
+                      : []),
               ]
             : undefined;
+        const leavePromotionEnabled = (leavePoliciesForMenu ?? []).some((p) => p.isPromotionYn === 'Y');
         const items = buildAppShellMenuItems(
             isAdmin,
             approvalMenuChildren,
             showMemberDirectoryMenu,
             hrGroupExtraChildren,
+            leavePromotionEnabled,
         );
 
         const esgMenuItem =
@@ -676,6 +678,7 @@ function useAppShellSiderMenuItems(currentPathname: string): NonNullable<MenuPro
         myDashboardProfile?.organizationName,
         user?.departmentName,
         showApprovalFormSettings,
+        leavePoliciesForMenu,
     ]);
 }
 
@@ -1376,26 +1379,32 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
     if (pathname === '/app/attendance/monthly') return ['/app/attendance/monthly'];
     if (pathname === '/app/attendance/schedules/my') return ['/app/attendance/schedules/my'];
     if (pathname === '/app/attendance/overtime') return ['/app/attendance/overtime'];
-    if (pathname === '/app/attendance/work-time') return ['/app/attendance/work-time'];
-    if (pathname === '/app/attendance/company/monthly') return ['/app/attendance/company/monthly'];
+    // 내 주간 근무시간은 내 근태로 통합 직접 URL 접근 시 내 근태 메뉴 강조
+    if (pathname === '/app/attendance/work-time') return ['/app/attendance'];
+    if (pathname === '/app/attendance/company/monthly') return ['/app/attendance/company'];
     if (pathname === '/app/attendance/company') return ['/app/attendance/company'];
     if (pathname === '/app/attendance/holidays') return ['/app/attendance/holidays'];
-    if (pathname === '/app/attendance/ip-whitelist') return ['/app/attendance/ip-whitelist'];
     if (pathname === '/app/attendance/schedules') return ['/app/attendance/schedules'];
     if (pathname === '/app/attendance/overtime-policies') return ['/app/attendance/overtime-policies'];
-    if (pathname === '/app/attendance/flexible-slots') return ['/app/attendance/flexible-slots'];
+    if (pathname === '/app/attendance/flexible-slots') return ['/app/attendance/schedules'];
+    if (pathname === '/app/attendance/comprehensive-ot') return ['/app/attendance/comprehensive-ot'];
     if (pathname === '/app/attendance') return ['/app/attendance'];
     if (pathname === '/app/work-trips') return ['/app/work-trips'];
-    if (pathname === '/app/leave/grant') return ['/app/leave/grant'];
     if (pathname === '/app/leave/policies') return ['/app/leave/policies'];
     if (pathname === '/app/leave/absence') return ['/app/leave/absence'];
     if (pathname === '/app/leave/types') return ['/app/leave/types'];
+    if (pathname === '/app/leave/my-promotion') return ['/app/leave/my-promotion'];
+    if (pathname === '/app/leave/promotion-no-response') return ['/app/leave/policies'];
     if (pathname === '/app/leave') return ['/app/leave'];
-    if (pathname === '/app/salary/unused-leave') return ['/app/salary/unused-leave'];
+    if (pathname === '/app/salary/unused-leave') return ['/app/payroll/admin'];
     if (pathname === '/app/salary/settings') return ['/app/salary/settings'];
-    if (pathname === '/app/salary/pay-grade-table') return ['/app/salary/pay-grade-table'];
+    if (pathname === '/app/salary/pay-grade-table') return ['/app/salary/settings'];
+    if (pathname === '/app/salary/retirement-policy') return ['/app/salary/retirement-policy'];
     if (pathname === '/app/payroll/allowances') return ['/app/payroll/allowances'];
-    if (pathname === '/app/payroll/allowances/admin') return ['/app/payroll/allowances/admin'];
+    if (pathname === '/app/payroll/retirement') return ['/app/payroll/retirement'];
+    if (pathname === '/app/payroll/annual') return ['/app/payroll/annual'];
+    if (pathname === '/app/income') return ['/app/income'];
+    if (pathname === '/app/payroll/tax-summary') return ['/app/payroll/tax-summary'];
     if (pathname.startsWith('/app/payroll/admin')) return ['/app/payroll/admin'];
     if (pathname === '/app/payroll' || /^\/app\/payroll\/[^/]+$/.test(pathname)) return ['/app/payroll'];
     if (pathname.startsWith('/app/approvals')) {
@@ -1429,25 +1438,46 @@ function menuOpenKeysForPath(
     if (ORG_HR_PATH_SET.has(pathname) || /^\/app\/members\/[^/]+$/.test(pathname)) {
         keys.push(ORG_HR_GROUP_KEY);
     }
+    if (pathname === '/app/leave/absence') {
+        keys.push(ORG_HR_GROUP_KEY);
+    }
     if (
         (pathname.startsWith('/app/attendance') && pathname !== '/app/attendance/holidays') ||
         pathname === '/app/work-trips'
     ) {
         keys.push(WORK_GROUP_KEY);
     }
-    if (pathname.startsWith('/app/leave') || pathname === '/app/attendance/holidays') {
+    if (
+        isSystemAdmin &&
+        ((pathname.startsWith('/app/leave') &&
+            pathname !== '/app/leave/absence') ||
+            pathname === '/app/attendance/holidays')
+    ) {
         keys.push(LEAVE_GROUP_KEY);
+    }
+    if (
+        !isSystemAdmin &&
+        pathname.startsWith('/app/leave')
+    ) {
+        keys.push(WORK_GROUP_KEY);
     }
     if (
         isSystemAdmin &&
         (pathname.startsWith('/app/payroll') ||
             pathname === '/app/salary/unused-leave' ||
             pathname === '/app/salary/settings' ||
-            pathname === '/app/salary/pay-grade-table')
+            pathname === '/app/salary/pay-grade-table' ||
+            pathname === '/app/salary/retirement-policy')
     ) {
         keys.push(PAYROLL_GROUP_KEY);
     }
-    if (!isSystemAdmin && (pathname === '/app/payroll' || pathname === '/app/payroll/allowances')) {
+    if (!isSystemAdmin && (
+        pathname === '/app/payroll' ||
+        pathname === '/app/payroll/annual' ||
+        pathname === '/app/payroll/allowances' ||
+        pathname === '/app/payroll/retirement' ||
+        pathname === '/app/income'
+    )) {
         keys.push(PAYROLL_GROUP_KEY);
     }
     if (pathname.startsWith('/app/esg')) keys.push(ESG_GROUP_KEY);

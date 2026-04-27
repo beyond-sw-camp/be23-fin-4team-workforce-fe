@@ -47,12 +47,24 @@ export function NotificationsPage() {
         to: '/app/approvals',
         search: { tab: 'my', box: 'per-all' },
       });
+      return;
+    }
+    // 연차 사용 촉진 통보 강제 지정 알림은 회신 페이지로 딥링크
+    if (t === 'LEAVE_PROMOTION_FIRST'
+        || t === 'LEAVE_PROMOTION_SECOND'
+        || t === 'LEAVE_DESIGNATION') {
+      await navigate({ to: '/app/leave/my-promotion' });
     }
   };
 
   const isApprovalNotification = (type: string) => {
     const t = String(type ?? '').toUpperCase();
-    return t === 'APPROVAL_REQUESTED' || t === 'APPROVAL_APPROVED' || t === 'APPROVAL_REJECTED';
+    return t === 'APPROVAL_REQUESTED'
+        || t === 'APPROVAL_APPROVED'
+        || t === 'APPROVAL_REJECTED'
+        || t === 'LEAVE_PROMOTION_FIRST'
+        || t === 'LEAVE_PROMOTION_SECOND'
+        || t === 'LEAVE_DESIGNATION';
   };
 
   return (
