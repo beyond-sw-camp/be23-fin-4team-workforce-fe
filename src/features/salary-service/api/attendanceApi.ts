@@ -299,11 +299,13 @@ export const attendanceApi = {
       );
     },
 
-    /** 회사 기본 휴가(연차/반차/경조 등) 시드 */
-    async initDefaults(companyId: string): Promise<void> {
-      await httpClient.post(`${BASE}/attendance/leave-types/init`, undefined, {
-        params: { companyId },
-      });
+    /** 회사 기본 휴가(연차/반차/경조 등) 시드 codes 지정 시 해당 코드만 시드 */
+    async initDefaults(companyId: string, codes?: string[]): Promise<void> {
+      await httpClient.post(
+        `${BASE}/attendance/leave-types/init`,
+        codes && codes.length > 0 ? { codes } : undefined,
+        { params: { companyId } },
+      );
     },
   },
 

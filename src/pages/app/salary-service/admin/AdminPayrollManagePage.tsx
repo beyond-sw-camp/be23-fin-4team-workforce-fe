@@ -31,6 +31,7 @@ export function AdminPayrollManagePage() {
   const { message, modal } = App.useApp();
   const qc = useQueryClient();
   const [addForm] = Form.useForm<{ templateId: string; amount: number }>();
+  const [bonusForm] = Form.useForm<{ bonusType: 'BONUS' | 'PERFORMANCE'; amount: number }>();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editAmount, setEditAmount] = useState<number>(0);
 
@@ -54,6 +55,29 @@ export function AdminPayrollManagePage() {
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ['salary', 'payroll', payrollId] });
     void qc.invalidateQueries({ queryKey: ['salary', 'payroll'] });
+  };
+
+  const resolveBonusTemplate = async (
+    bonusType: 'BONUS' | 'PERFORMANCE',
+    templates: SalaryItemTemplate[],
+  ) => {
+    const targetName = bonusType === 'BONUS' ? '상여금' : '성과급';
+    const existing = templates.find((t) => t.itemName === targetName && t.itemType === 'EARNING' && t.delYn !== 'Y');
+    if (existing?.salaryItemTemplateId) {
+      return existing.salaryItemTemplateId;
+    }
+    const maxOrder = templates.reduce((acc, t) => Math.max(acc, t.displayOrder ?? 0), 0);
+    const created = await salaryApi.salaryItemTemplate.create({
+      itemName: targetName,
+      itemType: 'EARNING',
+      displayOrder: Math.max(70, maxOrder + 1),
+      isTaxableYn: 'Y',
+    });
+    const createdId = created.salaryItemTemplateId;
+    if (!createdId) {
+      throw new Error(`${targetName} 템플릿 생성에 실패했습니다.`);
+    }
+    return createdId;
   };
 
   const addItemM = useMutation({
@@ -106,6 +130,24 @@ export function AdminPayrollManagePage() {
       invalidate();
     },
     onError: (e: Error) => message.error(e.message || '처리에 실패했습니다.'),
+  });
+
+  const addBonusM = useMutation({
+    mutationFn: async (v: { bonusType: 'BONUS' | 'PERFORMANCE'; amount: number }) => {
+      const templates = templatesQ.data ?? [];
+      const templateId = await resolveBonusTemplate(v.bonusType, templates);
+      await salaryApi.payroll.addItem(payrollId, {
+        salaryItemTemplateId: templateId,
+        amount: v.amount,
+      });
+    },
+    onSuccess: async () => {
+      message.success('상여/성과 항목이 추가되었습니다.');
+      bonusForm.resetFields();
+      await qc.invalidateQueries({ queryKey: ['salary', 'salary-item-templates'] });
+      invalidate();
+    },
+    onError: (e: Error) => message.error(e.message || '상여/성과 항목 추가에 실패했습니다.'),
   });
 
   const payroll = payrollQ.data;
@@ -245,31 +287,59 @@ export function AdminPayrollManagePage() {
 
       <Card className="tw-border-slate-200/80 tw-shadow-sm" title="급여 항목">
         {isDraft && (
-          <Form
-            form={addForm}
-            layout="inline"
-            className="tw-mb-4 tw-flex tw-flex-wrap tw-items-end tw-gap-2"
-            onFinish={(v) => addItemM.mutate({ templateId: v.templateId, amount: v.amount })}
-          >
-            <Form.Item name="templateId" label="템플릿" rules={[{ required: true }]}>
-              <Select
-                placeholder="항목 선택"
-                className="tw-min-w-[240px]"
-                options={templateOptions}
-                loading={templatesQ.isLoading}
-                showSearch
-                optionFilterProp="label"
-              />
-            </Form.Item>
-            <Form.Item name="amount" label="금액" rules={[{ required: true }]}>
-              <InputNumber min={0} className="tw-min-w-[140px]" />
-            </Form.Item>
-            <Form.Item>
-              <Button type="primary" htmlType="submit" loading={addItemM.isPending}>
-                항목 추가
-              </Button>
-            </Form.Item>
-          </Form>
+          <>
+            <Form
+              form={bonusForm}
+              layout="inline"
+              className="tw-mb-3 tw-flex tw-flex-wrap tw-items-end tw-gap-2"
+              initialValues={{ bonusType: 'BONUS' }}
+              onFinish={(v) => addBonusM.mutate(v)}
+            >
+              <Form.Item name="bonusType" label="상여/성과" rules={[{ required: true }]}>
+                <Select
+                  className="tw-min-w-[180px]"
+                  options={[
+                    { value: 'BONUS', label: '상여금' },
+                    { value: 'PERFORMANCE', label: '성과급' },
+                  ]}
+                />
+              </Form.Item>
+              <Form.Item name="amount" label="금액" rules={[{ required: true }]}>
+                <InputNumber min={0} className="tw-min-w-[140px]" />
+              </Form.Item>
+              <Form.Item>
+                <Button type="primary" htmlType="submit" loading={addBonusM.isPending}>
+                  상여/성과 추가
+                </Button>
+              </Form.Item>
+            </Form>
+
+            <Form
+              form={addForm}
+              layout="inline"
+              className="tw-mb-4 tw-flex tw-flex-wrap tw-items-end tw-gap-2"
+              onFinish={(v) => addItemM.mutate({ templateId: v.templateId, amount: v.amount })}
+            >
+              <Form.Item name="templateId" label="템플릿" rules={[{ required: true }]}>
+                <Select
+                  placeholder="항목 선택"
+                  className="tw-min-w-[240px]"
+                  options={templateOptions}
+                  loading={templatesQ.isLoading}
+                  showSearch
+                  optionFilterProp="label"
+                />
+              </Form.Item>
+              <Form.Item name="amount" label="금액" rules={[{ required: true }]}>
+                <InputNumber min={0} className="tw-min-w-[140px]" />
+              </Form.Item>
+              <Form.Item>
+                <Button type="primary" htmlType="submit" loading={addItemM.isPending}>
+                  항목 추가
+                </Button>
+              </Form.Item>
+            </Form>
+          </>
         )}
         {!isDraft && (
           <Typography.Paragraph type="secondary" className="!tw-mt-0 !tw-mb-4 !tw-text-sm">

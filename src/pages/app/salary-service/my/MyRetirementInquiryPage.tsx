@@ -8,7 +8,7 @@
  *
  *  화면 진입 시 오늘 날짜로 자동 시뮬 → 입사일 + 결과 받음
  */
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   Alert,
@@ -16,7 +16,9 @@ import {
   Button,
   Card,
   Col,
+  Collapse,
   DatePicker,
+  Descriptions,
   Popover,
   Row,
   Space,
@@ -83,6 +85,7 @@ export function MyRetirementInquiryPage() {
 
   const simulateM = useMutation({
     mutationFn: (date: Dayjs) =>
+      // 백엔드가 joinDate 자동 조회 프론트는 resignDate 만 보내면 됨
       salaryApi.retirement.simulateMine({
         resignDate: date.format('YYYY-MM-DD'),
       }),
@@ -90,17 +93,13 @@ export function MyRetirementInquiryPage() {
     onError: (e: Error) => message.error(e.message || '시뮬레이션 실패'),
   });
 
-  // 화면 진입 시 오늘 날짜로 자동 시뮬 (joinDate는 응답에서 받음)
-  useEffect(() => {
-    if (!memberId) return;
-    simulateM.mutate(dayjs());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [memberId]);
+  // 화면 진입 시 자동 시뮬 호출 안 함 [계산하기] 클릭 시점에만 실행
+  // 정산 시작일 표시는 profileJoinDate 로 미리 채워둠
 
   const handleReset = () => {
     const today = dayjs();
     setResignDate(today);
-    simulateM.mutate(today);
+    setResult(null);
   };
 
   const handleCalculate = () => {
@@ -126,78 +125,69 @@ export function MyRetirementInquiryPage() {
       </div>
 
       <Row gutter={16}>
-        {/* 좌측 — 시뮬레이션 입력 + 결과 */}
-        <Col xs={24} lg={16}>
-          <Space direction="vertical" className="tw-w-full" size={12}>
-            {/* 입력 카드 */}
-            <Card
-              title={
-                <Space size={6}>
-                  <span>예상 퇴직금 조회</span>
-                  <Typography.Text type="secondary" className="!tw-text-xs">ⓘ</Typography.Text>
-                </Space>
-              }
-            >
-              <div className="tw-grid tw-grid-cols-[100px_1fr] tw-gap-y-3 tw-items-center">
-                <span className="tw-text-sm tw-text-slate-600">정산 시작일</span>
-                <input
-                  className="tw-border tw-border-slate-200 tw-rounded tw-px-3 tw-py-1.5 tw-bg-slate-50 tw-text-slate-700 tw-w-[200px]"
-                  value={joinDateText}
-                  readOnly
-                />
-                <span className="tw-text-sm tw-text-slate-600">예상 퇴직일</span>
-                <DatePicker
-                  value={resignDate}
-                  onChange={(d) => d && setResignDate(d)}
-                  format="YYYY.MM.DD"
-                  allowClear={false}
-                  style={{ width: 200 }}
-                />
-              </div>
-              <div className="tw-flex tw-justify-center tw-gap-2 tw-mt-4">
-                <Button icon={<ReloadOutlined />} onClick={handleReset} />
-                <Button type="primary" onClick={handleCalculate} loading={simulateM.isPending}>
-                  계산하기
-                </Button>
-              </div>
-            </Card>
+        {/* 좌측 — 예상 퇴직금 조회 입력 + 계산하기 버튼 */}
+        <Col xs={24} lg={9}>
+          <Card
+            className="tw-h-full"
+            title={
+              <Space size={6}>
+                <span>예상 퇴직금 조회</span>
+                <Typography.Text type="secondary" className="!tw-text-xs">ⓘ</Typography.Text>
+              </Space>
+            }
+          >
+            <div className="tw-grid tw-grid-cols-[90px_1fr] tw-gap-y-3 tw-items-center">
+              <span className="tw-text-sm tw-text-slate-600">정산 시작일</span>
+              <input
+                className="tw-border tw-border-slate-200 tw-rounded tw-px-3 tw-py-1.5 tw-bg-slate-50 tw-text-slate-700"
+                value={joinDateText}
+                readOnly
+              />
+              <span className="tw-text-sm tw-text-slate-600">예상 퇴직일</span>
+              <DatePicker
+                value={resignDate}
+                onChange={(d) => d && setResignDate(d)}
+                format="YYYY.MM.DD"
+                allowClear={false}
+              />
+            </div>
+            <div className="tw-flex tw-justify-center tw-gap-2 tw-mt-4">
+              <Button icon={<ReloadOutlined />} onClick={handleReset} />
+              <Button type="primary" onClick={handleCalculate} loading={simulateM.isPending}>
+                계산하기
+              </Button>
+            </div>
+          </Card>
+        </Col>
 
-            {/* 결과 카드 */}
-            <Card>
-              <div className="tw-text-sm tw-text-slate-500">예상 퇴직금</div>
-              <div className="tw-text-right">
-                <Typography.Title level={1} className="!tw-m-0 !tw-mt-1">
-                  {formatWon(estimated)}
-                  <span className="tw-text-2xl tw-ml-1 tw-font-normal">원</span>
-                </Typography.Title>
-                <div className="tw-text-xs tw-text-slate-400 tw-mt-1">
-                  재직일수 {days != null ? `${days}일` : '-'}
-                </div>
+        {/* 가운데 — 예상 퇴직금 큰 숫자 */}
+        <Col xs={24} lg={7}>
+          <Card className="tw-h-full">
+            <div className="tw-text-sm tw-text-slate-500">예상 퇴직금</div>
+            <div className="tw-text-right tw-mt-6">
+              <Typography.Title level={1} className="!tw-m-0">
+                {formatWon(estimated)}
+                <span className="tw-text-2xl tw-ml-1 tw-font-normal">원</span>
+              </Typography.Title>
+              <div className="tw-text-xs tw-text-slate-400 tw-mt-1">
+                재직일수 {days != null ? `${days}일` : '-'}
               </div>
+            </div>
 
-              {result && !result.eligible && (
-                <Alert
-                  type="warning"
-                  showIcon
-                  className="tw-mt-3"
-                  message="근속 1년 미만 — 법정 퇴직금 지급 대상이 아닙니다."
-                />
-              )}
-              {result && result.disclaimer && (
-                <Alert
-                  type="info"
-                  showIcon
-                  className="tw-mt-3"
-                  message={result.disclaimer}
-                />
-              )}
-            </Card>
-          </Space>
+            {result && !result.eligible && (
+              <Alert
+                type="warning"
+                showIcon
+                className="tw-mt-3"
+                message="근속 1년 미만 — 법정 퇴직금 지급 대상이 아닙니다."
+              />
+            )}
+          </Card>
         </Col>
 
         {/* 우측 — 기본정보 */}
         <Col xs={24} lg={8}>
-          <Card title="기본정보">
+          <Card title="기본정보" className="tw-h-full">
             <Typography.Title level={4} className="!tw-m-0">
               퇴직금
             </Typography.Title>
@@ -236,6 +226,138 @@ export function MyRetirementInquiryPage() {
           </Card>
         </Col>
       </Row>
+
+      {/* 예상 퇴직금 상세 산출내역 펼침 카드 */}
+      {result && (
+        <Collapse
+          defaultActiveKey={['detail']}
+          items={[
+            {
+              key: 'detail',
+              label: <span className="tw-font-medium tw-text-slate-700">예상 퇴직금 상세 산출내역</span>,
+              children: <RetirementBreakdown result={result} />,
+            },
+          ]}
+        />
+      )}
+
+      {result?.disclaimer && (
+        <Alert
+          type="info"
+          showIcon
+          message={result.disclaimer}
+        />
+      )}
     </Space>
+  );
+}
+
+/* -----------------------------------------------------------
+   예상 퇴직금 상세 산출내역
+       평균급여 / 평균상여 / 평균임금 / 평균 근속기간 / 근속월수 / 근속일수
+       예상 퇴직 소득세 / 예상 퇴직 주민세 / 국민연금 퇴직 전환금 / 예상 공제 총액
+       예상 퇴직금 − 예상 공제 총액 = 예상 실 지급액
+   추정 항목 (백엔드 미구현) 은 0 원으로 표시 후 안내
+   ----------------------------------------------------------- */
+function RetirementBreakdown({ result }: { result: RetirementSimRes }) {
+  const avgSalary = result.avgMonthlyWage ?? 0;
+  // 평균상여 / 국민연금 전환금 백엔드 미구현 0 으로 표기
+  const avgBonus = 0;
+  const avgWage = avgSalary + avgBonus;
+
+  // 근속 기간 — 일수 / 월수
+  const days = result.serviceDays ?? 0;
+  const months =
+    result.joinDate && result.resignDate
+      ? dayjs(result.resignDate).diff(dayjs(result.joinDate), 'month')
+      : Math.floor(days / 30);
+
+  // 퇴직소득세 / 주민세 — 정확 계산은 별도 룰 필요 (퇴직소득공제 등)
+  // 현재는 백엔드 미구현 0 표기 향후 PayrollCalculationService 확장 시 채움
+  const incomeTax = 0;
+  const localTax = 0;
+  const npConversion = 0;
+  const totalDeduction = incomeTax + localTax + npConversion;
+  const netPayout = (result.estimatedAmount ?? 0) - totalDeduction;
+
+  const fmt = (n: number) => `${n.toLocaleString('ko-KR')}원`;
+
+  return (
+    <div className="tw-flex tw-flex-col tw-gap-6">
+      {/* 1. 예상 퇴직금 및 기타내역 — bordered Descriptions 2행 3열 */}
+      <section>
+        <Typography.Title level={5} className="!tw-mt-0 !tw-mb-3">
+          예상 퇴직금 및 기타내역
+        </Typography.Title>
+        <Descriptions
+          bordered
+          size="middle"
+          column={{ xs: 1, sm: 2, md: 3 }}
+          labelStyle={{ width: '15%', backgroundColor: '#fafafa' }}
+          contentStyle={{ width: '18.33%', textAlign: 'right' }}
+          items={[
+            { key: 'avgSalary', label: '평균급여',     children: fmt(avgSalary) },
+            { key: 'avgBonus',  label: '평균상여',     children: fmt(avgBonus) },
+            { key: 'avgWage',   label: '평균임금',     children: fmt(avgWage) },
+            { key: 'avgPeriod', label: '평균 근속기간', children: `${days.toLocaleString('ko-KR')}일` },
+            { key: 'months',    label: '근속월수',     children: `${months.toLocaleString('ko-KR')}개월` },
+            { key: 'days',      label: '근속일수',     children: `${days.toLocaleString('ko-KR')}일` },
+          ]}
+        />
+      </section>
+
+      {/* 2. 예상 공제내역 — 위 표와 동일한 3열 구조. 마지막 행 합계만 span 3 */}
+      <section>
+        <Typography.Title level={5} className="!tw-mt-0 !tw-mb-3">
+          예상 공제내역
+        </Typography.Title>
+        <Descriptions
+          bordered
+          size="middle"
+          column={{ xs: 1, sm: 2, md: 3 }}
+          labelStyle={{ width: '15%', backgroundColor: '#fafafa' }}
+          contentStyle={{ width: '18.33%', textAlign: 'right' }}
+          items={[
+            { key: 'incomeTax',    label: '예상 퇴직 소득세',     children: fmt(incomeTax) },
+            { key: 'localTax',     label: '예상 퇴직 주민세',     children: fmt(localTax) },
+            { key: 'npConversion', label: '국민연금 퇴직 전환금', children: fmt(npConversion) },
+            {
+              key: 'totalDeduction',
+              label: '예상 공제 총액',
+              children: <strong>{fmt(totalDeduction)}</strong>,
+            },
+            // 위쪽 표와 동일한 3열 구조 유지 위해 빈 셀 2개 채움
+            { key: 'pad1', label: '', children: '' },
+            { key: 'pad2', label: '', children: '' },
+          ]}
+        />
+      </section>
+
+      {/* 3. 예상 실 지급액 */}
+      <section className="tw-bg-blue-50 tw-rounded tw-px-6 tw-py-5">
+        <div className="tw-flex tw-items-center tw-justify-center tw-gap-6 tw-flex-wrap">
+          <SumBox label="예상 퇴직금" value={fmt(result.estimatedAmount ?? 0)} />
+          <span className="tw-text-2xl tw-text-slate-400">−</span>
+          <SumBox label="예상 공제 총액" value={fmt(totalDeduction)} />
+          <span className="tw-text-2xl tw-text-slate-400">=</span>
+          <SumBox label="예상 실 지급액" value={fmt(netPayout)} primary />
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function SumBox({ label, value, primary }: { label: string; value: string; primary?: boolean }) {
+  return (
+    <div className="tw-flex tw-flex-col tw-items-center">
+      <span className="tw-text-xs tw-text-slate-500 tw-mb-1">{label}</span>
+      <span
+        className={`tw-rounded tw-bg-white tw-border tw-border-slate-200 tw-px-4 tw-py-2 tw-text-base ${
+          primary ? 'tw-font-bold tw-text-[#2563EB]' : 'tw-font-medium tw-text-slate-800'
+        }`}
+      >
+        {value}
+      </span>
+    </div>
   );
 }
