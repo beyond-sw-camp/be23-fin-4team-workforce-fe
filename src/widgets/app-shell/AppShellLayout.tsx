@@ -140,6 +140,7 @@ const APP_MENU_ICONS: Record<string, ReactNode> = {
     '/app/income': <BankOutlined className="tw-text-lg"/>,
     '/app/notifications': <BellOutlined className="tw-text-lg"/>,
     '/app/performance': <LineChartOutlined className="tw-text-lg"/>,
+    '/app/approval-center': <FileDoneOutlined className="tw-text-lg"/>,
     '/app/evaluations': <StarOutlined className="tw-text-lg"/>,
     '/app/meetings': <VideoCameraOutlined className="tw-text-lg"/>,
     '/app/settings': <SettingOutlined className="tw-text-lg"/>,
@@ -163,7 +164,12 @@ function shouldShowEsgMenuItem(path: string, cfg: EsgConfig | null | undefined, 
 }
 
 const TALENT_HUB_GROUP_KEY = 'group-talent-hub';
-const TALENT_HUB_PATHS = ['/app/performance', '/app/evaluations', '/app/meetings'] as const;
+const TALENT_HUB_PATHS = [
+    '/app/performance',
+    '/app/approval-center',
+    '/app/evaluations',
+    '/app/meetings',
+] as const;
 const TALENT_HUB_PATH_SET = new Set<string>(TALENT_HUB_PATHS);
 
 const ORG_HR_GROUP_KEY = 'group-org-hr';
@@ -634,10 +640,18 @@ function useAppShellSiderMenuItems(currentPathname: string): {
         staleTime: 300_000,
     });
 
+    /** 연차 촉진 메뉴 노출용. 급여 서비스 503 등일 때는 빈 배열로 삼켜 사이드바 전체가 깨지지 않게 함 */
     const {data: leavePoliciesForMenu} = useQuery({
         queryKey: ['salary', 'leave-policies'],
-        queryFn: () => attendanceApi.leavePolicy.list(),
+        queryFn: async () => {
+            try {
+                return await attendanceApi.leavePolicy.list();
+            } catch {
+                return [];
+            }
+        },
         enabled: status === 'authenticated',
+        retry: false,
         staleTime: 60_000,
     });
 
@@ -1448,6 +1462,10 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
     if (/^\/app\/members\/[^/]+$/.test(pathname)) return ['/app/members'];
     if (/^\/app\/meetings\/[^/]+$/.test(pathname)) return ['/app/meetings'];
     if (/^\/app\/performance\//.test(pathname)) return ['/app/performance'];
+    if (/^\/app\/approval-center\//.test(pathname)) return ['/app/approval-center'];
+    if (/^\/app\/evaluation-flow(\/|$)/.test(pathname)) return ['/app/evaluations'];
+    if (/^\/app\/my-evaluation-result-v2(\/|$)/.test(pathname)) return ['/app/evaluations'];
+    if (/^\/app\/evaluation-admin(\/|$)/.test(pathname)) return ['/app/evaluations'];
     if (pathname === '/app/attendance/monthly') return ['/app/attendance/monthly'];
     if (pathname === '/app/attendance/schedules/my') return ['/app/attendance/schedules/my'];
     if (pathname === '/app/attendance/overtime') return ['/app/attendance/overtime'];
@@ -1509,7 +1527,12 @@ function menuOpenKeysForPath(
 ): string[] {
     const keys: string[] = [];
     const isSystemAdmin = opts?.isSystemAdmin === true;
-    if (TALENT_HUB_PATH_SET.has(pathname) || /^\/app\/(meetings|performance|evaluations)\//.test(pathname)) keys.push(TALENT_HUB_GROUP_KEY);
+    if (
+        TALENT_HUB_PATH_SET.has(pathname) ||
+        /^\/app\/(meetings|performance|evaluations|approval-center|evaluation-flow|my-evaluation-result-v2|evaluation-admin)\//.test(pathname)
+    ) {
+        keys.push(TALENT_HUB_GROUP_KEY);
+    }
     if (ORG_HR_PATH_SET.has(pathname) || /^\/app\/members\/[^/]+$/.test(pathname)) {
         keys.push(ORG_HR_GROUP_KEY);
     }
