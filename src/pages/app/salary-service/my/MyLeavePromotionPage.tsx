@@ -256,7 +256,7 @@ export function MyLeavePromotionPage() {
     <Space direction="vertical" className="tw-w-full" size={16}>
       <div>
         <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
-          내 연차 사용 통보
+         휴가 계획 회신
         </Typography.Title>
         <Typography.Paragraph
           type="secondary"

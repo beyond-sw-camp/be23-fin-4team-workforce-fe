@@ -4,7 +4,7 @@
  *  보조: 직원별 이력 조회 탭
  *  버튼: 엑셀 다운로드 / 재계산 / 누락 직원 추가
  */
-import { Link, useNavigate } from '@tanstack/react-router';
+import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   App,
@@ -124,6 +124,18 @@ export function AdminPayrollPage() {
   const { message, modal } = App.useApp();
   const qc = useQueryClient();
   const navigate = useNavigate();
+
+  // 활성 탭을 URL search params 와 동기화 — 상세 화면에서 뒤로가기 시 같은 탭 유지
+  const search = useSearch({ strict: false }) as {
+    tab?: 'company' | 'member' | 'salary';
+  };
+  const activeTab = search?.tab ?? 'company';
+  const setActiveTab = (key: string) => {
+    void navigate({
+      to: '/app/payroll/admin',
+      search: { tab: key as 'company' | 'member' | 'salary' },
+    });
+  };
 
   const [yearMonth, setYearMonth] = useState<dayjs.Dayjs>(() => dayjs());
   const ym = yearMonth.format('YYYY-MM');
@@ -352,6 +364,7 @@ export function AdminPayrollPage() {
             <Link
               to="/app/payroll/admin/$payrollId"
               params={{ payrollId: r.payrollId }}
+              search={{ tab: 'company' }}
               className="tw-text-[#2563EB]"
             >
               상세
@@ -377,7 +390,7 @@ export function AdminPayrollPage() {
       <div className="tw-flex tw-flex-wrap tw-items-start tw-justify-between tw-gap-3">
         <div>
           <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
-            급여 정산 관리
+          급여 정산 관리
           </Typography.Title>
           <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-sm">
             매월 배치로 자동 생성된 급여대장을 검증·확정·지급 처리합니다.
@@ -403,9 +416,6 @@ export function AdminPayrollPage() {
           }}>
             누락 직원 추가
           </Button>
-          <Link to="/app/salary/unused-leave" className="tw-text-sm tw-text-[#2563EB]">
-            미사용 연차수당
-          </Link>
         </Space>
       </div>
 
@@ -419,11 +429,12 @@ export function AdminPayrollPage() {
 
       {/* 탭 */}
       <Tabs
-        defaultActiveKey="company"
+        activeKey={activeTab}
+        onChange={setActiveTab}
         items={[
           {
             key: 'company',
-            label: '회사 전체 보기',
+            label: '이번달 정산',
             children: (
               <Card>
                 {/* 필터 + 일괄 액션 */}
@@ -499,7 +510,7 @@ export function AdminPayrollPage() {
                   }}
                   locale={{ emptyText: '해당 월의 급여대장이 없습니다. 우측 상단 [재계산] 버튼으로 생성하세요.' }}
                   onRow={(r) => ({
-                    onClick: () => navigate({ to: '/app/payroll/admin/$payrollId', params: { payrollId: r.payrollId } }),
+                    onClick: () => navigate({ to: '/app/payroll/admin/$payrollId', params: { payrollId: r.payrollId }, search: { tab: 'company' } }),
                     style: { cursor: 'pointer' },
                   })}
                   size="middle"
@@ -509,8 +520,8 @@ export function AdminPayrollPage() {
           },
           {
             key: 'member',
-            label: '정산 이력보기',
-            children: <MemberHistoryTab />,
+            label: '정산 이력',
+            children: <CompanyHistoryTab />,
           },
           {
             key: 'salary',
@@ -550,32 +561,63 @@ export function AdminPayrollPage() {
   );
 }
 
-/* ===== 직원별 이력 조회 탭 (보조 영역) ===== */
+/* ===== 정산 이력 탭 — 월별로 모든 직원 정산 결과 조회 (조회 전용) ===== */
 
-function MemberHistoryTab() {
-  const [selectedMemberId, setSelectedMemberId] = useState<string | undefined>(undefined);
+function CompanyHistoryTab() {
+  const navigate = useNavigate();
+  const [historyMonth, setHistoryMonth] = useState<dayjs.Dayjs>(() => dayjs());
+  const ym = historyMonth.format('YYYY-MM');
 
   const listQ = useQuery({
-    queryKey: ['salary', 'payroll', 'member', selectedMemberId ?? ''],
-    queryFn: () => salaryApi.payroll.listByMember(selectedMemberId ?? ''),
-    enabled: Boolean(selectedMemberId),
+    queryKey: ['salary', 'payroll', 'history', ym],
+    queryFn: () => salaryApi.payroll.listByCompanyMonth(ym),
   });
+  const rows = listQ.data ?? [];
 
-  const sorted = useMemo(() => {
-    const rows = listQ.data ?? [];
-    return [...rows].sort((a, b) =>
-      (b.payrollYearMonthDay ?? '').localeCompare(a.payrollYearMonthDay ?? ''),
-    );
-  }, [listQ.data]);
+  const departmentOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of rows) {
+      if (r.organizationName) set.add(r.organizationName);
+    }
+    return Array.from(set).sort().map((d) => ({ value: d, label: d }));
+  }, [rows]);
 
-  const cols: ColumnsType<Payroll> = useMemo(
+  const [keyword, setKeyword] = useState('');
+  const [statusFilter, setStatusFilter] = useState<PayrollStatusCode | 'ALL'>('ALL');
+  const [departmentFilter, setDepartmentFilter] = useState<string | 'ALL'>('ALL');
+
+  const filtered = useMemo(() => {
+    return rows.filter((r) => {
+      if (statusFilter !== 'ALL' && r.payrollStatus !== statusFilter) return false;
+      if (departmentFilter !== 'ALL' && r.organizationName !== departmentFilter) return false;
+      if (keyword.trim()) {
+        const k = keyword.trim().toLowerCase();
+        const hits =
+          (r.name?.toLowerCase().includes(k) ?? false) ||
+          (r.sabun?.toLowerCase().includes(k) ?? false) ||
+          (r.organizationName?.toLowerCase().includes(k) ?? false);
+        if (!hits) return false;
+      }
+      return true;
+    });
+  }, [rows, statusFilter, departmentFilter, keyword]);
+
+  const cols: ColumnsType<PayrollAdminListItem> = useMemo(
     () => [
-      { title: '귀속일', dataIndex: 'payrollYearMonthDay', key: 'payrollYearMonthDay', width: 130 },
+      { title: '사번', dataIndex: 'sabun', key: 'sabun', width: 90, render: (v) => v ?? '—' },
+      { title: '이름', dataIndex: 'name', key: 'name', width: 110, render: (v) => v ?? '—' },
+      { title: '부서', dataIndex: 'organizationName', key: 'organizationName', width: 130, render: (v) => v ?? '—' },
+      {
+        title: '귀속일',
+        dataIndex: 'payrollYearMonthDay',
+        key: 'payrollYearMonthDay',
+        width: 130,
+      },
       {
         title: '급여구분',
         dataIndex: 'payrollType',
         key: 'payrollType',
-        width: 120,
+        width: 110,
         render: (v?: string) => PAYROLL_TYPE_KO[v ?? ''] ?? v ?? '—',
       },
       {
@@ -585,11 +627,11 @@ function MemberHistoryTab() {
         width: 100,
         render: (s: string) => <Tag color={STATUS_COLOR[s] ?? 'default'}>{STATUS_KO[s] ?? s}</Tag>,
       },
-      { title: '총지급', dataIndex: 'totalPayment', key: 'totalPayment', align: 'right',
+      { title: '총지급', dataIndex: 'totalPayment', key: 'totalPayment', width: 130, align: 'right',
         render: (v: number) => formatWon(v) },
-      { title: '총공제', dataIndex: 'totalDeduction', key: 'totalDeduction', align: 'right',
+      { title: '총공제', dataIndex: 'totalDeduction', key: 'totalDeduction', width: 130, align: 'right',
         render: (v: number) => formatWon(v) },
-      { title: '실수령', dataIndex: 'netPay', key: 'netPay', align: 'right',
+      { title: '실수령', dataIndex: 'netPay', key: 'netPay', width: 140, align: 'right',
         render: (v: number) => formatWon(v) },
       {
         title: '지급일',
@@ -601,11 +643,19 @@ function MemberHistoryTab() {
       {
         title: '액션',
         key: 'actions',
-        width: 100,
-        render: (_, r) => r.payrollId ? (
-          <Link to="/app/payroll/admin/$payrollId" params={{ payrollId: r.payrollId }}
-                className="tw-text-[#2563EB]">상세</Link>
-        ) : null,
+        width: 90,
+        render: (_, r) =>
+          r.payrollId ? (
+            <Link
+              to="/app/payroll/admin/$payrollId"
+              params={{ payrollId: r.payrollId }}
+              search={{ tab: 'member' }}
+              className="tw-text-[#2563EB]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              상세보기
+            </Link>
+          ) : null,
       },
     ],
     [],
@@ -613,20 +663,56 @@ function MemberHistoryTab() {
 
   return (
     <Card>
-      <Form<{ memberId: string }> layout="inline" onFinish={(v) => setSelectedMemberId(v.memberId)}>
-        <MemberSearchSelect required />
-        <Form.Item>
-          <Button type="primary" htmlType="submit">조회</Button>
-        </Form.Item>
-      </Form>
-      <Table<Payroll>
-        className="tw-mt-3"
-        rowKey={(r) => r.payrollId ?? Math.random().toString()}
+      <Space wrap className="tw-mb-3">
+        <DatePicker.MonthPicker
+          value={historyMonth}
+          onChange={(d) => d && setHistoryMonth(d)}
+          allowClear={false}
+          format="YYYY-MM"
+          style={{ width: 140 }}
+        />
+        <Input.Search
+          placeholder="이름·사번·부서 검색"
+          value={keyword}
+          onChange={(e) => setKeyword(e.target.value)}
+          style={{ width: 240 }}
+          allowClear
+        />
+        <Select
+          value={statusFilter}
+          onChange={setStatusFilter}
+          style={{ width: 130 }}
+          options={[
+            { value: 'ALL', label: '상태 전체' },
+            { value: 'DRAFT', label: '작성중' },
+            { value: 'CONFIRMED', label: '확정' },
+            { value: 'PAID', label: '지급완료' },
+          ]}
+        />
+        <Select
+          value={departmentFilter}
+          onChange={setDepartmentFilter}
+          style={{ width: 160 }}
+          options={[{ value: 'ALL', label: '부서 전체' }, ...departmentOptions]}
+        />
+        <Typography.Text type="secondary" className="!tw-text-xs">
+          총 {filtered.length}건
+        </Typography.Text>
+      </Space>
+
+      <Table<PayrollAdminListItem>
+        rowKey={(r) => r.payrollId}
         loading={listQ.isLoading}
-        dataSource={sorted}
+        dataSource={filtered}
         columns={cols}
-        pagination={{ pageSize: 20 }}
-        locale={{ emptyText: selectedMemberId ? '이력이 없습니다.' : '직원을 검색·선택 후 [조회] 를 누르세요.' }}
+        pagination={{ pageSize: 20, showSizeChanger: true }}
+        locale={{ emptyText: '해당 월의 정산 이력이 없습니다.' }}
+        onRow={(r) => ({
+          onClick: () =>
+            navigate({ to: '/app/payroll/admin/$payrollId', params: { payrollId: r.payrollId }, search: { tab: 'member' } }),
+          style: { cursor: 'pointer' },
+        })}
+        size="middle"
       />
     </Card>
   );
