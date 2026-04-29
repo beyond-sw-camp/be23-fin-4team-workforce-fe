@@ -59,6 +59,8 @@ import {searchApi} from '@/features/search/api/searchApi';
 import {organizationApi} from '@/features/organization/api/organizationApi';
 import {memberApi} from '@/features/member/api/memberApi';
 import {attendanceApi} from '@/features/salary-service/api/attendanceApi';
+import {salaryApi} from '@/features/salary-service/api/salaryApi';
+import {hasActiveNegotiationSalaryPolicy} from '@/features/salary-service/lib/salaryPolicyAccess';
 import {
     canAccessMemberDirectory,
     canAccessMemberDirectoryFromPermissionStrings,
@@ -140,6 +142,7 @@ const APP_MENU_ICONS: Record<string, ReactNode> = {
     '/app/income': <BankOutlined className="tw-text-lg"/>,
     '/app/notifications': <BellOutlined className="tw-text-lg"/>,
     '/app/performance': <LineChartOutlined className="tw-text-lg"/>,
+    '/app/approval-center': <FileDoneOutlined className="tw-text-lg"/>,
     '/app/evaluations': <StarOutlined className="tw-text-lg"/>,
     '/app/meetings': <VideoCameraOutlined className="tw-text-lg"/>,
     '/app/settings': <SettingOutlined className="tw-text-lg"/>,
@@ -163,7 +166,12 @@ function shouldShowEsgMenuItem(path: string, cfg: EsgConfig | null | undefined, 
 }
 
 const TALENT_HUB_GROUP_KEY = 'group-talent-hub';
-const TALENT_HUB_PATHS = ['/app/performance', '/app/evaluations', '/app/meetings'] as const;
+const TALENT_HUB_PATHS = [
+    '/app/performance',
+    '/app/approval-center',
+    '/app/evaluations',
+    '/app/meetings',
+] as const;
 const TALENT_HUB_PATH_SET = new Set<string>(TALENT_HUB_PATHS);
 
 const ORG_HR_GROUP_KEY = 'group-org-hr';
@@ -184,6 +192,8 @@ const LEAVE_PATH_SET = new Set<string>(LEAVE_PATHS);
 
 /** 관리자: 급여 하위(내 급여·관리·미사용 수당·설정) */
 const PAYROLL_GROUP_KEY = 'group-payroll';
+/** 급여 정산 관리 + 연봉 협상(연봉협상제일 때만) 사이드 서브메뉴 */
+const PAYROLL_SETTLEMENT_MENU_KEY = 'group-payroll-settlement';
 
 const APPROVAL_GROUP_KEY = 'group-approvals';
 /** openKeys: 전자결재 하위 구역(ap-section-*). */
@@ -243,6 +253,7 @@ function buildAppShellMenuItems(
     canAccessMemberDirectory: boolean,
     hrGroupExtraChildren?: NonNullable<MenuProps['items']>,
     leavePromotionEnabled = false,
+    showSalaryNegotiationSubmenu = false,
 ): NonNullable<MenuProps['items']> {
     const items: NonNullable<MenuProps['items']> = [];
     let hubInserted = false;
@@ -479,12 +490,40 @@ function buildAppShellMenuItems(
                                                text="급여 관리"/>
                     ),
                     children: [
-                        {
-                            key: '/app/payroll/admin',
-                            icon: <DollarOutlined className="tw-text-lg"/>,
-                            label: APP_MENU_LABEL['/app/payroll/admin'],
-                            title: APP_MENU_LABEL['/app/payroll/admin'],
-                        },
+                        ...(showSalaryNegotiationSubmenu
+                            ? [
+                                  {
+                                      key: PAYROLL_SETTLEMENT_MENU_KEY,
+                                      label: (
+                                          <SiderGroupedMenuLabel
+                                              icon={<DollarOutlined className="tw-text-lg"/>}
+                                              text={APP_MENU_LABEL['/app/payroll/admin'] ?? '급여 정산 관리'}
+                                          />
+                                      ),
+                                      children: [
+                                          {
+                                              key: '/app/payroll/admin',
+                                              icon: <DollarOutlined className="tw-text-lg"/>,
+                                              label: '월 급여대장',
+                                              title: '월 급여대장',
+                                          },
+                                          {
+                                              key: '/app/salary/negotiations',
+                                              icon: <LineChartOutlined className="tw-text-lg"/>,
+                                              label: APP_MENU_LABEL['/app/salary/negotiations'] ?? '연봉 협상 관리',
+                                              title: APP_MENU_LABEL['/app/salary/negotiations'] ?? '연봉 협상 관리',
+                                          },
+                                      ],
+                                  },
+                              ]
+                            : [
+                                  {
+                                      key: '/app/payroll/admin',
+                                      icon: <DollarOutlined className="tw-text-lg"/>,
+                                      label: APP_MENU_LABEL['/app/payroll/admin'],
+                                      title: APP_MENU_LABEL['/app/payroll/admin'],
+                                  },
+                              ]),
                         {
                             key: '/app/payroll/tax-summary',
                             icon: <AuditOutlined className="tw-text-lg"/>,
@@ -502,6 +541,12 @@ function buildAppShellMenuItems(
                             icon: <BankOutlined className="tw-text-lg"/>,
                             label: APP_MENU_LABEL['/app/salary/retirement-policy'],
                             title: APP_MENU_LABEL['/app/salary/retirement-policy'],
+                        },
+                        {
+                            key: '/app/salary/bonus-policy',
+                            icon: <DollarOutlined className="tw-text-lg"/>,
+                            label: APP_MENU_LABEL['/app/salary/bonus-policy'],
+                            title: APP_MENU_LABEL['/app/salary/bonus-policy'],
                         },
                     ],
                 });
@@ -537,6 +582,12 @@ function buildAppShellMenuItems(
                             label: APP_MENU_LABEL['/app/payroll/retirement'],
                             title: APP_MENU_LABEL['/app/payroll/retirement'],
                         },
+                        {
+                            key: '/app/payroll/negotiations',
+                            icon: <DollarOutlined className="tw-text-lg"/>,
+                            label: APP_MENU_LABEL['/app/payroll/negotiations'],
+                            title: APP_MENU_LABEL['/app/payroll/negotiations'],
+                        },
                     ],
                 });
             }
@@ -553,7 +604,10 @@ function buildAppShellMenuItems(
     return items;
 }
 
-function useAppShellSiderMenuItems(currentPathname: string): NonNullable<MenuProps['items']> {
+function useAppShellSiderMenuItems(currentPathname: string): {
+    items: NonNullable<MenuProps['items']>;
+    showSalaryNegotiationSubmenu: boolean;
+} {
     const {status, user} = useAuth();
     const isAdmin = user?.isSystemAdmin === true;
     const {hasPermission} = usePermissions();
@@ -588,10 +642,25 @@ function useAppShellSiderMenuItems(currentPathname: string): NonNullable<MenuPro
         staleTime: 300_000,
     });
 
+    /** 연차 촉진 메뉴 노출용. 급여 서비스 503 등일 때는 빈 배열로 삼켜 사이드바 전체가 깨지지 않게 함 */
     const {data: leavePoliciesForMenu} = useQuery({
         queryKey: ['salary', 'leave-policies'],
-        queryFn: () => attendanceApi.leavePolicy.list(),
+        queryFn: async () => {
+            try {
+                return await attendanceApi.leavePolicy.list();
+            } catch {
+                return [];
+            }
+        },
         enabled: status === 'authenticated',
+        retry: false,
+        staleTime: 60_000,
+    });
+
+    const {data: salaryPoliciesForMenu} = useQuery({
+        queryKey: ['salary', 'salary-policies'],
+        queryFn: () => salaryApi.salaryPolicy.list(),
+        enabled: status === 'authenticated' && isAdmin,
         staleTime: 60_000,
     });
 
@@ -626,12 +695,14 @@ function useAppShellSiderMenuItems(currentPathname: string): NonNullable<MenuPro
               ]
             : undefined;
         const leavePromotionEnabled = (leavePoliciesForMenu ?? []).some((p) => p.isPromotionYn === 'Y');
+        const showSalaryNegotiationSubmenu = hasActiveNegotiationSalaryPolicy(salaryPoliciesForMenu);
         const items = buildAppShellMenuItems(
             isAdmin,
             approvalMenuChildren,
             showMemberDirectoryMenu,
             hrGroupExtraChildren,
             leavePromotionEnabled,
+            showSalaryNegotiationSubmenu,
         );
 
         const esgMenuItem =
@@ -651,7 +722,7 @@ function useAppShellSiderMenuItems(currentPathname: string): NonNullable<MenuPro
                 : null;
 
         if (!isAdmin) {
-            return esgMenuItem ? [...items, esgMenuItem] : items;
+            return {items: esgMenuItem ? [...items, esgMenuItem] : items, showSalaryNegotiationSubmenu: false};
         }
 
         /** 시스템 관리자: HR 정책 문서 바로 위에 ESG */
@@ -663,9 +734,9 @@ function useAppShellSiderMenuItems(currentPathname: string): NonNullable<MenuPro
         };
 
         if (esgMenuItem) {
-            return [...items, esgMenuItem, doc];
+            return {items: [...items, esgMenuItem, doc], showSalaryNegotiationSubmenu};
         }
-        return [...items, doc];
+        return {items: [...items, doc], showSalaryNegotiationSubmenu};
     }, [
         esgConfig,
         isAdmin,
@@ -676,6 +747,7 @@ function useAppShellSiderMenuItems(currentPathname: string): NonNullable<MenuPro
         user?.departmentName,
         showApprovalFormSettings,
         leavePoliciesForMenu,
+        salaryPoliciesForMenu,
     ]);
 }
 
@@ -1406,6 +1478,10 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
     if (/^\/app\/members\/[^/]+$/.test(pathname)) return ['/app/members'];
     if (/^\/app\/meetings\/[^/]+$/.test(pathname)) return ['/app/meetings'];
     if (/^\/app\/performance\//.test(pathname)) return ['/app/performance'];
+    if (/^\/app\/approval-center\//.test(pathname)) return ['/app/approval-center'];
+    if (/^\/app\/evaluation-flow(\/|$)/.test(pathname)) return ['/app/evaluations'];
+    if (/^\/app\/my-evaluation-result-v2(\/|$)/.test(pathname)) return ['/app/evaluations'];
+    if (/^\/app\/evaluation-admin(\/|$)/.test(pathname)) return ['/app/evaluations'];
     if (pathname === '/app/attendance/monthly') return ['/app/attendance/monthly'];
     if (pathname === '/app/attendance/schedules/my') return ['/app/attendance/schedules/my'];
     if (pathname === '/app/attendance/overtime') return ['/app/attendance/overtime'];
@@ -1430,8 +1506,11 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
     if (pathname === '/app/salary/settings') return ['/app/salary/settings'];
     if (pathname === '/app/salary/pay-grade-table') return ['/app/salary/settings'];
     if (pathname === '/app/salary/retirement-policy') return ['/app/salary/retirement-policy'];
+    if (pathname === '/app/salary/negotiations') return ['/app/salary/negotiations'];
+    if (pathname === '/app/salary/bonus-policy') return ['/app/salary/bonus-policy'];
     if (pathname === '/app/payroll/allowances') return ['/app/payroll/allowances'];
     if (pathname === '/app/payroll/retirement') return ['/app/payroll/retirement'];
+    if (pathname === '/app/payroll/negotiations') return ['/app/payroll/negotiations'];
     if (pathname === '/app/payroll/annual') return ['/app/payroll/annual'];
     if (pathname === '/app/income') return ['/app/income'];
     if (pathname === '/app/payroll/tax-summary') return ['/app/payroll/tax-summary'];
@@ -1460,11 +1539,16 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
 function menuOpenKeysForPath(
     pathname: string,
     search: Record<string, unknown>,
-    opts?: { isSystemAdmin?: boolean },
+    opts?: { isSystemAdmin?: boolean; showSalaryNegotiationSubmenu?: boolean },
 ): string[] {
     const keys: string[] = [];
     const isSystemAdmin = opts?.isSystemAdmin === true;
-    if (TALENT_HUB_PATH_SET.has(pathname) || /^\/app\/(meetings|performance|evaluations)\//.test(pathname)) keys.push(TALENT_HUB_GROUP_KEY);
+    if (
+        TALENT_HUB_PATH_SET.has(pathname) ||
+        /^\/app\/(meetings|performance|evaluations|approval-center|evaluation-flow|my-evaluation-result-v2|evaluation-admin)\//.test(pathname)
+    ) {
+        keys.push(TALENT_HUB_GROUP_KEY);
+    }
     if (ORG_HR_PATH_SET.has(pathname) || /^\/app\/members\/[^/]+$/.test(pathname)) {
         keys.push(ORG_HR_GROUP_KEY);
     }
@@ -1497,15 +1581,25 @@ function menuOpenKeysForPath(
             pathname === '/app/salary/unused-leave' ||
             pathname === '/app/salary/settings' ||
             pathname === '/app/salary/pay-grade-table' ||
-            pathname === '/app/salary/retirement-policy')
+            pathname === '/app/salary/retirement-policy' ||
+            pathname === '/app/salary/negotiations' ||
+            pathname === '/app/salary/bonus-policy')
     ) {
         keys.push(PAYROLL_GROUP_KEY);
+    }
+    if (
+        isSystemAdmin &&
+        opts?.showSalaryNegotiationSubmenu === true &&
+        (pathname === '/app/payroll/admin' || pathname === '/app/salary/negotiations')
+    ) {
+        keys.push(PAYROLL_SETTLEMENT_MENU_KEY);
     }
     if (!isSystemAdmin && (
         pathname === '/app/payroll' ||
         pathname === '/app/payroll/annual' ||
         pathname === '/app/payroll/allowances' ||
         pathname === '/app/payroll/retirement' ||
+        pathname === '/app/payroll/negotiations' ||
         pathname === '/app/income'
     )) {
         keys.push(PAYROLL_GROUP_KEY);
@@ -1545,7 +1639,7 @@ function AppShellLayout() {
     const {user} = useAuth();
     const isSystemAdmin = user?.isSystemAdmin === true;
     const menuSelectedKey = useMemo(() => menuSelectedKeyFromPath(pathname, search), [pathname, search]);
-    const appShellMenuItems = useAppShellSiderMenuItems(pathname);
+    const {items: appShellMenuItems, showSalaryNegotiationSubmenu} = useAppShellSiderMenuItems(pathname);
     const [orgChartModalOpen, setOrgChartModalOpen] = useState(false);
 
     const [siderCollapsed, setSiderCollapsed] = useState(() => {
@@ -1575,7 +1669,7 @@ function AppShellLayout() {
         } catch {
             /* ignore */
         }
-        return menuOpenKeysForPath(pathname, search, {isSystemAdmin});
+        return menuOpenKeysForPath(pathname, search, {isSystemAdmin, showSalaryNegotiationSubmenu: false});
     });
 
     useEffect(() => {
@@ -1584,12 +1678,15 @@ function AppShellLayout() {
             return;
         }
         setMenuOpenKeys((prev) => {
-            const pathKeys = menuOpenKeysForPath(pathname, search, {isSystemAdmin});
+            const pathKeys = menuOpenKeysForPath(pathname, search, {
+                isSystemAdmin,
+                showSalaryNegotiationSubmenu,
+            });
             const merged = new Set(prev);
             for (const k of pathKeys) merged.add(k);
             return [...merged];
         });
-    }, [pathname, search, siderCollapsed, isSystemAdmin]);
+    }, [pathname, search, siderCollapsed, isSystemAdmin, showSalaryNegotiationSubmenu]);
 
     /** 작성 허브「전체」모달 iframe — 사이드·헤더 없이 본문만(실제 라우트 화면과 동일). */
     const embedComposeModal =
@@ -1680,6 +1777,11 @@ function AppShellLayout() {
                             onClick={({key, domEvent}) => {
                                 domEvent.stopPropagation();
                                 const keyStr = String(key);
+                                if (keyStr === PAYROLL_SETTLEMENT_MENU_KEY) {
+                                    void navigate({to: '/app/payroll/admin'});
+                                    if (siderCollapsed) setMenuOpenKeys([]);
+                                    return;
+                                }
                                 const groupDefaultPath =
                                     keyStr === TALENT_HUB_GROUP_KEY
                                         ? '/app/performance'

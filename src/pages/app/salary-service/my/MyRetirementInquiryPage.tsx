@@ -284,6 +284,9 @@ function RetirementBreakdown({ result }: { result: RetirementSimRes }) {
 
   return (
     <div className="tw-flex tw-flex-col tw-gap-6">
+      {/* 0. 평균임금 정확 산정 — 근로기준법 제2조 1항 6호 + 시행령 제2조 */}
+      <AverageWageBreakdown result={result} />
+
       {/* 1. 예상 퇴직금 및 기타내역 — bordered Descriptions 2행 3열 */}
       <section>
         <Typography.Title level={5} className="!tw-mt-0 !tw-mb-3">
@@ -359,5 +362,172 @@ function SumBox({ label, value, primary }: { label: string; value: string; prima
         {value}
       </span>
     </div>
+  );
+}
+
+/* -----------------------------------------------------------
+   평균임금 정확 산정 breakdown
+     근로기준법 제2조 1항 6호 평균임금 정의
+       (직전 3개월 임금총액 + 12개월 상여 환산 + 12개월 연차수당 환산) / 3개월 일수
+     시행령 제2조 평균임금 < 통상시급 일액 이면 통상시급 일액 적용
+   ----------------------------------------------------------- */
+function AverageWageBreakdown({ result }: { result: RetirementSimRes }) {
+  // 백엔드 새 필드 미존재 시 (DC 또는 구버전 응답) breakdown 숨김
+  if (
+    result.appliedDailyWage == null &&
+    result.averageDailyWage == null &&
+    result.basePeriodPayment == null
+  ) {
+    return null;
+  }
+
+  const fmt = (n?: number) =>
+    n == null ? '—' : `${Number(n).toLocaleString('ko-KR')}원`;
+
+  const isAverage = result.appliedBasis === 'AVERAGE';
+  const isOrdinary = result.appliedBasis === 'ORDINARY';
+
+  return (
+    <section>
+      <div className="tw-flex tw-items-center tw-flex-wrap tw-gap-2 tw-mb-3">
+        <Typography.Title level={5} className="!tw-mt-0 !tw-mb-0">
+          평균임금 산정 내역
+        </Typography.Title>
+        <Tag color="default">근로기준법 제2조 1항 6호</Tag>
+        {(result.excludedLeaveDays ?? 0) > 0 && (
+          <Tag color="orange">
+            휴직기간 {result.excludedLeaveDays}일 제외 ({result.excludedLeaveCount ?? 0}건) · 시행령 제2조
+          </Tag>
+        )}
+      </div>
+
+      <Descriptions
+        bordered
+        size="middle"
+        column={{ xs: 1, sm: 2, md: 3 }}
+        labelStyle={{ width: '15%', backgroundColor: '#fafafa' }}
+        contentStyle={{ width: '18.33%', textAlign: 'right' }}
+        items={[
+          {
+            key: 'basePeriod',
+            label: '직전 3개월 임금총액',
+            children: fmt(result.basePeriodPayment),
+          },
+          {
+            key: 'basePeriodDays',
+            label: '3개월 일수',
+            children: (() => {
+              const base = result.basePeriodDays;
+              const excluded = result.excludedLeaveDays ?? 0;
+              const adjusted = result.adjustedPeriodDays;
+              if (base == null) return '—';
+              if (excluded > 0) {
+                return (
+                  <span>
+                    <Typography.Text delete type="secondary">{base}일</Typography.Text>
+                    {' → '}
+                    <strong>{adjusted ?? base - excluded}일</strong>
+                    <Typography.Text type="secondary" className="!tw-ml-1 !tw-text-xs">
+                      (휴직 {excluded}일 제외)
+                    </Typography.Text>
+                  </span>
+                );
+              }
+              return `${base}일`;
+            })(),
+          },
+          {
+            key: 'simpleAvg',
+            label: '단순 일평균',
+            children: fmt(result.simpleDailyAverage),
+          },
+          {
+            key: 'bonusAdd',
+            label: '12개월 상여 환산',
+            children: (
+              <span>
+                {fmt(result.bonusAddition12mAvg)}
+                <Typography.Text type="secondary" className="!tw-ml-1 !tw-text-xs">
+                  × 3/12
+                </Typography.Text>
+              </span>
+            ),
+          },
+          {
+            key: 'leaveAdd',
+            label: '12개월 연차수당 환산',
+            children: (
+              <span>
+                {fmt(result.unusedLeaveAddition12mAvg)}
+                <Typography.Text type="secondary" className="!tw-ml-1 !tw-text-xs">
+                  × 3/12
+                </Typography.Text>
+              </span>
+            ),
+          },
+          {
+            key: 'avgDaily',
+            label: '평균임금 일액',
+            children: (
+              <span className={isAverage ? 'tw-font-bold tw-text-emerald-600' : ''}>
+                {fmt(result.averageDailyWage)}
+              </span>
+            ),
+          },
+          {
+            key: 'ordinaryDaily',
+            label: '통상시급 일액',
+            children: (
+              <span className={isOrdinary ? 'tw-font-bold tw-text-blue-600' : ''}>
+                {fmt(result.ordinaryDailyWage)}
+              </span>
+            ),
+          },
+          {
+            key: 'appliedDaily',
+            label: (
+              <span>
+                <strong>적용 일액</strong>
+                <Typography.Text type="secondary" className="!tw-ml-1 !tw-text-xs">
+                  시행령 제2조
+                </Typography.Text>
+              </span>
+            ),
+            children: (
+              <span className="tw-font-bold tw-text-[#2563EB]">
+                {fmt(result.appliedDailyWage)}
+              </span>
+            ),
+          },
+          {
+            key: 'appliedBasis',
+            label: '적용 기준',
+            children: isAverage ? (
+              <Tag color="green">평균임금</Tag>
+            ) : isOrdinary ? (
+              <Tag color="blue">통상시급</Tag>
+            ) : (
+              <Tag>—</Tag>
+            ),
+          },
+        ]}
+      />
+
+      <Alert
+        type={isOrdinary ? 'warning' : 'info'}
+        showIcon
+        className="!tw-mt-3"
+        message={
+          isOrdinary
+            ? '평균임금이 통상시급 일액보다 적어 시행령 제2조에 따라 통상시급 일액이 적용되었습니다.'
+            : '평균임금 일액이 통상시급 일액 이상이므로 평균임금이 적용되었습니다.'
+        }
+        description={
+          <Typography.Text type="secondary" className="!tw-text-xs">
+            퇴직금 = 적용 일액 × 30 × 근속일수 / 365
+          </Typography.Text>
+        }
+      />
+    </section>
   );
 }
