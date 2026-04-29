@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  Alert,
   App,
   Button,
   Calendar,
@@ -147,6 +148,99 @@ export function MyScheduleSelectionsPage() {
       new Map((schedulesQ.data ?? []).map((s) => [s.workScheduleId ?? '', s])),
     [schedulesQ.data],
   );
+
+  /* ─────────────────────────────────────────────────────────────
+   * 마감일 안내 배너 — 4가지 상태 자동 분기
+   *  ① 마감 전 + 다음달 미선택 → "다음달 신청 마감 D-N" 경고
+   *  ② 마감 전 + 다음달 신청 완료 → "다음달 슬롯 신청 완료" 성공
+   *  ③ 마감 후 + 이번달 자동 할당 → "이번달 자동 적용 / 다음달 마감 D-N" 정보
+   *  ④ 마감 후 + 이번달 본인 신청 적용 중 → "이번달 적용 중 / 다음달 마감 D-N" 성공
+   * ──────────────────────────────────────────────────────────── */
+  const activeFlexibleSchedule = useMemo(
+    () => (schedulesQ.data ?? []).find((s: WorkSchedule) => s.workType === 'FLEXIBLE'),
+    [schedulesQ.data],
+  );
+
+  // 회사 활성 FLEXIBLE 스케줄의 모든 슬롯 (배너에서 시간 표시용)
+  const activeFlexibleSlotsQ = useQuery({
+    queryKey: ['salary', 'flexible-slots', 'active', activeFlexibleSchedule?.workScheduleId],
+    queryFn: () =>
+      attendanceApi.flexibleSlot.listByWorkSchedule(activeFlexibleSchedule!.workScheduleId!),
+    enabled: Boolean(activeFlexibleSchedule?.workScheduleId),
+  });
+  const allSlotsMap = useMemo(
+    () => new Map((activeFlexibleSlotsQ.data ?? []).map((s) => [s.slotId ?? '', s])),
+    [activeFlexibleSlotsQ.data],
+  );
+
+  const banner = useMemo(() => {
+    if (!activeFlexibleSchedule) return null;
+    const today = dayjs();
+    const deadlineDay = activeFlexibleSchedule.selectionDeadlineDay ?? 25;
+    const thisMonthDeadline = today.date(deadlineDay);
+    const isBeforeDeadline = !today.isAfter(thisMonthDeadline, 'day');
+
+    const currentYm = today.format('YYYY-MM');
+    const nextYm = today.add(1, 'month').format('YYYY-MM');
+    const history = historyQ.data ?? [];
+
+    const findSelection = (ym: string) =>
+      history.find(
+        (s) =>
+          s.targetYearMonth === ym &&
+          (s.approvalStatus === 'APPROVED' ||
+            s.approvalStatus === 'AUTO' ||
+            s.approvalStatus === 'PENDING'),
+      );
+
+    const formatSlotInfo = (selection: MemberScheduleSelection | undefined) => {
+      if (!selection) return '-';
+      const slot = allSlotsMap.get(selection.slotId ?? '');
+      const label = slot?.slotLabel ?? selection.slotLabel ?? '-';
+      const time =
+        slot?.startTime && slot?.endTime ? ` (${slot.startTime}~${slot.endTime})` : '';
+      return `${label}${time}`;
+    };
+
+    if (isBeforeDeadline) {
+      const dDay = thisMonthDeadline.diff(today, 'day');
+      const nextMonthLabel = today.add(1, 'month').format('M월');
+      const nextSel = findSelection(nextYm);
+
+      if (!nextSel) {
+        return {
+          type: 'warning' as const,
+          message: `${nextMonthLabel} 근무 시간대 선택 마감 D-${dDay} (${thisMonthDeadline.format('M월 D일')}까지)`,
+          description: '마감일까지 신청하지 않으면 기본 근무 시간대가 자동 적용됩니다.',
+        };
+      }
+      return {
+        type: 'success' as const,
+        message: `${nextMonthLabel} 근무 시간대 — ${formatSlotInfo(nextSel)} 신청 완료`,
+        description: `마감일까지 변경 가능합니다 (D-${dDay}, ${thisMonthDeadline.format('M월 D일')})`,
+      };
+    }
+
+    // 마감 후
+    const nextDeadline = thisMonthDeadline.add(1, 'month');
+    const dDay = nextDeadline.diff(today, 'day');
+    const currentMonthLabel = today.format('M월');
+    const nextMonthLabel = today.add(1, 'month').format('M월');
+    const currentSel = findSelection(currentYm);
+
+    if (currentSel?.approvalStatus === 'AUTO') {
+      return {
+        type: 'info' as const,
+        message: `${currentMonthLabel} 근무 시간대 — ${formatSlotInfo(currentSel)} 자동 적용 중`,
+        description: `${thisMonthDeadline.format('M월 D일')} 마감을 지나 자동 배정되었습니다. 다음 달(${nextMonthLabel}) 마감: ${nextDeadline.format('M월 D일')} (D-${dDay})`,
+      };
+    }
+    return {
+      type: 'success' as const,
+      message: `${currentMonthLabel} 근무 시간대 — ${formatSlotInfo(currentSel)} 적용 중`,
+      description: `다음 달(${nextMonthLabel}) 근무 시간대는 ${nextDeadline.format('M월 D일')}까지 신청 가능합니다 (D-${dDay})`,
+    };
+  }, [activeFlexibleSchedule, historyQ.data, allSlotsMap]);
   const dailyMap = useMemo(() => {
     const map = new Map<string, DailyAttendance>();
     for (const row of monthlyQ.data?.content ?? []) {
@@ -232,6 +326,15 @@ export function MyScheduleSelectionsPage() {
           </Button>
         </Space>
       </div>
+
+      {banner && (
+        <Alert
+          type={banner.type}
+          showIcon
+          message={banner.message}
+          description={banner.description}
+        />
+      )}
 
       <Card title="개인 근무 스케줄" className="tw-border-slate-200/80 tw-shadow-sm" loading={monthlyQ.isLoading}>
         <Calendar

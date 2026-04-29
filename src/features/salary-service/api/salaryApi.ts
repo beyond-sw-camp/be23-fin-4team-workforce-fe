@@ -6,6 +6,7 @@ import type {
   BonusPolicyUpdatePayload,
   MemberAllowance,
   MemberAllowanceCreatePayload,
+  MemberAllowanceAutoGrantPayload,
   PayGradeTable,
   PayGradeTableBulkCreatePayload,
   PayGradeTableCreatePayload,
@@ -346,8 +347,10 @@ export const salaryApi = {
       return unwrapApiResponse<Salary>(data);
     },
 
-    async delete(salaryId: string): Promise<void> {
-      await httpClient.delete(`${BASE}/salary/salaries/${encodeURIComponent(salaryId)}`);
+    async delete(salaryId: string, options?: { force?: boolean }): Promise<void> {
+      await httpClient.delete(`${BASE}/salary/salaries/${encodeURIComponent(salaryId)}`, {
+        params: options?.force ? { force: true } : undefined,
+      });
     },
   },
 
@@ -562,47 +565,42 @@ export const salaryApi = {
     },
   },
 
-  /** /api/salary/me/allowances — 개인 수당 신청(사원) */
+  /** /salary/me/allowances — 개인 수당 신청(사원) */
   memberAllowance: {
     async createMy(payload: MemberAllowanceCreatePayload): Promise<MemberAllowance> {
-      const { data } = await httpClient.post(`${BASE}/api/salary/me/allowances`, payload);
+      const { data } = await httpClient.post(`${BASE}/salary/me/allowances`, payload);
       unwrapMessage(data);
       return unwrapApiResponse<MemberAllowance>(data);
     },
 
     async listMy(): Promise<MemberAllowance[]> {
-      const { data } = await httpClient.get(`${BASE}/api/salary/me/allowances`);
+      const { data } = await httpClient.get(`${BASE}/salary/me/allowances`);
       const unwrapped = unwrapApiResponse<MemberAllowance[] | null>(data);
       return Array.isArray(unwrapped) ? unwrapped : [];
     },
 
     async updateApprovalLink(memberAllowanceId: string, approvalRequestId: string): Promise<void> {
       await httpClient.patch(
-        `${BASE}/api/salary/me/allowances/${encodeURIComponent(memberAllowanceId)}/approval-link`,
+        `${BASE}/salary/me/allowances/${encodeURIComponent(memberAllowanceId)}/approval-link`,
         null,
         { params: { approvalRequestId } },
       );
     },
 
     async cancelMy(memberAllowanceId: string): Promise<void> {
-      await httpClient.delete(`${BASE}/api/salary/me/allowances/${encodeURIComponent(memberAllowanceId)}`);
+      await httpClient.delete(`${BASE}/salary/me/allowances/${encodeURIComponent(memberAllowanceId)}`);
     },
   },
 
-  /** /api/salary/admin/allowances — 수당 관리자 조회/자동등록 */
+  /** /salary/admin/allowances — 수당 관리자 조회/자동등록 */
   memberAllowanceAdmin: {
-    async autoGrant(payload: {
-      memberId: string;
-      salaryItemTemplateId: string;
-      amount: number;
-      effectiveFrom: string;
-    }): Promise<void> {
-      const { data } = await httpClient.post(`${BASE}/api/salary/admin/allowances/auto-grant`, payload);
+    async autoGrant(payload: MemberAllowanceAutoGrantPayload): Promise<void> {
+      const { data } = await httpClient.post(`${BASE}/salary/admin/allowances/auto-grant`, payload);
       unwrapMessage(data);
     },
 
     async listByStatus(status?: string): Promise<MemberAllowance[]> {
-      const { data } = await httpClient.get(`${BASE}/api/salary/admin/allowances`, {
+      const { data } = await httpClient.get(`${BASE}/salary/admin/allowances`, {
         params: status ? { status } : undefined,
       });
       const unwrapped = unwrapApiResponse<MemberAllowance[] | null>(data);
@@ -611,7 +609,7 @@ export const salaryApi = {
 
     async listActiveByMember(memberId: string, date: string): Promise<MemberAllowance[]> {
       const { data } = await httpClient.get(
-        `${BASE}/api/salary/admin/allowances/members/${encodeURIComponent(memberId)}/active`,
+        `${BASE}/salary/admin/allowances/members/${encodeURIComponent(memberId)}/active`,
         { params: { date } },
       );
       const unwrapped = unwrapApiResponse<MemberAllowance[] | null>(data);

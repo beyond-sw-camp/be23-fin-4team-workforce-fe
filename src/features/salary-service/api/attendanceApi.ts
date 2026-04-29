@@ -1,7 +1,10 @@
 /** 근태·휴가·스케줄·출장만 쪼개 둔 API (salaryServiceApi랑 경로 동일) */
 import type {
+  AttendanceCorrectionPending,
+  AttendanceCorrectionReqPayload,
   AttendanceLog,
   AttendanceLogCreatePayload,
+  MissingAttendanceSuspect,
   ComprehensiveOvertimeStatus,
   CompanyHoliday,
   LeaveOfAbsenceSubmitPayload,
@@ -28,6 +31,7 @@ import type {
   LeavePolicy,
   LeavePolicyCreatePayload,
   LeavePolicyUpdatePayload,
+  LeavePromotionHistory,
   LeavePromotionMy,
   LeavePromotionNoResponse,
   LeavePromotionRespondPayload,
@@ -136,6 +140,45 @@ export const attendanceApi = {
       });
       return unwrapApiResponse<WorkTimeSummary>(data);
     },
+
+    /* ─────────────────────────────────────────────────
+     * 출퇴근 정정 신청 / 승인 / 반려
+     * 새 테이블 없이 DailyAttendance.closureStatus = UNDER_REVIEW + AttendanceLog 의
+     * sourceType = ADMIN_MANUAL 활용. 정정 가능 기간은 백엔드 정책 (default 7일)
+     * ───────────────────────────────────────────────── */
+    correction: {
+      /** 직원: 정정 신청. 출근/퇴근 둘 중 하나 이상 + 사유 필수 */
+      async request(payload: AttendanceCorrectionReqPayload): Promise<string> {
+        const { data } = await httpClient.post(`${BASE}/attendance/correction`, payload);
+        return unwrapApiResponse<string>(data);
+      },
+
+      /** 직원: 누락 후보 일자 (휴가·휴직 복귀 안전망) */
+      async listMyMissing(): Promise<MissingAttendanceSuspect[]> {
+        const { data } = await httpClient.get(`${BASE}/attendance/correction/my/missing-suspect`);
+        const unwrapped = unwrapApiResponse<MissingAttendanceSuspect[] | null>(data);
+        return Array.isArray(unwrapped) ? unwrapped : [];
+      },
+
+      /** 관리자: 정정 검토 큐 (UNDER_REVIEW 상태 DA 전체) */
+      async listPending(): Promise<AttendanceCorrectionPending[]> {
+        const { data } = await httpClient.get(`${BASE}/attendance/correction/pending`);
+        const unwrapped = unwrapApiResponse<AttendanceCorrectionPending[] | null>(data);
+        return Array.isArray(unwrapped) ? unwrapped : [];
+      },
+
+      /** 관리자: 승인 → 재계산 + FINALIZED */
+      async approve(dailyAttendanceId: string): Promise<void> {
+        await httpClient.post(`${BASE}/attendance/correction/${dailyAttendanceId}/approve`);
+      },
+
+      /** 관리자: 반려 → 정정 로그 삭제 + 원본 복구 + OPEN 복귀 */
+      async reject(dailyAttendanceId: string, rejectReason: string): Promise<void> {
+        await httpClient.post(`${BASE}/attendance/correction/${dailyAttendanceId}/reject`, {
+          rejectReason,
+        });
+      },
+    },
   },
 
   /** /member-balance — 휴가 잔여 */
@@ -222,6 +265,26 @@ export const attendanceApi = {
         payload,
       );
       unwrapMessage(data);
+    },
+
+    // 관리자 — 통보 이력 (회신 완료 + 강제 지정)
+    async listHistory(): Promise<LeavePromotionHistory[]> {
+      const { data } = await httpClient.get(`${BASE}/leave-promotions/admin/history`);
+      const unwrapped = unwrapApiResponse<LeavePromotionHistory[] | null>(data);
+      return Array.isArray(unwrapped) ? unwrapped : [];
+    },
+
+    // 시연용 — 촉진 배치 즉시 실행
+    async runBatch(targetDate?: string): Promise<{
+      targetDate: string;
+      firstSent: number;
+      secondSent: number;
+      skipped: number;
+    }> {
+      const { data } = await httpClient.post(`${BASE}/leave-promotions/batch/run`, null, {
+        params: targetDate ? { targetDate } : undefined,
+      });
+      return unwrapApiResponse(data);
     },
   },
 
@@ -582,7 +645,7 @@ export const attendanceApi = {
       return unwrapped;
     },
 
-    // 내 휴가 신청 이력 페이지 조회 휴가계획 관리 화면 신청내용 표 데이터 소스
+    // 내 휴가 신청 이력 페이지 조회 휴가 계획 관리 화면 신청내용 표 데이터 소스
     async listMyHistory(params?: {
       page?: number;
       size?: number;

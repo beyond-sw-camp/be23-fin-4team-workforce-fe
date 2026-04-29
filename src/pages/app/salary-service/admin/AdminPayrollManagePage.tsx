@@ -2,7 +2,7 @@
  * /app/payroll/admin/$payrollId
  * DRAFT일 때 항목 CRUD, 확정·지급 완료 버튼.
  */
-import { Link, useParams } from '@tanstack/react-router';
+import { Link, useParams, useSearch } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, App, Button, Card, DatePicker, Descriptions, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Statistic, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
@@ -29,6 +29,11 @@ function formatWon(n: number | null | undefined) {
 
 export function AdminPayrollManagePage() {
   const { payrollId } = useParams({ strict: false }) as { payrollId: string };
+  // 어느 탭에서 진입했는지 — 뒤로가기 링크에 그대로 전달
+  const search = useSearch({ strict: false }) as {
+    tab?: 'company' | 'member' | 'salary';
+  };
+  const fromTab = search?.tab ?? 'company';
   const { message, modal } = App.useApp();
   const qc = useQueryClient();
   const [addForm] = Form.useForm<{ templateId: string; amount: number }>();
@@ -304,7 +309,11 @@ export function AdminPayrollManagePage() {
 
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
-      <Link to="/app/payroll/admin" className="tw-text-sm tw-text-[#2563EB]">
+      <Link
+        to="/app/payroll/admin"
+        search={{ tab: fromTab }}
+        className="tw-text-sm tw-text-[#2563EB]"
+      >
         ← 급여 관리
       </Link>
 
