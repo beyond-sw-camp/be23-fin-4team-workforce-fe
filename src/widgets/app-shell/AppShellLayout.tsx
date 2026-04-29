@@ -135,6 +135,7 @@ const APP_MENU_ICONS: Record<string, ReactNode> = {
     '/app/attendance/flexible-slots': <ScheduleOutlined className="tw-text-lg"/>,
     '/app/leave': <ScheduleOutlined className="tw-text-lg"/>,
     '/app/approvals': <FileDoneOutlined className="tw-text-lg"/>,
+    '/app/contracts': <SafetyCertificateOutlined className="tw-text-lg"/>,
     '/app/approvals/department': <FolderOpenOutlined className="tw-text-lg"/>,
     '/app/payroll': <DollarOutlined className="tw-text-lg"/>,
     '/app/payroll/annual': <BarChartOutlined className="tw-text-lg"/>,
@@ -454,6 +455,12 @@ function buildAppShellMenuItems(
                                 icon: <FormOutlined className="tw-text-lg"/>,
                                 label: composeEntry.label,
                                 title: composeEntry.label,
+                            },
+                            {
+                                key: '/app/contracts',
+                                icon: <SafetyCertificateOutlined className="tw-text-lg"/>,
+                                label: '전자계약',
+                                title: '전자계약',
                             },
                             ...APPROVAL_GUIDE_SECTION_ORDER.map((section) => ({
                                 key: `ap-section-${section}`,
@@ -1531,6 +1538,7 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
         ...APP_MENU_PATH_ORDER,
         ...ESG_MENU_PATH_ORDER,
         '/app/ai-documents',
+        '/app/contracts',
     ]);
     if (menuPaths.has(pathname)) return [pathname];
     return [];

@@ -353,6 +353,14 @@ const absenceProxyRoute = createRoute({
   component: AbsenceProxyPage,
 });
 
+const electronicContractsRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/contracts',
+  component: () => (
+    <GenericPage title="전자계약" description="전자계약 기능을 준비 중입니다. 곧 이용하실 수 있습니다." />
+  ),
+});
+
 const evaluationsRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/evaluations',
@@ -812,6 +820,7 @@ const routeTree = rootRoute.addChildren([
       myApprovalRequestsRoute,
       absenceProxyRoute,
       departmentApprovalsInboxRoute,
+      electronicContractsRoute,
       goalApprovalDetailRoute,
       evaluationsRoute,
       evaluationSeasonDetailRoute,

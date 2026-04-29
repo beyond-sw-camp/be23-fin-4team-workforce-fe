@@ -1,4 +1,4 @@
-import { FormOutlined } from '@ant-design/icons';
+import { FormOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
 import type { OrgChartOrgNode } from '@/features/organization/api/organizationApi';
 
@@ -84,6 +84,12 @@ export function buildApprovalMenuGroupChildren(
       icon: <FormOutlined className="tw-text-lg" />,
       label: '전자결재',
       title: '전자결재',
+    },
+    {
+      key: '/app/contracts',
+      icon: <SafetyCertificateOutlined className="tw-text-lg" />,
+      label: '전자계약',
+      title: '전자계약',
     },
   ];
 }

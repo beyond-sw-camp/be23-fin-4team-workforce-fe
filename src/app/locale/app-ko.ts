@@ -12,6 +12,7 @@ export const APP_MENU_LABEL: Record<string, string> = {
   '/app/attendance': '내 근태',
   '/app/leave': '휴가계획 관리',
   '/app/approvals': '결재함',
+  '/app/contracts': '전자계약',
   '/app/approvals/department': '부서 문서함',
   '/app/payroll': '급여 조회',
   '/app/payroll/annual': '연봉 조회',
@@ -143,6 +144,7 @@ export function appHeaderTitleFromPath(
   if (/^\/app\/payroll\/[^/]+$/.test(pathname)) return '급여 명세';
   if (/^\/app\/members\/[^/]+$/.test(pathname)) return '구성원 상세';
   if (pathname === '/app/approvals/department') return '부서 문서함';
+  if (pathname === '/app/contracts') return '전자계약';
   if (/^\/app\/meetings\/[^/]+$/.test(pathname)) return '면담 상세';
   return APP_BRAND_NAME;
 }
