@@ -3,13 +3,14 @@
  * 시스템 기본 휴가(연차, 반차, 병가 등)는 이름/순서만 수정 가능, 삭제 불가.
  * 커스텀 휴가는 전 필드 수정/삭제 가능.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   App,
   Button,
   Card,
   Checkbox,
+  DatePicker,
   Descriptions,
   Divider,
   Drawer,
@@ -21,6 +22,7 @@ import {
   Select,
   Space,
   Table,
+  Tabs,
   Tag,
   Typography,
 } from 'antd';
@@ -30,8 +32,11 @@ import {
   ArrowUpOutlined,
   HolderOutlined,
 } from '@ant-design/icons';
+import dayjs, { type Dayjs } from 'dayjs';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
+import { memberApi } from '@/features/member/api/memberApi';
 import { useAuth } from '@/features/auth/useAuth';
+import { AdminLeaveGrantPage } from '@/pages/app/salary-service/admin/AdminLeaveGrantPage';
 import type {
   BalanceTypeCode,
   CompanyLeaveType,
@@ -46,9 +51,11 @@ type FormValues = {
   displayOrder: number;
 };
 
-// 잔고 차감 휴가 (연차/월차/반차) 는 시스템 기본으로 관리되며 화면에서 수정 불가
-// 일반 추가 휴가는 모두 차감 없음 (balanceType = null)
+// 수정 불가 휴가 (연차/월차/반차) 잔고 차감 룰이 시스템에 박혀있어 변경 시 정합성 깨짐
+// 삭제 불가 휴가 (연차) 회사 운영의 최소 기준이라 절대 삭제 X
+//  그 외는 모두 자유롭게 수정 / 삭제 가능
 const LOCKED_NAMES = new Set<string>(['연차', '월차']);
+const UNDELETABLE_NAMES = new Set<string>(['연차']);
 
 // 기본 휴가 카탈로그 백엔드 initializeDefaults spec 과 동기화
 //  required: 무조건 시드 (체크박스 비활성)
@@ -119,8 +126,9 @@ const isHalfDay = (name?: string | null) =>
 const isLocked = (record: CompanyLeaveType) =>
   LOCKED_NAMES.has(record.name ?? '') || isHalfDay(record.name);
 // 반차만 삭제 가능 그 외 시스템 기본은 삭제 불가 커스텀은 항상 삭제 가능
+// 연차만 삭제 불가 그 외 시스템 기본·커스텀 모두 삭제 가능
 const canDelete = (record: CompanyLeaveType) =>
-  isHalfDay(record.name) || !record.isSystemDefault;
+  !UNDELETABLE_NAMES.has(record.name ?? '');
 
 const BALANCE_KO: Record<string, string> = {
   ANNUAL: '당해 연차',
@@ -140,6 +148,71 @@ export function AdminCompanyLeaveTypesPage() {
 
   // 행 클릭 시 우측 Drawer 에 표시할 상세 대상
   const [detailTarget, setDetailTarget] = useState<CompanyLeaveType | null>(null);
+
+  // [수동 휴가 부여] 모달 — 회사 직원에게 잔고를 직접 INSERT (배치 대기 없이 즉시 반영)
+  const [grantOpen, setGrantOpen] = useState(false);
+  const [grantForm] = Form.useForm<{
+    memberId: string;
+    balanceType: BalanceTypeCode;
+    totalGranted: number;
+    expirationDate?: Dayjs | null;
+  }>();
+  const [memberKeyword, setMemberKeyword] = useState('');
+  const [debouncedKeyword, setDebouncedKeyword] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedKeyword(memberKeyword), 320);
+    return () => clearTimeout(t);
+  }, [memberKeyword]);
+  const memberSearchQ = useQuery({
+    queryKey: ['member', 'search', 'leave-grant', debouncedKeyword],
+    queryFn: () => memberApi.searchMembersLookup({ keyword: debouncedKeyword.trim(), page: 0, size: 30 }),
+    enabled: debouncedKeyword.trim().length >= 1,
+  });
+
+  const grantMut = useMutation({
+    mutationFn: (v: {
+      memberId: string;
+      balanceType: BalanceTypeCode;
+      totalGranted: number;
+      expirationDate?: Dayjs | null;
+    }) =>
+      attendanceApi.memberBalance.grant({
+        memberId: v.memberId,
+        balanceType: v.balanceType,
+        totalGranted: v.totalGranted,
+        expirationDate: v.expirationDate ? v.expirationDate.format('YYYY-MM-DD') : null,
+      }),
+    onSuccess: () => {
+      message.success('휴가 잔고가 부여되었습니다.');
+      setGrantOpen(false);
+      grantForm.resetFields();
+      void qc.invalidateQueries({ queryKey: ['salary', 'member-balance'] });
+      void qc.invalidateQueries({ queryKey: ['attendance', 'member-balance'] });
+    },
+    onError: (err: unknown) => {
+      const e = err as { response?: { data?: { message?: string } }; message?: string };
+      void message.error(e?.response?.data?.message ?? e?.message ?? '부여에 실패했습니다.');
+    },
+  });
+
+  const onGrantOpen = () => {
+    grantForm.resetFields();
+    grantForm.setFieldsValue({
+      balanceType: 'ANNUAL',
+      totalGranted: 15,
+      expirationDate: dayjs().add(1, 'year').endOf('year'),
+    });
+    setGrantOpen(true);
+  };
+
+  const onSubmitGrant = async () => {
+    try {
+      const v = await grantForm.validateFields();
+      grantMut.mutate(v);
+    } catch {
+      // antd 가 자동 표시
+    }
+  };
 
   // [기본 휴가 불러오기] 선택 모달 — 패턴 D
   const [initOpen, setInitOpen] = useState(false);
@@ -496,7 +569,14 @@ export function AdminCompanyLeaveTypesPage() {
   );
 
   return (
-    <Space direction="vertical" className="tw-w-full" size={16}>
+    <Tabs
+      defaultActiveKey="types"
+      items={[
+        {
+          key: 'types',
+          label: '휴가 종류 관리',
+          children: (
+            <Space direction="vertical" className="tw-w-full" size={16}>
       <div className="tw-flex tw-flex-wrap tw-items-end tw-justify-between tw-gap-3">
         <div>
           <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
@@ -507,6 +587,9 @@ export function AdminCompanyLeaveTypesPage() {
           </Typography.Text>
         </div>
         <Space>
+          <Button onClick={onGrantOpen}>
+            수동 휴가 부여
+          </Button>
           <Button loading={initDefaultsM.isPending} onClick={openInitModal}>
             기본 휴가 불러오기
           </Button>
@@ -627,6 +710,77 @@ export function AdminCompanyLeaveTypesPage() {
           />
         )}
       </Drawer>
+
+      {/* [수동 휴가 부여] — 시연용/누락 보정용 즉시 INSERT 모달 */}
+      <Modal
+        open={grantOpen}
+        title="수동 휴가 부여"
+        onCancel={() => setGrantOpen(false)}
+        onOk={onSubmitGrant}
+        confirmLoading={grantMut.isPending}
+        okText="부여"
+        cancelText="취소"
+        destroyOnClose
+        width={520}
+      >
+        <Typography.Paragraph type="secondary" className="!tw-text-xs !tw-mb-3">
+          매월 1일 휴가 자동 부여 배치를 기다리지 않고, 특정 직원에게 즉시 휴가 잔고를 부여합니다.
+          시연·누락 보정용. 일반적인 정기 부여는 자동 배치(`leaveGrantJob`)에 맡기세요.
+        </Typography.Paragraph>
+        <Form form={grantForm} layout="vertical">
+          <Form.Item
+            label="대상 직원"
+            name="memberId"
+            rules={[{ required: true, message: '직원을 선택해주세요.' }]}
+          >
+            <Select
+              showSearch
+              allowClear
+              placeholder="이름·이메일로 검색"
+              filterOption={false}
+              onSearch={setMemberKeyword}
+              loading={memberSearchQ.isFetching}
+              notFoundContent={debouncedKeyword ? '결과 없음' : '키워드를 입력하세요'}
+              options={(memberSearchQ.data ?? []).map((m) => ({
+                value: m.memberId,
+                label: `${m.name ?? '이름 없음'} · ${m.email ?? '—'}`,
+              }))}
+            />
+          </Form.Item>
+          <Form.Item
+            label="잔고 유형"
+            name="balanceType"
+            rules={[{ required: true, message: '잔고 유형을 선택해주세요.' }]}
+            extra="ANNUAL=당해 연차 / CARRYOVER=이월 / MONTHLY=월차 (1년 미만)"
+          >
+            <Select
+              options={[
+                { value: 'ANNUAL', label: 'ANNUAL — 당해 연차' },
+                { value: 'CARRYOVER', label: 'CARRYOVER — 이월 연차' },
+                { value: 'MONTHLY', label: 'MONTHLY — 월차' },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item
+            label="부여 일수"
+            name="totalGranted"
+            rules={[
+              { required: true, message: '일수를 입력해주세요.' },
+              { type: 'number', min: 0.5, message: '0.5일 이상이어야 합니다.' },
+            ]}
+            extra="반차는 0.5 단위로 입력 가능"
+          >
+            <InputNumber min={0} step={0.5} style={{ width: '100%' }} placeholder="예: 15" />
+          </Form.Item>
+          <Form.Item
+            label="만료일"
+            name="expirationDate"
+            extra="이 날짜 이후 매일 03:00 만료 배치(leaveExpireJob)에서 isExpireYn=Y 처리됩니다. 비워두면 만료 없음."
+          >
+            <DatePicker style={{ width: '100%' }} />
+          </Form.Item>
+        </Form>
+      </Modal>
 
       {/* [기본 휴가 불러오기] — 패턴 D 선택 마법사 */}
       <Modal
@@ -821,6 +975,15 @@ export function AdminCompanyLeaveTypesPage() {
           </div>
         </Form>
       </Modal>
-    </Space>
+            </Space>
+          ),
+        },
+        {
+          key: 'grant',
+          label: '수동 휴가 부여',
+          children: <AdminLeaveGrantPage />,
+        },
+      ]}
+    />
   );
 }

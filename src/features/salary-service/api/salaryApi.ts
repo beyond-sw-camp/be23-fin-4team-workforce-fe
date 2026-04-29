@@ -1,8 +1,12 @@
 /** 급여·정책·템플릿·세율만 쪼개 둔 API (salaryServiceApi랑 경로 동일) */
 import type {
   AnnualSalarySummary,
+  BonusPolicy,
+  BonusPolicyCreatePayload,
+  BonusPolicyUpdatePayload,
   MemberAllowance,
   MemberAllowanceCreatePayload,
+  MemberAllowanceAutoGrantPayload,
   PayGradeTable,
   PayGradeTableBulkCreatePayload,
   PayGradeTableCreatePayload,
@@ -16,6 +20,8 @@ import type {
   PayrollAdminListItem,
   PayrollRecalculatePayload,
   PayrollRecalculateResult,
+  RetroactivePayrollPayload,
+  RetroactivePayrollResult,
   BulkPayrollActionResult,
   RetirementPolicy,
   RetirementSimReq,
@@ -28,6 +34,10 @@ import type {
   SalaryItemTemplate,
   SalaryItemTemplateCreatePayload,
   SalaryItemTemplateUpdatePayload,
+  SalaryNegotiation,
+  SalaryNegotiationBulkCreatePayload,
+  SalaryNegotiationCreatePayload,
+  SalaryNegotiationUpdatePayload,
   SalaryPolicy,
   SalaryPolicyCreatePayload,
   SalaryPolicyUpdatePayload,
@@ -162,6 +172,20 @@ export const salaryApi = {
       });
       unwrapMessage(data);
       return unwrapApiResponse<PayrollRecalculateResult>(data);
+    },
+
+    /** 소급분 차액 미리보기 — DB 변경 없음 */
+    async retroactivePreview(payload: RetroactivePayrollPayload): Promise<RetroactivePayrollResult> {
+      const { data } = await httpClient.post(`${BASE}/salary/payroll/retroactive/preview`, payload);
+      unwrapMessage(data);
+      return unwrapApiResponse<RetroactivePayrollResult>(data);
+    },
+
+    /** 소급분 명세서 발행 — RETROACTIVE 타입 Payroll DRAFT 로 신규 생성 */
+    async retroactiveApply(payload: RetroactivePayrollPayload): Promise<RetroactivePayrollResult> {
+      const { data } = await httpClient.post(`${BASE}/salary/payroll/retroactive/apply`, payload);
+      unwrapMessage(data);
+      return unwrapApiResponse<RetroactivePayrollResult>(data);
     },
 
     /** 회사 월 단위 급여대장 엑셀(XLSX) 다운로드 (관리자).
@@ -323,8 +347,10 @@ export const salaryApi = {
       return unwrapApiResponse<Salary>(data);
     },
 
-    async delete(salaryId: string): Promise<void> {
-      await httpClient.delete(`${BASE}/salary/salaries/${encodeURIComponent(salaryId)}`);
+    async delete(salaryId: string, options?: { force?: boolean }): Promise<void> {
+      await httpClient.delete(`${BASE}/salary/salaries/${encodeURIComponent(salaryId)}`, {
+        params: options?.force ? { force: true } : undefined,
+      });
     },
   },
 
@@ -539,47 +565,42 @@ export const salaryApi = {
     },
   },
 
-  /** /api/salary/me/allowances — 개인 수당 신청(사원) */
+  /** /salary/me/allowances — 개인 수당 신청(사원) */
   memberAllowance: {
     async createMy(payload: MemberAllowanceCreatePayload): Promise<MemberAllowance> {
-      const { data } = await httpClient.post(`${BASE}/api/salary/me/allowances`, payload);
+      const { data } = await httpClient.post(`${BASE}/salary/me/allowances`, payload);
       unwrapMessage(data);
       return unwrapApiResponse<MemberAllowance>(data);
     },
 
     async listMy(): Promise<MemberAllowance[]> {
-      const { data } = await httpClient.get(`${BASE}/api/salary/me/allowances`);
+      const { data } = await httpClient.get(`${BASE}/salary/me/allowances`);
       const unwrapped = unwrapApiResponse<MemberAllowance[] | null>(data);
       return Array.isArray(unwrapped) ? unwrapped : [];
     },
 
     async updateApprovalLink(memberAllowanceId: string, approvalRequestId: string): Promise<void> {
       await httpClient.patch(
-        `${BASE}/api/salary/me/allowances/${encodeURIComponent(memberAllowanceId)}/approval-link`,
+        `${BASE}/salary/me/allowances/${encodeURIComponent(memberAllowanceId)}/approval-link`,
         null,
         { params: { approvalRequestId } },
       );
     },
 
     async cancelMy(memberAllowanceId: string): Promise<void> {
-      await httpClient.delete(`${BASE}/api/salary/me/allowances/${encodeURIComponent(memberAllowanceId)}`);
+      await httpClient.delete(`${BASE}/salary/me/allowances/${encodeURIComponent(memberAllowanceId)}`);
     },
   },
 
-  /** /api/salary/admin/allowances — 수당 관리자 조회/자동등록 */
+  /** /salary/admin/allowances — 수당 관리자 조회/자동등록 */
   memberAllowanceAdmin: {
-    async autoGrant(payload: {
-      memberId: string;
-      salaryItemTemplateId: string;
-      amount: number;
-      effectiveFrom: string;
-    }): Promise<void> {
-      const { data } = await httpClient.post(`${BASE}/api/salary/admin/allowances/auto-grant`, payload);
+    async autoGrant(payload: MemberAllowanceAutoGrantPayload): Promise<void> {
+      const { data } = await httpClient.post(`${BASE}/salary/admin/allowances/auto-grant`, payload);
       unwrapMessage(data);
     },
 
     async listByStatus(status?: string): Promise<MemberAllowance[]> {
-      const { data } = await httpClient.get(`${BASE}/api/salary/admin/allowances`, {
+      const { data } = await httpClient.get(`${BASE}/salary/admin/allowances`, {
         params: status ? { status } : undefined,
       });
       const unwrapped = unwrapApiResponse<MemberAllowance[] | null>(data);
@@ -588,11 +609,149 @@ export const salaryApi = {
 
     async listActiveByMember(memberId: string, date: string): Promise<MemberAllowance[]> {
       const { data } = await httpClient.get(
-        `${BASE}/api/salary/admin/allowances/members/${encodeURIComponent(memberId)}/active`,
+        `${BASE}/salary/admin/allowances/members/${encodeURIComponent(memberId)}/active`,
         { params: { date } },
       );
       const unwrapped = unwrapApiResponse<MemberAllowance[] | null>(data);
       return Array.isArray(unwrapped) ? unwrapped : [];
+    },
+  },
+
+  /** /salary/negotiations 연봉 협상
+   *  자체 워크플로 DRAFT → SUBMITTED → APPROVED/REJECTED → APPLIED
+   *  단건 등록 + groupId 묶음 일괄 등록 모두 지원
+   */
+  negotiation: {
+    async listByCompany(): Promise<SalaryNegotiation[]> {
+      const { data } = await httpClient.get(`${BASE}/salary/negotiations`);
+      const unwrapped = unwrapApiResponse<SalaryNegotiation[] | null>(data);
+      return Array.isArray(unwrapped) ? unwrapped : [];
+    },
+
+    async listByGroup(groupId: string): Promise<SalaryNegotiation[]> {
+      const { data } = await httpClient.get(
+        `${BASE}/salary/negotiations/group/${encodeURIComponent(groupId)}`,
+      );
+      const unwrapped = unwrapApiResponse<SalaryNegotiation[] | null>(data);
+      return Array.isArray(unwrapped) ? unwrapped : [];
+    },
+
+    async findById(negotiationId: string): Promise<SalaryNegotiation> {
+      const { data } = await httpClient.get(
+        `${BASE}/salary/negotiations/${encodeURIComponent(negotiationId)}`,
+      );
+      return unwrapApiResponse<SalaryNegotiation>(data);
+    },
+
+    async listMine(): Promise<SalaryNegotiation[]> {
+      const { data } = await httpClient.get(`${BASE}/salary/negotiations/my`);
+      const unwrapped = unwrapApiResponse<SalaryNegotiation[] | null>(data);
+      return Array.isArray(unwrapped) ? unwrapped : [];
+    },
+
+    async create(payload: SalaryNegotiationCreatePayload): Promise<SalaryNegotiation> {
+      const { data } = await httpClient.post(`${BASE}/salary/negotiations/create`, payload);
+      unwrapMessage(data);
+      return unwrapApiResponse<SalaryNegotiation>(data);
+    },
+
+    async bulkCreate(payload: SalaryNegotiationBulkCreatePayload): Promise<SalaryNegotiation[]> {
+      const { data } = await httpClient.post(
+        `${BASE}/salary/negotiations/bulk-create`,
+        payload,
+      );
+      unwrapMessage(data);
+      const unwrapped = unwrapApiResponse<SalaryNegotiation[] | null>(data);
+      return Array.isArray(unwrapped) ? unwrapped : [];
+    },
+
+    async update(
+      negotiationId: string,
+      payload: SalaryNegotiationUpdatePayload,
+    ): Promise<SalaryNegotiation> {
+      const { data } = await httpClient.put(
+        `${BASE}/salary/negotiations/${encodeURIComponent(negotiationId)}`,
+        payload,
+      );
+      unwrapMessage(data);
+      return unwrapApiResponse<SalaryNegotiation>(data);
+    },
+
+    async submit(negotiationId: string): Promise<SalaryNegotiation> {
+      const { data } = await httpClient.patch(
+        `${BASE}/salary/negotiations/${encodeURIComponent(negotiationId)}/submit`,
+      );
+      unwrapMessage(data);
+      return unwrapApiResponse<SalaryNegotiation>(data);
+    },
+
+    async approve(negotiationId: string, note?: string | null): Promise<SalaryNegotiation> {
+      const { data } = await httpClient.patch(
+        `${BASE}/salary/negotiations/${encodeURIComponent(negotiationId)}/approve`,
+        { note: note ?? null },
+      );
+      unwrapMessage(data);
+      return unwrapApiResponse<SalaryNegotiation>(data);
+    },
+
+    async reject(negotiationId: string, note?: string | null): Promise<SalaryNegotiation> {
+      const { data } = await httpClient.patch(
+        `${BASE}/salary/negotiations/${encodeURIComponent(negotiationId)}/reject`,
+        { note: note ?? null },
+      );
+      unwrapMessage(data);
+      return unwrapApiResponse<SalaryNegotiation>(data);
+    },
+
+    async apply(negotiationId: string): Promise<SalaryNegotiation> {
+      const { data } = await httpClient.patch(
+        `${BASE}/salary/negotiations/${encodeURIComponent(negotiationId)}/apply`,
+      );
+      unwrapMessage(data);
+      return unwrapApiResponse<SalaryNegotiation>(data);
+    },
+
+    async delete(negotiationId: string): Promise<void> {
+      await httpClient.delete(
+        `${BASE}/salary/negotiations/${encodeURIComponent(negotiationId)}`,
+      );
+    },
+  },
+
+  /** /salary/bonus-policy 보너스 정책
+   *  정기상여 / 성과급 / 명절상여 회사 표준 룰
+   *  실제 지급은 PayrollType (PERFORMANCE_BONUS / SPECIAL_BONUS) 으로 처리
+   */
+  bonusPolicy: {
+    async list(): Promise<BonusPolicy[]> {
+      const { data } = await httpClient.get(`${BASE}/salary/bonus-policy`);
+      const unwrapped = unwrapApiResponse<BonusPolicy[] | null>(data);
+      return Array.isArray(unwrapped) ? unwrapped : [];
+    },
+
+    // 활성 정책 조회 없으면 백엔드가 기본 비활성 정책 자동 생성 후 반환
+    async getActive(): Promise<BonusPolicy> {
+      const { data } = await httpClient.get(`${BASE}/salary/bonus-policy/active`);
+      return unwrapApiResponse<BonusPolicy>(data);
+    },
+
+    async create(payload: BonusPolicyCreatePayload): Promise<BonusPolicy> {
+      const { data } = await httpClient.post(`${BASE}/salary/bonus-policy`, payload);
+      unwrapMessage(data);
+      return unwrapApiResponse<BonusPolicy>(data);
+    },
+
+    async update(id: string, payload: BonusPolicyUpdatePayload): Promise<BonusPolicy> {
+      const { data } = await httpClient.patch(
+        `${BASE}/salary/bonus-policy/${encodeURIComponent(id)}`,
+        payload,
+      );
+      unwrapMessage(data);
+      return unwrapApiResponse<BonusPolicy>(data);
+    },
+
+    async delete(id: string): Promise<void> {
+      await httpClient.delete(`${BASE}/salary/bonus-policy/${encodeURIComponent(id)}`);
     },
   },
 };

@@ -20,6 +20,7 @@ import {
   Drawer,
   Empty,
   Input,
+  Switch,
   Segmented,
   Space,
   Table,
@@ -76,6 +77,7 @@ export function AdminAttendancePage() {
   ]);
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState('');
+  const [overtimeOnly, setOvertimeOnly] = useState(false);
   const [drawerRow, setDrawerRow] = useState<DailyAttendance | null>(null);
 
   /** 기간 모드 → from/to/단일일자 여부 */
@@ -152,7 +154,7 @@ export function AdminAttendancePage() {
   const normalized = useMemo(() => normalizeSpringPage(listQ.data), [listQ.data]);
 
   /** 검색은 현재 페이지 내 클라이언트 필터 (이름/이메일/부서/UUID 부분 매칭) */
-  const filteredContent = useMemo(() => {
+  const filteredBySearch = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return normalized.content;
     return normalized.content.filter((r) => {
@@ -172,11 +174,18 @@ export function AdminAttendancePage() {
     });
   }, [normalized.content, search, memberMap]);
 
+  const filteredContent = useMemo(() => {
+    if (!overtimeOnly) return filteredBySearch;
+    return filteredBySearch.filter((r) => (r.overtimeMinutes ?? 0) > 0);
+  }, [filteredBySearch, overtimeOnly]);
+
   /** KPI: 현재 페이지(검색 적용 후) 기준 집계 — 페이지 전체 집계 API 도입 시 교체 */
   const kpi = useMemo(() => {
     const counts: Record<string, number> = { NORMAL: 0, ABSENT: 0, LEAVE: 0, HALF: 0 };
     let workMinTotal = 0;
     let workCount = 0;
+    let overtimeMinTotal = 0;
+    let overtimeMemberCount = 0;
     filteredContent.forEach((r) => {
       const s = r.status ?? '';
       if (s in counts) counts[s] += 1;
@@ -184,12 +193,20 @@ export function AdminAttendancePage() {
         workMinTotal += r.workedMinutes;
         workCount += 1;
       }
+      if (typeof r.overtimeMinutes === 'number' && r.overtimeMinutes > 0) {
+        overtimeMinTotal += r.overtimeMinutes;
+        overtimeMemberCount += 1;
+      }
     });
     return {
       normal: counts.NORMAL,
       absent: counts.ABSENT,
       leaveOrHalf: counts.LEAVE + counts.HALF,
       avgWorkMin: workCount > 0 ? Math.round(workMinTotal / workCount) : 0,
+      overtimeMinTotal,
+      overtimeMemberCount,
+      avgOvertimeMin:
+        overtimeMemberCount > 0 ? Math.round(overtimeMinTotal / overtimeMemberCount) : 0,
     };
   }, [filteredContent]);
 
@@ -286,6 +303,24 @@ export function AdminAttendancePage() {
     }
 
     base.push({
+      title: '연장',
+      dataIndex: 'overtimeMinutes',
+      key: 'overtimeMinutes',
+      width: 120,
+      align: 'right',
+      sorter: (a, b) => (a.overtimeMinutes ?? 0) - (b.overtimeMinutes ?? 0),
+      render: (m: number | null | undefined) => {
+        const val = m ?? 0;
+        if (val <= 0) return <Typography.Text type="secondary">—</Typography.Text>;
+        return (
+          <Tag color="volcano" className="!tw-mr-0">
+            {formatHm(val)}
+          </Tag>
+        );
+      },
+    });
+
+    base.push({
       title: '근무',
       dataIndex: 'workedMinutes',
       key: 'workedMinutes',
@@ -311,7 +346,7 @@ export function AdminAttendancePage() {
             기간을 선택해 일별·월별 근태를 한 화면에서 조회합니다.
           </Typography.Paragraph>
         </div>
-        <Button onClick={() => navigate({ to: '/app/attendance/comprehensive-ot' })}>
+        <Button onClick={() => navigate({ to: '/app/attendance/overtime-status' })}>
           초과 근무 현황
         </Button>
       </div>
@@ -360,6 +395,10 @@ export function AdminAttendancePage() {
             allowClear
             style={{ width: 260 }}
           />
+          <Space size={6}>
+            <Typography.Text className="!tw-text-xs">초과근무만</Typography.Text>
+            <Switch checked={overtimeOnly} onChange={setOvertimeOnly} size="small" />
+          </Space>
           <Typography.Text type="secondary" className="!tw-text-xs">
             {period.from === period.to
               ? period.from
@@ -369,11 +408,17 @@ export function AdminAttendancePage() {
         </Space>
       </Card>
 
-      <div className="tw-grid tw-grid-cols-2 md:tw-grid-cols-4 tw-gap-3">
+      <div className="tw-grid tw-grid-cols-2 md:tw-grid-cols-3 xl:tw-grid-cols-6 tw-gap-3">
         <KpiTile label="정상 출근" value={kpi.normal.toLocaleString()} tone="success" />
         <KpiTile label="결근" value={kpi.absent.toLocaleString()} tone="danger" />
         <KpiTile label="휴가/반차" value={kpi.leaveOrHalf.toLocaleString()} tone="warning" />
         <KpiTile label="평균 근무" value={formatHm(kpi.avgWorkMin)} tone="neutral" />
+        <KpiTile label="초과근무 인원" value={`${kpi.overtimeMemberCount.toLocaleString()}명`} tone="hot" />
+        <KpiTile
+          label="총 초과근무"
+          value={`${formatHm(kpi.overtimeMinTotal)} / 평균 ${formatHm(kpi.avgOvertimeMin)}`}
+          tone="hot"
+        />
       </div>
 
       <Card className="tw-border-slate-200/80 tw-shadow-sm" size="small">
@@ -485,7 +530,7 @@ export function AdminAttendancePage() {
 type KpiTileProps = {
   label: string;
   value: string;
-  tone: 'success' | 'danger' | 'warning' | 'neutral';
+  tone: 'success' | 'danger' | 'warning' | 'neutral' | 'hot';
 };
 
 function KpiTile({ label, value, tone }: KpiTileProps) {
@@ -496,6 +541,8 @@ function KpiTile({ label, value, tone }: KpiTileProps) {
         ? 'tw-text-rose-600'
         : tone === 'warning'
           ? 'tw-text-amber-600'
+          : tone === 'hot'
+            ? 'tw-text-orange-600'
           : 'tw-text-slate-900';
   return (
     <div className="tw-rounded-lg tw-border tw-border-slate-200/80 tw-bg-white tw-px-4 tw-py-3 tw-shadow-sm">

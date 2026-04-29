@@ -1,4 +1,4 @@
-/** /app/leave — 휴가계획 관리 (직원)
+/** /app/leave — 휴가 계획 관리 (직원)
  *
  *  레퍼런스 화면 톤으로 재구성
  *  - 상단 KPI 4장: 발생 / 사용 / 잔여 / 촉진 (그대로 유지)
@@ -131,7 +131,7 @@ export function MyLeavePage() {
     queryFn: () => attendanceApi.leavePolicy.list(),
   });
 
-  // 내 연차 사용 통보 응답 받지 못한 또는 진행 중인 촉진 건수
+  // 휴가 계획 회신 응답 받지 못한 또는 진행 중인 촉진 건수
   const promotionQ = useQuery({
     queryKey: ['salary', 'leave-promotion', 'mine'],
     queryFn: () => attendanceApi.leavePromotion.listMy(),
@@ -331,16 +331,13 @@ export function MyLeavePage() {
       <div className="tw-flex tw-flex-wrap tw-items-start tw-justify-between tw-gap-3">
         <div>
           <Typography.Title level={2} className="!tw-m-0 !tw-text-slate-900">
-            휴가계획 관리
+            휴가 계획 관리
           </Typography.Title>
           <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-sm">
             내 휴가 현황(발생·사용·잔여·촉진) 과 신청 이력을 한 곳에서 확인합니다. 휴가 신청은 전자결재로 진행되며, 연차 사용 촉진 1차·2차 알림이 오면 휴가 계획 회신 메뉴에서 응답하세요.
           </Typography.Paragraph>
         </div>
         <Space size="small" wrap>
-          <Link to="/app/leave/my-promotion">
-            <Button icon={<FileTextOutlined />}>촉진 안내문 확인</Button>
-          </Link>
           <Link to="/app/leave/my-promotion">
             <Button icon={<FormOutlined />}>휴가 계획 회신</Button>
           </Link>

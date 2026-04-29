@@ -33,11 +33,29 @@ export type SpringPage<T> = {
   empty?: boolean;
 };
 
+export type ClosureStatusCode =
+  | 'OPEN'
+  | 'DRAFT'
+  | 'UNDER_REVIEW'
+  | 'FINALIZED'
+  | 'LOCKED';
+
+/**
+ * 일별 근태의 정정 진행 상태
+ *  NORMAL     정상 — 액션 불필요
+ *  ABNORMAL   이상 — 누락, 정정 신청 가능
+ *  PENDING    검토중 — 신청 후 관리자 결정 대기
+ *  COMPLETED  정정 완료
+ */
+export type CorrectionStateCode = 'NORMAL' | 'ABNORMAL' | 'PENDING' | 'COMPLETED';
+
 export type DailyAttendance = {
   dailyAttendanceId?: string;
   memberId?: string;
   attendanceDate?: string;
   status?: AttendanceStatusCode;
+  closureStatus?: ClosureStatusCode;
+  correctionState?: CorrectionStateCode;
   workScheduleId?: string;
   firstClockIn?: string | null;
   lastClockOut?: string | null;
@@ -45,6 +63,32 @@ export type DailyAttendance = {
   totalBreakMinutes?: number | null;
   workedMinutes?: number | null;
   overtimeMinutes?: number | null;
+};
+
+/** 출퇴근 정정 신청 페이로드 */
+export type AttendanceCorrectionReqPayload = {
+  attendanceDate: string; // YYYY-MM-DD
+  requestedClockIn?: string | null; // ISO LocalDateTime
+  requestedClockOut?: string | null; // ISO LocalDateTime
+  reason: string;
+};
+
+/** 정정 검토 큐 행 (관리자 화면) */
+export type AttendanceCorrectionPending = {
+  dailyAttendanceId: string;
+  memberId: string;
+  attendanceDate: string;
+  requestedClockIn?: string | null;
+  requestedClockOut?: string | null;
+  reason?: string | null;
+  requestedAt?: string | null;
+};
+
+/** 누락 후보 일자 (휴가·휴직 복귀 안전망) */
+export type MissingAttendanceSuspect = {
+  date: string; // YYYY-MM-DD
+  reasonCode: 'NO_RECORD' | 'CLOCK_IN_MISSING' | 'CLOCK_OUT_MISSING';
+  reasonLabel?: string;
 };
 
 export type AttendanceLog = {
@@ -186,12 +230,19 @@ export type MemberScheduleSelectionCreatePayload = {
 export type MemberAllowance = {
   memberAllowanceId?: string;
   memberId?: string;
+  companyId?: string;
   salaryItemTemplateId?: string;
   amount?: number | null;
   effectiveFrom?: string | null;
+  effectiveTo?: string | null;
   reason?: string | null;
   approvalStatus?: AllowanceApprovalStatusCode;
   approvalRequestId?: string | null;
+  requestedBy?: string | null;
+  requestedAt?: string | null;
+  decidedBy?: string | null;
+  decidedAt?: string | null;
+  decisionNote?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
 };
@@ -201,6 +252,14 @@ export type MemberAllowanceCreatePayload = {
   amount: number;
   effectiveFrom: string;
   reason?: string | null;
+};
+
+/** 관리자용 자동부여(Auto-grant) — 신규입사자에게 자격수당을 즉시 적용 */
+export type MemberAllowanceAutoGrantPayload = {
+  memberId: string;
+  salaryItemTemplateId: string;
+  amount: number;
+  effectiveFrom: string;
 };
 
 export type BalanceTypeCode = 'ANNUAL' | 'MONTHLY' | 'CARRYOVER' | string;
@@ -337,6 +396,8 @@ export type PayrollItem = {
   itemType?: ItemTypeCode;
   amount?: number | null;
   displayOrder?: number | null;
+  /** 과세 여부 Y/N — 비과세 항목 표시용 */
+  isTaxableYn?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
 };
@@ -377,10 +438,15 @@ export type SalaryItemTemplate = {
   itemType?: ItemTypeCode;
   displayOrder?: number | null;
   isTaxableYn?: string | null;
+  /** 통상임금 포함 여부 Y면 시급 환산 기준에 합산 (가산수당 base) */
+  isOrdinaryWageYn?: string | null;
   /** 세법 카테고리 카탈로그 기반 자동 복사 또는 관리자 선택 */
   taxCategory?: TaxCategoryCode | null;
   /** 월 비과세 한도 카테고리에 따라 결정 한도 없음이면 null 일반 과세는 0 */
   monthlyNonTaxableLimit?: number | null;
+  /** 회사 기본 지급 금액 (수당 산식 v1) — 부가 수당 부여 시 자동 채워짐.
+   *  null 이면 부여 시 admin 이 직접 입력. 향후 v2 에서 식("BASE * 0.05") 으로 확장. */
+  defaultAmount?: number | null;
   /** 시스템 기본 항목 여부. true 면 삭제 불가, 일부 필드 수정 제한 */
   isSystemDefault?: boolean | null;
   delYn?: string | null;
@@ -443,6 +509,21 @@ export type LeavePromotionNoResponse = {
   balanceExpirationDate?: string | null;
   remainingDays?: number | null;
   daysSinceSent: number;
+};
+
+/** 관리자 — 회신 완료 + 강제 지정 이력 */
+export type LeavePromotionHistory = {
+  promotionLogId: string;
+  memberId: string;
+  stage: PromotionStageCode;
+  status: PromotionLogStatusCode;     // ACKNOWLEDGED / DESIGNATED
+  sentOn: string;
+  balanceExpirationDate?: string | null;
+  remainingDays?: number | null;
+  acknowledgedAt?: string | null;
+  plannedDates?: string[];
+  designatedDates?: string[];
+  designationReason?: string | null;
 };
 
 // 직원 회신 페이로드 사용계획 날짜는 참고용 잔여 차감 없음
@@ -619,6 +700,9 @@ export type PeriodEndTypeCode = 'LAST' | 'SPECIFIC' | string;
 /** 지급일이 주말/공휴일일 때 조정 규칙. BEFORE=직전 영업일(실무 표준), AFTER=직후 영업일, NONE=해당일 그대로 */
 export type PayDayShiftRuleCode = 'NONE' | 'BEFORE' | 'AFTER' | string;
 
+/** 일할계산 방식. DAYS_IN_MONTH 해당월 일수 / FIXED_30 30일 고정 (통상임금 표준) / WORKING_DAYS 월 소정근로일 */
+export type ProrationMethodCode = 'DAYS_IN_MONTH' | 'FIXED_30' | 'WORKING_DAYS' | string;
+
 /** SalaryPolicy 는 절사 단위를 갖지 않음. 절사 단위는 OvertimePolicy.overtimeFloorMinutes 가 단일 진실. */
 export type SalaryPolicy = {
   salaryPolicyId?: string;
@@ -633,6 +717,10 @@ export type SalaryPolicy = {
   periodEndType?: PeriodEndTypeCode;
   /** 지급일 주말/공휴일 조정 규칙 (기본 BEFORE) */
   payDayShiftRule?: PayDayShiftRuleCode | null;
+  /** 월 소정근로시간 시급 환산 기준 한국 표준 209 */
+  monthlyOrdinaryHours?: number | null;
+  /** 일할계산 방식 입사 / 퇴사 / 기간변경 월 적용 */
+  prorationMethod?: ProrationMethodCode | null;
   effectiveFrom?: string;
   effectiveTo?: string | null;
   createdAt?: string | null;
@@ -650,6 +738,10 @@ export type SalaryPolicyCreatePayload = {
   periodEndType: PeriodEndTypeCode;
   /** 지급일 주말/공휴일 조정 규칙, 기본 BEFORE */
   payDayShiftRule: PayDayShiftRuleCode;
+  /** 월 소정근로시간 한국 표준 209 회사별 다름 */
+  monthlyOrdinaryHours?: number | null;
+  /** 일할계산 방식 입사 / 퇴사 / 기간변경 월 적용 */
+  prorationMethod?: ProrationMethodCode | null;
   effectiveFrom: string;
   effectiveTo?: string | null;
 };
@@ -694,7 +786,9 @@ export type RetirementSimReq = {
   resignDate: string; // YYYY-MM-DD
 };
 
-/** 퇴직금 시뮬 응답 */
+/** 퇴직금 시뮬 응답
+ *  평균임금 정확 산정 breakdown 포함 (근로기준법 제2조 1항 6호 + 시행령 제2조)
+ */
 export type RetirementSimRes = {
   retirementType: RetirementTypeCode;
   modeDescription: string;
@@ -703,7 +797,23 @@ export type RetirementSimRes = {
   joinDate: string;       // 정산 시작일
   resignDate: string;     // 예상 퇴직일
   serviceDays: number;    // 재직일수
-  avgMonthlyWage: number; // 평균 월급
+  avgMonthlyWage: number; // 평균 월급 (호환성)
+
+  // 평균임금 breakdown
+  basePeriodPayment?: number;        // 직전 3개월 정기급여 임금총액
+  basePeriodDays?: number;            // 3개월 일수 (89~92)
+  simpleDailyAverage?: number;        // 단순 일평균 (가산 전)
+  // 시행령 제2조 평균임금 산정 제외 기간 (출산/육아/산재/병역 등)
+  excludedLeaveDays?: number;         // 3개월 기간 내 휴직 일수 합계
+  excludedLeaveCount?: number;        // 제외된 휴직 건수
+  adjustedPeriodDays?: number;        // 조정된 분모 (basePeriodDays - excludedLeaveDays)
+  bonusAddition12mAvg?: number;       // 12개월 상여 환산 (3/12)
+  unusedLeaveAddition12mAvg?: number; // 12개월 연차수당 환산 (3/12)
+  averageDailyWage?: number;          // 평균임금 일액 (가산 후)
+  ordinaryDailyWage?: number;         // 통상시급 일액 (× 8h)
+  appliedDailyWage?: number;          // 적용 일평균 max(평균, 통상)
+  appliedBasis?: 'AVERAGE' | 'ORDINARY' | string;
+
   estimatedAmount: number;// 예상 퇴직금
   eligible: boolean;      // 1년 이상 자격
   disclaimer: string;
@@ -800,6 +910,42 @@ export type PayrollRecalculatePayload = {
   settlementDate?: string | null;
 };
 
+/** 소급분 자동 재계산 요청 (preview / apply 동일 페이로드) */
+export type RetroactivePayrollPayload = {
+  memberId: string;
+  /** YYYY-MM 형식 */
+  fromMonth: string;
+  /** YYYY-MM 형식 */
+  toMonth: string;
+  /** 새 통상임금 (인상 후) */
+  newOrdinaryWage: number;
+  memo?: string | null;
+};
+
+/** 소급분 월별 차액 항목 */
+export type RetroactiveMonthlyDiff = {
+  month: string;            // YYYY-MM
+  oldAllowance: number;
+  newAllowance: number;
+  diff: number;
+  sourcePayrollId?: string | null;
+};
+
+/** 소급분 미리보기 / 발행 응답 */
+export type RetroactivePayrollResult = {
+  memberId: string;
+  fromMonth: string;
+  toMonth: string;
+  previousOrdinaryWage: number;
+  newOrdinaryWage: number;
+  monthlyDiffs: RetroactiveMonthlyDiff[];
+  totalDiff: number;
+  /** apply 시점에만 채워짐 */
+  newPayrollId?: string | null;
+  issuedDate?: string | null;
+  message?: string | null;
+};
+
 export type PayrollRecalculateResult = {
   /** 신규 생성된 급여대장 수 */
   created: number;
@@ -819,6 +965,10 @@ export type SalaryItemTemplateCreatePayload = {
   itemType: ItemTypeCode;
   displayOrder: number;
   isTaxableYn: string;
+  /** 통상임금 포함 여부 Y/N null 이면 N 처리 */
+  isOrdinaryWageYn?: string | null;
+  /** 회사 기본 지급 금액 (수당 산식 v1) */
+  defaultAmount?: number | null;
 };
 
 export type SalaryItemTemplateUpdatePayload = SalaryItemTemplateCreatePayload;
@@ -1001,3 +1151,163 @@ export type PayGradeTableBulkCreatePayload = {
     description?: string | null;
   }>;
 };
+
+/* ──────────────────────────────────────────────
+ * 연봉 협상 (SalaryNegotiation)
+ *  단건 + 일괄 등록 (groupId 묶음)
+ *  자체 워크플로 DRAFT → SUBMITTED → APPROVED/REJECTED → APPLIED
+ *  직원 응답 화면 없음 본인 협상 이력 조회만
+ * ────────────────────────────────────────────── */
+
+// 협상 종류 정기/승진/수시/유지
+export type NegotiationTypeCode =
+  | 'REGULAR'
+  | 'PROMOTION'
+  | 'AD_HOC'
+  | 'RETENTION'
+  | string;
+
+// 협상 진행 상태
+export type NegotiationStatusCode =
+  | 'DRAFT'
+  | 'SUBMITTED'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'APPLIED'
+  | string;
+
+export type SalaryNegotiation = {
+  negotiationId?: string;
+  companyId?: string;
+  memberId?: string;
+
+  negotiationType?: NegotiationTypeCode;
+  groupId?: string | null;
+  groupName?: string | null;
+
+  // member-service 결합
+  sabun?: string | null;
+  memberName?: string | null;
+  organizationName?: string | null;
+
+  currentBaseSalary?: number | null;
+  currentJobGradeName?: string | null;
+  currentJobTitleName?: string | null;
+
+  proposedBaseSalary?: number | null;
+  proposedJobGradeName?: string | null;
+  proposedJobTitleName?: string | null;
+  proposedEffectiveFrom?: string | null;
+  changeRate?: number | null;
+  reason?: string | null;
+
+  status?: NegotiationStatusCode;
+  approvalRequestId?: string | null;
+
+  proposedAt?: string | null;
+  decidedAt?: string | null;
+  appliedAt?: string | null;
+  decidedBy?: string | null;
+  decisionNote?: string | null;
+
+  appliedSalaryId?: string | null;
+
+  createdAt?: string | null;
+  updatedAt?: string | null;
+};
+
+export type SalaryNegotiationCreatePayload = {
+  memberId: string;
+  negotiationType: NegotiationTypeCode;
+  groupId?: string | null;
+  groupName?: string | null;
+  proposedBaseSalary: number;
+  proposedJobGradeName?: string | null;
+  proposedJobTitleName?: string | null;
+  proposedEffectiveFrom: string;
+  reason?: string | null;
+};
+
+export type SalaryNegotiationBulkItem = {
+  memberId: string;
+  proposedBaseSalary: number;
+  proposedJobGradeName?: string | null;
+  proposedJobTitleName?: string | null;
+  reason?: string | null;
+};
+
+export type SalaryNegotiationBulkCreatePayload = {
+  groupName: string;
+  negotiationType: NegotiationTypeCode;
+  proposedEffectiveFrom: string;
+  items: SalaryNegotiationBulkItem[];
+};
+
+export type SalaryNegotiationUpdatePayload = {
+  proposedBaseSalary?: number | null;
+  proposedJobGradeName?: string | null;
+  proposedJobTitleName?: string | null;
+  proposedEffectiveFrom?: string | null;
+  reason?: string | null;
+};
+
+/* ──────────────────────────────────────────────
+ * 보너스 정책 (BonusPolicy)
+ *  회사 표준 룰만 저장 (정기상여 / 성과급 / 명절상여)
+ *  실제 지급은 PayrollType (PERFORMANCE_BONUS / SPECIAL_BONUS) 새 Payroll 행에서 처리
+ * ────────────────────────────────────────────── */
+
+// 보너스 지급 대상 범위
+export type BonusEligibilityScopeCode = 'ALL' | 'REGULAR_ONLY' | string;
+
+// 명절상여 지급 방식
+export type HolidayBonusTypeCode = 'RATE' | 'AMOUNT' | string;
+
+export type BonusPolicy = {
+  bonusPolicyId?: string;
+  companyId?: string;
+
+  // 정기상여
+  useRegularBonusYn?: string | null;
+  regularBonusAnnualRate?: number | null;
+  regularBonusPaymentCount?: number | null;
+
+  // 성과급
+  usePerformanceBonusYn?: string | null;
+  performanceBonusMaxRate?: number | null;
+  performanceBonusBasis?: string | null;
+
+  // 명절상여
+  useHolidayBonusYn?: string | null;
+  holidayBonusType?: HolidayBonusTypeCode | null;
+  holidayBonusValue?: number | null;
+
+  // 공통
+  eligibilityScope?: BonusEligibilityScopeCode;
+  effectiveFrom?: string;
+  effectiveTo?: string | null;
+  memo?: string | null;
+  active?: boolean;
+
+  createdAt?: string | null;
+  updatedAt?: string | null;
+};
+
+export type BonusPolicyCreatePayload = {
+  useRegularBonusYn?: string | null;
+  regularBonusAnnualRate?: number | null;
+  regularBonusPaymentCount?: number | null;
+  usePerformanceBonusYn?: string | null;
+  performanceBonusMaxRate?: number | null;
+  performanceBonusBasis?: string | null;
+  useHolidayBonusYn?: string | null;
+  holidayBonusType?: HolidayBonusTypeCode | null;
+  holidayBonusValue?: number | null;
+  eligibilityScope: BonusEligibilityScopeCode;
+  effectiveFrom: string;
+  effectiveTo?: string | null;
+  memo?: string | null;
+};
+
+// 시작일 변경 불가 나머지 항목 모두 갱신 가능
+export type BonusPolicyUpdatePayload = Omit<BonusPolicyCreatePayload, 'effectiveFrom'>;

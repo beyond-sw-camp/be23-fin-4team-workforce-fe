@@ -8,6 +8,8 @@ import {
 import { z } from 'zod';
 import type { AppRouterContext } from '@/app/router/types';
 import { requireAuth, requireMemberDirectoryAccess, requirePermissions } from '@/app/router/guards';
+import { salaryApi } from '@/features/salary-service/api/salaryApi';
+import { hasActiveNegotiationSalaryPolicy } from '@/features/salary-service/lib/salaryPolicyAccess';
 import { PERM } from '@/features/permissions/backend-permissions';
 import { HomePublicLayout } from '@/pages/public/HomePublicLayout';
 import { LandingHomePage } from '@/pages/public/LandingHomePage';
@@ -37,6 +39,8 @@ import { MyApprovalRequestsPage } from '@/pages/app/MyApprovalRequestsPage';
 import { GenericPage } from '@/pages/app/GenericPage';
 import { AiDocumentsAdminPage } from '@/pages/app/AiDocumentsAdminPage';
 import { AdminAttendancePage } from '@/pages/app/salary-service/admin/AdminAttendancePage';
+import { AdminAttendanceCorrectionPage } from '@/pages/app/salary-service/admin/AdminAttendanceCorrectionPage';
+import { AdminBonusPolicyPage } from '@/pages/app/salary-service/admin/AdminBonusPolicyPage';
 import { AdminComprehensiveOvertimePage } from '@/pages/app/salary-service/admin/AdminComprehensiveOvertimePage';
 import { AdminCompanyHolidaysPage } from '@/pages/app/salary-service/admin/AdminCompanyHolidaysPage';
 import { AdminFlexibleSlotsPage } from '@/pages/app/salary-service/admin/AdminFlexibleSlotsPage';
@@ -50,6 +54,8 @@ import { AdminPayrollManagePage } from '@/pages/app/salary-service/admin/AdminPa
 import { AdminPayrollPage } from '@/pages/app/salary-service/admin/AdminPayrollPage';
 import { AdminPayrollTaxSummaryPage } from '@/pages/app/salary-service/admin/AdminPayrollTaxSummaryPage';
 import { AdminRetirementPolicyPage } from '@/pages/app/salary-service/admin/AdminRetirementPolicyPage';
+import { AdminMemberAllowancePage } from '@/pages/app/salary-service/admin/AdminMemberAllowancePage';
+import { AdminSalaryNegotiationsPage } from '@/pages/app/salary-service/admin/AdminSalaryNegotiationsPage';
 import { AdminSalarySettingsPage } from '@/pages/app/salary-service/admin/AdminSalarySettingsPage';
 import { AdminUnusedLeavePayoutPage } from '@/pages/app/salary-service/admin/AdminUnusedLeavePayoutPage';
 import { AdminWorkSchedulesPage } from '@/pages/app/salary-service/admin/AdminWorkSchedulesPage';
@@ -59,6 +65,7 @@ import { MyLeavePage } from '@/pages/app/salary-service/my/MyLeavePage';
 import { MyLeavePromotionPage } from '@/pages/app/salary-service/my/MyLeavePromotionPage';
 import { MyOvertimeRequestsPage } from '@/pages/app/salary-service/my/MyOvertimeRequestsPage';
 import { MyAnnualSalaryPage } from '@/pages/app/salary-service/my/MyAnnualSalaryPage';
+import { MyNegotiationHistoryPage } from '@/pages/app/salary-service/my/MyNegotiationHistoryPage';
 import { MyIncomeManagementPage } from '@/pages/app/salary-service/my/MyIncomeManagementPage';
 import { MyPayrollPage } from '@/pages/app/salary-service/my/MyPayrollPage';
 import { MyRetirementInquiryPage } from '@/pages/app/salary-service/my/MyRetirementInquiryPage';
@@ -510,6 +517,17 @@ const adminAttendanceDailyRoute = createRoute({
   },
 });
 
+const adminAttendanceCorrectionRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/attendance/corrections',
+  component: AdminAttendanceCorrectionPage,
+  beforeLoad: ({ context }) => {
+    if (!context.auth.user?.isSystemAdmin) {
+      throw redirect({ to: '/app/attendance' });
+    }
+  },
+});
+
 const adminCompanyHolidaysRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/attendance/holidays',
@@ -556,13 +574,26 @@ const adminFlexibleSlotsRoute = createRoute({
 
 const adminComprehensiveOvertimeRoute = createRoute({
   getParentRoute: () => appBaseRoute,
-  path: '/attendance/comprehensive-ot',
+  path: '/attendance/overtime-status',
   component: AdminComprehensiveOvertimePage,
   beforeLoad: ({ context }) => {
     if (!context.auth.user?.isSystemAdmin) {
       throw redirect({ to: '/app/attendance' });
     }
   },
+});
+
+/** 구 경로 호환용 리다이렉트 */
+const adminComprehensiveOvertimeLegacyRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/attendance/comprehensive-ot',
+  beforeLoad: ({ context }) => {
+    if (!context.auth.user?.isSystemAdmin) {
+      throw redirect({ to: '/app/attendance' });
+    }
+    throw redirect({ to: '/app/attendance/overtime-status' });
+  },
+  component: AdminComprehensiveOvertimePage,
 });
 
 const myLeaveRoute = createRoute({
@@ -633,6 +664,10 @@ const payrollAdminManageRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/payroll/admin/$payrollId',
   component: AdminPayrollManagePage,
+  validateSearch: z.object({
+    // 어느 탭에서 진입했는지 — 뒤로가기 시 동일 탭으로 복귀
+    tab: z.enum(['company', 'member', 'salary']).optional(),
+  }),
   beforeLoad: ({ context }) => {
     if (!context.auth.user?.isSystemAdmin) {
       throw redirect({ to: '/app/payroll' });
@@ -644,6 +679,10 @@ const payrollAdminRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/payroll/admin',
   component: AdminPayrollPage,
+  validateSearch: z.object({
+    // 정산 화면 활성 탭: company(이번달 정산) | member(정산 이력) | salary(직원 급여 관리)
+    tab: z.enum(['company', 'member', 'salary']).optional(),
+  }),
   beforeLoad: ({ context }) => {
     if (!context.auth.user?.isSystemAdmin) {
       throw redirect({ to: '/app/payroll' });
@@ -701,10 +740,28 @@ const myRetirementInquiryRoute = createRoute({
   component: MyRetirementInquiryPage,
 });
 
+// 직원 본인 연봉 협상 이력
+const myNegotiationHistoryRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/payroll/negotiations',
+  component: MyNegotiationHistoryPage,
+});
+
 const adminSalarySettingsRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/salary/settings',
   component: AdminSalarySettingsPage,
+  beforeLoad: ({ context }) => {
+    if (!context.auth.user?.isSystemAdmin) {
+      throw redirect({ to: '/app/payroll' });
+    }
+  },
+});
+
+const adminMemberAllowanceRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/payroll/admin/allowances',
+  component: AdminMemberAllowancePage,
   beforeLoad: ({ context }) => {
     if (!context.auth.user?.isSystemAdmin) {
       throw redirect({ to: '/app/payroll' });
@@ -738,6 +795,32 @@ const adminRetirementPolicyRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/salary/retirement-policy',
   component: AdminRetirementPolicyPage,
+  beforeLoad: ({ context }) => {
+    if (!context.auth.user?.isSystemAdmin) {
+      throw redirect({ to: '/app/payroll' });
+    }
+  },
+});
+
+const adminSalaryNegotiationsRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/salary/negotiations',
+  component: AdminSalaryNegotiationsPage,
+  beforeLoad: async ({ context }) => {
+    if (!context.auth.user?.isSystemAdmin) {
+      throw redirect({ to: '/app/payroll' });
+    }
+    const policies = await salaryApi.salaryPolicy.list();
+    if (!hasActiveNegotiationSalaryPolicy(policies)) {
+      throw redirect({ to: '/app/payroll/admin' });
+    }
+  },
+});
+
+const adminBonusPolicyRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/salary/bonus-policy',
+  component: AdminBonusPolicyPage,
   beforeLoad: ({ context }) => {
     if (!context.auth.user?.isSystemAdmin) {
       throw redirect({ to: '/app/payroll' });
@@ -806,11 +889,13 @@ const routeTree = rootRoute.addChildren([
       myWorkTimeRoute,
       adminAttendanceMonthlyRoute,
       adminAttendanceDailyRoute,
+      adminAttendanceCorrectionRoute,
       adminCompanyHolidaysRoute,
       adminWorkSchedulesRoute,
       adminOvertimePoliciesRoute,
       adminFlexibleSlotsRoute,
       adminComprehensiveOvertimeRoute,
+      adminComprehensiveOvertimeLegacyRoute,
       myLeaveRoute,
       myLeavePromotionRoute,
       adminLeavePoliciesRoute,
@@ -818,6 +903,7 @@ const routeTree = rootRoute.addChildren([
       adminLeaveOfAbsenceRoute,
       adminCompanyLeaveTypesRoute,
       myWorkTripsRoute,
+      adminMemberAllowanceRoute,
       payrollAdminManageRoute,
       payrollAdminRoute,
       payrollTaxSummaryRoute,
@@ -827,10 +913,13 @@ const routeTree = rootRoute.addChildren([
       myIncomeManagementRoute,
       myAllowancesRoute,
       myRetirementInquiryRoute,
+      myNegotiationHistoryRoute,
       adminSalarySettingsRoute,
       adminPayGradeTableRoute,
       adminUnusedLeavePayoutRoute,
       adminRetirementPolicyRoute,
+      adminSalaryNegotiationsRoute,
+      adminBonusPolicyRoute,
       ...genericRoutes,
     ]),
   ]),
