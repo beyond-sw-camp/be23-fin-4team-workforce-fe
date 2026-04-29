@@ -31,6 +31,7 @@ import {
   serializeFormSchema,
   validateSchemaFieldsForSubmit,
 } from '@/features/approvals/ui/ApprovalFormSchemaBuilder';
+import { ContractTemplatesAdminGuidePanel } from '@/features/approvals/ui/ContractTemplatesAdminGuidePanel';
 import { parseFormSchema, type FormFieldSchema } from '@/features/approvals/lib/approvalFormSchema';
 import { parseApiError } from '@/shared/api/error-parser';
 import { flattenOrganizationsWithMeta } from '@/features/organization/lib/flattenOrganizationTree';
@@ -143,7 +144,7 @@ export function ApprovalsAdminPage() {
   const { user } = useAuth();
   const isSystemAdmin = user?.isSystemAdmin === true;
   const [createOpen, setCreateOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'documents' | 'policy-lines'>('documents');
+  const [activeTab, setActiveTab] = useState<'documents' | 'policy-lines' | 'contract-templates'>('documents');
   const [selectedDocumentId, setSelectedDocumentId] = useState<string>('');
   const [policyDrafts, setPolicyDrafts] = useState<PolicyLineDraft[]>([]);
   const [schemaFields, setSchemaFields] = useState<FormFieldSchema[]>(() => defaultSchemaFields());
@@ -540,7 +541,7 @@ export function ApprovalsAdminPage() {
       ) : (
         <Tabs
           activeKey={activeTab}
-          onChange={(key) => setActiveTab(key as 'documents' | 'policy-lines')}
+          onChange={(key) => setActiveTab(key as 'documents' | 'policy-lines' | 'contract-templates')}
           items={[
             {
               key: 'documents',
@@ -871,6 +872,11 @@ export function ApprovalsAdminPage() {
                   </Space>
                 </Card>
               ),
+            },
+            {
+              key: 'contract-templates',
+              label: '전자계약 양식 관리',
+              children: <ContractTemplatesAdminGuidePanel />,
             },
           ]}
         />

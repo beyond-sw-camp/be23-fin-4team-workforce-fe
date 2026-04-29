@@ -1609,10 +1609,12 @@ export function ApprovalsPage() {
     () => findApprovalFormFieldByLabel(selectedSchema.fields, APPROVAL_FAMILY_EVENT_SUBTYPE_FIELD_LABEL),
     [selectedSchema.fields],
   );
-  const vacationLeaveKindWatchPath = vacationLeaveKindField
-    ? (['content', vacationLeaveKindField.name] as const)
-    : undefined;
-  const watchedVacationLeaveKind = Form.useWatch(vacationLeaveKindWatchPath, form);
+  /** `useWatch`는 동적 namePath를 권장하지 않음 — `content`만 구독 후 필드명으로 조회 */
+  const watchedContent = Form.useWatch('content', form) as Record<string, unknown> | undefined;
+  const watchedVacationLeaveKind =
+    vacationLeaveKindField != null && watchedContent && typeof watchedContent === 'object'
+      ? watchedContent[vacationLeaveKindField.name]
+      : undefined;
   const showFamilyEventSubtypeInCompose =
     familyEventSubtypeField != null &&
     (vacationLeaveKindField == null || watchedVacationLeaveKind === APPROVAL_FAMILY_EVENT_LEAVE_KIND_OPTION);
