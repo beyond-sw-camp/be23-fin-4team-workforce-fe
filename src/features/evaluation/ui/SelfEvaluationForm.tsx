@@ -63,28 +63,28 @@ export function SelfEvaluationForm({ response, onSubmitted }: Props) {
   const saveMut = useMutation({
     mutationFn: () => evaluationRedesignApi.saveSelf(response.responseId, buildPayload()),
     onSuccess: () => {
-      message.success('임시 저장 완료');
+      message.success('임시 저장을 완료했어요.');
       queryClient.invalidateQueries({ queryKey: ['my-self-evals'] });
       queryClient.invalidateQueries({ queryKey: ['my-evaluator-assignments'] });
     },
-    onError: (e: any) => message.error(e?.response?.data?.message ?? '임시 저장 실패'),
+    onError: (e: any) => message.error(e?.response?.data?.message ?? '임시 저장에 실패했어요.'),
   });
 
   const submitMut = useMutation({
     mutationFn: () => evaluationRedesignApi.submitSelf(response.responseId, buildPayload()),
     onSuccess: (r) => {
-      message.success('자기평가 제출 완료');
+      message.success('자기평가 제출을 완료했어요.');
       queryClient.invalidateQueries({ queryKey: ['my-self-evals'] });
       queryClient.invalidateQueries({ queryKey: ['my-evaluator-assignments'] });
       onSubmitted?.(r);
     },
-    onError: (e: any) => message.error(e?.response?.data?.message ?? '제출 실패'),
+    onError: (e: any) => message.error(e?.response?.data?.message ?? '제출에 실패했어요.'),
   });
 
   const editable = response.stage === 'SELF_PENDING';
 
   if (!snapshot) {
-    return <AppEmptyIllustrated description="평가 대상 목표 스냅샷이 없습니다." />;
+    return <AppEmptyIllustrated description="평가 대상 개인 목표 스냅샷이 없어요." />;
   }
 
   return (
@@ -98,20 +98,16 @@ export function SelfEvaluationForm({ response, onSubmitted }: Props) {
             <div className="tw-text-[11px] tw-font-semibold tw-uppercase tw-tracking-wide tw-text-indigo-500">
               SELF EVALUATION
             </div>
-            <div className="tw-mt-0.5 tw-text-[18px] tw-font-bold tw-text-[#1e3a5f]">
-              자기평가 입력
-            </div>
+            <div className="tw-mt-0.5 tw-text-[18px] tw-font-bold tw-text-[#1e3a5f]">자기평가 입력</div>
             <div className="tw-mt-1 tw-text-xs tw-text-slate-500">
-              KR별 등급만 선택하면 되고, 기준 텍스트는 상위 Objective rubric을 참고합니다.
+              개인 목표별 등급만 선택하면 되고, 기준 문구는 상위 조직 목표의 평가 기준을 참고하면 돼요.
             </div>
           </div>
           <div className="tw-shrink-0 tw-text-right">
             <div className="tw-text-[10px] tw-font-semibold tw-uppercase tw-tracking-wide tw-text-slate-400">
               예상 최종 점수
             </div>
-            <div className="tw-text-[36px] tw-font-bold tw-leading-none tw-text-[#1e3a5f]">
-              {previewScore}
-            </div>
+            <div className="tw-text-[36px] tw-font-bold tw-leading-none tw-text-[#1e3a5f]">{previewScore}</div>
           </div>
         </div>
       </Card>
@@ -128,16 +124,10 @@ export function SelfEvaluationForm({ response, onSubmitted }: Props) {
               <div className="tw-flex tw-items-center tw-justify-between tw-gap-2">
                 <span className="tw-text-[15px] tw-font-semibold tw-text-slate-900">{goal.title}</span>
                 <Space size={6}>
-                  <Tag
-                    bordered={false}
-                    className="!tw-m-0 !tw-rounded-full !tw-bg-slate-100 !tw-px-2.5 !tw-text-[11px] !tw-font-medium !tw-text-slate-700"
-                  >
+                  <Tag bordered={false} className="!tw-m-0 !tw-rounded-full !tw-bg-slate-100 !tw-px-2.5 !tw-text-[11px] !tw-font-medium k!tw-text-slate-700">
                     가중치 {goal.weightPct}%
                   </Tag>
-                  <Tag
-                    bordered={false}
-                    className="!tw-m-0 !tw-rounded-full !tw-bg-blue-50 !tw-px-2.5 !tw-text-[11px] !tw-font-bold !tw-text-blue-700"
-                  >
+                  <Tag bordered={false} className="!tw-m-0 !tw-rounded-full !tw-bg-blue-50 !tw-px-2.5 !tw-text-[11px] !tw-font-bold !tw-text-blue-700">
                     목표 점수 {gScore}
                   </Tag>
                 </Space>
@@ -148,11 +138,9 @@ export function SelfEvaluationForm({ response, onSubmitted }: Props) {
 
             <div className="tw-mb-4 tw-rounded-xl tw-border tw-border-blue-100 tw-bg-blue-50/50 tw-p-4">
               <div className="tw-mb-2 tw-text-[11px] tw-font-semibold tw-uppercase tw-tracking-wide tw-text-blue-600">
-                Objective Rubric
+                조직 목표 평가 기준
               </div>
-              <div className="tw-mb-3 tw-text-sm tw-font-semibold tw-text-slate-900">
-                {goal.objectiveTitle ?? '상위 Objective'}
-              </div>
+              <div className="tw-mb-3 tw-text-sm tw-font-semibold tw-text-slate-900">{goal.objectiveTitle ?? '상위 조직 목표'}</div>
               <div className="tw-grid tw-grid-cols-4 tw-gap-2">
                 {GRADES.map((g) => (
                   <div key={g} className="tw-rounded-lg tw-border tw-border-blue-100 tw-bg-white tw-p-3">
@@ -189,7 +177,7 @@ export function SelfEvaluationForm({ response, onSubmitted }: Props) {
             </div>
 
             <Input
-              placeholder="목표 코멘트 (선택)"
+              placeholder="개인 목표 코멘트 (선택)"
               value={comments[goal.goalId] ?? ''}
               onChange={(e) => setComments((p) => ({ ...p, [goal.goalId]: e.target.value }))}
               disabled={!editable}
@@ -209,7 +197,7 @@ export function SelfEvaluationForm({ response, onSubmitted }: Props) {
           value={overallComment}
           onChange={(e) => setOverallComment(e.target.value)}
           disabled={!editable}
-          placeholder="이번 주기 전반에 대한 의견 (선택)"
+          placeholder="이번 사이클 전반에 대한 의견을 남겨 주세요. (선택)"
         />
       </Card>
 
@@ -217,7 +205,7 @@ export function SelfEvaluationForm({ response, onSubmitted }: Props) {
         <Card className={SECTION_CARD} styles={{ body: { padding: 16 } }}>
           <div className="tw-flex tw-flex-col tw-gap-3 sm:tw-flex-row sm:tw-items-center sm:tw-justify-between">
             {!allAnswered ? (
-              <span className="tw-text-xs tw-text-rose-500">모든 KR에 등급을 선택해야 제출할 수 있습니다.</span>
+              <span className="tw-text-xs tw-text-rose-500">모든 개인 목표의 등급을 선택해야 제출할 수 있어요.</span>
             ) : (
               <span className="tw-text-xs tw-text-emerald-600">제출 준비 완료</span>
             )}

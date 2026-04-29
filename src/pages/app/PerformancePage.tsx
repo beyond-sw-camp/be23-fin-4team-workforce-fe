@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+﻿import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { App as AntdApp, Alert, Card, Input, List, Progress, Select, Space, Tabs, Tag, Typography } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import { DownOutlined, RightOutlined } from '@ant-design/icons';
@@ -44,6 +44,14 @@ function buildOrganizationNameMap(
 
 type PerformanceTab = 'my-objective' | 'integrated';
 
+function resolveEnabledTab(
+  enabledTabs: PerformanceTab[],
+  candidate?: PerformanceTab,
+): PerformanceTab {
+  if (candidate && enabledTabs.includes(candidate)) return candidate;
+  return enabledTabs[0] ?? 'my-objective';
+}
+
 export default function PerformancePage() {
   const { user } = useAuth();
   const { message } = AntdApp.useApp();
@@ -52,7 +60,7 @@ export default function PerformancePage() {
   const { hasPermission } = usePermissions();
   const canReadCompany = hasPermission(PERM.GOAL_READ);
   const canReadOrganization = hasPermission(PERM.ORGANIZATION_READ);
-  /** 조직 Objective 작성·상세에서 수정 — 백엔드 TEAM/COMPANY CREATE·UPDATE 와 동일 */
+  /** 조직 목표 작성·상세 수정 권한은 백엔드 TEAM/COMPANY CREATE·UPDATE 정책과 맞춘다. */
   const canManageOrgObjectives = canManageOrganizationScopedGoals(hasPermission);
   const showObjectiveCreate = canManageOrgObjectives;
 
@@ -62,9 +70,7 @@ export default function PerformancePage() {
     return tabs;
   }, [canReadCompany, canReadOrganization]);
 
-  const [tab, setTab] = useState<PerformanceTab>(
-    enabledTabs.includes(search.view as PerformanceTab) ? (search.view as PerformanceTab) : enabledTabs[0],
-  );
+  const [tab, setTab] = useState<PerformanceTab>(resolveEnabledTab(enabledTabs, search.view as PerformanceTab | undefined));
   const [editOpen, setEditOpen] = useState(false);
   const [editGoal, setEditGoal] = useState<Goal | null>(null);
   const [presetAlignedOrgGoalId, setPresetAlignedOrgGoalId] = useState<string | null>(null);
@@ -74,14 +80,12 @@ export default function PerformancePage() {
 
   useEffect(() => {
     if (!enabledTabs.includes(tab)) {
-      setTab(enabledTabs[0]);
+      setTab(resolveEnabledTab(enabledTabs));
     }
   }, [enabledTabs, tab]);
 
   useEffect(() => {
-    const next = enabledTabs.includes(search.view as PerformanceTab)
-      ? (search.view as PerformanceTab)
-      : enabledTabs[0];
+    const next = resolveEnabledTab(enabledTabs, search.view as PerformanceTab | undefined);
     if (next !== tab) {
       setTab(next);
     }
@@ -103,11 +107,11 @@ export default function PerformancePage() {
     (goal: Goal) => {
       if (goal.ownerType === 'MEMBER') {
         if (goal.status !== 'DRAFT') {
-          message.warning('승인 대기·진행 중·완료된 KR은 수정할 수 없습니다.');
+          message.warning('승인 대기 중이거나 완료된 개인 목표는 수정할 수 없어요.');
           return;
         }
         if (cycleHasPendingApproval(goal.cycleKey)) {
-          message.warning('승인 요청이 진행 중인 사이클의 KR은 수정할 수 없습니다.');
+          message.warning('승인 요청이 진행 중인 사이클의 개인 목표는 수정할 수 없어요.');
           return;
         }
       }
@@ -122,7 +126,7 @@ export default function PerformancePage() {
   const openCreateKrFromObjective = useCallback(
     (objective: Goal) => {
       if (cycleHasPendingApproval(objective.cycleKey)) {
-        message.warning('승인 요청이 진행 중인 사이클에는 새 KR을 추가할 수 없습니다.');
+        message.warning('승인 요청이 진행 중인 사이클에는 개인 목표를 추가할 수 없어요.');
         return;
       }
       setEditGoal(null);
@@ -138,7 +142,7 @@ export default function PerformancePage() {
   const tabItems = [
     {
       key: 'my-objective',
-      label: '내 Objective',
+      label: '내 조직 목표',
       children: (
         <div className="tw-px-4 tw-pb-4 tw-pt-2">
           <MyObjectivesTab
@@ -153,7 +157,7 @@ export default function PerformancePage() {
       ? [
           {
             key: 'integrated',
-            label: '전사+구성원 KR',
+            label: '전사+구성원 개인 목표',
             children: (
               <div className="tw-px-4 tw-pb-4 tw-pt-2">
                 <IntegratedGoalsTab
@@ -173,7 +177,7 @@ export default function PerformancePage() {
       <AppWorkspacePageTitle
         eyebrow="PERFORMANCE"
         title="목표"
-        subtitle="내 KR, 우리 조직 Objective, 전사 공개 목표를 역할에 맞게 나눠서 봅니다."
+        subtitle="내 개인 목표와 우리 조직의 조직 목표, 그리고 전사 공개 목표를 한 곳에서 관리할 수 있어요."
         extra={
           <Space>
             {showObjectiveCreate && (
@@ -186,7 +190,7 @@ export default function PerformancePage() {
                   setEditOpen(true);
                 }}
               >
-                Objective 작성
+                조직 목표 작성
               </AppButton>
             )}
             <AppButton
@@ -199,7 +203,7 @@ export default function PerformancePage() {
                 setEditOpen(true);
               }}
             >
-              KR 작성
+              개인 목표 작성
             </AppButton>
           </Space>
         }
@@ -226,7 +230,7 @@ export default function PerformancePage() {
         <div>
           <Text strong className="tw-text-[16px] tw-text-slate-900">승인 센터</Text>
           <div className="tw-mt-1 tw-text-sm tw-text-slate-500">
-            주기 단위로 묶인 목표 승인 요청을 한 곳에서 처리하고, 본인 요청 이력도 확인합니다.
+            사이클 단위로 묶인 목표 승인 요청을 한 곳에서 처리하고, 내가 올린 요청 이력도 확인할 수 있어요.
           </div>
         </div>
         <Card className={SECTION_CARD} styles={{ body: { padding: 4 } }}>
@@ -235,7 +239,7 @@ export default function PerformancePage() {
             items={[
               {
                 key: 'queue',
-                label: '내 처리 큐',
+                label: '결재 처리',
                 children: (
                   <div className="tw-px-4 tw-pb-4 tw-pt-2">
                     <ApprovalQueueList onSelect={setSelectedBundle} />
@@ -360,21 +364,22 @@ function MyObjectivesTab({
   const deleteMut = useMutation({
     mutationFn: (goalId: string) => goalApi.deleteGoal(goalId),
     onSuccess: () => {
-      message.success('KR을 삭제했습니다.');
+      message.success('개인 목표를 삭제했어요.');
       queryClient.invalidateQueries({ queryKey: ['goals-mine'] });
       queryClient.invalidateQueries({ queryKey: ['goals-my-objectives'] });
       queryClient.invalidateQueries({ queryKey: ['my-bundles'] });
     },
-    onError: (error: any) => message.error(error?.message ?? 'KR 삭제에 실패했습니다.'),
+    onError: (error: any) => message.error(error?.message ?? '개인 목표 삭제에 실패했어요.'),
   });
 
   useEffect(() => {
-    if (!selectedCycleKey && cycleOptions.length > 0) {
-      setSelectedCycleKey(String(cycleOptions[0].value));
+    const firstCycleOption = cycleOptions[0];
+    if (!selectedCycleKey && firstCycleOption) {
+      setSelectedCycleKey(String(firstCycleOption.value));
       return;
     }
     if (selectedCycleKey && !cycleOptions.some((option) => option.value === selectedCycleKey)) {
-      setSelectedCycleKey(String(cycleOptions[0]?.value ?? ''));
+      setSelectedCycleKey(String(firstCycleOption?.value ?? ''));
     }
   }, [cycleOptions, selectedCycleKey]);
 
@@ -386,14 +391,14 @@ function MyObjectivesTab({
         <Card className="tw-h-fit tw-border-slate-200/80 tw-shadow-sm" styles={{ body: { padding: 12 } }}>
           <aside className="tw-bg-white lg:tw-sticky lg:tw-top-4 lg:tw-self-start">
             <div className="tw-mb-2 tw-mt-4 tw-text-xs tw-font-semibold tw-uppercase tw-tracking-wide tw-text-slate-500">
-              {selectedCycleApprovedBundle ? '승인 완료 KR 목록' : '승인 요청 대상 KR'}
+              {selectedCycleApprovedBundle ? '승인 완료 개인 목표 목록' : '승인 요청 대상 개인 목표'}
             </div>
             <div className="tw-flex tw-flex-col tw-gap-2">
               {cycleKrList.length === 0 ? (
                 <div className="tw-rounded-xl tw-border tw-border-dashed tw-border-slate-200 tw-bg-slate-50 tw-p-3 tw-text-xs tw-text-slate-500">
                   {selectedCycleApprovedBundle
-                    ? '선택한 사이클에 승인 완료 KR이 없습니다.'
-                    : '선택한 사이클에 승인 요청 대상 KR이 없습니다.'}
+                    ? '선택한 사이클에 승인 완료된 개인 목표가 없어요.'
+                    : '선택한 사이클에 승인 요청 대상 개인 목표가 없어요.'}
                 </div>
               ) : (
                 cycleKrList.map((goal) => (
@@ -438,8 +443,8 @@ function MyObjectivesTab({
                           onClick={(event) => {
                             event.stopPropagation();
                             modal.confirm({
-                              title: 'KR 삭제',
-                              content: '삭제한 KR은 복구할 수 없습니다. 계속할까요?',
+                              title: '개인 목표 삭제',
+                              content: '삭제한 개인 목표는 복구할 수 없어요. 계속할까요?',
                               onOk: () => deleteMut.mutate(goal.goalId),
                             });
                           }}
@@ -478,7 +483,7 @@ function MyObjectivesTab({
                 placeholder="사이클 선택"
               />
               <span className="tw-ml-2 tw-text-sm tw-text-slate-500">
-                {selectedCycleApprovedBundle ? '승인 완료 KR' : '승인 대상 KR'}
+                {selectedCycleApprovedBundle ? '승인 완료 개인 목표' : '승인 대상 개인 목표'}
               </span>
               <span className="tw-rounded-lg tw-bg-slate-100 tw-px-2.5 tw-py-1 tw-text-sm tw-font-semibold tw-text-slate-800">
                 {cycleKrCount}건
@@ -487,7 +492,7 @@ function MyObjectivesTab({
             <div className="tw-mt-4 tw-min-w-0 tw-overflow-x-auto wf-scrollbar">
               <div className="tw-min-w-[800px]">
                 {!isLoading && objectives.length === 0 ? (
-                  <AppEmptyIllustrated description="소속 조직에 설정된 Objective가 없습니다. Objective가 생기면 그 기준과 연결된 KR을 여기서 함께 볼 수 있습니다." />
+                  <AppEmptyIllustrated description="소속 조직에 등록된 조직 목표가 아직 없어요. 조직 목표가 생기면 그 기준과 연결된 개인 목표를 여기서 함께 볼 수 있어요." />
                 ) : selectedCycleObjectives.length > 0 ? (
                   <Space direction="vertical" size={10} className="tw-w-full">
                     {selectedCycleObjectives.map((objective, index) => (
@@ -503,7 +508,7 @@ function MyObjectivesTab({
                     ))}
                   </Space>
                 ) : (
-                  <AppEmptyIllustrated description="선택한 사이클의 Objective가 없습니다." />
+                  <AppEmptyIllustrated description="선택한 사이클의 조직 목표가 없어요." />
                 )}
               </div>
             </div>
@@ -612,12 +617,13 @@ function IntegratedGoalsTab({
   }, [childrenByObjective, krKeyword, objectiveKeyword, orgFilter, selectedCycleObjectives]);
 
   useEffect(() => {
-    if (!selectedCycleKey && cycleOptions.length > 0) {
-      setSelectedCycleKey(String(cycleOptions[0].value));
+    const firstCycleOption = cycleOptions[0];
+    if (!selectedCycleKey && firstCycleOption) {
+      setSelectedCycleKey(String(firstCycleOption.value));
       return;
     }
     if (selectedCycleKey && !cycleOptions.some((option) => option.value === selectedCycleKey)) {
-      setSelectedCycleKey(String(cycleOptions[0]?.value ?? ''));
+      setSelectedCycleKey(String(firstCycleOption?.value ?? ''));
     }
   }, [cycleOptions, selectedCycleKey]);
 
@@ -633,11 +639,11 @@ function IntegratedGoalsTab({
           placeholder="기준 사이클"
         />
         <Select value={orgFilter} options={orgOptions} onChange={setOrgFilter} showSearch optionFilterProp="label" />
-        <Input value={objectiveKeyword} onChange={(event) => setObjectiveKeyword(event.target.value)} placeholder="Objective 필터" />
-        <Input value={krKeyword} onChange={(event) => setKrKeyword(event.target.value)} placeholder="KR 필터" />
+        <Input value={objectiveKeyword} onChange={(event) => setObjectiveKeyword(event.target.value)} placeholder="조직 목표 필터" />
+        <Input value={krKeyword} onChange={(event) => setKrKeyword(event.target.value)} placeholder="개인 목표 필터" />
       </div>
       {!isLoading && filteredObjectives.length === 0 ? (
-        <AppEmptyIllustrated description="조건에 맞는 Objective/KR이 없습니다." />
+        <AppEmptyIllustrated description="조건에 맞는 조직 목표나 개인 목표가 없어요." />
       ) : (
         <div className="tw-min-w-0 tw-overflow-x-auto wf-scrollbar">
           <div className="tw-min-w-[800px]">
@@ -715,19 +721,19 @@ function CycleSubmissionQuickPanel({
         watcherIds: [],
       }),
     onSuccess: () => {
-      message.success('승인 요청을 등록했습니다.');
+      message.success('승인 요청을 등록했어요.');
       invalidate();
     },
-    onError: (error: any) => message.error(error?.message ?? '승인 요청에 실패했습니다.'),
+    onError: (error: any) => message.error(error?.message ?? '승인 요청 등록에 실패했어요.'),
   });
 
   const withdrawMut = useMutation({
     mutationFn: () => approvalApi.withdraw(pendingBundle!.bundleId),
     onSuccess: () => {
-      message.success('승인 요청을 회수했습니다.');
+      message.success('승인 요청을 회수했어요.');
       invalidate();
     },
-    onError: (error: any) => message.error(error?.message ?? '요청 회수에 실패했습니다.'),
+    onError: (error: any) => message.error(error?.message ?? '요청 회수에 실패했어요.'),
   });
 
   return (
@@ -735,7 +741,7 @@ function CycleSubmissionQuickPanel({
       <div className="tw-text-xs tw-font-semibold tw-uppercase tw-tracking-wide tw-text-slate-500">승인 요청</div>
       <div className="tw-rounded-xl tw-bg-slate-50 tw-p-3">
         <div className="tw-mb-1 tw-flex tw-items-center tw-justify-between">
-          <span className="tw-text-xs tw-text-slate-500">KR 가중치 합</span>
+          <span className="tw-text-xs tw-text-slate-500">개인 목표 가중치 합</span>
           <span className={sumWeight === 100 ? 'tw-text-xs tw-font-semibold tw-text-emerald-600' : 'tw-text-xs tw-font-semibold tw-text-rose-600'}>
             {sumWeight}/100
           </span>
@@ -749,8 +755,8 @@ function CycleSubmissionQuickPanel({
             readOnly
             size="small"
             className="!tw-rounded-lg"
-            placeholder="승인자 자동 매핑(선택 가능)"
-            value={approverId ? `${approverName || '선택된 구성원'} (${approverId})` : ''}
+            placeholder="승인자 자동 매핑 (선택 가능)"
+            value={approverId ? ((approverName || '선택된 구성원') + ' (' + approverId + ')') : ''}
           />
           <AppButton
             variant="secondary"
@@ -758,7 +764,7 @@ function CycleSubmissionQuickPanel({
             className="!tw-h-8 !tw-rounded-lg !tw-px-3 !tw-text-xs !tw-font-semibold"
             onClick={() => setApproverPickerOpen(true)}
           >
-            선택
+                선택
           </AppButton>
         </div>
       )}
@@ -771,12 +777,12 @@ function CycleSubmissionQuickPanel({
           onClick={() =>
             modal.confirm({
               title: '승인 요청 회수',
-              content: '회수하면 현재 사이클의 KR이 다시 DRAFT 상태로 돌아갑니다.',
+              content: '회수하면 현재 사이클의 개인 목표가 다시 DRAFT 상태로 돌아갑니다.',
               onOk: () => withdrawMut.mutate(),
             })
           }
         >
-          요청 회수
+            요청 회수
         </AppButton>
       ) : (
         <AppButton variant="primary" className="tw-w-full" disabled={!submittable} loading={submitMut.isPending} onClick={() => submitMut.mutate()}>
@@ -790,7 +796,7 @@ function CycleSubmissionQuickPanel({
           showIcon
           className="!tw-rounded-xl"
           message={`반려 이력 (revision ${lastRejected.revision})`}
-          description={lastRejected.lastRejectedReason ?? '반려 사유가 없습니다.'}
+          description={lastRejected.lastRejectedReason ?? '반려 사유가 없어요.'}
         />
       )}
 
@@ -801,7 +807,7 @@ function CycleSubmissionQuickPanel({
         onClose={() => setApproverPickerOpen(false)}
         onSelect={(member) => {
           setApproverId(member.memberId);
-          setApproverName(`${member.name} · ${member.organizationName} · ${member.jobGradeName}`);
+          setApproverName(`${member.name} 쨌 ${member.organizationName} 쨌 ${member.jobGradeName}`);
           setApproverPickerOpen(false);
         }}
       />
@@ -832,12 +838,12 @@ function CompanyGoalsTab() {
     <div className="tw-flex tw-flex-col tw-gap-4">
       <div className="tw-flex tw-flex-wrap tw-gap-2">
         <FilterChip active={typeFilter === 'ALL'} onClick={() => setTypeFilter('ALL')}>전체</FilterChip>
-        <FilterChip active={typeFilter === 'OBJECTIVE'} onClick={() => setTypeFilter('OBJECTIVE')}>Objective</FilterChip>
-        <FilterChip active={typeFilter === 'KR'} onClick={() => setTypeFilter('KR')}>KR</FilterChip>
+        <FilterChip active={typeFilter === 'OBJECTIVE'} onClick={() => setTypeFilter('OBJECTIVE')}>조직 목표</FilterChip>
+        <FilterChip active={typeFilter === 'KR'} onClick={() => setTypeFilter('KR')}>개인 목표</FilterChip>
       </div>
       <CycleFilterRow cycle={cycle} onChange={setCycle} />
       {!isLoading && filtered.length === 0 ? (
-        <AppEmptyIllustrated description="조건에 맞는 목표가 없습니다." />
+        <AppEmptyIllustrated description="조건에 맞는 목표가 없어요." />
       ) : (
         <Space direction="vertical" size={4} className="tw-w-full">
           {filtered.map((goal) => (
@@ -866,16 +872,16 @@ function MemberKrTab() {
     <div className="tw-flex tw-flex-col tw-gap-4">
       <OrganizationPickerInput value={orgId} onChange={setOrgId} />
       {!orgId ? (
-        <AppEmptyIllustrated description="구성원 KR을 보려면 조직을 먼저 선택해 주세요." />
+        <AppEmptyIllustrated description="구성원 개인 목표를 보려면 조직을 먼저 선택해 주세요." />
       ) : (
         <>
           <Card
             className={SECTION_CARD}
             styles={{ body: { padding: 20 } }}
-            title={<Text strong className="tw-text-[15px] tw-text-slate-900">Objectives</Text>}
+            title={<Text strong className="tw-text-[15px] tw-text-slate-900">조직 목표</Text>}
           >
             {objectives.length === 0 ? (
-              <AppEmptyIllustrated description="선택한 조직에 등록된 Objective가 없습니다." />
+              <AppEmptyIllustrated description="선택한 조직에 등록된 조직 목표가 없어요." />
             ) : (
               <Space direction="vertical" size={4} className="tw-w-full">
                 {objectives.map((goal) => (
@@ -888,10 +894,10 @@ function MemberKrTab() {
           <Card
             className={SECTION_CARD}
             styles={{ body: { padding: 20 } }}
-            title={<Text strong className="tw-text-[15px] tw-text-slate-900">구성원 KR</Text>}
+            title={<Text strong className="tw-text-[15px] tw-text-slate-900">구성원 개인 목표</Text>}
           >
             {!isLoading && krs.length === 0 ? (
-              <AppEmptyIllustrated description="선택한 조직의 KR이 없습니다." />
+              <AppEmptyIllustrated description="선택한 조직의 개인 목표가 없어요." />
             ) : (
               <Space direction="vertical" size={4} className="tw-w-full">
                 {krs.map((goal) => (
@@ -923,12 +929,10 @@ function ObjectiveDrilldownCard({
   onOpenDetail: (goal: Goal) => void;
   onCreateKr: () => void;
   showHeader?: boolean;
-  /** 전달 시 펼침 시 API 대신 이 목록을 사용합니다(전사 통합 탭 등). */
+  /** 통합 목록 화면에서는 필요할 때 자식 개인 목표 목록을 프리패치해서 사용한다. */
   prefetchedChildren?: Goal[];
   childOwnerColumnLabel?: (child: Goal) => string;
-  /** Objective(ownerType ORGANIZATION) 행 담당 주체 칸에 표시할 조직명 */
   organizationDisplayName?: string;
-  /** true면 Objective 행의 KR 추가(+) 버튼 비활성 */
   disableCreateKr?: boolean;
 }) {
   const usePrefetch = prefetchedChildren !== undefined;
@@ -965,11 +969,11 @@ function ObjectiveDrilldownCard({
           className={`${OBJECTIVE_DRILLDOWN_GRID} tw-border-b tw-border-slate-200/80 tw-bg-slate-50 tw-px-4 tw-py-2 tw-text-[11px] tw-font-semibold tw-tracking-wide tw-text-slate-500`}
         >
           <div className="tw-pl-0.5">제목</div>
-          <div className="tw-text-left">담당 주체</div>
+          <div className="tw-text-left">대상</div>
           <div className="tw-text-left">사이클</div>
           <div className="tw-text-left">종료일</div>
           <div className="tw-text-left">가중치</div>
-          <div className="tw-text-right">액션</div>
+          <div className="tw-text-right">작업</div>
         </div>
       )}
       <div className={`${OBJECTIVE_DRILLDOWN_GRID} tw-px-4 tw-py-3`}>
@@ -988,7 +992,7 @@ function ObjectiveDrilldownCard({
               event.stopPropagation();
               setExpanded((value) => !value);
             }}
-            aria-label={expanded ? '연결 KR 접기' : '연결 KR 펼치기'}
+            aria-label={expanded ? '연결된 개인 목표 접기' : '연결된 개인 목표 펼치기'}
             className="tw-inline-flex tw-h-5 tw-w-5 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-md tw-border tw-border-slate-200 tw-bg-white tw-text-slate-500 tw-transition-colors hover:tw-bg-slate-50"
           >
             {expanded ? <DownOutlined className="tw-text-[10px]" /> : <RightOutlined className="tw-text-[10px]" />}
@@ -1008,7 +1012,7 @@ function ObjectiveDrilldownCard({
         >
           {goal.ownerType === 'ORGANIZATION'
             ? organizationDisplayName?.trim() || '-'
-            : '나'}
+            : '개인'}
         </div>
         <div className="tw-text-xs tw-text-slate-700">{goal.cycleKey || '-'}</div>
         <div className="tw-text-xs tw-text-slate-700">{goal.cycleEndDate ? goal.cycleEndDate.slice(0, 10) : '-'}</div>
@@ -1030,7 +1034,7 @@ function ObjectiveDrilldownCard({
         </div>
         <div className="tw-flex tw-items-center tw-justify-end tw-gap-1.5" onClick={(event) => event.stopPropagation()}>
           <AppButton
-            variant="ghost"
+            variant="text"
             size="small"
             className="!tw-h-7 !tw-rounded-lg !tw-px-2.5 !tw-text-xs !tw-font-semibold"
             onClick={(event) => {
@@ -1049,9 +1053,9 @@ function ObjectiveDrilldownCard({
               event.stopPropagation();
               onCreateKr();
             }}
-            aria-label="KR 생성"
+            aria-label="개인 목표 작성"
             title={
-              disableCreateKr ? '승인 요청이 진행 중인 사이클에는 새 KR을 추가할 수 없습니다.' : 'KR 생성'
+              disableCreateKr ? '승인 요청이 진행 중인 사이클에는 개인 목표를 추가할 수 없어요.' : '개인 목표 작성'
             }
             className="tw-h-8 tw-w-8 !tw-rounded-full !tw-p-0"
           />
@@ -1060,9 +1064,9 @@ function ObjectiveDrilldownCard({
       {expanded && (
         <div className="tw-border-t tw-border-slate-200/80 tw-bg-slate-50/40">
           {childrenLoading ? (
-            <div className="tw-p-4 tw-text-sm tw-text-slate-500">연결 KR 불러오는 중...</div>
+            <div className="tw-p-4 tw-text-sm tw-text-slate-500">연결된 개인 목표를 불러오는 중이에요.</div>
           ) : children.length === 0 ? (
-            <div className="tw-p-4 tw-text-sm tw-text-slate-500">이 Objective에 연결된 KR이 없습니다.</div>
+            <div className="tw-p-4 tw-text-sm tw-text-slate-500">이 조직 목표에 연결된 개인 목표가 없어요.</div>
           ) : (
             children.map((child, index) => (
               <div
@@ -1089,7 +1093,7 @@ function ObjectiveDrilldownCard({
                     ? childOwnerColumnLabel(child)
                     : child.ownerType === 'ORGANIZATION'
                       ? '조직'
-                      : '나'}
+                      : '개인'}
                 </div>
                 <div className="tw-text-xs tw-text-slate-700">{child.cycleKey || '-'}</div>
                 <div className="tw-text-xs tw-text-slate-700">{child.cycleEndDate ? child.cycleEndDate.slice(0, 10) : '-'}</div>
@@ -1099,7 +1103,7 @@ function ObjectiveDrilldownCard({
                 </div>
                 <div className="tw-flex tw-items-center tw-justify-end" onClick={(event) => event.stopPropagation()}>
                   <AppButton
-                    variant="ghost"
+                    variant="text"
                     size="small"
                     className="!tw-h-7 !tw-rounded-lg !tw-px-2.5 !tw-text-xs !tw-font-semibold"
                     onClick={(event) => {
@@ -1138,11 +1142,11 @@ function GoalDetailModal({
       ? goal.status === 'DRAFT' &&
         !myBundles.some((b) => b.cycleKey === goal.cycleKey && b.status === 'PENDING')
       : goal.ownerType === 'ORGANIZATION' && canEditObjective);
-  const confirmText = goal?.ownerType === 'MEMBER' ? 'KR 수정' : 'Objective 수정';
+  const confirmText = goal?.ownerType === 'MEMBER' ? '개인 목표 수정' : '조직 목표 수정';
   return (
     <AppDoubleActionModal
       open={!!goal}
-      title={goal ? `${goal.ownerType === 'ORGANIZATION' ? 'Objective' : 'KR'} 상세` : '상세'}
+      title={goal ? ((goal.ownerType === 'ORGANIZATION' ? '조직 목표' : '개인 목표') + ' 상세') : '상세'}
       onClose={onClose}
       onConfirm={() => {
         if (goal && canEditInModal) onEdit(goal);
@@ -1189,7 +1193,7 @@ function RequestedHistory({ onSelect }: { onSelect: (bundle: GoalApprovalBundle)
   useMemberDisplayNames(ids);
 
   if (!isLoading && data.length === 0) {
-    return <AppEmptyIllustrated description="요청한 승인 이력이 없습니다." />;
+    return <AppEmptyIllustrated description="요청한 승인 이력이 없어요." />;
   }
 
   return (

@@ -397,7 +397,7 @@ function normalizeCreateDesignBody(body: CreateDesignPayload): Record<string, un
   const normalizedSectionsJson = normalizeSectionsJsonForBackend(body.sectionsJson);
   const sections = safeJsonParse<unknown[]>(normalizedSectionsJson, []);
   const gradeConfig = body.gradeConfigJson
-    ? safeJsonParse<Record<string, unknown>>(
+    ? safeJsonParse<Record<string, unknown> | undefined>(
         normalizeGradeConfigJsonForBackend(body.gradeConfigJson),
         undefined,
       )
@@ -419,7 +419,7 @@ function normalizeUpdateDesignBody(body: UpdateDesignPayload): Record<string, un
     );
   }
   if (body.gradeConfigJson != null) {
-    o.gradeConfig = safeJsonParse<Record<string, unknown>>(
+    o.gradeConfig = safeJsonParse<Record<string, unknown> | undefined>(
       normalizeGradeConfigJsonForBackend(body.gradeConfigJson),
       undefined,
     );

@@ -33,9 +33,12 @@ export function CycleSubmissionPanel({
   const [approverName, setApproverName] = useState('');
   const [approverPickerOpen, setApproverPickerOpen] = useState(false);
 
-  const krGoals = useMemo(() => goals.filter((goal) => goal.ownerType === 'MEMBER'), [goals]);
-  const sumWeight = useMemo(() => krGoals.reduce((total, goal) => total + (goal.weightPct || 0), 0), [krGoals]);
-  const submittable = sumWeight === 100 && krGoals.length > 0;
+  const individualGoals = useMemo(() => goals.filter((goal) => goal.ownerType === 'MEMBER'), [goals]);
+  const sumWeight = useMemo(
+    () => individualGoals.reduce((total, goal) => total + (goal.weightPct || 0), 0),
+    [individualGoals],
+  );
+  const submittable = sumWeight === 100 && individualGoals.length > 0;
 
   const submitMut = useMutation({
     mutationFn: () =>
@@ -47,7 +50,7 @@ export function CycleSubmissionPanel({
       message.success('승인 요청을 등록했습니다.');
       invalidateQueries();
     },
-    onError: (error: any) => message.error(error?.message ?? '승인 요청에 실패했습니다.'),
+    onError: (error: any) => message.error(error?.message ?? '승인 요청 등록에 실패했습니다.'),
   });
 
   const withdrawMut = useMutation({
@@ -68,7 +71,7 @@ export function CycleSubmissionPanel({
           <Text strong className="tw-text-[15px] tw-text-slate-900">
             {cycleKey}
           </Text>
-          <span className="tw-text-xs tw-text-slate-500">KR {krGoals.length}개</span>
+          <span className="tw-text-xs tw-text-slate-500">개인 목표 {individualGoals.length}개</span>
         </div>
       }
       extra={
@@ -79,7 +82,7 @@ export function CycleSubmissionPanel({
             onClick={() =>
               modal.confirm({
                 title: '승인 요청 회수',
-                content: '회수하면 현재 사이클의 KR이 다시 DRAFT 상태로 돌아갑니다.',
+                content: '회수하면 현재 사이클의 개인 목표가 다시 DRAFT 상태로 돌아갑니다.',
                 onOk: () => withdrawMut.mutate(),
               })
             }
@@ -106,7 +109,7 @@ export function CycleSubmissionPanel({
           message={<span className="tw-font-semibold">이전 승인 요청이 반려되었습니다. (revision {lastRejected.revision})</span>}
           description={
             <div>
-              <div className="tw-mb-1 tw-text-sm">{lastRejected.lastRejectedReason ?? '반려 사유가 남아 있지 않습니다.'}</div>
+              <div className="tw-mb-1 tw-text-sm">{lastRejected.lastRejectedReason ?? '반려 사유가 아직 등록되지 않았습니다.'}</div>
               {lastRejected.affectedGoalIds.length > 0 && (
                 <div className="tw-text-xs tw-text-slate-500">지적된 목표 {lastRejected.affectedGoalIds.length}건</div>
               )}
@@ -120,14 +123,14 @@ export function CycleSubmissionPanel({
           type="info"
           showIcon
           className="tw-mb-4 !tw-rounded-xl"
-          message={<span className="tw-font-semibold">승인 대기 중입니다. (revision {pendingBundle.revision})</span>}
+          message={<span className="tw-font-semibold">승인 대기 중이에요. (revision {pendingBundle.revision})</span>}
           description={pendingBundle.delegateApproverId ? '위임 승인자가 검토 중입니다.' : '기본 승인자가 검토 중입니다.'}
         />
       )}
 
       <div className="tw-mb-4 tw-rounded-xl tw-bg-slate-50 tw-p-4">
         <div className="tw-mb-2 tw-flex tw-justify-between">
-          <span className="tw-text-sm tw-font-medium tw-text-slate-700">KR 가중치 합</span>
+          <span className="tw-text-sm tw-font-medium tw-text-slate-700">개인 목표 가중치 합</span>
           <span className={sumWeight === 100 ? 'tw-text-sm tw-font-bold tw-text-emerald-600' : 'tw-text-sm tw-font-bold tw-text-rose-600'}>
             {sumWeight} / 100
           </span>
@@ -140,34 +143,32 @@ export function CycleSubmissionPanel({
         />
       </div>
 
-      {!pendingBundle && krGoals.length === 0 && (
+      {!pendingBundle && individualGoals.length === 0 && (
         <Alert
           type="error"
           showIcon
           className="tw-mb-4 !tw-rounded-xl"
-          message="KR가 없습니다."
-          description="Objective만으로는 승인 요청을 보낼 수 없습니다. 개인 KR을 먼저 작성해 주세요."
+          message="개인 목표가 없습니다."
+          description="조직 목표만으로는 승인 요청을 보낼 수 없어요. 먼저 개인 목표를 작성해 주세요."
         />
       )}
 
-      {!pendingBundle && krGoals.length > 0 && sumWeight !== 100 && (
+      {!pendingBundle && individualGoals.length > 0 && sumWeight !== 100 && (
         <Alert
           type="error"
           showIcon
           className="tw-mb-4 !tw-rounded-xl"
-          message={`현재 KR 가중치 합은 ${sumWeight}%입니다.`}
-          description="승인 요청은 KR 가중치 합이 100%일 때만 가능합니다."
+          message={`현재 개인 목표 가중치 합이 ${sumWeight}%입니다.`}
+          description="승인 요청은 개인 목표 가중치 합이 100%일 때만 가능합니다."
         />
       )}
 
       {!pendingBundle && (
         <div className="tw-mb-4">
-          <label className="tw-mb-1 tw-block tw-text-xs tw-text-slate-500">
-            승인자 ID (비우면 직속 조직장 자동 매핑)
-          </label>
+          <label className="tw-mb-1 tw-block tw-text-xs tw-text-slate-500">승인자 ID (비워두면 직속 조직장으로 자동 매핑)</label>
           <Input
             readOnly
-            placeholder="선택하지 않으면 자동 매핑됩니다."
+            placeholder="선택하지 않으면 자동으로 매핑됩니다."
             value={approverId ? `${approverName || '선택된 구성원'} (${approverId})` : ''}
             addonAfter={
               <a
@@ -185,20 +186,20 @@ export function CycleSubmissionPanel({
 
       <div className="tw-mb-1 tw-flex tw-items-center tw-gap-2">
         <Text className="!tw-text-[12px] !tw-font-semibold !tw-uppercase !tw-tracking-wide !tw-text-slate-400">
-          Key Results
+          개인 목표 목록
         </Text>
-        <span className="tw-text-[11px] tw-text-slate-400">모든 KR은 상위 Objective rubric을 참조합니다.</span>
+        <span className="tw-text-[11px] tw-text-slate-400">모든 개인 목표는 상위 조직 목표의 평가 기준을 참조합니다.</span>
       </div>
       <Space direction="vertical" size={8} className="tw-w-full">
-        {krGoals.map((goal) => (
+        {individualGoals.map((goal) => (
           <GoalCard
             key={goal.goalId}
             goal={goal}
             onClick={!pendingBundle && goal.status === 'DRAFT' ? onEditGoal : undefined}
           />
         ))}
-        {krGoals.length === 0 && (
-          <div className="tw-py-4 tw-text-center tw-text-sm tw-text-slate-400">이 사이클에 작성된 KR이 없습니다.</div>
+        {individualGoals.length === 0 && (
+          <div className="tw-py-4 tw-text-center tw-text-sm tw-text-slate-400">이 사이클에 작성된 개인 목표가 아직 없습니다.</div>
         )}
       </Space>
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import { App, DatePicker, Form, Input, InputNumber, Radio, Select, Switch, Typography } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -26,10 +26,10 @@ const GRADE_BADGE = {
 } as const;
 
 const GRADE_HINT = {
-  S: '최상위 수준의 성과 기준',
-  A: '목표 달성 기준',
-  B: '기본 기대 수준 기준',
-  C: '최소 기대 수준 기준',
+  S: '가장 뛰어난 성과를 기대하는 기준',
+  A: '목표를 충분히 달성한 기준',
+  B: '기본 기대 수준을 충족한 기준',
+  C: '최소 기대 수준을 충족한 기준',
 } as const;
 
 type Props = {
@@ -90,7 +90,7 @@ export function GoalEditModal({
     () =>
       availableObjectives.map((item) => ({
         value: item.goalId,
-        label: `${item.title} · ${item.cycleKey}`,
+        label: `${item.title} 쨌 ${item.cycleKey}`,
       })),
     [availableObjectives],
   );
@@ -162,11 +162,11 @@ export function GoalEditModal({
   const createMut = useMutation({
     mutationFn: (payload: GoalCreatePayload) => goalApi.createGoal(payload),
     onSuccess: () => {
-      message.success('목표를 생성했습니다.');
+      message.success('목표를 생성했어요.');
       invalidateGoalQueries();
       onClose();
     },
-    onError: (error: any) => message.error(error?.message ?? '목표 생성에 실패했습니다.'),
+    onError: (error: any) => message.error(error?.message ?? '목표 생성에 실패했어요.'),
   });
 
   const updateMut = useMutation({
@@ -196,11 +196,11 @@ export function GoalEditModal({
     },
     onSuccess: ({ updated, targetGoalId }) => {
       patchGoalInCache(updated, targetGoalId);
-      message.success('목표를 수정했습니다.');
+      message.success('목표를 수정했어요.');
       invalidateGoalQueries();
       onClose();
     },
-    onError: (error: any) => message.error(error?.message ?? '목표 수정에 실패했습니다.'),
+    onError: (error: any) => message.error(error?.message ?? '목표 수정에 실패했어요.'),
   });
 
   async function handleSubmit() {
@@ -236,11 +236,10 @@ export function GoalEditModal({
     createMut.mutate(payload);
   }
 
-  // 모달 destroy 시 본문의 <Form>이 제거되면 상위의 useForm/useWatch가 끊겨 경고가 난다 → destroyOnHidden false.
   return (
     <AppDoubleActionModal
       open={open}
-      title={isEdit ? '목표 수정' : isObjective ? 'Objective 생성' : 'KR 생성'}
+      title={isEdit ? '목표 수정' : isObjective ? '조직 목표 생성' : '개인 목표 생성'}
       onClose={onClose}
       onConfirm={handleSubmit}
       confirmText="저장"
@@ -256,8 +255,8 @@ export function GoalEditModal({
           <div className="tw-grid tw-grid-cols-2 tw-gap-3">
             <Form.Item label="목표 유형" name="ownerType" rules={[{ required: true }]}>
               <Radio.Group disabled={isEdit}>
-                <Radio.Button value="MEMBER">개인 KR</Radio.Button>
-                <Radio.Button value="ORGANIZATION">조직 Objective</Radio.Button>
+                <Radio.Button value="MEMBER">개인 목표</Radio.Button>
+                <Radio.Button value="ORGANIZATION">조직 목표</Radio.Button>
               </Radio.Group>
             </Form.Item>
 
@@ -271,7 +270,7 @@ export function GoalEditModal({
                       <OrganizationPickerInput
                         value={ownerId}
                         onChange={(orgId) => setFieldValue('ownerId', orgId)}
-                        placeholder="Objective를 소유할 조직을 선택하세요"
+                        placeholder="조직 목표를 소유할 조직을 선택하세요."
                       />
                     </Form.Item>
                   );
@@ -285,7 +284,7 @@ export function GoalEditModal({
                       <Input
                         readOnly
                         disabled={isEdit}
-                        placeholder="KR을 소유할 구성원을 선택하세요"
+                        placeholder="개인 목표를 소유할 구성원을 선택하세요."
                         value={ownerId ? selectedOwnerMemberLabel || '선택된 구성원' : ''}
                         addonAfter={
                           isEdit ? null : (
@@ -310,20 +309,20 @@ export function GoalEditModal({
           {!isObjective && (
             <Form.Item
               className="tw-mt-2"
-              label="상위 Objective"
+              label="상위 조직 목표"
               name="alignedOrgGoalId"
-              rules={[{ required: true, message: 'KR은 상위 Objective에 반드시 연결되어야 합니다.' }]}
-              tooltip="KR은 부모 Objective의 S/A/B/C 기준을 그대로 참조합니다."
+              rules={[{ required: true, message: '개인 목표는 상위 조직 목표와 반드시 연결되어야 합니다.' }]}
+              tooltip="개인 목표는 상위 조직 목표의 S/A/B/C 기준을 그대로 참조합니다."
             >
               <Select
-                placeholder="연결할 Objective를 먼저 선택하세요"
+                placeholder="연결할 조직 목표를 먼저 선택하세요."
                 options={objectiveOptions}
                 loading={isObjectivesLoading}
                 disabled={isObjectivesLoading}
                 notFoundContent={
                   isObjectivesLoading
-                    ? 'Objective 목록을 불러오는 중입니다.'
-                    : '내 조직에 연결 가능한 Objective가 없습니다.'
+                    ? '조직 목표 목록을 불러오는 중입니다.'
+                    : '내 조직에서 연결 가능한 조직 목표가 없습니다.'
                 }
                 showSearch
                 optionFilterProp="label"
@@ -332,7 +331,7 @@ export function GoalEditModal({
           )}
 
           <Form.Item label="제목" name="title" rules={[{ required: true, max: 300 }]}>
-            <Input placeholder={isObjective ? '예: 2026 Q2 고객 경험 개선' : '예: 주요 고객 재계약 성공률 90% 달성'} />
+            <Input placeholder={isObjective ? '예: 2026 Q2 고객 경험 개선' : '예: 주요 고객 계약 성사율 90% 달성'} />
           </Form.Item>
 
           <Form.Item label="설명" name="description" rules={[{ required: true }]}>
@@ -411,7 +410,7 @@ export function GoalEditModal({
                 label="가중치(%)"
                 name="weightPct"
                 rules={[{ required: true, type: 'number', min: 0, max: 100 }]}
-                tooltip="같은 사이클 KR의 가중치 합이 100%여야 승인 요청이 가능합니다."
+                tooltip="같은 사이클의 개인 목표 가중치 합이 100%여야 승인 요청이 가능합니다."
               >
                 <InputNumber min={0} max={100} style={{ width: '100%' }} disabled={!krSetupReady} />
               </Form.Item>
@@ -453,7 +452,7 @@ export function GoalEditModal({
           </Form.Item>
           {!isObjective && !krSetupReady && (
             <div className="tw-rounded-xl tw-border tw-border-slate-200 tw-bg-slate-50 tw-p-3 tw-text-xs tw-text-slate-500">
-              상위 Objective를 선택하면 사이클/기간/가중치/공개 범위 입력이 활성화됩니다.
+              상위 조직 목표를 선택하면 사이클, 기간, 가중치, 공개 범위를 입력할 수 있어요.
             </div>
           )}
 
@@ -482,7 +481,7 @@ export function GoalEditModal({
                 ))}
               </div>
               <div className="tw-mt-3 tw-rounded-xl tw-border tw-border-blue-100 tw-bg-blue-50/60 tw-p-4 tw-text-sm tw-text-slate-600">
-                Objective가 S/A/B/C 평가 기준의 기준점이 됩니다. 같은 Objective에 연결된 모든 KR은 이 기준을 공통으로 참고합니다.
+                조직 목표가 S/A/B/C 평가 기준의 기준점이 됩니다. 같은 조직 목표에 연결된 모든 개인 목표가 이 기준을 공통으로 참조합니다.
               </div>
             </>
           ) : null}
@@ -495,7 +494,7 @@ export function GoalEditModal({
         onClose={() => setMemberPickerOpen(false)}
         onSelect={(member) => {
           form.setFieldValue('ownerId', member.memberId);
-          setSelectedOwnerMemberLabel(`${member.name} · ${member.organizationName} · ${member.jobGradeName}`);
+          setSelectedOwnerMemberLabel(`${member.name} 쨌 ${member.organizationName} 쨌 ${member.jobGradeName}`);
           setMemberPickerOpen(false);
         }}
       />
@@ -546,3 +545,4 @@ function SectionHeader({ title, className }: { title: string; className?: string
     </div>
   );
 }
+

@@ -138,14 +138,15 @@ export default function EvaluationFlowPage({ embedded = false }: EvaluationFlowP
   }, [myEvaluator, mySelf]);
 
   useEffect(() => {
-    if (!grouped.all.length) return;
+    const firstResponse = grouped.all[0];
+    if (!firstResponse) return;
     if (!activeId || !grouped.all.some((item) => item.responseId === activeId)) {
-      setActiveId(grouped.all[0].responseId);
+      setActiveId(firstResponse.responseId);
     }
   }, [activeId, grouped.all]);
 
   const active = useMemo(
-    () => grouped.all.find((response) => response.responseId === activeId) ?? grouped.all[0],
+    () => grouped.all.find((response) => response.responseId === activeId) ?? grouped.all[0] ?? null,
     [activeId, grouped.all],
   );
 

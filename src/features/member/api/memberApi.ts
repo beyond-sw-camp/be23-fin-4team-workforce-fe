@@ -587,6 +587,23 @@ export const memberApi = {
     const response = await httpClient.post('/member/create', payload);
     return unwrapApiResponse<MemberSummary>(response.data);
   },
+  /**
+   * GET /member/me/permissions — 본인 권한 목록 (`RESOURCE:ACTION:RANGE` 문자열 배열).
+   * - JWT(AT)에는 권한이 없어 새로고침/AT 연장 후 `Me.permissions` 재수화에 사용한다.
+   * - 비-관리자(예: 팀장)는 ROLE:READ 권한이 없어 `GET /member/role/{roleId}` 가 403 이라
+   *   해당 경로 대신 본인 전용 엔드포인트로 권한을 다시 받아온다.
+   * - 백엔드 `MemberController#getMyPermissions` 와 1:1 대응.
+   */
+  async getMyPermissions(): Promise<string[]> {
+    const response = await httpClient.get('/member/me/permissions');
+    const raw = unwrapApiResponse<unknown>(response.data);
+    if (Array.isArray(raw)) {
+      return raw
+        .map((v) => (typeof v === 'string' ? v.trim() : ''))
+        .filter((v) => v.length > 0);
+    }
+    return [];
+  },
   async list(params?: Record<string, unknown>) {
     const response = await httpClient.get('/member/list', { params });
     return unwrapApiResponse<MemberSummary[]>(response.data);

@@ -9,7 +9,13 @@ function utcYmd(d: Date): string {
 
 /** YYYY-MM-DD + 일수 (UTC 달력일) */
 export function addCalendarDays(ymd: string, delta: number): string {
-  const [y, mo, d] = ymd.split('-').map((x) => Number(x));
+  const [yRaw, moRaw, dRaw] = ymd.split('-');
+  const y = Number(yRaw);
+  const mo = Number(moRaw);
+  const d = Number(dRaw);
+  if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) {
+    return ymd;
+  }
   const dt = new Date(Date.UTC(y, mo - 1, d + delta));
   return utcYmd(dt);
 }
