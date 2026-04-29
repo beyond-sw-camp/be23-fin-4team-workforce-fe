@@ -44,6 +44,27 @@ export type FormSchema = {
   fields: FormFieldSchema[];
 };
 
+/**
+ * 결재 생성 시 pre-action으로 contentJson에 주입되는 엔티티 ID 필드명.
+ * `ApprovalsPage`의 `PRE_ACTION_CONFIGS[].entityIdField`와 동기화할 것.
+ */
+export const APPROVAL_PRE_ACTION_ENTITY_ID_FIELD_NAMES = [
+  'leaveRequestId',
+  'overtimeRequestId',
+  'memberAllowanceId',
+  'selectionId',
+  'leaveOfAbsenceId',
+] as const;
+
+/** 양식 선택 모달 등 기안지 미리보기에서 노출하지 않을 필드 */
+export function shouldHideApprovalFormFieldInSelectModalPreview(field: FormFieldSchema): boolean {
+  if (field.type === 'hidden') return true;
+  if ((APPROVAL_PRE_ACTION_ENTITY_ID_FIELD_NAMES as readonly string[]).includes(field.name)) return true;
+  const compact = field.label.replace(/\s+/g, '').toLowerCase();
+  if (compact.includes('salary') && compact.includes('연결')) return true;
+  return false;
+}
+
 /** 연차신청서 등 휴가 양식: 휴가종류 select와 경조사 구분 필드 연동 시 라벨 기준 */
 export const APPROVAL_VACATION_LEAVE_KIND_FIELD_LABEL = '휴가종류';
 export const APPROVAL_FAMILY_EVENT_SUBTYPE_FIELD_LABEL = '경조사 구분';

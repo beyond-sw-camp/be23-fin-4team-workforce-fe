@@ -5341,7 +5341,7 @@ export function ApprovalsPage() {
         width={1000}
       >
         <div className="tw-max-h-[min(72vh,640px)] tw-min-h-0 tw-overflow-y-auto tw-px-5 tw-py-2">
-          {selectedDocument ? renderComposeApprovalInfoContent({ stacked: false }) : null}
+        {selectedDocument ? renderComposeApprovalInfoContent({ stacked: false }) : null}
         </div>
       </AppDoubleActionModal>
 
@@ -5395,12 +5395,12 @@ export function ApprovalsPage() {
               승인된 공문이 수신 부서로 발송되기 전에만 취소할 수 있습니다.
             </Typography.Paragraph>
           ) : null}
-          <Input.TextArea
-            rows={4}
-            value={cancelReason}
-            onChange={(e) => setCancelReason(e.target.value)}
-            placeholder="취소 사유를 입력하세요."
-          />
+        <Input.TextArea
+          rows={4}
+          value={cancelReason}
+          onChange={(e) => setCancelReason(e.target.value)}
+          placeholder="취소 사유를 입력하세요."
+        />
         </div>
       </AppDoubleActionModal>
 
@@ -5429,12 +5429,12 @@ export function ApprovalsPage() {
         confirmDanger={approvalAction?.mode === 'reject'}
       >
         <div className="tw-px-5 tw-py-4">
-          <Input.TextArea
-            rows={4}
-            value={approvalComment}
-            onChange={(e) => setApprovalComment(e.target.value)}
-            placeholder={approvalAction?.mode === 'approve' ? '승인 의견(선택)' : '반려 사유(필수)'}
-          />
+        <Input.TextArea
+          rows={4}
+          value={approvalComment}
+          onChange={(e) => setApprovalComment(e.target.value)}
+          placeholder={approvalAction?.mode === 'approve' ? '승인 의견(선택)' : '반려 사유(필수)'}
+        />
         </div>
       </AppDoubleActionModal>
     </div>
