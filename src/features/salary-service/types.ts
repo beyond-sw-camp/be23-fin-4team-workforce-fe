@@ -33,11 +33,29 @@ export type SpringPage<T> = {
   empty?: boolean;
 };
 
+export type ClosureStatusCode =
+  | 'OPEN'
+  | 'DRAFT'
+  | 'UNDER_REVIEW'
+  | 'FINALIZED'
+  | 'LOCKED';
+
+/**
+ * 일별 근태의 정정 진행 상태
+ *  NORMAL     정상 — 액션 불필요
+ *  ABNORMAL   이상 — 누락, 정정 신청 가능
+ *  PENDING    검토중 — 신청 후 관리자 결정 대기
+ *  COMPLETED  정정 완료
+ */
+export type CorrectionStateCode = 'NORMAL' | 'ABNORMAL' | 'PENDING' | 'COMPLETED';
+
 export type DailyAttendance = {
   dailyAttendanceId?: string;
   memberId?: string;
   attendanceDate?: string;
   status?: AttendanceStatusCode;
+  closureStatus?: ClosureStatusCode;
+  correctionState?: CorrectionStateCode;
   workScheduleId?: string;
   firstClockIn?: string | null;
   lastClockOut?: string | null;
@@ -45,6 +63,32 @@ export type DailyAttendance = {
   totalBreakMinutes?: number | null;
   workedMinutes?: number | null;
   overtimeMinutes?: number | null;
+};
+
+/** 출퇴근 정정 신청 페이로드 */
+export type AttendanceCorrectionReqPayload = {
+  attendanceDate: string; // YYYY-MM-DD
+  requestedClockIn?: string | null; // ISO LocalDateTime
+  requestedClockOut?: string | null; // ISO LocalDateTime
+  reason: string;
+};
+
+/** 정정 검토 큐 행 (관리자 화면) */
+export type AttendanceCorrectionPending = {
+  dailyAttendanceId: string;
+  memberId: string;
+  attendanceDate: string;
+  requestedClockIn?: string | null;
+  requestedClockOut?: string | null;
+  reason?: string | null;
+  requestedAt?: string | null;
+};
+
+/** 누락 후보 일자 (휴가·휴직 복귀 안전망) */
+export type MissingAttendanceSuspect = {
+  date: string; // YYYY-MM-DD
+  reasonCode: 'NO_RECORD' | 'CLOCK_IN_MISSING' | 'CLOCK_OUT_MISSING';
+  reasonLabel?: string;
 };
 
 export type AttendanceLog = {
@@ -186,12 +230,19 @@ export type MemberScheduleSelectionCreatePayload = {
 export type MemberAllowance = {
   memberAllowanceId?: string;
   memberId?: string;
+  companyId?: string;
   salaryItemTemplateId?: string;
   amount?: number | null;
   effectiveFrom?: string | null;
+  effectiveTo?: string | null;
   reason?: string | null;
   approvalStatus?: AllowanceApprovalStatusCode;
   approvalRequestId?: string | null;
+  requestedBy?: string | null;
+  requestedAt?: string | null;
+  decidedBy?: string | null;
+  decidedAt?: string | null;
+  decisionNote?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
 };
@@ -201,6 +252,14 @@ export type MemberAllowanceCreatePayload = {
   amount: number;
   effectiveFrom: string;
   reason?: string | null;
+};
+
+/** 관리자용 자동부여(Auto-grant) — 신규입사자에게 자격수당을 즉시 적용 */
+export type MemberAllowanceAutoGrantPayload = {
+  memberId: string;
+  salaryItemTemplateId: string;
+  amount: number;
+  effectiveFrom: string;
 };
 
 export type BalanceTypeCode = 'ANNUAL' | 'MONTHLY' | 'CARRYOVER' | string;
@@ -337,6 +396,8 @@ export type PayrollItem = {
   itemType?: ItemTypeCode;
   amount?: number | null;
   displayOrder?: number | null;
+  /** 과세 여부 Y/N — 비과세 항목 표시용 */
+  isTaxableYn?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
 };
@@ -445,6 +506,21 @@ export type LeavePromotionNoResponse = {
   balanceExpirationDate?: string | null;
   remainingDays?: number | null;
   daysSinceSent: number;
+};
+
+/** 관리자 — 회신 완료 + 강제 지정 이력 */
+export type LeavePromotionHistory = {
+  promotionLogId: string;
+  memberId: string;
+  stage: PromotionStageCode;
+  status: PromotionLogStatusCode;     // ACKNOWLEDGED / DESIGNATED
+  sentOn: string;
+  balanceExpirationDate?: string | null;
+  remainingDays?: number | null;
+  acknowledgedAt?: string | null;
+  plannedDates?: string[];
+  designatedDates?: string[];
+  designationReason?: string | null;
 };
 
 // 직원 회신 페이로드 사용계획 날짜는 참고용 잔여 차감 없음

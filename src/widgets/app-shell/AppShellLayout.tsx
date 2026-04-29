@@ -166,7 +166,6 @@ function shouldShowEsgMenuItem(path: string, cfg: EsgConfig | null | undefined, 
 const TALENT_HUB_GROUP_KEY = 'group-talent-hub';
 const TALENT_HUB_PATHS = [
     '/app/performance',
-    '/app/approval-center',
     '/app/evaluations',
     '/app/meetings',
 ] as const;
@@ -342,16 +341,7 @@ function buildAppShellMenuItems(
                             label: APP_MENU_LABEL['/app/leave'],
                             title: APP_MENU_LABEL['/app/leave'],
                         },
-                        ...(leavePromotionEnabled
-                            ? [
-                                {
-                                    key: '/app/leave/my-promotion',
-                                    icon: <BellOutlined className="tw-text-lg"/>,
-                                    label: APP_MENU_LABEL['/app/leave/my-promotion'],
-                                    title: APP_MENU_LABEL['/app/leave/my-promotion'],
-                                },
-                            ]
-                            : []),
+                        // "휴가 계획 회신" 메뉴는 휴가 계획 관리(MyLeavePage) 안에 통합됨 — 사이드바 노출 제거
                     );
                 }
                 if (isAdmin) {
@@ -361,6 +351,12 @@ function buildAppShellMenuItems(
                             icon: <TeamOutlined className="tw-text-lg"/>,
                             label: APP_MENU_LABEL['/app/attendance/company'],
                             title: APP_MENU_LABEL['/app/attendance/company'],
+                        },
+                        {
+                            key: '/app/attendance/corrections',
+                            icon: <ClockCircleOutlined className="tw-text-lg"/>,
+                            label: APP_MENU_LABEL['/app/attendance/corrections'],
+                            title: APP_MENU_LABEL['/app/attendance/corrections'],
                         },
                         {
                             key: '/app/attendance/schedules',
@@ -492,18 +488,21 @@ function buildAppShellMenuItems(
                             ? [
                                   {
                                       key: PAYROLL_SETTLEMENT_MENU_KEY,
-                                      label: (
-                                          <SiderGroupedMenuLabel
-                                              icon={<DollarOutlined className="tw-text-lg"/>}
-                                              text={APP_MENU_LABEL['/app/payroll/admin'] ?? '급여 정산 관리'}
-                                          />
-                                      ),
+                                      icon: <DollarOutlined className="tw-text-lg"/>,
+                                      label: APP_MENU_LABEL['/app/payroll/admin'] ?? '급여 정산 관리',
+                                      title: APP_MENU_LABEL['/app/payroll/admin'] ?? '급여 정산 관리',
                                       children: [
                                           {
                                               key: '/app/payroll/admin',
                                               icon: <DollarOutlined className="tw-text-lg"/>,
                                               label: '월 급여대장',
                                               title: '월 급여대장',
+                                          },
+                                          {
+                                              key: '/app/payroll/admin/allowances',
+                                              icon: <DollarOutlined className="tw-text-lg"/>,
+                                              label: APP_MENU_LABEL['/app/payroll/admin/allowances'] ?? '수당 관리',
+                                              title: APP_MENU_LABEL['/app/payroll/admin/allowances'] ?? '수당 관리',
                                           },
                                           {
                                               key: '/app/salary/negotiations',
@@ -520,6 +519,12 @@ function buildAppShellMenuItems(
                                       icon: <DollarOutlined className="tw-text-lg"/>,
                                       label: APP_MENU_LABEL['/app/payroll/admin'],
                                       title: APP_MENU_LABEL['/app/payroll/admin'],
+                                  },
+                                  {
+                                      key: '/app/payroll/admin/allowances',
+                                      icon: <DollarOutlined className="tw-text-lg"/>,
+                                      label: APP_MENU_LABEL['/app/payroll/admin/allowances'] ?? '수당 관리',
+                                      title: APP_MENU_LABEL['/app/payroll/admin/allowances'] ?? '수당 관리',
                                   },
                               ]),
                         {
@@ -1462,7 +1467,6 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
     if (/^\/app\/members\/[^/]+$/.test(pathname)) return ['/app/members'];
     if (/^\/app\/meetings\/[^/]+$/.test(pathname)) return ['/app/meetings'];
     if (/^\/app\/performance\//.test(pathname)) return ['/app/performance'];
-    if (/^\/app\/approval-center\//.test(pathname)) return ['/app/approval-center'];
     if (/^\/app\/evaluation-flow(\/|$)/.test(pathname)) return ['/app/evaluations'];
     if (/^\/app\/my-evaluation-result-v2(\/|$)/.test(pathname)) return ['/app/evaluations'];
     if (/^\/app\/evaluation-admin(\/|$)/.test(pathname)) return ['/app/evaluations'];
@@ -1473,17 +1477,20 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
     if (pathname === '/app/attendance/work-time') return ['/app/attendance'];
     if (pathname === '/app/attendance/company/monthly') return ['/app/attendance/company'];
     if (pathname === '/app/attendance/company') return ['/app/attendance/company'];
+    if (pathname === '/app/attendance/corrections') return ['/app/attendance/corrections'];
     if (pathname === '/app/attendance/holidays') return ['/app/attendance/holidays'];
     if (pathname === '/app/attendance/schedules') return ['/app/attendance/schedules'];
     if (pathname === '/app/attendance/overtime-policies') return ['/app/attendance/overtime-policies'];
     if (pathname === '/app/attendance/flexible-slots') return ['/app/attendance/schedules'];
+    if (pathname === '/app/attendance/overtime-status') return ['/app/attendance/company'];
     if (pathname === '/app/attendance/comprehensive-ot') return ['/app/attendance/company'];
     if (pathname === '/app/attendance') return ['/app/attendance'];
     if (pathname === '/app/work-trips') return ['/app/work-trips'];
     if (pathname === '/app/leave/policies') return ['/app/leave/policies'];
     if (pathname === '/app/leave/absence') return ['/app/leave/absence'];
     if (pathname === '/app/leave/types') return ['/app/leave/types'];
-    if (pathname === '/app/leave/my-promotion') return ['/app/leave/my-promotion'];
+    // 사이드바 노출 제거 — 부모 메뉴 /app/leave 로 하이라이트
+    if (pathname === '/app/leave/my-promotion') return ['/app/leave'];
     if (pathname === '/app/leave/promotion-no-response') return ['/app/leave/policies'];
     if (pathname === '/app/leave') return ['/app/leave'];
     if (pathname === '/app/salary/unused-leave') return ['/app/payroll/admin'];
@@ -1498,6 +1505,7 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
     if (pathname === '/app/payroll/annual') return ['/app/payroll/annual'];
     if (pathname === '/app/income') return ['/app/income'];
     if (pathname === '/app/payroll/tax-summary') return ['/app/payroll/tax-summary'];
+    if (pathname === '/app/payroll/admin/allowances') return ['/app/payroll/admin/allowances'];
     if (pathname.startsWith('/app/payroll/admin')) return ['/app/payroll/admin'];
     if (pathname === '/app/payroll' || /^\/app\/payroll\/[^/]+$/.test(pathname)) return ['/app/payroll'];
     if (pathname.startsWith('/app/approvals')) {
@@ -1529,7 +1537,7 @@ function menuOpenKeysForPath(
     const isSystemAdmin = opts?.isSystemAdmin === true;
     if (
         TALENT_HUB_PATH_SET.has(pathname) ||
-        /^\/app\/(meetings|performance|evaluations|approval-center|evaluation-flow|my-evaluation-result-v2|evaluation-admin)\//.test(pathname)
+        /^\/app\/(meetings|performance|evaluations|evaluation-flow|my-evaluation-result-v2|evaluation-admin)\//.test(pathname)
     ) {
         keys.push(TALENT_HUB_GROUP_KEY);
     }

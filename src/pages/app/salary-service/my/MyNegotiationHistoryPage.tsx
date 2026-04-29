@@ -15,6 +15,7 @@ import {
   Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import dayjs from 'dayjs';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import type {
   NegotiationStatusCode,
@@ -54,6 +55,12 @@ function formatPercent(n: number | null | undefined) {
   if (n == null || Number.isNaN(n)) return '—';
   const sign = n > 0 ? '+' : '';
   return `${sign}${(n * 100).toFixed(2)}%`;
+}
+
+function formatDate(v?: string | null) {
+  if (!v) return '—';
+  const d = dayjs(v);
+  return d.isValid() ? d.format('YYYY-MM-DD') : String(v);
 }
 
 export function MyNegotiationHistoryPage() {
@@ -131,6 +138,12 @@ export function MyNegotiationHistoryPage() {
       key: 'proposedEffectiveFrom',
       width: 110,
       render: (v) => v ?? '—',
+    },
+    {
+      title: '등록일',
+      key: 'proposedAt',
+      width: 110,
+      render: (_, r) => formatDate(r.proposedAt ?? r.createdAt),
     },
     {
       title: '상태',
