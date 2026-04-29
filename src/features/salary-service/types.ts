@@ -444,6 +444,9 @@ export type SalaryItemTemplate = {
   taxCategory?: TaxCategoryCode | null;
   /** 월 비과세 한도 카테고리에 따라 결정 한도 없음이면 null 일반 과세는 0 */
   monthlyNonTaxableLimit?: number | null;
+  /** 회사 기본 지급 금액 (수당 산식 v1) — 부가 수당 부여 시 자동 채워짐.
+   *  null 이면 부여 시 admin 이 직접 입력. 향후 v2 에서 식("BASE * 0.05") 으로 확장. */
+  defaultAmount?: number | null;
   /** 시스템 기본 항목 여부. true 면 삭제 불가, 일부 필드 수정 제한 */
   isSystemDefault?: boolean | null;
   delYn?: string | null;
@@ -964,6 +967,8 @@ export type SalaryItemTemplateCreatePayload = {
   isTaxableYn: string;
   /** 통상임금 포함 여부 Y/N null 이면 N 처리 */
   isOrdinaryWageYn?: string | null;
+  /** 회사 기본 지급 금액 (수당 산식 v1) */
+  defaultAmount?: number | null;
 };
 
 export type SalaryItemTemplateUpdatePayload = SalaryItemTemplateCreatePayload;

@@ -340,9 +340,6 @@ export function MyLeavePage() {
         </div>
         <Space size="small" wrap>
           <Link to="/app/leave/my-promotion">
-            <Button icon={<FileTextOutlined />}>촉진 안내문 확인</Button>
-          </Link>
-          <Link to="/app/leave/my-promotion">
             <Button icon={<FormOutlined />}>휴가 계획 회신</Button>
           </Link>
           <Button

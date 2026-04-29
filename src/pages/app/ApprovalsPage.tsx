@@ -197,7 +197,8 @@ async function createApprovalRequestWithAttachments(
 type PreActionConfig = {
   documentName: string;
   entityIdField: string;
-  submitEntity: (content: Record<string, unknown>) => Promise<string>;
+  /** content 와 첨부파일 유무를 받아 entity 를 생성 — 첨부 sentinel 처리에 사용 */
+  submitEntity: (content: Record<string, unknown>, hasAttachment?: boolean) => Promise<string>;
   cancelEntity: (id: string) => Promise<void>;
   linkApproval: ((id: string, approvalRequestId: string) => Promise<void>) | null;
 };
@@ -250,19 +251,24 @@ const PRE_ACTION_CONFIGS: PreActionConfig[] = [
   {
     documentName: '연차신청서',
     entityIdField: 'leaveRequestId',
-    submitEntity: async (content) => {
+    submitEntity: async (content, hasAttachment) => {
       const companyLeaveTypeId = readStr(content, 'vacationType');
       const startDate = readStr(content, 'startDate');
       const endDate = readStr(content, 'endDate');
       if (!companyLeaveTypeId || !startDate || !endDate) {
         throw new Error('휴가 종류·시작일·종료일은 필수입니다.');
       }
+      // 첨부파일은 결재문서 생성 후에 업로드되지만 백엔드 LeaveRequestService 는
+      // requireEvidenceYn=Y 인 휴가에 대해 evidenceFileUrl 이 null/blank 이면 거부함.
+      // 결재 첨부파일 슬롯에 파일이 들어 있으면 sentinel 을 보내 검증을 통과시키고,
+      // 실제 파일 URL 은 결재 문서 attachments 로 보존된다.
+      const evidenceFileUrl = hasAttachment ? 'APPROVAL_ATTACHMENT' : null;
       const r = await attendanceApi.leaveRequest.submit({
         companyLeaveTypeId,
         startDate,
         endDate,
         reason: readStr(content, 'reason') || '휴가 신청',
-        evidenceFileUrl: null,
+        evidenceFileUrl,
       });
       if (!r.leaveRequestId) throw new Error('휴가 신청 ID 를 받지 못했습니다.');
       return r.leaveRequestId;
@@ -397,8 +403,9 @@ async function createApprovalWithPreAction(
     }
   })();
 
-  // Step 1
-  const entityId = await config.submitEntity(content);
+  // Step 1 — 첨부 유무를 함께 전달 (증빙 필수 휴가 등에서 sentinel 처리에 사용)
+  const hasAttachment = (attachmentFiles?.length ?? 0) > 0;
+  const entityId = await config.submitEntity(content, hasAttachment);
 
   // Step 2
   const enriched: CreateApprovalRequestPayload = {
@@ -1500,15 +1507,57 @@ export function ApprovalsPage() {
     queryFn: () => salaryApi.salaryItemTemplate.list(),
     staleTime: 60_000,
   });
+  const { data: myAllowanceHistory = [] } = useQuery({
+    queryKey: ['salary', 'allowance', 'my'],
+    queryFn: () => salaryApi.memberAllowance.listMy(),
+    staleTime: 60_000,
+  });
+  const activeAllowanceTemplateIds = useMemo(() => {
+    const today = dayjs().format('YYYY-MM-DD');
+    const ids = new Set<string>();
+    for (const row of myAllowanceHistory) {
+      const templateId = row.salaryItemTemplateId ?? '';
+      if (!templateId) continue;
+      const status = String(row.approvalStatus ?? '').toUpperCase();
+      const approved = status === 'APPROVED' || status === 'AUTO';
+      const started = !row.effectiveFrom || row.effectiveFrom <= today;
+      const notEnded = !row.effectiveTo || row.effectiveTo >= today;
+      if (approved && started && notEnded) ids.add(templateId);
+    }
+    return ids;
+  }, [myAllowanceHistory]);
+  const allowanceFixedAmountByTemplate = useMemo(() => {
+    const byTemplate = new Map<string, number>();
+    const sorted = [...myAllowanceHistory].sort(
+      (a, b) => (b.effectiveFrom ?? '').localeCompare(a.effectiveFrom ?? ''),
+    );
+    for (const row of sorted) {
+      const templateId = row.salaryItemTemplateId ?? '';
+      const amount = Number(row.amount ?? NaN);
+      const status = String(row.approvalStatus ?? '').toUpperCase();
+      if (!templateId || Number.isNaN(amount)) continue;
+      if (status !== 'APPROVED' && status !== 'AUTO') continue;
+      if (!byTemplate.has(templateId)) byTemplate.set(templateId, amount);
+    }
+    return byTemplate;
+  }, [myAllowanceHistory]);
   const salaryItemTemplateOptions = useMemo(
     () =>
       salaryItemTemplates
         .filter((t) => t.delYn !== 'Y' && t.itemType === 'EARNING')
+        .filter((t) => {
+          const id = t.salaryItemTemplateId ?? '';
+          if (!id) return false;
+          const normalizedName = String(t.itemName ?? '').replace(/\s+/g, '');
+          if (normalizedName === '기본급') return false;
+          if (activeAllowanceTemplateIds.has(id)) return false;
+          return true;
+        })
         .slice()
         .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
         .map((t) => ({ value: t.salaryItemTemplateId ?? '', label: t.itemName ?? '—' }))
         .filter((o) => o.value),
-    [salaryItemTemplates],
+    [activeAllowanceTemplateIds, salaryItemTemplates],
   );
 
   // 출퇴근시간 변경 slotId 동적 옵션, source="flexibleTimeSlot"
@@ -2611,6 +2660,22 @@ export function ApprovalsPage() {
       }
 
       const contentForSubmit = { ...(values.content ?? {}) };
+      const isAllowanceChangeDocument = selectedDocument.documentName === '수당 변경 신청';
+      if (isAllowanceChangeDocument) {
+        const selectedTemplateId = readStr(contentForSubmit, 'salaryItemTemplateId');
+        if (status === 'WAIT' && !selectedTemplateId) {
+          message.warning('수당 항목을 선택해 주세요.');
+          return;
+        }
+        if (selectedTemplateId) {
+          const fixedAmount = allowanceFixedAmountByTemplate.get(selectedTemplateId);
+          if (fixedAmount == null) {
+            message.warning('선택한 수당의 회사 고정 금액을 찾을 수 없습니다. 관리자에게 확인해 주세요.');
+            return;
+          }
+          contentForSubmit.amount = fixedAmount;
+        }
+      }
       if (vacationLeaveKindField && familyEventSubtypeField) {
         const kind = contentForSubmit[vacationLeaveKindField.name];
         if (kind !== APPROVAL_FAMILY_EVENT_LEAVE_KIND_OPTION) {
@@ -4580,6 +4645,9 @@ export function ApprovalsPage() {
                               showFamilyEventSubtypeInCompose,
                           )
                           .map((field) => {
+                          const isAllowanceChangeDocument = selectedDocument.documentName === '수당 변경 신청';
+                          // 수당 변경 신청은 회사 고정 금액을 사용하므로 신청 금액 입력 UI는 숨긴다.
+                          if (isAllowanceChangeDocument && field.name === 'amount') return null;
                           // hidden 필드는 제출 시 프론트가 auto-populate (예: leaveRequestId), UI 에 미표시
                           if (field.type === 'hidden') return null;
                           const namePath: (string | number)[] = ['content', field.name];

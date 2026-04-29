@@ -347,8 +347,10 @@ export const salaryApi = {
       return unwrapApiResponse<Salary>(data);
     },
 
-    async delete(salaryId: string): Promise<void> {
-      await httpClient.delete(`${BASE}/salary/salaries/${encodeURIComponent(salaryId)}`);
+    async delete(salaryId: string, options?: { force?: boolean }): Promise<void> {
+      await httpClient.delete(`${BASE}/salary/salaries/${encodeURIComponent(salaryId)}`, {
+        params: options?.force ? { force: true } : undefined,
+      });
     },
   },
 

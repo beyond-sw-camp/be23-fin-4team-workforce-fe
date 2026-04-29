@@ -56,8 +56,6 @@ function formatHm(minutes: number | null | undefined): string {
 const EVENT_KO: Record<string, string> = {
   CLOCK_IN: '출근',
   CLOCK_OUT: '퇴근',
-  BREAK_START: '휴게 시작',
-  BREAK_END: '휴게 종료',
 };
 
 function formatDt(iso?: string | null) {
@@ -169,29 +167,17 @@ export function MyAttendancePage() {
     onError: (e: Error) => message.error(e.message || '퇴근 처리에 실패했습니다.'),
   });
 
-  const breakStartM = useMutation({
-    mutationFn: () => attendanceApi.attendance.breakStart({}),
-    onSuccess: () => {
-      message.success('휴게를 시작했습니다.');
-      invalidate();
-    },
-    onError: (e: Error) => message.error(e.message || '요청에 실패했습니다.'),
-  });
-
-  const breakEndM = useMutation({
-    mutationFn: () => attendanceApi.attendance.breakEnd({}),
-    onSuccess: () => {
-      message.success('휴게를 종료했습니다.');
-      invalidate();
-    },
-    onError: (e: Error) => message.error(e.message || '요청에 실패했습니다.'),
-  });
-
   const busy =
     clockInM.isPending ||
-    clockOutM.isPending ||
-    breakStartM.isPending ||
-    breakEndM.isPending;
+    clockOutM.isPending;
+
+  const visibleLogs = useMemo(
+    () =>
+      (logsQ.data ?? []).filter(
+        (log) => log.eventType !== 'BREAK_START' && log.eventType !== 'BREAK_END',
+      ),
+    [logsQ.data],
+  );
 
   const logColumns: ColumnsType<AttendanceLog> = useMemo(
     () => [
@@ -221,7 +207,7 @@ export function MyAttendancePage() {
             내 근태
           </Typography.Title>
           <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-sm">
-            출퇴근·휴게는 백엔드 정책(하루 1회 등)을 따릅니다. 날짜를 바꿔 과거 로그를 볼 수 있습니다.
+            출퇴근은 백엔드 정책(하루 1회 등)을 따릅니다. 날짜를 바꿔 과거 로그를 볼 수 있습니다.
           </Typography.Paragraph>
         </div>
         <Space wrap>
@@ -386,12 +372,6 @@ export function MyAttendancePage() {
           <Button loading={busy} onClick={() => clockOutM.mutate()}>
             퇴근
           </Button>
-          <Button loading={busy} onClick={() => breakStartM.mutate()}>
-            휴게 시작
-          </Button>
-          <Button loading={busy} onClick={() => breakEndM.mutate()}>
-            휴게 종료
-          </Button>
         </Space>
       </Card>
 
@@ -406,7 +386,6 @@ export function MyAttendancePage() {
             <Descriptions.Item label="첫 출근">{formatDt(daily.firstClockIn)}</Descriptions.Item>
             <Descriptions.Item label="마지막 퇴근">{formatDt(daily.lastClockOut)}</Descriptions.Item>
             <Descriptions.Item label="근무(분)">{daily.workedMinutes ?? '—'}</Descriptions.Item>
-            <Descriptions.Item label="휴게(분)">{daily.totalBreakMinutes ?? daily.breakMinutes ?? '—'}</Descriptions.Item>
             <Descriptions.Item label="연장(분)">{daily.overtimeMinutes ?? '—'}</Descriptions.Item>
           </Descriptions>
         )}
@@ -417,7 +396,7 @@ export function MyAttendancePage() {
           rowKey={(r) => r.attendanceLogId ?? `${r.eventType}-${r.eventTime}`}
           loading={logsQ.isLoading}
           columns={logColumns}
-          dataSource={logsQ.data ?? []}
+          dataSource={visibleLogs}
           pagination={false}
           size="small"
         />
