@@ -138,7 +138,6 @@ const APP_MENU_ICONS: Record<string, ReactNode> = {
     '/app/income': <BankOutlined className="tw-text-lg"/>,
     '/app/notifications': <BellOutlined className="tw-text-lg"/>,
     '/app/performance': <LineChartOutlined className="tw-text-lg"/>,
-    '/app/approval-center': <FileDoneOutlined className="tw-text-lg"/>,
     '/app/evaluations': <StarOutlined className="tw-text-lg"/>,
     '/app/meetings': <VideoCameraOutlined className="tw-text-lg"/>,
     '/app/settings': <SettingOutlined className="tw-text-lg"/>,
@@ -164,7 +163,6 @@ function shouldShowEsgMenuItem(path: string, cfg: EsgConfig | null | undefined, 
 const TALENT_HUB_GROUP_KEY = 'group-talent-hub';
 const TALENT_HUB_PATHS = [
     '/app/performance',
-    '/app/approval-center',
     '/app/evaluations',
     '/app/meetings',
 ] as const;
@@ -248,7 +246,7 @@ function buildAppShellMenuItems(
     hrGroupExtraChildren?: NonNullable<MenuProps['items']>,
     leavePromotionEnabled = false,
 ): NonNullable<MenuProps['items']> {
-    const items: NonNullable<MenuProps['items']> = [];
+    const items: NonNullable<MeㅎㅎnuProps['items']> = [];
     let hubInserted = false;
     let orgInserted = false;
     let approvalInserted = false;
@@ -1398,7 +1396,6 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
     if (/^\/app\/members\/[^/]+$/.test(pathname)) return ['/app/members'];
     if (/^\/app\/meetings\/[^/]+$/.test(pathname)) return ['/app/meetings'];
     if (/^\/app\/performance\//.test(pathname)) return ['/app/performance'];
-    if (/^\/app\/approval-center\//.test(pathname)) return ['/app/approval-center'];
     if (/^\/app\/evaluation-flow(\/|$)/.test(pathname)) return ['/app/evaluations'];
     if (/^\/app\/my-evaluation-result-v2(\/|$)/.test(pathname)) return ['/app/evaluations'];
     if (/^\/app\/evaluation-admin(\/|$)/.test(pathname)) return ['/app/evaluations'];
@@ -1462,7 +1459,7 @@ function menuOpenKeysForPath(
     const isSystemAdmin = opts?.isSystemAdmin === true;
     if (
         TALENT_HUB_PATH_SET.has(pathname) ||
-        /^\/app\/(meetings|performance|evaluations|approval-center|evaluation-flow|my-evaluation-result-v2|evaluation-admin)\//.test(pathname)
+        /^\/app\/(meetings|performance|evaluations|evaluation-flow|my-evaluation-result-v2|evaluation-admin)\//.test(pathname)
     ) {
         keys.push(TALENT_HUB_GROUP_KEY);
     }

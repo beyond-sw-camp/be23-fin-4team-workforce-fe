@@ -29,9 +29,6 @@ import { MemberEditPage } from '@/pages/app/MemberEditPage';
 import { NotificationsPage } from '@/pages/app/NotificationsPage';
 import EvaluationsHubPage from '@/pages/app/evaluations/EvaluationsHubPage';
 import EvaluationSeasonDetailPage from '@/pages/app/evaluations/EvaluationSeasonDetailPage';
-import MyEvaluationResultPage from '@/pages/app/evaluations/MyEvaluationResultPage';
-import MyEvaluationResultsListPage from '@/pages/app/evaluations/MyEvaluationResultsListPage';
-import { EvaluationWritePage } from '@/pages/app/EvaluationWritePage';
 import PerformancePage from '@/pages/app/PerformancePage';
 import { GoalApprovalDetailPage } from '@/pages/app/GoalApprovalDetailPage';
 import { ApprovalsPage } from '@/pages/app/ApprovalsPage';
@@ -267,7 +264,33 @@ const notificationsRoute = createRoute({
 const performanceRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/performance',
+  validateSearch: z.object({
+    view: z.enum(['my-kr', 'my-objective', 'company', 'member-kr', 'integrated']).optional(),
+  }),
   component: PerformancePage,
+});
+
+// === redesign 신규 라우트 ===
+const evaluationFlowRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/evaluation-flow',
+  beforeLoad: () => {
+    throw redirect({ to: '/app/evaluations', search: { view: 'self' } });
+  },
+});
+const myEvaluationResultV2Route = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/my-evaluation-result-v2',
+  beforeLoad: () => {
+    throw redirect({ to: '/app/evaluations', search: { view: 'results' } });
+  },
+});
+const evaluationAdminRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/evaluation-admin',
+  beforeLoad: () => {
+    throw redirect({ to: '/app/evaluations', search: { view: 'overview' } });
+  },
 });
 
 const goalApprovalDetailRoute = createRoute({
@@ -351,20 +374,21 @@ const absenceProxyRoute = createRoute({
 const evaluationsRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/evaluations',
+  validateSearch: z.object({
+    view: z
+      .string()
+      .optional()
+      .transform((v) => (v === 'self' || v === 'results' || v === 'overview' ? v : undefined)),
+    adminTab: z.enum(['seasons', 'designs', 'operations']).optional(),
+  }),
   component: EvaluationsHubPage,
-});
-
-const evaluationWriteRoute = createRoute({
-  getParentRoute: () => appBaseRoute,
-  path: '/evaluations/$responseId/write',
-  component: EvaluationWritePage,
 });
 
 const evaluationSeasonDetailRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/evaluations/seasons/$seasonId',
   validateSearch: z.object({
-    tab: z.enum(['progress', 'groups', 'design', 'calibration', 'results']).optional(),
+    tab: z.enum(['groups']).optional(),
   }),
   component: EvaluationSeasonDetailPage,
   beforeLoad: ({ context }) => {
@@ -380,17 +404,12 @@ const evaluationSeasonDetailRoute = createRoute({
   },
 });
 
-// 본인이 받은 평가 결과 — 별도 권한 불요(피평가자 본인 접근)
-const myEvaluationResultRoute = createRoute({
-  getParentRoute: () => appBaseRoute,
-  path: '/evaluations/seasons/$seasonId/my-result',
-  component: MyEvaluationResultPage,
-});
-
 const myEvaluationResultsRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/evaluations/my-results',
-  component: MyEvaluationResultsListPage,
+  beforeLoad: () => {
+    throw redirect({ to: '/app/evaluations', search: { view: 'results' } });
+  },
 });
 
 const organizationSearchSchema = z.object({
@@ -770,6 +789,10 @@ const routeTree = rootRoute.addChildren([
       memberEditRoute,
       notificationsRoute,
       performanceRoute,
+      // === 통합 워크플로우 라우트 ===
+      evaluationFlowRoute,
+      myEvaluationResultV2Route,
+      evaluationAdminRoute,
       approvalsAdminRoute,
       myApprovalRequestsRoute,
       absenceProxyRoute,
@@ -777,9 +800,7 @@ const routeTree = rootRoute.addChildren([
       goalApprovalDetailRoute,
       evaluationsRoute,
       evaluationSeasonDetailRoute,
-      myEvaluationResultRoute,
       myEvaluationResultsRoute,
-      evaluationWriteRoute,
       organizationRoute,
       rolesRoute,
       meetingsRoute,
