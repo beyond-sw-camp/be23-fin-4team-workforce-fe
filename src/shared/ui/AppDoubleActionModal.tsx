@@ -1,5 +1,6 @@
 import { Button } from 'antd';
 import type { ReactNode } from 'react';
+import clsx from 'clsx';
 import { AppModal } from '@/shared/ui/AppModal';
 
 type AppDoubleActionModalProps = {
@@ -13,7 +14,10 @@ type AppDoubleActionModalProps = {
   cancelText?: string;
   confirmLoading?: boolean;
   confirmDisabled?: boolean;
+  confirmDanger?: boolean;
+  confirmButtonClassName?: string;
   destroyOnHidden?: boolean;
+  zIndex?: number;
 };
 
 /**
@@ -33,13 +37,17 @@ export function AppDoubleActionModal({
   cancelText = '취소',
   confirmLoading = false,
   confirmDisabled = false,
+  confirmDanger = false,
+  confirmButtonClassName,
   destroyOnHidden = true,
+  zIndex,
 }: AppDoubleActionModalProps) {
   return (
     <AppModal
       open={open}
       title={title}
       onCancel={onClose}
+      zIndex={zIndex}
       footer={
         <div className="tw-grid tw-w-full tw-grid-cols-2 tw-gap-2">
           <Button
@@ -50,10 +58,14 @@ export function AppDoubleActionModal({
           </Button>
           <Button
             type="primary"
+            danger={confirmDanger}
             onClick={onConfirm}
             loading={confirmLoading}
             disabled={confirmDisabled}
-            className="!tw-h-12 !tw-w-full !tw-rounded-xl !tw-border-0 !tw-bg-[#1e3a5f] !tw-px-5 !tw-font-semibold hover:!tw-bg-[#152a45] disabled:!tw-bg-slate-300"
+            className={clsx(
+              '!tw-h-12 !tw-w-full !tw-rounded-xl !tw-border-0 !tw-bg-[#1e3a5f] !tw-px-5 !tw-font-semibold hover:!tw-bg-[#152a45] disabled:!tw-bg-slate-300',
+              confirmButtonClassName,
+            )}
           >
             {confirmText}
           </Button>

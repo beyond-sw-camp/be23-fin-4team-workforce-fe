@@ -1,6 +1,6 @@
 import { RightOutlined, SearchOutlined } from '@ant-design/icons';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Avatar, Checkbox, Input, Modal, Spin, Tree, Typography, message } from 'antd';
+import { Avatar, Checkbox, Input, Spin, Tree, Typography, message } from 'antd';
 import type { DataNode } from 'antd/es/tree';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { memberChatApi } from '@/features/member-chat/api/memberChatApi';
@@ -10,7 +10,7 @@ import {
   type OrgChartOrgNode,
   organizationApi,
 } from '@/features/organization/api/organizationApi';
-import { AppButton } from '@/shared/ui/AppButton';
+import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
 
 const KS = '\x1f';
 
@@ -356,17 +356,20 @@ export function CreateRoomFromOrgChartModal({
   };
 
   return (
-    <Modal
+    <AppSingleActionModal
       open={open}
-      onCancel={onClose}
-      footer={null}
+      onClose={onClose}
+      onSubmit={() => void handleConfirm()}
+      submitText="확인"
+      submitLoading={pending}
+      submitDisabled={isLoading || selectedCount === 0}
+      submitButtonClassName="!tw-bg-[#00A3C1] hover:!tw-bg-[#008faf] disabled:!tw-bg-slate-200"
       destroyOnHidden
       zIndex={1200}
       width={560}
       title={<span className="tw-text-base tw-font-semibold tw-text-slate-900">새 대화</span>}
-      styles={{ body: { paddingTop: 8 } }}
     >
-      <div className="tw-flex tw-flex-col tw-gap-3">
+      <div className="tw-flex tw-flex-col tw-gap-3 tw-px-5 tw-py-4 tw-pt-2">
         <Input
           allowClear
           value={keyword}
@@ -413,18 +416,7 @@ export function CreateRoomFromOrgChartModal({
         <Typography.Text type="secondary" className="!tw-mb-0 tw-block tw-text-xs">
           선택 {selectedCount}명 · 1명이면 1:1, 2명 이상이면 그룹 채팅방이 만들어집니다.
         </Typography.Text>
-
-        <AppButton
-          type="primary"
-          block
-          loading={pending}
-          disabled={isLoading || selectedCount === 0}
-          className="!tw-h-12 !tw-rounded-xl !tw-border-0 !tw-bg-[#00A3C1] hover:!tw-bg-[#008faf] disabled:!tw-bg-slate-200"
-          onClick={handleConfirm}
-        >
-          확인
-        </AppButton>
       </div>
-    </Modal>
+    </AppSingleActionModal>
   );
 }

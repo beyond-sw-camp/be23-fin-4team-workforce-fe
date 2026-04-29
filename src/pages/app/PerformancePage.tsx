@@ -27,7 +27,6 @@ import {
   Form,
   Input,
   InputNumber,
-  Modal,
   Popconfirm,
   Popover,
   Progress,
@@ -1621,19 +1620,20 @@ function PerformancePage() {
         />
 
       {companyId ? (
-        <Modal
+        <AppSingleActionModal
           title={PERFORMANCE_PAGE_KO.approvalStripCenter}
           open={approvalHubOpen}
-          onCancel={() => setApprovalHubOpen(false)}
-          footer={null}
+          onClose={() => setApprovalHubOpen(false)}
+          onSubmit={() => setApprovalHubOpen(false)}
+          submitText="닫기"
           width="min(720px, calc(100vw - 24px))"
-          centered
           destroyOnHidden
-          styles={{ body: { maxHeight: 'min(78vh, 720px)', overflowY: 'auto' } }}
           zIndex={1050}
         >
-          <GoalApprovalCenterPanel showIntro={false} embeddedInModal />
-        </Modal>
+          <div className="tw-max-h-[min(78vh,720px)] tw-min-h-0 tw-overflow-y-auto tw-px-5 tw-py-4">
+            <GoalApprovalCenterPanel showIntro={false} embeddedInModal />
+          </div>
+        </AppSingleActionModal>
       ) : null}
 
       <AppSingleActionModal

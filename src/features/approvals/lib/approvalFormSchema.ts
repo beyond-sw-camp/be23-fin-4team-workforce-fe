@@ -9,9 +9,19 @@ export const FORM_SCHEMA_FIELD_TYPES = [
   'datetime-local',
   'time',
   'hidden',
+  /** 회의록 등: 녹음 후 STT·요약, contentJson에는 포함하지 않음 */
+  'ai_transcribe',
 ] as const;
 
 export type FormFieldType = (typeof FORM_SCHEMA_FIELD_TYPES)[number];
+
+/** `type: "ai_transcribe"` 필드의 `config` */
+export type AiTranscribeFieldConfig = {
+  fillTranscript: string;
+  fillSummary: string;
+  attachAudio?: boolean;
+  language?: string;
+};
 
 /** select 필드의 options 를 동적으로 로드하는 소스 식별자 */
 export type FormFieldSource = 'companyLeaveType' | string;
@@ -26,6 +36,8 @@ export type FormFieldSchema = {
   placeholder?: string;
   /** true면 양식 수정 API에서 삭제·라벨·타입·순서·잠금 해제 불가 */
   locked?: boolean;
+  /** `ai_transcribe` 전용 */
+  config?: AiTranscribeFieldConfig;
 };
 
 export type FormSchema = {
@@ -67,6 +79,22 @@ export function parseFormSchema(raw: string): FormSchema {
             const placeholder = typeof o.placeholder === 'string' ? o.placeholder.trim() : undefined;
             const locked = o.locked === true;
             if (!name || !label) return null;
+            let config: AiTranscribeFieldConfig | undefined;
+            if (type === 'ai_transcribe' && o.config && typeof o.config === 'object') {
+              const c = o.config as Record<string, unknown>;
+              const fillTranscript =
+                typeof c.fillTranscript === 'string' ? c.fillTranscript.trim() : '';
+              const fillSummary = typeof c.fillSummary === 'string' ? c.fillSummary.trim() : '';
+              const lang = typeof c.language === 'string' ? c.language.trim() : undefined;
+              if (fillTranscript && fillSummary) {
+                config = {
+                  fillTranscript,
+                  fillSummary,
+                  attachAudio: c.attachAudio === true,
+                  ...(lang ? { language: lang } : {}),
+                };
+              }
+            }
             return {
               name,
               label,
@@ -75,6 +103,7 @@ export function parseFormSchema(raw: string): FormSchema {
               ...(source ? { source } : {}),
               ...(placeholder ? { placeholder } : {}),
               ...(locked ? { locked: true } : {}),
+              ...(config ? { config } : {}),
             };
           })
           .filter((f): f is FormFieldSchema => f != null)
@@ -102,6 +131,18 @@ export function getApprovalRequestSubjectLine(detail: ApprovalRequestDetail): st
   const t = c.title;
   if (typeof t === 'string' && t.trim()) return t.trim();
   return '';
+}
+
+/** 제출용 contentJson에서 위젯 전용 필드 제거 (서버는 audio 등을 기대하지 않음) */
+export function stripNonPersistedApprovalContentFields(
+  content: Record<string, unknown>,
+  fields: FormFieldSchema[],
+): void {
+  for (const f of fields) {
+    if (f.type === 'ai_transcribe') {
+      delete content[f.name];
+    }
+  }
 }
 
 export function formatStoredContentValue(value: unknown): string {

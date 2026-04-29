@@ -1,5 +1,6 @@
 import { Button } from 'antd';
 import type { ReactNode } from 'react';
+import clsx from 'clsx';
 import { AppModal } from '@/shared/ui/AppModal';
 
 type AppSingleActionModalProps = {
@@ -12,7 +13,9 @@ type AppSingleActionModalProps = {
   width?: number | string;
   submitLoading?: boolean;
   submitDisabled?: boolean;
+  submitButtonClassName?: string;
   destroyOnHidden?: boolean;
+  zIndex?: number;
 };
 
 /**
@@ -30,13 +33,16 @@ export function AppSingleActionModal({
   width = 720,
   submitLoading = false,
   submitDisabled = false,
+  submitButtonClassName,
   destroyOnHidden = true,
+  zIndex,
 }: AppSingleActionModalProps) {
   return (
     <AppModal
       open={open}
       title={title}
       onCancel={onClose}
+      zIndex={zIndex}
       footer={
         <div className="tw-flex tw-items-center">
           <Button
@@ -44,7 +50,10 @@ export function AppSingleActionModal({
             onClick={onSubmit}
             loading={submitLoading}
             disabled={submitDisabled}
-            className="!tw-h-12 !tw-w-full !tw-rounded-xl !tw-border-0 !tw-bg-[#1e3a5f] !tw-px-5 !tw-font-semibold hover:!tw-bg-[#152a45] disabled:!tw-bg-slate-300"
+            className={clsx(
+              '!tw-h-12 !tw-w-full !tw-rounded-xl !tw-border-0 !tw-bg-[#1e3a5f] !tw-px-5 !tw-font-semibold hover:!tw-bg-[#152a45] disabled:!tw-bg-slate-300',
+              submitButtonClassName,
+            )}
           >
             {submitText}
           </Button>

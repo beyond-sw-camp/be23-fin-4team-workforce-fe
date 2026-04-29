@@ -1,8 +1,9 @@
 import { RightOutlined, SearchOutlined } from '@ant-design/icons';
-import { Input, Modal, Tree, Typography } from 'antd';
+import { Input, Tree, Typography } from 'antd';
 import type { DataNode } from 'antd/es/tree';
 import { useMemo, useState } from 'react';
 import type { OrganizationFlatRow } from '@/features/organization/lib/flattenOrganizationTree';
+import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
 
 type Props = {
   open: boolean;
@@ -74,15 +75,16 @@ export function OrganizationTreeSelectModal({
   const expandedKeys = useMemo(() => filteredRows.map((r) => r.id), [filteredRows]);
 
   return (
-    <Modal
+    <AppSingleActionModal
       open={open}
       title="조직트리에서 선택"
-      onCancel={onClose}
-      footer={null}
+      onClose={onClose}
+      onSubmit={onClose}
+      submitText="닫기"
       width={560}
       destroyOnHidden
     >
-      <div className="tw-space-y-3">
+      <div className="tw-space-y-3 tw-px-5 tw-py-4">
         <Input
           allowClear
           value={keyword}
@@ -115,7 +117,7 @@ export function OrganizationTreeSelectModal({
           </div>
         )}
       </div>
-    </Modal>
+    </AppSingleActionModal>
   );
 }
 

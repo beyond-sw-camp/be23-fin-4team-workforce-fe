@@ -746,6 +746,7 @@ export function ApprovalRequestReadOnlyModal({
                       }
                     >
                       {requestDetailSchema.fields.map((field) => {
+                        if (field.type === 'ai_transcribe') return null;
                         const text = formatStoredContentValue(content[field.name]);
                         return (
                           <ApprovalFormPaperFieldRow key={field.name} label={field.label} required>

@@ -22,6 +22,7 @@ import {
     LineChartOutlined,
     PieChartOutlined,
     MoreOutlined,
+    AudioOutlined,
     MessageOutlined,
     PartitionOutlined,
     PauseCircleOutlined,
@@ -86,6 +87,7 @@ import {
 } from '@/features/approvals/lib/approvalGuideNav';
 import {AppSearchField} from '@/shared/ui/AppSearchField';
 import {AiChatbotFab} from '@/widgets/app-shell/AiChatbotFab';
+import {AiRecordingModal} from '@/widgets/app-shell/AiRecordingModal';
 import {MemberChatProvider, useMemberChatOpener} from '@/widgets/app-shell/MemberChatOpener';
 import {OrgChartModal} from '@/widgets/organization/OrgChartModal';
 import {HeaderSearchMemberDetailModal} from '@/widgets/app-shell/HeaderSearchMemberDetailModal';
@@ -1064,6 +1066,7 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
     const [headerDetailMemberId, setHeaderDetailMemberId] = useState<string | null>(null);
     const [notificationPopoverOpen, setNotificationPopoverOpen] = useState(false);
     const [notificationTab, setNotificationTab] = useState<'all' | 'unread'>('all');
+    const [aiRecordingModalOpen, setAiRecordingModalOpen] = useState(false);
 
     useEffect(() => {
         const t = window.setTimeout(() => {
@@ -1350,6 +1353,18 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
 
             <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-3 tw-overflow-visible md:tw-gap-3.5">
                 <SessionAccessTimer/>
+                <Tooltip title="음성 녹음">
+                    <button
+                        type="button"
+                        className={headerGhostIconClass}
+                        aria-label="음성 녹음"
+                        onClick={() => {
+                            setAiRecordingModalOpen(true);
+                        }}
+                    >
+                        <AudioOutlined className="tw-text-[20px]"/>
+                    </button>
+                </Tooltip>
                 <Tooltip title="멤버 채팅">
                     <Badge count={chatUnreadTotal} color="#EF4444" offset={[-8, 8]} showZero={false} overflowCount={99}>
                         <button
@@ -1382,6 +1397,7 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
                 </Popover>
                 <AppShellAccountMenu/>
             </div>
+            <AiRecordingModal open={aiRecordingModalOpen} onClose={() => setAiRecordingModalOpen(false)} />
         </Layout.Header>
     );
 }
