@@ -90,7 +90,7 @@ export function GoalEditModal({
     () =>
       availableObjectives.map((item) => ({
         value: item.goalId,
-        label: `${item.title} 쨌 ${item.cycleKey}`,
+        label: `${item.title} · ${item.cycleKey}`,
       })),
     [availableObjectives],
   );
@@ -494,7 +494,7 @@ export function GoalEditModal({
         onClose={() => setMemberPickerOpen(false)}
         onSelect={(member) => {
           form.setFieldValue('ownerId', member.memberId);
-          setSelectedOwnerMemberLabel(`${member.name} 쨌 ${member.organizationName} 쨌 ${member.jobGradeName}`);
+          setSelectedOwnerMemberLabel(`${member.name} · ${member.organizationName} · ${member.jobGradeName}`);
           setMemberPickerOpen(false);
         }}
       />

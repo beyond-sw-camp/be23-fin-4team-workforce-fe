@@ -828,7 +828,7 @@ function CycleSubmissionQuickPanel({
         onClose={() => setApproverPickerOpen(false)}
         onSelect={(member) => {
           setApproverId(member.memberId);
-          setApproverName(`${member.name} 쨌 ${member.organizationName} 쨌 ${member.jobGradeName}`);
+          setApproverName(`${member.name} · ${member.organizationName} · ${member.jobGradeName}`);
           setApproverPickerOpen(false);
         }}
       />

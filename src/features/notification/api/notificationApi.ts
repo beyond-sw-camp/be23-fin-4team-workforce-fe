@@ -166,6 +166,10 @@ export const notificationApi = {
     const response = await httpClient.patch(`/notification/${encodeURIComponent(notificationId)}/delete`, null);
     return unwrapApiResponse<null>(response.data);
   },
+  async deleteAllNotifications() {
+    const response = await httpClient.patch('/notification/delete-all', null);
+    return unwrapApiResponse<null>(response.data);
+  },
   subscribe(onNotification: () => void) {
     const token = getAccessToken();
     const refreshIdentity = getRefreshIdentityHeaders();
