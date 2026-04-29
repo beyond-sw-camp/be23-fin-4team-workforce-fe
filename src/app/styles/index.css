@@ -95,6 +95,11 @@ a {
   background-color: rgba(100, 116, 139, 0.5);
 }
 
+/* 결재양식 선택 모달은 내부 영역만 스크롤; wrap 스크롤 차단 */
+.wf-approval-form-select-modal-wrap {
+  overflow: hidden !important;
+}
+
 /* Member chat font size options (floating modal settings). */
 [data-chat-font='sm'] .tw-text-xs,
 [data-chat-font='sm'] .ant-typography.ant-typography-secondary,

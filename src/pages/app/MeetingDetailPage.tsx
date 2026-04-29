@@ -1,131 +1,62 @@
 import { useMemo, useState } from 'react';
 import {
-  Card,
-  Typography,
-  Tag,
+  Badge,
   Button,
-  Space,
+  Card,
+  Checkbox,
+  Col,
+  DatePicker,
   Descriptions,
   Divider,
+  Empty,
   Form,
   Input,
   List,
-  Checkbox,
+  Modal,
+  Progress,
+  Row,
+  Space,
+  Tag,
   Tooltip,
+  Typography,
   message,
   Skeleton,
-  Empty,
-  Modal,
-  Badge,
-  Progress,
-  DatePicker,
-  Row,
-  Col,
 } from 'antd';
 import {
+  CalendarOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
-  PlusOutlined,
-  SmileOutlined,
-  MehOutlined,
+  DislikeOutlined,
   FrownOutlined,
   LikeOutlined,
-  DislikeOutlined,
-  UserOutlined,
-  CalendarOutlined,
   LinkOutlined,
-  StarOutlined,
+  MehOutlined,
+  PlusOutlined,
+  SmileOutlined,
   StarFilled,
+  StarOutlined,
+  UserOutlined,
 } from '@ant-design/icons';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useParams } from '@tanstack/react-router';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link, useParams } from '@tanstack/react-router';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
 import { meetingApi } from '@/features/meetings/api/meetingApi';
-import type {
-  MeetingAction,
-  CompleteMeetingPayload,
-  Reaction,
-  TlRating,
-} from '@/features/meetings/model/types';
-import { MemberRemoteSelect } from '@/features/members/ui/MemberRemoteSelect';
+import type { CompleteMeetingPayload, MeetingAction, Reaction, TlRating } from '@/features/meetings/model/types';
 import { useMemberDisplayNames } from '@/features/members/hooks/useMemberDisplayNames';
+import { MemberRemoteSelect } from '@/features/members/ui/MemberRemoteSelect';
 import { DetailPageHeader } from '@/shared/ui/DetailPageHeader';
 
 dayjs.locale('ko');
 
-/* ── 한글 사전 ── */
-const KO = {
-  back: '면담 목록',
-  titleMeeting: '면담 상세',
-  labelPartner: '면담 상대',
-  labelManager: '매니저',
-  labelMember: '구성원',
-  labelSchedule: '예정 일시',
-  labelRepeat: '반복 주기',
-  labelAgenda: '안건',
-  labelRelatedSeason: '연결 평가 시즌',
-  labelStatus: '상태',
-  statusScheduled: '예정',
-  statusCompleted: '완료',
-  statusOverdue: '지연',
-  repeatOneTime: '1회',
-  repeatWeekly: '매주',
-  repeatBiWeekly: '격주',
-  repeatMonthly: '매월',
-  repeatQuarterly: '분기',
-
-  // Complete
-  sectionComplete: '면담 완료 처리',
-  fieldMemo: '면담 기록',
-  fieldMemoPlaceholder: '면담 내용을 요약해 주세요.',
-  fieldPrivateMemo: '비공개 메모',
-  fieldPrivateMemoPlaceholder: '매니저만 볼 수 있는 메모입니다.',
-  fieldReaction: '매니저 반응',
-  complete: '면담 완료',
-  completed: '면담이 완료 처리되었습니다.',
-
-  // Memo (completed meeting)
-  sectionMemo: '면담 기록',
-  sectionPrivateMemo: '비공개 메모 (매니저 전용)',
-  noMemo: '기록 없음',
-
-  // Member reaction
-  sectionMemberReaction: '구성원 반응',
-  memberReactionLabel: '면담이 어떠셨나요?',
-  memberReactionSaved: '반응이 저장되었습니다.',
-
-  // Actions
-  sectionActions: '후속 액션',
-  actionAdd: '액션 추가',
-  actionAssigneePlaceholder: '이름·이메일로 검색',
-  actionContentPlaceholder: '할 일을 입력하세요',
-  actionDuePlaceholder: '기한',
-  actionPending: '대기',
-  actionInProgress: '진행 중',
-  actionCompleted: '완료',
-  actionComplete: '완료 처리',
-  actionCompleteConfirm: '이 액션을 완료 처리하시겠습니까?',
-  actionCreated: '액션이 추가되었습니다.',
-  actionStatusCompleted: '액션이 완료되었습니다.',
-  actionEmpty: '등록된 후속 액션이 없습니다.',
-
-  // TL Rating
-  ratingExceeds: '우수',
-  ratingMeets: '적합',
-  ratingBelow: '미달',
-  ratingUpdated: '이행 평가가 저장되었습니다.',
-};
-
 const repeatMap: Record<string, string> = {
-  ONE_TIME: KO.repeatOneTime,
-  WEEKLY: KO.repeatWeekly,
-  BI_WEEKLY: KO.repeatBiWeekly,
-  MONTHLY: KO.repeatMonthly,
-  QUARTERLY: KO.repeatQuarterly,
+  ONE_TIME: '1회',
+  WEEKLY: '매주',
+  BI_WEEKLY: '격주',
+  MONTHLY: '매월',
+  QUARTERLY: '분기',
 };
 
-/* ── 반응 아이콘 매핑 ── */
 const reactionConfig: { value: Reaction; icon: React.ReactNode; label: string; color: string }[] = [
   { value: 'VERY_POSITIVE', icon: <LikeOutlined />, label: '매우 좋음', color: '#52c41a' },
   { value: 'POSITIVE', icon: <SmileOutlined />, label: '좋음', color: '#73d13d' },
@@ -135,9 +66,9 @@ const reactionConfig: { value: Reaction; icon: React.ReactNode; label: string; c
 ];
 
 const ratingConfig: { value: TlRating; label: string; color: string }[] = [
-  { value: 'EXCEEDS', label: KO.ratingExceeds, color: 'green' },
-  { value: 'MEETS', label: KO.ratingMeets, color: 'blue' },
-  { value: 'BELOW', label: KO.ratingBelow, color: 'orange' },
+  { value: 'EXCEEDS', label: '우수', color: 'green' },
+  { value: 'MEETS', label: '적합', color: 'blue' },
+  { value: 'BELOW', label: '미달', color: 'orange' },
 ];
 
 type ActionStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
@@ -147,109 +78,46 @@ const actionStatusColor: Record<ActionStatus, string> = {
   COMPLETED: 'success',
 };
 const actionStatusLabel: Record<ActionStatus, string> = {
-  PENDING: KO.actionPending,
-  IN_PROGRESS: KO.actionInProgress,
-  COMPLETED: KO.actionCompleted,
+  PENDING: '대기',
+  IN_PROGRESS: '진행 중',
+  COMPLETED: '완료',
 };
 
-/* ── 반응 선택 버튼 그룹 ── */
-function ReactionPicker({
-  value,
-  onChange,
-  disabled,
-}: {
-  value?: Reaction;
-  onChange: (v: Reaction) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <Space>
-      {reactionConfig.map((r) => (
-        <Tooltip key={r.value} title={r.label}>
-          <Button
-            shape="circle"
-            size="large"
-            disabled={disabled}
-            type={value === r.value ? 'primary' : 'default'}
-            style={value === r.value ? { background: r.color, borderColor: r.color } : {}}
-            icon={r.icon}
-            onClick={() => onChange(r.value)}
-          />
-        </Tooltip>
-      ))}
-    </Space>
-  );
-}
-
-/* ── 이행 평가 (TL Rating) ── */
-function TlRatingPicker({
-  value,
-  onChange,
-}: {
-  value?: TlRating;
-  onChange: (v: TlRating) => void;
-}) {
-  return (
-    <Space>
-      {ratingConfig.map((r) => (
-        <Tag.CheckableTag
-          key={r.value}
-          checked={value === r.value}
-          onChange={() => onChange(r.value)}
-          style={{ padding: '4px 12px', fontSize: 13 }}
-        >
-          {value === r.value ? <StarFilled className="tw-mr-1" /> : <StarOutlined className="tw-mr-1" />}
-          {r.label}
-        </Tag.CheckableTag>
-      ))}
-    </Space>
-  );
-}
-
-/* ──────────────── 메인 컴포넌트 ──────────────── */
 export default function MeetingDetailPage() {
   const { meetingId } = useParams({ strict: false }) as { meetingId: string };
   const qc = useQueryClient();
-
   const [completeForm] = Form.useForm();
   const [actionForm] = Form.useForm();
   const [showActionForm, setShowActionForm] = useState(false);
   const [managerReaction, setManagerReaction] = useState<Reaction | undefined>();
 
-  // ── 면담 데이터 ──
   const meetingQ = useQuery({
     queryKey: ['meetings', meetingId],
     queryFn: () => meetingApi.getMeeting(meetingId),
     enabled: !!meetingId,
   });
-
   const actionsQ = useQuery({
     queryKey: ['meetings', meetingId, 'actions'],
     queryFn: () => meetingApi.listActions(meetingId),
     enabled: !!meetingId,
   });
 
-  // ── 멤버 UUID → 이름 변환 ──
-  const memberIdsToResolve = useMemo(() => {
+  const memberIds = useMemo(() => {
     const ids = new Set<string>();
-    const m = meetingQ.data;
-    if (m) {
-      if (m.memberId) ids.add(m.memberId);
-      if (m.managerId) ids.add(m.managerId);
+    const meeting = meetingQ.data;
+    if (meeting) {
+      ids.add(meeting.memberId);
+      ids.add(meeting.managerId);
     }
-    for (const a of actionsQ.data ?? []) {
-      if (a.assigneeId) ids.add(a.assigneeId);
-    }
+    for (const action of actionsQ.data ?? []) ids.add(action.assigneeId);
     return [...ids];
-  }, [meetingQ.data, actionsQ.data]);
+  }, [actionsQ.data, meetingQ.data]);
+  const { labelFor } = useMemberDisplayNames(memberIds);
 
-  const { labelFor } = useMemberDisplayNames(memberIdsToResolve);
-
-  // ── Mutations ──
   const completeMut = useMutation({
     mutationFn: (body: CompleteMeetingPayload) => meetingApi.completeMeeting(meetingId, body),
     onSuccess: () => {
-      message.success(KO.completed);
+      message.success('면담을 완료 처리했습니다.');
       qc.invalidateQueries({ queryKey: ['meetings'] });
     },
     onError: () => message.error('면담 완료 처리에 실패했습니다.'),
@@ -258,16 +126,15 @@ export default function MeetingDetailPage() {
   const memberReactionMut = useMutation({
     mutationFn: (reaction: Reaction) => meetingApi.recordMemberReaction(meetingId, { memberReaction: reaction }),
     onSuccess: () => {
-      message.success(KO.memberReactionSaved);
+      message.success('구성원 반응을 저장했습니다.');
       qc.invalidateQueries({ queryKey: ['meetings', meetingId] });
     },
   });
 
   const createActionMut = useMutation({
-    mutationFn: (body: { content: string; assigneeId: string; dueDate?: string }) =>
-      meetingApi.createAction(meetingId, body),
+    mutationFn: (body: { content: string; assigneeId: string; dueDate?: string }) => meetingApi.createAction(meetingId, body),
     onSuccess: () => {
-      message.success(KO.actionCreated);
+      message.success('후속 액션을 추가했습니다.');
       actionForm.resetFields();
       setShowActionForm(false);
       qc.invalidateQueries({ queryKey: ['meetings', meetingId, 'actions'] });
@@ -277,7 +144,7 @@ export default function MeetingDetailPage() {
   const completeActionMut = useMutation({
     mutationFn: (actionId: string) => meetingApi.completeAction(meetingId, actionId),
     onSuccess: () => {
-      message.success(KO.actionStatusCompleted);
+      message.success('후속 액션을 완료 처리했습니다.');
       qc.invalidateQueries({ queryKey: ['meetings', meetingId, 'actions'] });
     },
   });
@@ -286,15 +153,14 @@ export default function MeetingDetailPage() {
     mutationFn: ({ actionId, tlRating }: { actionId: string; tlRating: TlRating }) =>
       meetingApi.rateAction(meetingId, actionId, { tlRating }),
     onSuccess: () => {
-      message.success(KO.ratingUpdated);
+      message.success('후속 액션 평가를 저장했습니다.');
       qc.invalidateQueries({ queryKey: ['meetings', meetingId, 'actions'] });
     },
   });
 
-  // ── Loading / Error ──
   if (meetingQ.isLoading) {
     return (
-      <div className="tw-p-6 tw-max-w-[900px] tw-mx-auto">
+      <div className="tw-mx-auto tw-max-w-[900px] tw-p-6">
         <Skeleton active paragraph={{ rows: 8 }} />
       </div>
     );
@@ -303,7 +169,7 @@ export default function MeetingDetailPage() {
   const meeting = meetingQ.data;
   if (!meeting) {
     return (
-      <div className="tw-p-6 tw-max-w-[900px] tw-mx-auto">
+      <div className="tw-mx-auto tw-max-w-[900px] tw-p-6">
         <Empty description="면담 정보를 찾을 수 없습니다." />
       </div>
     );
@@ -311,186 +177,146 @@ export default function MeetingDetailPage() {
 
   const isCompleted = !!meeting.completedAt;
   const isOverdue = !isCompleted && dayjs(meeting.scheduledAt).isBefore(dayjs());
-  const actions: MeetingAction[] = actionsQ.data ?? [];
-  const actionsDone = actions.filter((a) => a.status === 'COMPLETED').length;
-
-  const memberLine = labelFor(meeting.memberId);
-  const managerLine = labelFor(meeting.managerId);
-  const scheduleLine = dayjs(meeting.scheduledAt).format('YYYY-MM-DD (ddd) HH:mm');
+  const actions = actionsQ.data ?? [];
+  const actionsDone = actions.filter((action) => action.status === 'COMPLETED').length;
 
   return (
-    <div className="tw-p-6 tw-max-w-[900px] tw-mx-auto">
+    <div className="tw-mx-auto tw-max-w-[900px] tw-p-6">
       <DetailPageHeader
         backTo="/app/meetings"
-        backLabel={KO.back}
-        title={KO.titleMeeting}
+        backLabel="면담 목록"
+        title="면담 상세"
         subtitle={
           <Space wrap size="small" className="tw-text-slate-600">
-            <span>{memberLine} · {managerLine}</span>
+            <span>{labelFor(meeting.memberId)} · {labelFor(meeting.managerId)}</span>
             <span className="tw-inline-flex tw-items-center tw-gap-1">
               <CalendarOutlined />
-              {scheduleLine}
+              {dayjs(meeting.scheduledAt).format('YYYY-MM-DD (ddd) HH:mm')}
             </span>
             {isCompleted ? (
-              <Tag icon={<CheckCircleOutlined />} color="success">{KO.statusCompleted}</Tag>
+              <Tag icon={<CheckCircleOutlined />} color="success">완료</Tag>
             ) : isOverdue ? (
-              <Tag icon={<ClockCircleOutlined />} color="warning">{KO.statusOverdue}</Tag>
+              <Tag icon={<ClockCircleOutlined />} color="warning">지연</Tag>
             ) : (
-              <Tag icon={<ClockCircleOutlined />} color="processing">{KO.statusScheduled}</Tag>
+              <Tag icon={<ClockCircleOutlined />} color="processing">예정</Tag>
             )}
-            {meeting.relatedSeasonId ? (
-              <Tag color="blue" icon={<LinkOutlined />}>평가 피드백</Tag>
-            ) : null}
+            {meeting.relatedSeasonId && (
+              <Tag color="blue" icon={<LinkOutlined />}>피드백 면담</Tag>
+            )}
           </Space>
         }
         showShare={false}
       />
 
-      {/* ── 상단 정보 카드 ── */}
+      {meeting.relatedSeasonId && (
+        <Card className="tw-mb-5 tw-rounded-2xl tw-border tw-border-blue-200 tw-bg-blue-50/40">
+          <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-3">
+            <div>
+              <div className="tw-text-sm tw-font-semibold tw-text-slate-900">평가 피드백 면담</div>
+              <div className="tw-mt-1 tw-text-sm tw-text-slate-600">
+                이 면담은 평가 결과 공개 후 자동 생성된 피드백 면담입니다. 결과 리뷰와 다음 액션 정리에 집중해 주세요.
+              </div>
+            </div>
+            {meeting.relatedEvaluationResponseId && (
+              <Link to="/app/evaluations" search={{ view: 'results' }}>
+                <a className="tw-font-medium tw-text-[#1e3a5f]">평가 결과 보기</a>
+              </Link>
+            )}
+          </div>
+        </Card>
+      )}
+
       <Card className="tw-mb-5">
         <Descriptions column={{ xs: 1, sm: 2 }} size="small" styles={{ label: { fontWeight: 500 } }}>
-          <Descriptions.Item label={KO.labelMember}>
-            <Space>
-              <UserOutlined />
-              <Typography.Text>{labelFor(meeting.memberId)}</Typography.Text>
-            </Space>
+          <Descriptions.Item label="구성원">
+            <Space><UserOutlined /><Typography.Text>{labelFor(meeting.memberId)}</Typography.Text></Space>
           </Descriptions.Item>
-          <Descriptions.Item label={KO.labelManager}>
-            <Space>
-              <UserOutlined />
-              <Typography.Text>{labelFor(meeting.managerId)}</Typography.Text>
-            </Space>
+          <Descriptions.Item label="매니저">
+            <Space><UserOutlined /><Typography.Text>{labelFor(meeting.managerId)}</Typography.Text></Space>
           </Descriptions.Item>
-          <Descriptions.Item label={KO.labelSchedule}>
-            {dayjs(meeting.scheduledAt).format('YYYY-MM-DD (ddd) HH:mm')}
-          </Descriptions.Item>
-          <Descriptions.Item label={KO.labelRepeat}>
-            {repeatMap[meeting.repeatCycle] ?? meeting.repeatCycle}
-          </Descriptions.Item>
-          <Descriptions.Item label={KO.labelAgenda} span={2}>
-            {meeting.agenda || '-'}
-          </Descriptions.Item>
-          {meeting.relatedSeasonId && (
-            <Descriptions.Item label={KO.labelRelatedSeason}>
-              <Tag color="blue">{meeting.relatedSeasonId.slice(0, 8)}…</Tag>
-            </Descriptions.Item>
-          )}
-          {isCompleted && (
-            <Descriptions.Item label="완료 일시">
-              {dayjs(meeting.completedAt).format('YYYY-MM-DD HH:mm')}
-            </Descriptions.Item>
-          )}
+          <Descriptions.Item label="일정">{dayjs(meeting.scheduledAt).format('YYYY-MM-DD (ddd) HH:mm')}</Descriptions.Item>
+          <Descriptions.Item label="반복">{repeatMap[meeting.repeatCycle] ?? meeting.repeatCycle}</Descriptions.Item>
+          <Descriptions.Item label="아젠다" span={2}>{meeting.agenda || '-'}</Descriptions.Item>
+          {meeting.relatedSeasonId && <Descriptions.Item label="연결 시즌"><Tag color="blue">{meeting.relatedSeasonId.slice(0, 8)}…</Tag></Descriptions.Item>}
+          {isCompleted && <Descriptions.Item label="완료 시각">{dayjs(meeting.completedAt).format('YYYY-MM-DD HH:mm')}</Descriptions.Item>}
         </Descriptions>
       </Card>
 
-      {/* ── 완료 전: 면담 완료 폼 ── */}
       {!isCompleted && (
-        <Card title={KO.sectionComplete} className="tw-mb-5">
+        <Card title="면담 완료 처리" className="tw-mb-5">
           <Form
             form={completeForm}
             layout="vertical"
-            onFinish={(vals) => {
+            onFinish={(values) => {
               completeMut.mutate({
-                memo: vals.memo,
-                privateMemo: vals.privateMemo || undefined,
-                managerReaction: managerReaction,
+                memo: values.memo,
+                privateMemo: values.privateMemo || undefined,
+                managerReaction,
               });
             }}
           >
-            <Form.Item
-              name="memo"
-              label={KO.fieldMemo}
-              rules={[{ required: true, message: '면담 기록을 입력해 주세요.' }]}
-            >
-              <Input.TextArea rows={4} placeholder={KO.fieldMemoPlaceholder} />
+            <Form.Item name="memo" label="면담 기록" rules={[{ required: true, message: '면담 기록을 입력해 주세요.' }]}>
+              <Input.TextArea rows={4} placeholder="논의한 내용과 합의한 결론을 정리해 주세요." />
             </Form.Item>
-            <Form.Item name="privateMemo" label={KO.fieldPrivateMemo}>
-              <Input.TextArea rows={2} placeholder={KO.fieldPrivateMemoPlaceholder} />
+            <Form.Item name="privateMemo" label="비공개 메모">
+              <Input.TextArea rows={2} placeholder="매니저만 볼 수 있는 메모가 있으면 남겨 주세요." />
             </Form.Item>
-            <Form.Item label={KO.fieldReaction}>
+            <Form.Item label="매니저 반응">
               <ReactionPicker value={managerReaction} onChange={setManagerReaction} />
             </Form.Item>
-            <Button
-              type="primary"
-              icon={<CheckCircleOutlined />}
-              loading={completeMut.isPending}
-              onClick={() => completeForm.submit()}
-            >
-              {KO.complete}
+            <Button type="primary" icon={<CheckCircleOutlined />} loading={completeMut.isPending} onClick={() => completeForm.submit()}>
+              면담 완료
             </Button>
           </Form>
         </Card>
       )}
 
-      {/* ── 완료 후: 면담 기록 표시 ── */}
       {isCompleted && (
         <>
-          <Card title={KO.sectionMemo} className="tw-mb-5">
-            <Typography.Paragraph>
-              {meeting.memo || <Typography.Text type="secondary">{KO.noMemo}</Typography.Text>}
-            </Typography.Paragraph>
+          <Card title="면담 기록" className="tw-mb-5">
+            <Typography.Paragraph>{meeting.memo || <Typography.Text type="secondary">기록 없음</Typography.Text>}</Typography.Paragraph>
             {meeting.managerReaction && (
               <div className="tw-mt-3">
                 <Typography.Text type="secondary" className="tw-mr-2">매니저 반응:</Typography.Text>
-                {reactionConfig.find((r) => r.value === meeting.managerReaction)?.label ?? meeting.managerReaction}
+                {reactionConfig.find((item) => item.value === meeting.managerReaction)?.label ?? meeting.managerReaction}
               </div>
             )}
           </Card>
 
           {meeting.privateMemo && (
-            <Card title={KO.sectionPrivateMemo} className="tw-mb-5" style={{ borderColor: '#faad14' }}>
+            <Card title="비공개 메모" className="tw-mb-5" style={{ borderColor: '#faad14' }}>
               <Typography.Paragraph>{meeting.privateMemo}</Typography.Paragraph>
             </Card>
           )}
 
-          {/* 구성원 반응 */}
-          <Card title={KO.sectionMemberReaction} className="tw-mb-5" size="small">
-            <Typography.Text className="tw-mr-3">{KO.memberReactionLabel}</Typography.Text>
-            <ReactionPicker
-              value={meeting.memberReaction}
-              onChange={(v) => memberReactionMut.mutate(v)}
-              disabled={memberReactionMut.isPending}
-            />
+          <Card title="구성원 반응" className="tw-mb-5" size="small">
+            <Typography.Text className="tw-mr-3">면담이 어땠는지 남겨 주세요.</Typography.Text>
+            <ReactionPicker value={meeting.memberReaction} onChange={(value) => memberReactionMut.mutate(value)} disabled={memberReactionMut.isPending} />
           </Card>
         </>
       )}
 
-      {/* ── 후속 액션 ── */}
       <Card
         title={
           <Space>
-            <span>{KO.sectionActions}</span>
+            <span>후속 액션</span>
             {actions.length > 0 && (
-              <Badge
-                count={`${actionsDone}/${actions.length}`}
-                style={{ backgroundColor: actionsDone === actions.length ? '#52c41a' : '#1677ff' }}
-              />
+              <Badge count={`${actionsDone}/${actions.length}`} style={{ backgroundColor: actionsDone === actions.length ? '#52c41a' : '#1677ff' }} />
             )}
           </Space>
         }
         extra={
-          <Button
-            type="dashed"
-            size="small"
-            icon={<PlusOutlined />}
-            onClick={() => setShowActionForm(true)}
-          >
-            {KO.actionAdd}
+          <Button type="dashed" size="small" icon={<PlusOutlined />} onClick={() => setShowActionForm(true)}>
+            액션 추가
           </Button>
         }
       >
-        {/* 액션 진행률 바 */}
         {actions.length > 0 && (
-          <Progress
-            percent={Math.round((actionsDone / actions.length) * 100)}
-            size="small"
-            className="tw-mb-4"
-            strokeColor="#52c41a"
-          />
+          <Progress percent={Math.round((actionsDone / actions.length) * 100)} size="small" className="tw-mb-4" strokeColor="#52c41a" />
         )}
 
         {actions.length === 0 && !showActionForm ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={KO.actionEmpty} />
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="등록된 후속 액션이 없습니다." />
         ) : (
           <List
             dataSource={actions}
@@ -503,65 +329,39 @@ export default function MeetingDetailPage() {
                       key="complete"
                       size="small"
                       type="link"
-                      onClick={() => {
+                      onClick={() =>
                         Modal.confirm({
-                          title: KO.actionCompleteConfirm,
+                          title: '이 액션을 완료 처리할까요?',
                           onOk: () => completeActionMut.mutate(action.meetingActionId),
-                        });
-                      }}
+                        })
+                      }
                     >
-                      {KO.actionComplete}
+                      완료 처리
                     </Button>
                   ),
                 ].filter(Boolean)}
               >
                 <List.Item.Meta
-                  avatar={
-                    <Checkbox
-                      checked={action.status === 'COMPLETED'}
-                      disabled
-                    />
-                  }
+                  avatar={<Checkbox checked={action.status === 'COMPLETED'} disabled />}
                   title={
                     <Space>
-                      <Typography.Text
-                        delete={action.status === 'COMPLETED'}
-                        className={action.status === 'COMPLETED' ? 'tw-text-gray-400' : ''}
-                      >
+                      <Typography.Text delete={action.status === 'COMPLETED'} className={action.status === 'COMPLETED' ? 'tw-text-gray-400' : ''}>
                         {action.content}
                       </Typography.Text>
-                      <Tag color={actionStatusColor[action.status]}>
-                        {actionStatusLabel[action.status]}
-                      </Tag>
+                      <Tag color={actionStatusColor[action.status as ActionStatus]}>{actionStatusLabel[action.status as ActionStatus]}</Tag>
                     </Space>
                   }
                   description={
                     <Space split={<Divider type="vertical" />} size={0}>
-                      <Typography.Text type="secondary">
-                        담당: {labelFor(action.assigneeId)}
-                      </Typography.Text>
-                      {action.dueDate && (
-                        <Typography.Text type="secondary">
-                          기한: {dayjs(action.dueDate).format('MM/DD')}
-                        </Typography.Text>
-                      )}
-                      {action.tlRating && (
-                        <Tag color={ratingConfig.find((r) => r.value === action.tlRating)?.color}>
-                          {ratingConfig.find((r) => r.value === action.tlRating)?.label}
-                        </Tag>
-                      )}
+                      <Typography.Text type="secondary">담당: {labelFor(action.assigneeId)}</Typography.Text>
+                      {action.dueDate && <Typography.Text type="secondary">기한: {dayjs(action.dueDate).format('MM/DD')}</Typography.Text>}
+                      {action.tlRating && <Tag color={ratingConfig.find((item) => item.value === action.tlRating)?.color}>{ratingConfig.find((item) => item.value === action.tlRating)?.label}</Tag>}
                     </Space>
                   }
                 />
-                {/* 이행 평가 (완료된 액션에만) */}
                 {action.status === 'COMPLETED' && (
                   <div className="tw-ml-4">
-                    <TlRatingPicker
-                      value={action.tlRating}
-                      onChange={(v) =>
-                        rateActionMut.mutate({ actionId: action.meetingActionId, tlRating: v })
-                      }
-                    />
+                    <TlRatingPicker value={action.tlRating} onChange={(value) => rateActionMut.mutate({ actionId: action.meetingActionId, tlRating: value })} />
                   </div>
                 )}
               </List.Item>
@@ -569,64 +369,93 @@ export default function MeetingDetailPage() {
           />
         )}
 
-        {/* 액션 추가 폼 */}
         {showActionForm && (
           <>
             <Divider dashed />
             <Form
               form={actionForm}
               layout="vertical"
-              onFinish={(vals) => {
+              onFinish={(values) => {
                 createActionMut.mutate({
-                  content: vals.content,
-                  assigneeId: vals.assigneeId,
-                  dueDate: vals.dueDate ? vals.dueDate.format('YYYY-MM-DD') : undefined,
+                  content: values.content,
+                  assigneeId: values.assigneeId,
+                  dueDate: values.dueDate ? values.dueDate.format('YYYY-MM-DD') : undefined,
                 });
               }}
             >
-              <Form.Item
-                name="content"
-                label="할 일"
-                rules={[{ required: true, message: '내용을 입력해 주세요.' }]}
-              >
-                <Input placeholder={KO.actionContentPlaceholder} />
+              <Form.Item name="content" label="내용" rules={[{ required: true, message: '액션 내용을 입력해 주세요.' }]}>
+                <Input placeholder="누가 무엇을 언제까지 할지 한 줄로 정리해 주세요." />
               </Form.Item>
               <Row gutter={12}>
                 <Col span={14}>
-                  <Form.Item
-                    name="assigneeId"
-                    label="담당자"
-                    rules={[{ required: true, message: '담당자를 선택해 주세요.' }]}
-                  >
-                    <MemberRemoteSelect placeholder={KO.actionAssigneePlaceholder} />
+                  <Form.Item name="assigneeId" label="담당자" rules={[{ required: true, message: '담당자를 선택해 주세요.' }]}>
+                    <MemberRemoteSelect placeholder="이름 또는 이메일로 검색" />
                   </Form.Item>
                 </Col>
                 <Col span={10}>
                   <Form.Item name="dueDate" label="기한">
-                    <DatePicker className="tw-w-full" placeholder={KO.actionDuePlaceholder} />
+                    <DatePicker className="tw-w-full" placeholder="기한" />
                   </Form.Item>
                 </Col>
               </Row>
               <Space>
-                <Button
-                  type="primary"
-                  loading={createActionMut.isPending}
-                  onClick={() => actionForm.submit()}
-                >
-                  추가
-                </Button>
-                <Button onClick={() => setShowActionForm(false)}>
-                  취소
-                </Button>
+                <Button type="primary" loading={createActionMut.isPending} onClick={() => actionForm.submit()}>추가</Button>
+                <Button onClick={() => setShowActionForm(false)}>취소</Button>
               </Space>
             </Form>
           </>
         )}
       </Card>
 
-      {/* 면담 완료 후·액션 폼 접을 때 Form이 언마운트되어 useForm 인스턴스가 끊긴다. */}
       {isCompleted ? <Form form={completeForm} preserve={false} className="tw-hidden" aria-hidden /> : null}
       {!showActionForm ? <Form form={actionForm} preserve={false} className="tw-hidden" aria-hidden /> : null}
     </div>
+  );
+}
+
+function ReactionPicker({
+  value,
+  onChange,
+  disabled,
+}: {
+  value?: Reaction;
+  onChange: (value: Reaction) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <Space>
+      {reactionConfig.map((reaction) => (
+        <Tooltip key={reaction.value} title={reaction.label}>
+          <Button
+            shape="circle"
+            size="large"
+            disabled={disabled}
+            type={value === reaction.value ? 'primary' : 'default'}
+            style={value === reaction.value ? { background: reaction.color, borderColor: reaction.color } : {}}
+            icon={reaction.icon}
+            onClick={() => onChange(reaction.value)}
+          />
+        </Tooltip>
+      ))}
+    </Space>
+  );
+}
+
+function TlRatingPicker({
+  value,
+  onChange,
+}: {
+  value?: TlRating;
+  onChange: (value: TlRating) => void;
+}) {
+  return (
+    <Space>
+      {ratingConfig.map((rating) => (
+        <Tag.CheckableTag key={rating.value} checked={value === rating.value} onChange={() => onChange(rating.value)} style={{ padding: '4px 12px', fontSize: 13 }}>
+          {value === rating.value ? <StarFilled className="tw-mr-1" /> : <StarOutlined className="tw-mr-1" />}
+          {rating.label}
+        </Tag.CheckableTag>
+      ))}
+    </Space>
   );
 }

@@ -18,7 +18,7 @@ type Props = {
   title?: string;
   selectedMemberId?: string;
   onClose: () => void;
-  onSelect: (member: { memberId: string; name: string }) => void;
+  onSelect: (member: { memberId: string; name: string; organizationName: string; jobGradeName: string }) => void;
 };
 
 function subtreeMatches(node: OrgChartOrgNode, q: string): boolean {
@@ -72,12 +72,17 @@ export function SingleMemberOrgChartSelectModal({
   );
 
   const memberByKey = useMemo(() => {
-    const m = new Map<string, { memberId: string; name: string }>();
+    const m = new Map<string, { memberId: string; name: string; organizationName: string; jobGradeName: string }>();
     const walk = (nodes: OrgChartOrgNode[]) => {
       for (const n of nodes) {
         for (const mem of n.members) {
           if (mem.jobGradeName.trim() === ORG_CHART_HIDDEN_JOB_GRADE) continue;
-          m.set(`${MEMBER_KEY_PREFIX}${mem.memberId}`, { memberId: mem.memberId, name: mem.name });
+          m.set(`${MEMBER_KEY_PREFIX}${mem.memberId}`, {
+            memberId: mem.memberId,
+            name: mem.name,
+            organizationName: n.name,
+            jobGradeName: mem.jobGradeName || '직급 없음',
+          });
         }
         walk(n.children);
       }

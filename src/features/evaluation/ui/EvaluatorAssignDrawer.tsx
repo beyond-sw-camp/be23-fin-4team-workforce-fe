@@ -8,7 +8,7 @@ import {
     ThunderboltOutlined,
     UserOutlined,
 } from '@ant-design/icons';
-import {evaluationApi} from '@/features/evaluation/api/evaluationApi';
+import {evaluationRedesignApi} from '@/features/evaluation/api/evaluationRedesignApi';
 import type {EvaluationGroup, EvaluatorMap, EvalType} from '@/features/evaluation/model/types';
 import {evalTypeLabel} from '@/features/evaluation/lib/evaluationLabels';
 import {parseApiError} from '@/shared/api/error-parser';
@@ -58,9 +58,17 @@ export function EvaluatorAssignDrawer({state, onClose, seasonId, labelFor, evalT
     }, [state.open]);
 
     const effectiveEvalTypes = useMemo<EvalType[]>(() => {
-        // 그룹에 지정된 평가 유형만 사용. 없으면 4종 전부 허용
-        if (evalTypes && evalTypes.length > 0) return evalTypes;
-        return ['SELF', 'DOWNWARD', 'UPWARD', 'PEER'];
+        const ORDER: EvalType[] = ['SELF', 'DOWNWARD', 'UPWARD', 'PEER'];
+        const base = evalTypes && evalTypes.length > 0 ? [...evalTypes] : [...ORDER];
+        // 시즌 활성화 시 Lead는 DOWNWARD로 고정 — 그룹 유형에 없어도 상급자 행을 넣을 수 있게 합니다.
+        if (!base.includes('DOWNWARD')) {
+            const selfIdx = base.indexOf('SELF');
+            const insertAt = selfIdx >= 0 ? selfIdx + 1 : 0;
+            const next = [...base];
+            next.splice(insertAt, 0, 'DOWNWARD');
+            return next;
+        }
+        return base;
     }, [evalTypes]);
     const targetProfileById = useMemo(() => {
         const map = new Map<string, string>();
@@ -104,7 +112,7 @@ export function EvaluatorAssignDrawer({state, onClose, seasonId, labelFor, evalT
 
     const updateMapMut = useMutation({
         mutationFn: (maps: EvaluatorMap[]) =>
-            evaluationApi.updateEvaluatorMaps(seasonId, group!.groupId, JSON.stringify(maps)),
+            evaluationRedesignApi.updateEvaluatorMaps(seasonId, group!.groupId, maps),
         onSuccess: () => {
             message.success('평가자 지정이 저장되었습니다.');
             onSaved();
@@ -115,7 +123,7 @@ export function EvaluatorAssignDrawer({state, onClose, seasonId, labelFor, evalT
 
     const autoAssignMut = useMutation({
         /** 백엔드 `EvaluatorMapAutoReqDto.basis` 명세: direct_leader | team_leader | job_grade */
-        mutationFn: () => evaluationApi.autoAssignEvaluators(seasonId, group!.groupId, 'direct_leader'),
+        mutationFn: () => evaluationRedesignApi.autoAssignEvaluators(seasonId, group!.groupId, 'direct_leader'),
         onSuccess: (updatedGroup) => {
             keyRef.current = 0;
             const newMaps = (updatedGroup.evaluatorMaps ?? []).map((em) => ({
@@ -244,9 +252,14 @@ export function EvaluatorAssignDrawer({state, onClose, seasonId, labelFor, evalT
                     </Button>
                 </div>
             ) : null}
-            <Text type="secondary" className="tw-text-xs">
-                그룹 유형: {effectiveEvalTypes.map((t) => evalTypeLabel(t)).join(' · ')}
-            </Text>
+            <div className="tw-mb-1 tw-space-y-1">
+                <Text type="secondary" className="tw-text-xs">
+                    그룹 유형: {effectiveEvalTypes.map((t) => evalTypeLabel(t)).join(' · ')}
+                </Text>
+                <Text type="secondary" className="tw-block tw-text-xs">
+                    시즌 활성화·캘리브레이션의 최종 책임(Lead) 평가자는 각 대상마다 <Text strong>DOWNWARD(상급자)</Text> 매핑으로 확정됩니다.
+                </Text>
+            </div>
             {/* 안내 배너 + 자동 지정 (전체 지정 모드에서만 노출) */}
             {!isFocusedMode ? (
             <div className="tw-mb-4 tw-flex tw-items-center tw-justify-between tw-gap-3 tw-rounded-2xl tw-bg-indigo-50 tw-px-4 tw-py-3">

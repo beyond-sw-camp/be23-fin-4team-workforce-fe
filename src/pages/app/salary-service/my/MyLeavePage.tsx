@@ -104,7 +104,6 @@ export function MyLeavePage() {
         to: '/app/approvals',
         search: {
           tab: 'compose',
-          sideNav: 'request-compose',
           docId: leaveRequestDocId,
         },
       });
@@ -118,7 +117,7 @@ export function MyLeavePage() {
     message.warning('휴가 신청서 양식이 등록되지 않았습니다 전자결재에서 직접 선택해 주세요');
     void navigate({
       to: '/app/approvals',
-      search: { tab: 'compose', sideNav: 'request-compose' },
+      search: {},
     });
   };
 

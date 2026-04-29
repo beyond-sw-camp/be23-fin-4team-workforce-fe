@@ -234,6 +234,29 @@ async function mergeRolePermissionsIntoMe(me: Me): Promise<Me> {
 }
 
 /**
+ * 본인 권한 보강.
+ * - `GET /member/me/permissions` 는 권한 검사 없이 자기 포지션의 권한을 그대로 내려준다.
+ * - 비-관리자(예: 팀장)는 ROLE:READ 가 없어 `GET /member/role/{roleId}` 가 403 이므로
+ *   `mergeRolePermissionsIntoMe` 만으로는 새로고침 후 권한이 복원되지 않는다.
+ *   특히 Objective 작성 버튼처럼 GOAL:CREATE:TEAM/COMPANY 가 필요한 UI가 사라지는 문제의 핵심.
+ * - 따라서 `getSession` / `refreshSession` 등 JWT 만으로 시작하는 모든 경로에서 이 함수를 사용한다.
+ */
+async function mergeMyPermissionsIntoMe(me: Me): Promise<Me> {
+  try {
+    const codes = await memberApi.getMyPermissions();
+    if (!codes || codes.length === 0) {
+      return me;
+    }
+    return {
+      ...me,
+      permissions: mergePermissionStrings(me.permissions, codes),
+    };
+  } catch {
+    return me;
+  }
+}
+
+/**
  * JWT만으로 `Me` 구성(네트워크 없음). `mergeRolePermissionsIntoMe`는 호출하지 않음 — 로그인 오버레이 후 한 번만 호출하기 위함.
  */
 function decodeMeFromAccessToken(): Me {
@@ -398,7 +421,11 @@ function decodeMeFromAccessToken(): Me {
 
 async function getMeOrThrow(): Promise<Me> {
   const me = decodeMeFromAccessToken();
-  return mergeRolePermissionsIntoMe(me);
+  // 1) 비-관리자도 사용 가능한 본인 전용 엔드포인트로 권한 재수화 (새로고침/AT 연장 후 핵심)
+  let withMyPerms = await mergeMyPermissionsIntoMe(me);
+  // 2) ROLE:READ 권한이 있는 사용자는 역할 상세에서 권한을 보강해 누락이 없도록 함 (실패 시 무시)
+  withMyPerms = await mergeRolePermissionsIntoMe(withMyPerms);
+  return withMyPerms;
 }
 
 export const authClient: AuthClient = {
@@ -450,6 +477,11 @@ export const authClient: AuthClient = {
     }
 
     me = await mergeRolePermissionsIntoMe(me);
+    /**
+     * 로그인 응답의 `permissions` 가 누락/부분 응답인 경우를 대비해 본인 권한 엔드포인트로 한 번 더 보강.
+     * 새로고침 시 호출되는 `getMeOrThrow` 와 동일한 경로를 사용해 결과가 일치하도록 보장한다.
+     */
+    me = await mergeMyPermissionsIntoMe(me);
 
     /** 로그인 응답의 isFirstLoginYn 은 JWT에 없을 수 있어, 최초 로그인 시 비밀번호 변경 플래그를 여기서 확정 */
     if (payload.isFirstLoginYn !== undefined) {
