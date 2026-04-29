@@ -22,6 +22,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
+import { hasActivePayGradeSalaryPolicy } from '@/features/salary-service/lib/salaryPolicyAccess';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import { memberApi } from '@/features/member/api/memberApi';
 import { AdminPayGradeTablePage } from '@/pages/app/salary-service/admin/AdminPayGradeTablePage';
@@ -35,6 +36,7 @@ import type {
   PeriodStartTypeCode,
   PeriodEndTypeCode,
   PayDayShiftRuleCode,
+  ProrationMethodCode,
   TaxTypeCode,
   ItemTypeCode,
 } from '@/features/salary-service/types';
@@ -549,7 +551,17 @@ type PolicyFormValues = {
   wageSystemType: WageSystemTypeCode;
   fixedOvertimeMinutes?: number;
   payDayShiftRule: PayDayShiftRuleCode;
+  // 월 소정근로시간 시급 환산 기준 한국 표준 209
+  monthlyOrdinaryHours: number;
+  // 일할계산 방식 입사 / 퇴사 / 기간변경 월 적용
+  prorationMethod: ProrationMethodCode;
   effectiveRange: [dayjs.Dayjs, dayjs.Dayjs | null];
+};
+
+const PRORATION_METHOD_KO: Record<string, string> = {
+  DAYS_IN_MONTH: '해당월 일수 (28~31일)',
+  FIXED_30: '30일 고정 (통상임금 표준)',
+  WORKING_DAYS: '월 소정근로일 (간이 22일)',
 };
 
 function SalaryPolicyTab() {
@@ -571,6 +583,8 @@ function SalaryPolicyTab() {
     periodStartType: 'FIRST' as PeriodStartTypeCode,
     periodEndType: 'LAST' as PeriodEndTypeCode,
     payDayShiftRule: v.payDayShiftRule,
+    monthlyOrdinaryHours: v.monthlyOrdinaryHours,
+    prorationMethod: v.prorationMethod,
     effectiveFrom: v.effectiveRange[0].format('YYYY-MM-DD'),
     effectiveTo: v.effectiveRange[1]?.format('YYYY-MM-DD') ?? null,
   });
@@ -611,6 +625,22 @@ function SalaryPolicyTab() {
         : <Tag color="default">연봉협상제</Tag>,
     },
     { title: '임금제', dataIndex: 'wageSystemType', key: 'wageSystemType', width: 100, render: (v) => <Tag color={v === 'COMPREHENSIVE' ? 'orange' : 'blue'}>{WAGE_SYS_KO[v] ?? v}</Tag> },
+    {
+      title: '월 소정근로시간',
+      dataIndex: 'monthlyOrdinaryHours',
+      key: 'monthlyOrdinaryHours',
+      width: 130,
+      render: (v: number | null) => v != null ? <Tag color="cyan">{v}h</Tag> : <Tag>209h</Tag>,
+    },
+    {
+      title: '일할계산',
+      dataIndex: 'prorationMethod',
+      key: 'prorationMethod',
+      width: 200,
+      render: (v: string | null) => (
+        <Tag>{PRORATION_METHOD_KO[v ?? 'DAYS_IN_MONTH'] ?? v ?? '—'}</Tag>
+      ),
+    },
     { title: '적용 기간', key: 'eff', width: 220, render: (_, r) => `${r.effectiveFrom ?? ''} ~ ${r.effectiveTo ?? '진행중'}` },
     {
       title: '액션', key: 'a', width: 140,
@@ -624,6 +654,8 @@ function SalaryPolicyTab() {
               wageSystemType: (r.wageSystemType as WageSystemTypeCode) ?? 'NON_COMPREHENSIVE',
               fixedOvertimeMinutes: r.fixedOvertimeMinutes ?? undefined,
               payDayShiftRule: (r.payDayShiftRule as PayDayShiftRuleCode) ?? 'BEFORE',
+              monthlyOrdinaryHours: r.monthlyOrdinaryHours ?? 209,
+              prorationMethod: (r.prorationMethod as ProrationMethodCode) ?? 'DAYS_IN_MONTH',
               effectiveRange: [r.effectiveFrom ? dayjs(r.effectiveFrom) : dayjs(), r.effectiveTo ? dayjs(r.effectiveTo) : null],
             });
           }}>수정</Button>
@@ -635,7 +667,7 @@ function SalaryPolicyTab() {
 
   return (
     <>
-      <div className="tw-flex tw-justify-end tw-mb-3"><Button type="primary" onClick={() => { setEditing(null); form.resetFields(); form.setFieldsValue({ payDay: 25, usePayGradeYn: 'N', wageSystemType: 'NON_COMPREHENSIVE', payDayShiftRule: 'BEFORE', effectiveRange: [dayjs(), null] }); setOpen(true); }}>정책 등록</Button></div>
+      <div className="tw-flex tw-justify-end tw-mb-3"><Button type="primary" onClick={() => { setEditing(null); form.resetFields(); form.setFieldsValue({ payDay: 25, usePayGradeYn: 'N', wageSystemType: 'NON_COMPREHENSIVE', payDayShiftRule: 'BEFORE', monthlyOrdinaryHours: 209, prorationMethod: 'DAYS_IN_MONTH', effectiveRange: [dayjs(), null] }); setOpen(true); }}>정책 등록</Button></div>
       <Table<SalaryPolicy> rowKey={(r) => r.salaryPolicyId ?? Math.random().toString()} loading={listQ.isLoading} dataSource={listQ.data ?? []} columns={cols} pagination={{ pageSize: 10 }} locale={{ emptyText: '등록된 정책이 없습니다.' }} />
       <Modal open={open} onCancel={() => { setOpen(false); setEditing(null); form.resetFields(); }} onOk={() => form.submit()} confirmLoading={createM.isPending || updateM.isPending} okText={editing ? '수정' : '등록'} cancelText="취소" title={editing ? '급여 정책 수정' : '급여 정책 등록'} destroyOnClose width={600}>
         <Form<PolicyFormValues> form={form} layout="vertical" onFinish={(v) => editing?.salaryPolicyId ? updateM.mutate({ id: editing.salaryPolicyId, v }) : createM.mutate(v)}>
@@ -666,7 +698,7 @@ function SalaryPolicyTab() {
             label="임금 체계"
             name="usePayGradeYn"
             rules={[{ required: true }]}
-            extra="호봉제 선택 시 급여 이력 등록 시 호봉을 지정하면 호봉표에서 기본급 자동 계산"
+            extra="정책 한 건당 호봉제·연봉협상제 중 하나입니다. 호봉제면 호봉표 탭이 열리고, 연봉협상제면 급여 정산 메뉴에 연봉 협상이 표시됩니다."
           >
             <Select
               style={{ width: '100%' }}
@@ -690,6 +722,34 @@ function SalaryPolicyTab() {
             className="!tw-mb-3"
             message="연장근무시간 인정 단위(15분/30분 절사)는 「연장근로 정책」에서 관리합니다."
           />
+          <Space className="tw-w-full" size={16} align="start">
+            <Form.Item
+              label="월 소정근로시간"
+              name="monthlyOrdinaryHours"
+              rules={[
+                { required: true, message: '월 소정근로시간을 입력하세요.' },
+                { type: 'number', min: 1, max: 300, message: '1 ~ 300 사이' },
+              ]}
+              extra="시급 환산 기준. 한국 표준 209h (주 40h × 4.345 + 주휴 8h × 4.345). 주 35h 회사는 183h."
+            >
+              <InputNumber min={1} max={300} style={{ width: 160 }} addonAfter="시간" />
+            </Form.Item>
+            <Form.Item
+              label="일할계산 방식"
+              name="prorationMethod"
+              rules={[{ required: true, message: '일할계산 방식을 선택하세요.' }]}
+              extra="입사 / 퇴사 / 기간변경 월에 적용. 통상임금 표준은 30일 고정."
+            >
+              <Select
+                style={{ width: 240 }}
+                options={[
+                  { value: 'DAYS_IN_MONTH', label: PRORATION_METHOD_KO.DAYS_IN_MONTH },
+                  { value: 'FIXED_30', label: PRORATION_METHOD_KO.FIXED_30 },
+                  { value: 'WORKING_DAYS', label: PRORATION_METHOD_KO.WORKING_DAYS },
+                ]}
+              />
+            </Form.Item>
+          </Space>
           <Form.Item label="적용 기간" name="effectiveRange" rules={[{ required: true }]}><DatePicker.RangePicker allowEmpty={[false, true]} format="YYYY-MM-DD" style={{ width: '100%' }} /></Form.Item>
         </Form>
       </Modal>
@@ -905,6 +965,8 @@ type TemplateFormValues = {
   itemType: ItemTypeCode;
   displayOrder: number;
   isTaxableYn: 'Y' | 'N';
+  // 통상임금 포함 여부 가산수당 시급 환산 base
+  isOrdinaryWageYn: 'Y' | 'N';
 };
 
 function SalaryItemTemplateTab() {
@@ -994,6 +1056,16 @@ function SalaryItemTemplateTab() {
       render: (v) => (v === 'Y' ? <Tag color="blue">과세</Tag> : <Tag>비과세</Tag>),
     },
     {
+      title: '통상임금',
+      dataIndex: 'isOrdinaryWageYn',
+      key: 'isOrdinaryWageYn',
+      width: 110,
+      render: (v) =>
+        v === 'Y'
+          ? <Tag color="purple">포함</Tag>
+          : <Typography.Text type="secondary">제외</Typography.Text>,
+    },
+    {
       title: '액션',
       key: 'a',
       width: 180,
@@ -1001,7 +1073,13 @@ function SalaryItemTemplateTab() {
         <Space>
           <Button size="middle" onClick={() => {
             setEditing(r); setOpen(true);
-            form.setFieldsValue({ itemName: r.itemName ?? '', itemType: (r.itemType as ItemTypeCode) ?? 'EARNING', displayOrder: r.displayOrder ?? 0, isTaxableYn: (r.isTaxableYn as 'Y' | 'N') ?? 'Y' });
+            form.setFieldsValue({
+              itemName: r.itemName ?? '',
+              itemType: (r.itemType as ItemTypeCode) ?? 'EARNING',
+              displayOrder: r.displayOrder ?? 0,
+              isTaxableYn: (r.isTaxableYn as 'Y' | 'N') ?? 'Y',
+              isOrdinaryWageYn: (r.isOrdinaryWageYn as 'Y' | 'N') ?? 'N',
+            });
           }}>수정</Button>
           {r.isSystemDefault ? (
             <Typography.Text type="secondary" className="!tw-text-xs">
@@ -1040,7 +1118,7 @@ function SalaryItemTemplateTab() {
           >
             <Button loading={initDefaultsM.isPending}>기본 항목 불러오기</Button>
           </Popconfirm>
-          <Button type="primary" onClick={() => { setEditing(null); form.resetFields(); form.setFieldsValue({ itemType: 'EARNING', displayOrder: 0, isTaxableYn: 'Y' }); setOpen(true); }}>항목 등록</Button>
+          <Button type="primary" onClick={() => { setEditing(null); form.resetFields(); form.setFieldsValue({ itemType: 'EARNING', displayOrder: 0, isTaxableYn: 'Y', isOrdinaryWageYn: 'N' }); setOpen(true); }}>항목 등록</Button>
         </Space>
       </div>
       <Table<SalaryItemTemplate>
@@ -1071,6 +1149,19 @@ function SalaryItemTemplateTab() {
             <Select
               disabled={!!editing?.isSystemDefault}
               options={[{ value: 'Y', label: '과세' }, { value: 'N', label: '비과세' }]}
+            />
+          </Form.Item>
+          <Form.Item
+            label="통상임금 포함 여부"
+            name="isOrdinaryWageYn"
+            rules={[{ required: true }]}
+            extra="Y면 시급 환산 기준에 합산되어 연장/야간/휴일수당 base 가 됩니다. 정기·일률·고정 지급 항목 (직책수당 자격수당) 만 Y. 변동성 수당 (성과급 비정기상여) 및 비과세 실비 (식대 자가운전) 는 N."
+          >
+            <Select
+              options={[
+                { value: 'N', label: 'N — 통상임금 제외 (변동성 / 실비)' },
+                { value: 'Y', label: 'Y — 통상임금 포함 (정기 / 일률 / 고정)' },
+              ]}
             />
           </Form.Item>
           {editing?.isSystemDefault && (
@@ -1314,11 +1405,11 @@ function SimplifiedTaxTableTab() {
 
 export function AdminSalarySettingsPage() {
   const salaryPoliciesQ = useQuery({
-    queryKey: ['salary', 'salary-policies', 'settings-tabs'],
+    queryKey: ['salary', 'salary-policies'],
     queryFn: () => salaryApi.salaryPolicy.list(),
   });
   const hasPayGradePolicy = useMemo(
-    () => (salaryPoliciesQ.data ?? []).some((p) => p.usePayGradeYn === 'Y'),
+    () => hasActivePayGradeSalaryPolicy(salaryPoliciesQ.data),
     [salaryPoliciesQ.data],
   );
 

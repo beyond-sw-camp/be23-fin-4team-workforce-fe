@@ -4,11 +4,12 @@
  */
 import { Link, useParams } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Card, Descriptions, Form, InputNumber, Popconfirm, Select, Space, Table, Tag, Typography } from 'antd';
+import { Alert, App, Button, Card, DatePicker, Descriptions, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Statistic, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import dayjs, { type Dayjs } from 'dayjs';
 import { useMemo, useState } from 'react';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
-import type { PayrollItem, SalaryItemTemplate } from '@/features/salary-service/types';
+import type { RetroactiveMonthlyDiff, RetroactivePayrollResult, PayrollItem, SalaryItemTemplate } from '@/features/salary-service/types';
 
 const STATUS_KO: Record<string, string> = {
   DRAFT: '작성 중',
@@ -34,6 +35,7 @@ export function AdminPayrollManagePage() {
   const [bonusForm] = Form.useForm<{ bonusType: 'BONUS' | 'PERFORMANCE'; amount: number }>();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editAmount, setEditAmount] = useState<number>(0);
+  const [retroOpen, setRetroOpen] = useState(false);
 
   const payrollQ = useQuery({
     queryKey: ['salary', 'payroll', payrollId],
@@ -50,6 +52,21 @@ export function AdminPayrollManagePage() {
   const templatesQ = useQuery({
     queryKey: ['salary', 'salary-item-templates'],
     queryFn: () => salaryApi.salaryItemTemplate.list(),
+  });
+
+  // 보너스 정책 한도 검증용 활성 정책 + 직원 기본급 정보 조회
+  const bonusPolicyQ = useQuery({
+    queryKey: ['salary', 'bonus-policy', 'active'],
+    queryFn: () => salaryApi.bonusPolicy.getActive(),
+    staleTime: 60_000,
+  });
+
+  const memberId = payrollQ.data?.memberId;
+  const memberSalariesQ = useQuery({
+    queryKey: ['salary', 'salaries', 'member', memberId],
+    queryFn: () => salaryApi.salary.getByMemberId(memberId as string),
+    enabled: Boolean(memberId),
+    staleTime: 60_000,
   });
 
   const invalidate = () => {
@@ -171,6 +188,50 @@ export function AdminPayrollManagePage() {
     return [...list].sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0));
   }, [itemsQ.data]);
 
+  // 보너스 정책 한도 검증
+  // 정책 사용 시점 활성 baseSalary 기준 성과급 + 상여금 합계가 한도 초과 시 경고
+  const bonusValidation = useMemo(() => {
+    const policy = bonusPolicyQ.data;
+    const salaries = memberSalariesQ.data ?? [];
+    const items = itemsQ.data ?? [];
+    const targetDate = payroll?.payrollYearMonthDay ?? null;
+
+    if (!policy || policy.usePerformanceBonusYn !== 'Y') return null;
+    if (!policy.performanceBonusMaxRate || policy.performanceBonusMaxRate <= 0) return null;
+
+    // 귀속일 시점 활성 Salary 찾기
+    const activeSalary = salaries.find((s) => {
+      if (!s.effectiveFrom || !targetDate) return false;
+      if (s.effectiveFrom > targetDate) return false;
+      return !s.effectiveTo || s.effectiveTo >= targetDate;
+    });
+    const baseSalary = activeSalary?.baseSalary ?? 0;
+    if (baseSalary <= 0) return null;
+
+    // 상여금 / 성과급 항목명 매칭 합계
+    const bonusTotal = items
+      .filter((i) => i.itemType === 'EARNING')
+      .filter((i) => {
+        const name = i.itemName ?? '';
+        return name.includes('상여') || name.includes('성과') || name.includes('보너스');
+      })
+      .reduce((sum, i) => sum + (i.amount ?? 0), 0);
+
+    const maxAllowed = Math.floor(baseSalary * (policy.performanceBonusMaxRate / 100));
+    const exceeds = bonusTotal > maxAllowed;
+    const usagePercent = maxAllowed > 0 ? Math.round((bonusTotal / maxAllowed) * 100) : 0;
+
+    return {
+      baseSalary,
+      bonusTotal,
+      maxRate: policy.performanceBonusMaxRate,
+      maxAllowed,
+      exceeds,
+      usagePercent,
+      hasBonus: bonusTotal > 0,
+    };
+  }, [bonusPolicyQ.data, memberSalariesQ.data, itemsQ.data, payroll]);
+
   const columns: ColumnsType<PayrollItem> = useMemo(
     () => [
       { title: '항목', dataIndex: 'itemName', key: 'itemName' },
@@ -280,12 +341,56 @@ export function AdminPayrollManagePage() {
                 </Button>
               )}
               {isPaid && <Typography.Text type="success">지급 완료된 대장입니다.</Typography.Text>}
+              {payroll.memberId && (
+                <Button onClick={() => setRetroOpen(true)}>
+                  소급분 자동 재계산
+                </Button>
+              )}
             </Space>
           </>
         )}
       </Card>
 
+      {payroll?.memberId && (
+        <RetroactiveModal
+          open={retroOpen}
+          onClose={() => setRetroOpen(false)}
+          memberId={payroll.memberId}
+          memberLabel={payroll.memberId}
+        />
+      )}
+
       <Card className="tw-border-slate-200/80 tw-shadow-sm" title="급여 항목">
+        {bonusValidation && bonusValidation.hasBonus && (
+          <Alert
+            className="tw-mb-3"
+            type={bonusValidation.exceeds ? 'error' : bonusValidation.usagePercent >= 80 ? 'warning' : 'info'}
+            showIcon
+            message={
+              <span>
+                <b>보너스 정책 한도</b>{' '}
+                <Tag color="blue">기본급 {bonusValidation.baseSalary.toLocaleString('ko-KR')}원</Tag>
+                <Tag color={bonusValidation.exceeds ? 'red' : 'green'}>
+                  최대 {bonusValidation.maxRate}% = {bonusValidation.maxAllowed.toLocaleString('ko-KR')}원
+                </Tag>
+                <Tag color={bonusValidation.exceeds ? 'red' : 'default'}>
+                  현재 합계 {bonusValidation.bonusTotal.toLocaleString('ko-KR')}원 ({bonusValidation.usagePercent}%)
+                </Tag>
+              </span>
+            }
+            description={
+              bonusValidation.exceeds ? (
+                <Typography.Text type="danger">
+                  성과급/상여 합계가 보너스 정책 최대 한도를 초과했습니다. 정책 위반 — 등록 전 검토 필요.
+                </Typography.Text>
+              ) : bonusValidation.usagePercent >= 80 ? (
+                <Typography.Text type="warning">
+                  한도 사용률 80% 이상입니다. 추가 지급 시 한도 초과에 주의하세요.
+                </Typography.Text>
+              ) : null
+            }
+          />
+        )}
         {isDraft && (
           <>
             <Form
@@ -356,5 +461,211 @@ export function AdminPayrollManagePage() {
         />
       </Card>
     </Space>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ * 소급분 자동 재계산 모달
+ *  통상임금 인상 시 과거 월 가산수당 새 통상임금 기준 재계산
+ *  preview → 차액 표시 → apply 시 RETROACTIVE Payroll DRAFT 발행
+ * ───────────────────────────────────────────────────────────────────── */
+
+type RetroFormValues = {
+  range: [Dayjs, Dayjs];
+  newOrdinaryWage: number;
+  memo?: string;
+};
+
+function RetroactiveModal({
+  open,
+  onClose,
+  memberId,
+  memberLabel,
+}: {
+  open: boolean;
+  onClose: () => void;
+  memberId: string;
+  memberLabel: string;
+}) {
+  const { message } = App.useApp();
+  const [form] = Form.useForm<RetroFormValues>();
+  const [preview, setPreview] = useState<RetroactivePayrollResult | null>(null);
+
+  const previewM = useMutation({
+    mutationFn: (v: RetroFormValues) =>
+      salaryApi.payroll.retroactivePreview({
+        memberId,
+        fromMonth: v.range[0].format('YYYY-MM'),
+        toMonth: v.range[1].format('YYYY-MM'),
+        newOrdinaryWage: v.newOrdinaryWage,
+        memo: v.memo?.trim() || null,
+      }),
+    onSuccess: (res) => setPreview(res),
+    onError: (e: Error) => message.error(e.message || '미리보기 실패'),
+  });
+
+  const applyM = useMutation({
+    mutationFn: (v: RetroFormValues) =>
+      salaryApi.payroll.retroactiveApply({
+        memberId,
+        fromMonth: v.range[0].format('YYYY-MM'),
+        toMonth: v.range[1].format('YYYY-MM'),
+        newOrdinaryWage: v.newOrdinaryWage,
+        memo: v.memo?.trim() || null,
+      }),
+    onSuccess: (res) => {
+      message.success('소급분 명세서가 발행되었습니다.');
+      setPreview(res);
+    },
+    onError: (e: Error) => message.error(e.message || '발행 실패'),
+  });
+
+  const fmt = (n: number | null | undefined) => `${(n ?? 0).toLocaleString('ko-KR')}원`;
+
+  return (
+    <Modal
+      open={open}
+      title="소급분 자동 재계산"
+      width={760}
+      onCancel={() => {
+        setPreview(null);
+        form.resetFields();
+        onClose();
+      }}
+      footer={null}
+      destroyOnClose
+    >
+      <Typography.Paragraph type="secondary" className="!tw-text-xs">
+        통상임금 인상 시 과거 월 가산수당 (연장 / 야간 / 휴일) 을 새 통상임금 기준으로 재계산해
+        차액을 RETROACTIVE 명세서로 발행합니다. 발행 후 DRAFT 상태로 생성되며 인사팀이 검토 후
+        확정 / 지급 처리해야 합니다.
+      </Typography.Paragraph>
+
+      <Form<RetroFormValues>
+        form={form}
+        layout="vertical"
+        onFinish={(v) => previewM.mutate(v)}
+        initialValues={{
+          range: [dayjs().subtract(3, 'month').startOf('month'), dayjs().subtract(1, 'month').endOf('month')],
+        }}
+      >
+        <Form.Item label="대상 직원" extra={memberLabel}>
+          <Input value={memberId} disabled />
+        </Form.Item>
+        <Form.Item
+          label="소급 기간 (월 단위)"
+          name="range"
+          rules={[{ required: true, message: '소급 기간을 선택하세요.' }]}
+        >
+          <DatePicker.RangePicker picker="month" format="YYYY-MM" style={{ width: '100%' }} />
+        </Form.Item>
+        <Form.Item
+          label="새 통상임금 (원)"
+          name="newOrdinaryWage"
+          rules={[
+            { required: true, message: '새 통상임금을 입력하세요.' },
+            { type: 'number', min: 0, message: '0 이상' },
+          ]}
+          extra="기본급 + 통상임금 플래그 Y 인 정기수당 합계 — 인상 후 값"
+        >
+          <InputNumber
+            min={0}
+            step={100000}
+            style={{ width: '100%' }}
+            formatter={(v) => (v ? `${Number(v).toLocaleString('ko-KR')}원` : '')}
+            parser={(v) => Number((v ?? '').replace(/[^0-9]/g, '')) as 0}
+          />
+        </Form.Item>
+        <Form.Item label="메모 (선택)" name="memo">
+          <Input.TextArea rows={2} maxLength={300} placeholder="예: 2026 단협 통상임금 인상 6.5%" />
+        </Form.Item>
+        <Space>
+          <Button type="primary" htmlType="submit" loading={previewM.isPending}>
+            차액 미리보기
+          </Button>
+          {preview && preview.totalDiff > 0 && !preview.newPayrollId && (
+            <Button
+              type="primary"
+              danger
+              loading={applyM.isPending}
+              onClick={() => {
+                const v = form.getFieldsValue();
+                applyM.mutate(v);
+              }}
+            >
+              차액 합계 발행 ({fmt(preview.totalDiff)})
+            </Button>
+          )}
+        </Space>
+      </Form>
+
+      {preview && (
+        <div className="tw-mt-4 tw-pt-4 tw-border-t tw-border-slate-200">
+          <div className="tw-grid tw-grid-cols-3 tw-gap-3 tw-mb-3">
+            <Statistic title="기존 통상임금 (추정)" value={preview.previousOrdinaryWage} suffix="원" formatter={(v) => Number(v).toLocaleString('ko-KR')} />
+            <Statistic title="새 통상임금" value={preview.newOrdinaryWage} suffix="원" formatter={(v) => Number(v).toLocaleString('ko-KR')} valueStyle={{ color: '#10b981' }} />
+            <Statistic
+              title="차액 합계"
+              value={preview.totalDiff}
+              suffix="원"
+              formatter={(v) => Number(v).toLocaleString('ko-KR')}
+              valueStyle={{
+                color: preview.totalDiff > 0 ? '#1677ff' : preview.totalDiff < 0 ? '#ef4444' : undefined,
+                fontWeight: 700,
+              }}
+            />
+          </div>
+
+          <Table<RetroactiveMonthlyDiff>
+            rowKey={(r) => r.month}
+            dataSource={preview.monthlyDiffs}
+            pagination={false}
+            size="small"
+            columns={[
+              { title: '월', dataIndex: 'month', width: 100 },
+              {
+                title: '기존 가산수당',
+                dataIndex: 'oldAllowance',
+                align: 'right',
+                render: (n: number) => fmt(n),
+              },
+              {
+                title: '새 가산수당',
+                dataIndex: 'newAllowance',
+                align: 'right',
+                render: (n: number) => fmt(n),
+              },
+              {
+                title: '차액',
+                dataIndex: 'diff',
+                align: 'right',
+                render: (n: number) => (
+                  <span className={n > 0 ? 'tw-text-blue-600 tw-font-semibold' : n < 0 ? 'tw-text-red-600' : ''}>
+                    {fmt(n)}
+                  </span>
+                ),
+              },
+            ]}
+            locale={{ emptyText: '소급 대상 PAID 정기급여 명세가 없습니다.' }}
+          />
+
+          {preview.message && (
+            <Alert
+              type={preview.newPayrollId ? 'success' : preview.totalDiff > 0 ? 'info' : 'warning'}
+              showIcon
+              className="!tw-mt-3"
+              message={preview.message}
+              description={
+                preview.newPayrollId && (
+                  <Typography.Text type="secondary" className="!tw-text-xs">
+                    발행일 {preview.issuedDate} · Payroll ID {preview.newPayrollId}
+                  </Typography.Text>
+                )
+              }
+            />
+          )}
+        </div>
+      )}
+    </Modal>
   );
 }

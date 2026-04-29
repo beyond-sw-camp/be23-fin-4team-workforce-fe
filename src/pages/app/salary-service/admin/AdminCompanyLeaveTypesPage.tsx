@@ -46,9 +46,11 @@ type FormValues = {
   displayOrder: number;
 };
 
-// 잔고 차감 휴가 (연차/월차/반차) 는 시스템 기본으로 관리되며 화면에서 수정 불가
-// 일반 추가 휴가는 모두 차감 없음 (balanceType = null)
+// 수정 불가 휴가 (연차/월차/반차) 잔고 차감 룰이 시스템에 박혀있어 변경 시 정합성 깨짐
+// 삭제 불가 휴가 (연차) 회사 운영의 최소 기준이라 절대 삭제 X
+//  그 외는 모두 자유롭게 수정 / 삭제 가능
 const LOCKED_NAMES = new Set<string>(['연차', '월차']);
+const UNDELETABLE_NAMES = new Set<string>(['연차']);
 
 // 기본 휴가 카탈로그 백엔드 initializeDefaults spec 과 동기화
 //  required: 무조건 시드 (체크박스 비활성)
@@ -119,8 +121,9 @@ const isHalfDay = (name?: string | null) =>
 const isLocked = (record: CompanyLeaveType) =>
   LOCKED_NAMES.has(record.name ?? '') || isHalfDay(record.name);
 // 반차만 삭제 가능 그 외 시스템 기본은 삭제 불가 커스텀은 항상 삭제 가능
+// 연차만 삭제 불가 그 외 시스템 기본·커스텀 모두 삭제 가능
 const canDelete = (record: CompanyLeaveType) =>
-  isHalfDay(record.name) || !record.isSystemDefault;
+  !UNDELETABLE_NAMES.has(record.name ?? '');
 
 const BALANCE_KO: Record<string, string> = {
   ANNUAL: '당해 연차',

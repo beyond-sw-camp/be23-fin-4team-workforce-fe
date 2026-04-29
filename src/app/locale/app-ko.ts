@@ -43,10 +43,13 @@ export const APP_MENU_LABEL: Record<string, string> = {
   '/app/payroll/tax-summary': '세금·4대보험',
   '/app/payroll/allowances': '수당 변경 신청',
   '/app/payroll/retirement': '퇴직금 조회',
+  '/app/payroll/negotiations': '내 연봉 협상 이력',
   '/app/salary/unused-leave': '연차수당 정산',
   '/app/salary/settings': '급여 정책',
   '/app/salary/pay-grade-table': '호봉표 관리',
   '/app/salary/retirement-policy': '퇴직급여 정책',
+  '/app/salary/negotiations': '연봉 협상 관리',
+  '/app/salary/bonus-policy': '보너스 정책',
 };
 
 /** 사이드 메뉴 표시 순서 */
@@ -129,6 +132,9 @@ export function appHeaderTitleFromPath(
   if (pathname === '/app/payroll/allowances') return '수당 변경 신청';
   if (pathname === '/app/salary/settings') return '급여 정책 설정';
   if (pathname === '/app/salary/pay-grade-table') return '호봉표 관리';
+  if (pathname === '/app/salary/negotiations') return '연봉 협상 관리';
+  if (pathname === '/app/salary/bonus-policy') return '보너스 정책';
+  if (pathname === '/app/payroll/negotiations') return '내 연봉 협상 이력';
   if (pathname === '/app/payroll') return '급여 조회';
   if (pathname === '/app/payroll/annual') return '연봉 조회';
   if (pathname === '/app/income') return '소득관리';

@@ -37,7 +37,6 @@ type FormValues = {
   promotion2ndBeforeDays?: number | null;
   isCarryoverYn: boolean;
   carryoverDays?: number | null;
-  isCarryoverConsentYn: boolean;
   isPayoutYn: boolean;
 };
 
@@ -95,7 +94,6 @@ export function AdminLeavePoliciesPage() {
     promotion2ndBeforeDays: v.isPromotionYn ? (v.promotion2ndBeforeDays ?? null) : null,
     isCarryoverYn: toYn(v.isCarryoverYn),
     carryoverDays: v.isCarryoverYn ? (v.carryoverDays ?? null) : null,
-    isCarryoverConsentYn: toYn(v.isCarryoverConsentYn),
     isPayoutYn: toYn(v.isPayoutYn),
   });
 
@@ -156,7 +154,6 @@ export function AdminLeavePoliciesPage() {
           yn(r.isCarryoverYn) ? (
             <span>
               <Tag color="green">허용 ({r.carryoverDays ?? 0}일)</Tag>
-              {yn(r.isCarryoverConsentYn) && <Tag>동의 필요</Tag>}
             </span>
           ) : (
             <Tag>금지</Tag>
@@ -191,7 +188,6 @@ export function AdminLeavePoliciesPage() {
                   promotion2ndBeforeDays: r.promotion2ndBeforeDays ?? undefined,
                   isCarryoverYn: yn(r.isCarryoverYn),
                   carryoverDays: r.carryoverDays ?? undefined,
-                  isCarryoverConsentYn: yn(r.isCarryoverConsentYn),
                   isPayoutYn: yn(r.isPayoutYn),
                 });
               }}
@@ -288,7 +284,6 @@ export function AdminLeavePoliciesPage() {
                 maxAnnualDays: 25,
                 isPromotionYn: false,
                 isCarryoverYn: false,
-                isCarryoverConsentYn: false,
                 isPayoutYn: false,
               });
               setOpen(true);
@@ -430,7 +425,7 @@ function PolicyForm({ form }: PolicyFormProps) {
           name="extraDaysPerInterval"
           rules={[{ required: true, message: '추가 일수를 입력해주세요.' }, { type: 'number', min: 0 }]}
           style={{ width: 180 }}
-          extra="근로기준법 = 1일"
+          extra="근로기준법 = 1일씩"
         >
           <InputNumber min={0} step={0.5} addonBefore="+" addonAfter="일" style={{ width: '100%' }} />
         </Form.Item>
@@ -579,14 +574,6 @@ function PolicyForm({ form }: PolicyFormProps) {
             extra="이 일수까지만 다음 해로 넘김"
           >
             <InputNumber min={1} addonAfter="일" style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item
-            label="직원 동의 필요"
-            name="isCarryoverConsentYn"
-            valuePropName="checked"
-            extra="ON 이면 직원 동의 후에만 이월 (※ 동의 화면 별도 구현 필요)"
-          >
-            <Switch checkedChildren="ON" unCheckedChildren="OFF" />
           </Form.Item>
         </Space>
       ) : null}
