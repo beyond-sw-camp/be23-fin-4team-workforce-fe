@@ -185,7 +185,7 @@ export function MyScheduleSelectionsPage() {
     setOpenApplyModal(false);
     void navigate({
       to: '/app/approvals',
-      search: { tab: 'compose', sideNav: 'request-compose', docId: scheduleChangeDocId },
+      search: { tab: 'compose', docId: scheduleChangeDocId },
     });
   };
 
