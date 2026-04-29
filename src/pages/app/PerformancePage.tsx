@@ -56,7 +56,7 @@ export default function PerformancePage() {
   const { user } = useAuth();
   const { message } = AntdApp.useApp();
   const navigate = useNavigate();
-  const search = useSearch({ strict: false }) as { view?: PerformanceTab };
+  const search = useSearch({ strict: false }) as { view?: PerformanceTab; bundleId?: string };
   const { hasPermission } = usePermissions();
   const canReadCompany = hasPermission(PERM.GOAL_READ);
   const canReadOrganization = hasPermission(PERM.ORGANIZATION_READ);
@@ -103,6 +103,18 @@ export default function PerformancePage() {
     return (cycleKey: string) => set.has(cycleKey);
   }, [myBundlesForKrGuard]);
 
+  const { data: deepLinkedBundle } = useQuery({
+    queryKey: ['approval-bundle', search.bundleId],
+    queryFn: () => approvalApi.get(String(search.bundleId)),
+    enabled: !!search.bundleId,
+    retry: false,
+  });
+
+  useEffect(() => {
+    if (!deepLinkedBundle) return;
+    setSelectedBundle(deepLinkedBundle);
+  }, [deepLinkedBundle]);
+
   const openEditWithGuard = useCallback(
     (goal: Goal) => {
       if (goal.ownerType === 'MEMBER') {
@@ -142,7 +154,7 @@ export default function PerformancePage() {
   const tabItems = [
     {
       key: 'my-objective',
-      label: '내 조직 목표',
+      label: '내 목표',
       children: (
         <div className="tw-px-4 tw-pb-4 tw-pt-2">
           <MyObjectivesTab
@@ -157,7 +169,7 @@ export default function PerformancePage() {
       ? [
           {
             key: 'integrated',
-            label: '전사+구성원 개인 목표',
+            label: '전사 목표',
             children: (
               <div className="tw-px-4 tw-pb-4 tw-pt-2">
                 <IntegratedGoalsTab
@@ -271,7 +283,16 @@ export default function PerformancePage() {
       <BundleDetailModal
         open={!!selectedBundle}
         bundle={selectedBundle}
-        onClose={() => setSelectedBundle(null)}
+        onClose={() => {
+          setSelectedBundle(null);
+          if (search.bundleId) {
+            navigate({
+              to: '/app/performance',
+              search: { view: tab },
+              replace: true,
+            });
+          }
+        }}
         currentUserId={user.id}
       />
       <GoalDetailModal

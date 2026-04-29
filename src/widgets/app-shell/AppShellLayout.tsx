@@ -52,7 +52,10 @@ import type {EsgConfig} from '@/features/esg/api/esgApi';
 import {esgApi} from '@/features/esg/api/esgApi';
 import {memberChatApi} from '@/features/member-chat/api/memberChatApi';
 import {notificationApi} from '@/features/notification/api/notificationApi';
-import {buildApprovalNotificationNavigate} from '@/features/notification/lib/approvalNotificationRoute';
+import {
+    buildApprovalNotificationNavigate,
+    buildGoalBundleNotificationNavigate,
+} from '@/features/notification/lib/approvalNotificationRoute';
 import {companyApi} from '@/features/organization/api/companyApi';
 import {searchApi} from '@/features/search/api/searchApi';
 import {organizationApi} from '@/features/organization/api/organizationApi';
@@ -1143,6 +1146,17 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
         const t = String(type ?? '').toUpperCase();
         return t.startsWith('APPROVAL_');
     };
+    const isGoalBundleNotification = (type: string, targetType?: string): boolean => {
+        const t = String(type ?? '').toUpperCase();
+        const tt = String(targetType ?? '').toUpperCase();
+        // 과거/향후 스키마 모두 지원:
+        // 1) notificationType=GOAL_BUNDLE_*
+        // 2) notificationType=GOAL_EVALUATED + targetType=GOAL_BUNDLE_*
+        return t.startsWith('GOAL_BUNDLE_') || tt.startsWith('GOAL_BUNDLE_');
+    };
+    const isRoutableNotification = (type: string, targetType?: string): boolean => {
+        return isApprovalNotification(type) || isGoalBundleNotification(type, targetType);
+    };
     const filteredNotifications = notificationTab === 'unread'
         ? notifications.filter((item) => item.isRead !== 'YES')
         : notifications;
@@ -1152,15 +1166,27 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
         if (item.isRead !== 'YES') {
             await markNotificationAsRead.mutateAsync(item.notificationId);
         }
-        await navigate(
-          buildApprovalNotificationNavigate({
-            notificationType: item.notificationType,
-            targetType: item.targetType,
-            title: item.title,
-            content: item.content,
-            targetId: item.targetId,
-          }),
-        );
+        if (isGoalBundleNotification(item.notificationType, item.targetType)) {
+            await navigate(
+                buildGoalBundleNotificationNavigate({
+                    notificationType: item.notificationType,
+                    targetType: item.targetType,
+                    title: item.title,
+                    content: item.content,
+                    targetId: item.targetId,
+                }),
+            );
+        } else {
+            await navigate(
+                buildApprovalNotificationNavigate({
+                    notificationType: item.notificationType,
+                    targetType: item.targetType,
+                    title: item.title,
+                    content: item.content,
+                    targetId: item.targetId,
+                }),
+            );
+        }
         setNotificationPopoverOpen(false);
     };
 
@@ -1220,15 +1246,15 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
                             tabIndex={0}
                             className={`tw-rounded-xl tw-border tw-px-3 tw-py-2.5 ${
                                 item.isRead !== 'YES' ? 'tw-border-blue-200 tw-bg-blue-50/50' : 'tw-border-slate-200 tw-bg-white'
-                            } ${isApprovalNotification(item.notificationType) ? 'tw-cursor-pointer hover:tw-bg-slate-50' : ''}`}
+                            } ${isRoutableNotification(item.notificationType, item.targetType) ? 'tw-cursor-pointer hover:tw-bg-slate-50' : ''}`}
                             onClick={() => {
-                                if (!isApprovalNotification(item.notificationType)) return;
+                                if (!isRoutableNotification(item.notificationType, item.targetType)) return;
                                 void routeApprovalNotification(item);
                             }}
                             onKeyDown={(e) => {
                                 if (!(e.key === 'Enter' || e.key === ' ')) return;
                                 e.preventDefault();
-                                if (!isApprovalNotification(item.notificationType)) return;
+                                if (!isRoutableNotification(item.notificationType, item.targetType)) return;
                                 void routeApprovalNotification(item);
                             }}
                         >

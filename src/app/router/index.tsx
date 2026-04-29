@@ -30,7 +30,6 @@ import { NotificationsPage } from '@/pages/app/NotificationsPage';
 import EvaluationsHubPage from '@/pages/app/evaluations/EvaluationsHubPage';
 import EvaluationSeasonDetailPage from '@/pages/app/evaluations/EvaluationSeasonDetailPage';
 import PerformancePage from '@/pages/app/PerformancePage';
-import { GoalApprovalDetailPage } from '@/pages/app/GoalApprovalDetailPage';
 import { ApprovalsPage } from '@/pages/app/ApprovalsPage';
 import { AbsenceProxyPage } from '@/pages/app/AbsenceProxyPage';
 import { DepartmentApprovalSearchPage } from '@/pages/app/DepartmentApprovalSearchPage';
@@ -266,6 +265,7 @@ const performanceRoute = createRoute({
   path: '/performance',
   validateSearch: z.object({
     view: z.enum(['my-kr', 'my-objective', 'company', 'member-kr', 'integrated']).optional(),
+    bundleId: z.string().optional(),
   }),
   component: PerformancePage,
 });
@@ -291,12 +291,6 @@ const evaluationAdminRoute = createRoute({
   beforeLoad: () => {
     throw redirect({ to: '/app/evaluations', search: { view: 'overview' } });
   },
-});
-
-const goalApprovalDetailRoute = createRoute({
-  getParentRoute: () => appBaseRoute,
-  path: '/performance/approvals/$requestId',
-  component: GoalApprovalDetailPage,
 });
 
 const approvalsSearchSchema = z.object({
@@ -797,7 +791,6 @@ const routeTree = rootRoute.addChildren([
       myApprovalRequestsRoute,
       absenceProxyRoute,
       departmentApprovalsInboxRoute,
-      goalApprovalDetailRoute,
       evaluationsRoute,
       evaluationSeasonDetailRoute,
       myEvaluationResultsRoute,
