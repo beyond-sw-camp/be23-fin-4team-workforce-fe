@@ -14,6 +14,10 @@ type AppDoubleActionModalProps = {
   cancelText?: string;
   confirmLoading?: boolean;
   confirmDisabled?: boolean;
+  cancelAction?: () => void;
+  cancelLoading?: boolean;
+  cancelDisabled?: boolean;
+  cancelDanger?: boolean;
   confirmDanger?: boolean;
   confirmButtonClassName?: string;
   destroyOnHidden?: boolean;
@@ -21,10 +25,7 @@ type AppDoubleActionModalProps = {
 };
 
 /**
- * 더블 액션 모달.
- * - 헤더/푸터 고정
- * - 본문만 내부 스크롤
- * - content 패딩 제거 + 헤더/푸터 개별 패딩
+ * Double action modal with a fixed header/footer and scrollable body.
  */
 export function AppDoubleActionModal({
   open,
@@ -37,6 +38,10 @@ export function AppDoubleActionModal({
   cancelText = '취소',
   confirmLoading = false,
   confirmDisabled = false,
+  cancelAction,
+  cancelLoading = false,
+  cancelDisabled = false,
+  cancelDanger = false,
   confirmDanger = false,
   confirmButtonClassName,
   destroyOnHidden = true,
@@ -51,7 +56,10 @@ export function AppDoubleActionModal({
       footer={
         <div className="tw-grid tw-w-full tw-grid-cols-2 tw-gap-2">
           <Button
-            onClick={onClose}
+            onClick={cancelAction ?? onClose}
+            loading={cancelLoading}
+            disabled={cancelDisabled}
+            danger={cancelDanger}
             className="!tw-h-12 !tw-w-full !tw-rounded-xl !tw-border-slate-300 !tw-bg-white !tw-px-5 !tw-font-semibold !tw-text-slate-700 hover:!tw-border-slate-400 hover:!tw-text-slate-900"
           >
             {cancelText}
@@ -99,4 +107,3 @@ export function AppDoubleActionModal({
     </AppModal>
   );
 }
-

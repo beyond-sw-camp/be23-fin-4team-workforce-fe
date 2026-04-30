@@ -1,3 +1,5 @@
+import type { KpiCycle } from '@/features/goals/model/types';
+
 // ── Enums ──
 export type SeasonType = 'ANNUAL' | 'HALF_YEAR' | 'QUARTER';
 export type SeasonStatus = 'DRAFT' | 'ACTIVE' | 'CLOSED';
@@ -14,24 +16,56 @@ export type EvalSchedule = {
   downward?: { startDate: string; endDate: string };
 };
 
+/** 백엔드 `EvaluationSchedule` / `StageTransitionScheduler` 와 동일한 `scheduleJson.phases` 계약 */
+export type EvaluationScheduleStage =
+  | 'SELF_PENDING'
+  | 'SELF_SUBMITTED'
+  | 'PEER_OPEN'
+  | 'UPWARD_OPEN'
+  | 'DOWNWARD_OPEN'
+  | 'CALIBRATION_OPEN'
+  | 'CALIBRATION_LOCKED'
+  | 'CONFIRMED'
+  | 'SKIPPED_LEAVER';
+
+export type EvaluationPhaseRow = {
+  stage: EvaluationScheduleStage;
+  /** YYYY-MM-DD — Jackson LocalDate */
+  start: string;
+  end?: string;
+};
+
+export type EvaluationPhasesScheduleJson = {
+  phases: EvaluationPhaseRow[];
+};
+
 // ── Season ──
 export type EvaluationSeason = {
   seasonId: string;
   companyId: string;
   name: string;
   type: SeasonType;
+  /** 봉인·조회 키 — Goal.cycle 과 동일 */
+  targetCycle?: KpiCycle;
+  /** 봉인·조회 키 — Goal.cycleStartDate 와 동일 */
+  targetCycleStart?: string;
   startDate: string;
   endDate: string;
   status: SeasonStatus;
   resultPublishDate?: string;
   /** 결과 공개 시각 — null 이면 비공개 상태 */
   resultsPublishedAt?: string;
+  /** 레거시 시즌: self/peer/upward/downward 객체 */
   schedule?: EvalSchedule;
+  /** 신규 계약: `{ phases: [{ stage, start, end? }] }` */
+  schedulePhases?: EvaluationPhasesScheduleJson;
 };
 
 export type CreateSeasonPayload = {
   name: string;
   type: SeasonType;
+  /** 평가할 OKR 회차 시작일 (YYYY-MM-DD), 운영 기간과 별도 */
+  targetCycleStart: string;
   startDate: string;
   endDate: string;
   resultPublishDate?: string;
@@ -86,8 +120,8 @@ export type DesignQuestion = {
   options?: QuestionOption;
 };
 
-// [L-1] 섹션 유형 — 서버 enum SectionType 과 매칭
-export type SectionType = 'MANUAL' | 'KPI_SCORE' | 'PEER_FEEDBACK';
+// 섹션 유형
+export type SectionType = 'MANUAL' | 'PEER_FEEDBACK';
 
 export type DesignSection = {
   title: string;
@@ -95,8 +129,6 @@ export type DesignSection = {
   questions: DesignQuestion[];
   /** [L-1] 섹션 유형 — 기본 MANUAL */
   type?: SectionType;
-  /** [L-1] KPI_SCORE 섹션의 집계 범위 (ALL / TEMPLATE_ONLY / kpiTemplateId) */
-  kpiFilter?: string;
   /** 섹션 식별자 — 서버 저장 시 채워질 수 있음 */
   sectionId?: string;
 };
@@ -144,19 +176,8 @@ export type Calibration = {
   confirmedAt?: string;
 };
 
-// ── [L-1] Score Breakdown ──
-export type SectionScoreType = 'MANUAL' | 'KPI_SCORE' | 'PEER_FEEDBACK';
-
-/** [L-1] KPI_SCORE 섹션 전용 — 개별 목표가 얼마나 점수에 기여했는지. */
-export type KpiContribution = {
-  goalId?: string;
-  title?: string;
-  /** 0~100 (또는 capPct 까지) */
-  achievement?: number;
-  weight?: number;
-  /** 섹션 내에서 이 목표가 차지한 비율(0~100) */
-  contributionPct?: number;
-};
+// ── Score Breakdown ──
+export type SectionScoreType = 'MANUAL' | 'PEER_FEEDBACK';
 
 export type SectionScore = {
   sectionId?: string;
@@ -167,8 +188,6 @@ export type SectionScore = {
   skipped?: boolean;
   reason?: string;
   sampleSize?: number;
-  /** KPI_SCORE 섹션 전용 — 개별 목표별 기여도 드릴다운. */
-  kpiContributions?: KpiContribution[];
 };
 
 export type ScoreBreakdown = {
@@ -225,7 +244,6 @@ export type GoalSnapshotItem = {
   startDate?: string;
   endDate?: string;
   ownerId?: string;
-  kpiTemplateId?: string;
   snapshotTakenAt?: string;
 };
 

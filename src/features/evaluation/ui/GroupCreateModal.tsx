@@ -4,7 +4,7 @@ import type {DataNode} from 'antd/es/tree';
 import {RightOutlined, SearchOutlined, TeamOutlined} from '@ant-design/icons';
 import {useEffect, useMemo, useState} from 'react';
 import {EVALUATION_PAGE_KO as L} from '@/app/locale/app-ko';
-import {evaluationApi} from '@/features/evaluation/api/evaluationApi';
+import {evaluationRedesignApi} from '@/features/evaluation/api/evaluationRedesignApi';
 import type {CreateGroupPayload, EvaluationDesign, EvaluationGroup} from '@/features/evaluation/model/types';
 import {AppButton} from '@/shared/ui/AppButton';
 import {AppDoubleActionModal} from '@/shared/ui/AppDoubleActionModal';
@@ -32,7 +32,7 @@ export function GroupCreateModal({open, onClose, onCreated, seasonId, designs, e
     const isEditMode = !!editGroup;
 
     const createMut = useMutation({
-        mutationFn: (body: CreateGroupPayload) => evaluationApi.createGroup(seasonId, body),
+        mutationFn: (body: CreateGroupPayload) => evaluationRedesignApi.createGroup(seasonId, body),
         onSuccess: () => {
             message.success(L.groupCreated);
             form.resetFields();
@@ -46,7 +46,7 @@ export function GroupCreateModal({open, onClose, onCreated, seasonId, designs, e
     const updateMut = useMutation({
         mutationFn: (body: CreateGroupPayload) => {
             if (!editGroup) throw new Error('수정 대상 그룹이 없습니다.');
-            return evaluationApi.updateGroup(seasonId, editGroup.groupId, body);
+            return evaluationRedesignApi.updateGroup(seasonId, editGroup.groupId, body);
         },
         onSuccess: () => {
             message.success('그룹이 수정되었습니다.');

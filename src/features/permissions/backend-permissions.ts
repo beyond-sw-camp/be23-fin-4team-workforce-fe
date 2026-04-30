@@ -1,3 +1,5 @@
+import type { PermissionSpec } from '@/features/permissions/model';
+
 /**
  * member-service `Resource.name() + ":" + Action.name()` 와 동일한 접두사.
  * Redis 권한 문자열은 `MEMBER:READ:SELF` 형태이며, 백엔드 CheckPermission 은 granted.startsWith("MEMBER:READ") 로 검사합니다.
@@ -27,3 +29,18 @@ export const PERM = {
   CONTRACT_CREATE: 'CONTRACT:CREATE',
   CONTRACT_UPDATE: 'CONTRACT:UPDATE',
 } as const;
+
+/**
+ * goal-service {@code PositionPermissionReader.canCreateOrganizationScopedGoal} 과 동일:
+ * 조직 Objective 는 TEAM 또는 COMPANY 범위의 GOAL CREATE 또는 UPDATE 만 허용.
+ */
+export function canManageOrganizationScopedGoals(
+  hasPermission: (spec: PermissionSpec) => boolean,
+): boolean {
+  return (
+    hasPermission({ resource: 'GOAL', action: 'CREATE', scope: 'team' }) ||
+    hasPermission({ resource: 'GOAL', action: 'CREATE', scope: 'company' }) ||
+    hasPermission({ resource: 'GOAL', action: 'UPDATE', scope: 'team' }) ||
+    hasPermission({ resource: 'GOAL', action: 'UPDATE', scope: 'company' })
+  );
+}

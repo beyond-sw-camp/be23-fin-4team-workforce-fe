@@ -16,6 +16,11 @@ export type NotificationType =
   | 'APPROVAL_REQUESTED'
   | 'APPROVAL_APPROVED'
   | 'APPROVAL_REJECTED'
+  | 'GOAL_BUNDLE_REQUESTED'
+  | 'GOAL_BUNDLE_APPROVED'
+  | 'GOAL_BUNDLE_REJECTED'
+  | 'GOAL_BUNDLE_WITHDRAWN'
+  | 'GOAL_BUNDLE_DELEGATED'
   | 'SALARY_PUBLISHED'
   | 'GOAL_EVALUATED'
   | 'EVALUATION_REMINDER'
@@ -60,6 +65,11 @@ const NOTIFICATION_TYPE_KO: Record<string, string> = {
   APPROVAL_CANCELED: '결재 회수',
   APPROVAL_REFERENCED: '결재 참조 지정',
   APPROVAL_CIRCULATED: '결재 공람 도착',
+  GOAL_BUNDLE_REQUESTED: '목표 승인 요청',
+  GOAL_BUNDLE_APPROVED: '목표 승인 완료',
+  GOAL_BUNDLE_REJECTED: '목표 승인 반려',
+  GOAL_BUNDLE_WITHDRAWN: '목표 승인 회수',
+  GOAL_BUNDLE_DELEGATED: '목표 승인 위임',
   SALARY_PUBLISHED: '급여 명세서 발행',
   GOAL_EVALUATED: '목표 평가 완료',
   EVALUATION_REMINDER: '평가 미제출 안내',
@@ -78,6 +88,14 @@ const NOTIFICATION_TYPE_KO: Record<string, string> = {
   LABOR_LAW_WEEKLY_VIOLATION: '주 52시간 초과',
 };
 
+const GOAL_BUNDLE_TARGET_TYPE_KO: Record<string, string> = {
+  GOAL_BUNDLE_REQUESTED: '목표 승인 요청',
+  GOAL_BUNDLE_APPROVED: '목표 승인 완료',
+  GOAL_BUNDLE_REJECTED: '목표 승인 반려',
+  GOAL_BUNDLE_WITHDRAWN: '목표 승인 회수',
+  GOAL_BUNDLE_DELEGATED: '목표 승인 위임',
+};
+
 function normalizeYesNo(v: unknown): 'YES' | 'NO' {
   const s = String(v ?? '').trim().toUpperCase();
   return s === 'YES' || s === 'Y' || s === 'TRUE' ? 'YES' : 'NO';
@@ -86,15 +104,20 @@ function normalizeYesNo(v: unknown): 'YES' | 'NO' {
 function toNotificationItem(raw: unknown): NotificationItem {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const type = String(r.notificationType ?? r.type ?? 'UNKNOWN').trim();
+  const targetType = typeof r.targetType === 'string' ? r.targetType.trim() : '';
   const targetIdRaw =
     r.targetId ?? r.target_id ?? r.requestId ?? r.request_id ?? r.approvalRequestId ?? r.approval_request_id;
+  const title =
+    (type === 'GOAL_EVALUATED' && targetType && GOAL_BUNDLE_TARGET_TYPE_KO[targetType]) ||
+    NOTIFICATION_TYPE_KO[type] ||
+    type;
   return {
     notificationId: String(r.notificationId ?? r.id ?? '').trim(),
     notificationType: type,
-    title: NOTIFICATION_TYPE_KO[type] ?? type,
+    title,
     content: String(r.content ?? '').trim(),
     targetId: typeof targetIdRaw === 'string' ? targetIdRaw.trim() || undefined : undefined,
-    targetType: typeof r.targetType === 'string' ? r.targetType : undefined,
+    targetType: targetType || undefined,
     isRead: normalizeYesNo(r.isRead ?? r.readYn ?? r.read),
     createdAt: typeof r.createdAt === 'string' ? r.createdAt : undefined,
   };
@@ -141,6 +164,10 @@ export const notificationApi = {
   },
   async deleteNotification(notificationId: string) {
     const response = await httpClient.patch(`/notification/${encodeURIComponent(notificationId)}/delete`, null);
+    return unwrapApiResponse<null>(response.data);
+  },
+  async deleteAllNotifications() {
+    const response = await httpClient.patch('/notification/delete-all', null);
     return unwrapApiResponse<null>(response.data);
   },
   subscribe(onNotification: () => void) {
