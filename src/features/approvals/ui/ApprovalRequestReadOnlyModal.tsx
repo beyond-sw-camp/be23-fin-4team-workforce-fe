@@ -42,6 +42,24 @@ import {
   parseDetailContentJson,
   parseFormSchema,
 } from '@/features/approvals/lib/approvalFormSchema';
+import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
+
+/** slotId UUID 를 슬롯 라벨로 보여주는 작은 컴포넌트.
+ *  결재 상세에서 시차출퇴근 신청서의 slotId 필드 표시용. */
+function SlotLabelDisplay({ slotId }: { slotId: string }) {
+  const q = useQuery({
+    queryKey: ['approval-detail', 'flexibleSlot', slotId],
+    queryFn: () => attendanceApi.flexibleSlot.getById(slotId),
+    enabled: Boolean(slotId),
+    staleTime: 5 * 60_000,
+  });
+  if (q.isLoading) return <span>조회 중...</span>;
+  if (!q.data) return <span>{slotId}</span>;
+  const work = q.data.startTime && q.data.endTime
+    ? ` (${q.data.startTime.slice(0, 5)} ~ ${q.data.endTime.slice(0, 5)})`
+    : '';
+  return <span>{(q.data.slotLabel ?? q.data.slotCode ?? slotId) + work}</span>;
+}
 import {
   ApprovalFormPaperFieldRow,
   ApprovalFormPaperLayout,
@@ -745,20 +763,33 @@ export function ApprovalRequestReadOnlyModal({
                         />
                       }
                     >
-                      {requestDetailSchema.fields.map((field) => {
-                        const text = formatStoredContentValue(content[field.name]);
-                        return (
-                          <ApprovalFormPaperFieldRow key={field.name} label={field.label} required>
-                            <Typography.Text
-                              className={
-                                field.type === 'textarea' ? 'tw-whitespace-pre-wrap tw-break-words' : undefined
-                              }
-                            >
-                              {text}
-                            </Typography.Text>
-                          </ApprovalFormPaperFieldRow>
-                        );
-                      })}
+                      {requestDetailSchema.fields
+                        .filter((field) => field.type !== 'hidden') // hidden 필드는 상세에서도 미표시 (selectionId 등 시스템용)
+                        .map((field) => {
+                          const raw = content[field.name];
+                          // 시차출퇴근 슬롯 (source=flexibleTimeSlot) 필드는 UUID 대신 슬롯 라벨로 표시
+                          if (field.source === 'flexibleTimeSlot' && typeof raw === 'string' && raw.trim()) {
+                            return (
+                              <ApprovalFormPaperFieldRow key={field.name} label={field.label} required>
+                                <Typography.Text>
+                                  <SlotLabelDisplay slotId={raw.trim()} />
+                                </Typography.Text>
+                              </ApprovalFormPaperFieldRow>
+                            );
+                          }
+                          const text = formatStoredContentValue(raw);
+                          return (
+                            <ApprovalFormPaperFieldRow key={field.name} label={field.label} required>
+                              <Typography.Text
+                                className={
+                                  field.type === 'textarea' ? 'tw-whitespace-pre-wrap tw-break-words' : undefined
+                                }
+                              >
+                                {text}
+                              </Typography.Text>
+                            </ApprovalFormPaperFieldRow>
+                          );
+                        })}
                     </ApprovalFormPaperLayout>
                   );
                 })()}

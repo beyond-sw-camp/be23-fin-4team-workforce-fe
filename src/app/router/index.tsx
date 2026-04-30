@@ -653,7 +653,7 @@ const payrollAdminManageRoute = createRoute({
   component: AdminPayrollManagePage,
   validateSearch: z.object({
     // 어느 탭에서 진입했는지 — 뒤로가기 시 동일 탭으로 복귀
-    tab: z.enum(['company', 'member', 'salary']).optional(),
+    tab: z.enum(['company', 'member', 'salary', 'allowances']).optional(),
   }),
   beforeLoad: ({ context }) => {
     if (!context.auth.user?.isSystemAdmin) {
@@ -667,8 +667,10 @@ const payrollAdminRoute = createRoute({
   path: '/payroll/admin',
   component: AdminPayrollPage,
   validateSearch: z.object({
-    // 정산 화면 활성 탭: company(이번달 정산) | member(정산 이력) | salary(직원 급여 관리)
-    tab: z.enum(['company', 'member', 'salary']).optional(),
+    // 정산 화면 활성 탭: company(이번달 정산) | member(월별 정산 결과) | register(급여 등록) | salary(급여 변동 이력) | allowances(수당 관리)
+    tab: z.enum(['company', 'member', 'register', 'salary', 'allowances']).optional(),
+    // [salary 탭 전용] 직원 상세/직원 생성 직후 deep-link -> 해당 직원으로 prefill 한 [급여 등록] 모달 자동 오픈
+    createForMemberId: z.string().optional(),
   }),
   beforeLoad: ({ context }) => {
     if (!context.auth.user?.isSystemAdmin) {
@@ -745,14 +747,20 @@ const adminSalarySettingsRoute = createRoute({
   },
 });
 
+// 수당 관리는 월 급여대장 탭으로 통합 — 기존 URL 진입 시 탭으로 redirect
 const adminMemberAllowanceRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/payroll/admin/allowances',
-  component: AdminMemberAllowancePage,
+  component: AdminMemberAllowancePage,  // fallback (직접 임베드 안 됨)
   beforeLoad: ({ context }) => {
     if (!context.auth.user?.isSystemAdmin) {
       throw redirect({ to: '/app/payroll' });
     }
+    // 사용자가 즐겨찾기·외부링크로 진입해도 탭 UI 로 자연스럽게 이동
+    throw redirect({
+      to: '/app/payroll/admin',
+      search: { tab: 'allowances' },
+    });
   },
 });
 

@@ -25,7 +25,6 @@ import type {
   LeavePromotionHistory,
   LeavePromotionNoResponse,
 } from '@/features/salary-service/types';
-import { LeaveDesignateModal } from './components/LeaveDesignateModal';
 
 const QK = ['salary', 'leave-promotion', 'no-response'] as const;
 
@@ -38,7 +37,6 @@ function formatDate(iso?: string | null) {
 export function AdminLeavePromotionNoResponsePage() {
   const { message } = App.useApp();
   const qc = useQueryClient();
-  const [target, setTarget] = useState<LeavePromotionNoResponse | null>(null);
 
   const listQ = useQuery({
     queryKey: QK,
@@ -78,26 +76,6 @@ export function AdminLeavePromotionNoResponsePage() {
     return map;
   }, [membersQ.data]);
 
-  const designateM = useMutation({
-    mutationFn: ({
-      id,
-      dates,
-      reason,
-    }: {
-      id: string;
-      dates: string[];
-      reason: string;
-    }) =>
-      attendanceApi.leavePromotion.designate(id, { dates, reason }),
-    onSuccess: () => {
-      message.success('강제 지정이 완료되었습니다');
-      setTarget(null);
-      void qc.invalidateQueries({ queryKey: QK });
-    },
-    onError: (e: Error) =>
-      message.error(e.message || '강제 지정에 실패했습니다'),
-  });
-
   const columns = useMemo<ColumnsType<LeavePromotionNoResponse>>(
     () => [
       {
@@ -127,7 +105,7 @@ export function AdminLeavePromotionNoResponsePage() {
         },
       },
       {
-        title: '단계',
+        title: '알림 단계',
         dataIndex: 'stage',
         key: 'stage',
         width: 80,
@@ -164,27 +142,16 @@ export function AdminLeavePromotionNoResponsePage() {
           <Tag color={n >= 30 ? 'red' : 'orange'}>{n}일 경과</Tag>
         ),
       },
-      {
-        title: '액션',
-        key: 'actions',
-        width: 130,
-        render: (_, r) => (
-          <Button danger size="small" onClick={() => setTarget(r)}>
-            강제 지정
-          </Button>
-        ),
-      },
     ],
     [memberMap],
   );
 
-  // 회신 완료 / 강제 지정 분리
-  const acknowledgedRows = useMemo(
-    () => (historyQ.data ?? []).filter((r) => r.status === 'ACKNOWLEDGED'),
+  const firstNoticeRows = useMemo(
+    () => (historyQ.data ?? []).filter((r) => r.stage === 'FIRST'),
     [historyQ.data],
   );
-  const designatedRows = useMemo(
-    () => (historyQ.data ?? []).filter((r) => r.status === 'DESIGNATED'),
+  const secondNoticeRows = useMemo(
+    () => (historyQ.data ?? []).filter((r) => r.stage === 'SECOND'),
     [historyQ.data],
   );
 
@@ -207,12 +174,20 @@ export function AdminLeavePromotionNoResponsePage() {
     );
   };
 
-  // 회신 완료 탭 컬럼
-  const ackColumns = useMemo<ColumnsType<LeavePromotionHistory>>(
+  // 1차/2차 알림 현황 컬럼
+  const noticeColumns = useMemo<ColumnsType<LeavePromotionHistory>>(
     () => [
       { title: '직원', dataIndex: 'memberId', key: 'memberId', width: 200, render: renderEmployeeCell },
       { title: '단계', dataIndex: 'stage', key: 'stage', width: 70,
         render: (s: string) => <Tag color="geekblue">{s === 'FIRST' ? '1차' : '2차'}</Tag> },
+      {
+        title: '상태',
+        dataIndex: 'status',
+        key: 'status',
+        width: 120,
+        render: (s: string) =>
+          s === 'ACKNOWLEDGED' ? <Tag color="green">회신 완료</Tag> : <Tag>{s}</Tag>,
+      },
       { title: '잔여 / 만료', key: 'balance', width: 160,
         render: (_, r) => (
           <div className="tw-text-xs">
@@ -239,31 +214,77 @@ export function AdminLeavePromotionNoResponsePage() {
     [memberMap],
   );
 
-  // 강제 지정 탭 컬럼
-  const designatedColumns = useMemo<ColumnsType<LeavePromotionHistory>>(
+  const expiryRows = useMemo(
+    () =>
+      [...(historyQ.data ?? []), ...(listQ.data ?? []).map((r) => ({
+        ...r,
+        status: 'SENT',
+      }))].sort((a, b) => {
+        const aDate = dayjs(a.balanceExpirationDate);
+        const bDate = dayjs(b.balanceExpirationDate);
+        if (!aDate.isValid() && !bDate.isValid()) return 0;
+        if (!aDate.isValid()) return 1;
+        if (!bDate.isValid()) return -1;
+        return aDate.valueOf() - bDate.valueOf();
+      }),
+    [historyQ.data, listQ.data],
+  );
+
+  const expiryColumns = useMemo<ColumnsType<LeavePromotionHistory & { status?: string }>>(
     () => [
       { title: '직원', dataIndex: 'memberId', key: 'memberId', width: 200, render: renderEmployeeCell },
       { title: '단계', dataIndex: 'stage', key: 'stage', width: 70,
-        render: () => <Tag color="volcano">2차</Tag> },
-      { title: '잔여 / 만료', key: 'balance', width: 160,
-        render: (_, r) => (
-          <div className="tw-text-xs">
-            <div>{r.remainingDays != null ? `${r.remainingDays}일 남음` : '—'}</div>
-            <div className="tw-text-slate-500">{formatDate(r.balanceExpirationDate)} 만료</div>
-          </div>
-        ) },
-      { title: '회사 강제 지정일', key: 'designatedDates',
+        render: (s: string) => <Tag color={s === 'FIRST' ? 'geekblue' : 'volcano'}>{s === 'FIRST' ? '1차' : '2차'}</Tag> },
+      {
+        title: '알림 상태',
+        dataIndex: 'status',
+        key: 'status',
+        width: 110,
+        render: (s?: string) => {
+          if (s === 'ACKNOWLEDGED') return <Tag color="green">회신 완료</Tag>;
+          if (s === 'SENT') return <Tag color="orange">미회신</Tag>;
+          return <Tag>{s ?? '—'}</Tag>;
+        },
+      },
+      { title: '잔여 연차', key: 'remainingDays', dataIndex: 'remainingDays', width: 100,
+        render: (n?: number | null) => (typeof n === 'number' ? `${n}일` : '—'),
+      },
+      {
+        title: '사용기한(만료일)',
+        dataIndex: 'balanceExpirationDate',
+        key: 'balanceExpirationDate',
+        width: 180,
+        render: (v?: string | null) => {
+          if (!v) return '—';
+          const d = dayjs(v);
+          if (!d.isValid()) return v;
+          const diff = d.startOf('day').diff(dayjs().startOf('day'), 'day');
+          const tone = diff < 0 ? 'red' : diff <= 30 ? 'orange' : 'blue';
+          const suffix = diff < 0 ? `${Math.abs(diff)}일 지남` : diff === 0 ? 'D-day' : `D-${diff}`;
+          return <Tag color={tone}>{`${d.format('YYYY-MM-DD')} (${suffix})`}</Tag>;
+        },
+      },
+      {
+        title: '알림 발송일',
+        dataIndex: 'sentOn',
+        key: 'sentOn',
+        width: 130,
+        render: (v?: string) => formatDate(v),
+      },
+      { title: '회신 시점', dataIndex: 'acknowledgedAt', key: 'acknowledgedAt', width: 150,
+        render: (v?: string | null) => (v ? dayjs(v).format('YYYY-MM-DD HH:mm') : '—') },
+      { title: '사용 계획일', key: 'plannedDates',
         render: (_, r) => (
           <Space size={4} wrap>
-            {(r.designatedDates ?? []).map((d) => (
-              <Tag key={d} color="red">{d}</Tag>
+            {(r.plannedDates ?? []).map((d) => (
+              <Tag key={d} color="green">{d}</Tag>
             ))}
+            {(!r.plannedDates || r.plannedDates.length === 0) && (
+              <Typography.Text type="secondary" className="!tw-text-xs">—</Typography.Text>
+            )}
           </Space>
         ) },
-      { title: '지정 사유', dataIndex: 'designationReason', key: 'designationReason', ellipsis: true,
-        render: (s?: string | null) => s ?? <Typography.Text type="secondary">—</Typography.Text> },
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [memberMap],
   );
 
@@ -272,13 +293,13 @@ export function AdminLeavePromotionNoResponsePage() {
       <div className="tw-flex tw-flex-wrap tw-items-start tw-justify-between tw-gap-3">
         <div>
           <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
-            연차 사용 촉진 관리
+            연차 촉진 제도 알림 현황
           </Typography.Title>
           <Typography.Paragraph
             type="secondary"
             className="!tw-mb-0 !tw-mt-1 !tw-text-sm"
           >
-            연차 사용 촉진 통보의 미회신·회신완료·강제지정 이력을 한 화면에서 관리합니다.
+            연차 사용 촉진 제도의 1차/2차 알림 현황과 직원별 연차 사용기한(만료일) 현황을 조회합니다.
             매일 06:30 자동 배치가 만료 임박 잔고에 통보를 발송합니다.
           </Typography.Paragraph>
         </div>
@@ -306,15 +327,15 @@ export function AdminLeavePromotionNoResponsePage() {
         items={[
           {
             key: 'no-response',
-            label: `미회신 (${listQ.data?.length ?? 0})`,
+            label: `2차 미회신 (${listQ.data?.length ?? 0})`,
             children: (
               <>
                 <Alert
                   type="info"
                   showIcon
                   className="tw-mb-3"
-                  message="강제 지정 가능 시점"
-                  description="2차 통보 후 10일 경과한 미응답자만 노출됩니다. 강제 지정 시 연차가 차감되고 직원 알림이 발송됩니다."
+                  message="2차 통보 후 미회신 대상"
+                  description="2차 통보 후 10일 이상 경과한 미응답자 목록입니다. 강제지정 기능은 제외되었습니다."
                 />
                 <Card className="tw-border-slate-200/80 tw-shadow-sm">
                   <Table<LeavePromotionNoResponse>
@@ -324,7 +345,7 @@ export function AdminLeavePromotionNoResponsePage() {
                     dataSource={listQ.data ?? []}
                     pagination={{ pageSize: 20 }}
                     locale={{
-                      emptyText: <Empty description="강제 지정 가능한 미응답자가 없습니다" />,
+                      emptyText: <Empty description="2차 미회신 대상이 없습니다" />,
                     }}
                   />
                 </Card>
@@ -332,56 +353,60 @@ export function AdminLeavePromotionNoResponsePage() {
             ),
           },
           {
-            key: 'acknowledged',
-            label: `회신 완료 (${acknowledgedRows.length})`,
+            key: 'first-notice',
+            label: `1차 알림 현황 (${firstNoticeRows.length})`,
             children: (
               <Card className="tw-border-slate-200/80 tw-shadow-sm">
                 <Table<LeavePromotionHistory>
                   rowKey={(r) => r.promotionLogId}
                   loading={historyQ.isLoading || membersQ.isLoading}
-                  columns={ackColumns}
-                  dataSource={acknowledgedRows}
+                  columns={noticeColumns}
+                  dataSource={firstNoticeRows}
                   pagination={{ pageSize: 20 }}
                   locale={{
-                    emptyText: <Empty description="회신 완료 건이 없습니다" />,
+                    emptyText: <Empty description="1차 알림 이력이 없습니다" />,
                   }}
                 />
               </Card>
             ),
           },
           {
-            key: 'designated',
-            label: `강제 지정 (${designatedRows.length})`,
+            key: 'second-notice',
+            label: `2차 알림 현황 (${secondNoticeRows.length})`,
             children: (
               <Card className="tw-border-slate-200/80 tw-shadow-sm">
                 <Table<LeavePromotionHistory>
                   rowKey={(r) => r.promotionLogId}
                   loading={historyQ.isLoading || membersQ.isLoading}
-                  columns={designatedColumns}
-                  dataSource={designatedRows}
+                  columns={noticeColumns}
+                  dataSource={secondNoticeRows}
                   pagination={{ pageSize: 20 }}
                   locale={{
-                    emptyText: <Empty description="강제 지정 이력이 없습니다" />,
+                    emptyText: <Empty description="2차 알림 이력이 없습니다" />,
+                  }}
+                />
+              </Card>
+            ),
+          },
+          {
+            key: 'expiry-status',
+            label: `연차 사용기한 현황 (${expiryRows.length})`,
+            children: (
+              <Card className="tw-border-slate-200/80 tw-shadow-sm">
+                <Table<LeavePromotionHistory & { status?: string }>
+                  rowKey={(r) => r.promotionLogId}
+                  loading={historyQ.isLoading || listQ.isLoading || membersQ.isLoading}
+                  columns={expiryColumns}
+                  dataSource={expiryRows}
+                  pagination={{ pageSize: 20 }}
+                  locale={{
+                    emptyText: <Empty description="연차 사용기한 현황이 없습니다" />,
                   }}
                 />
               </Card>
             ),
           },
         ]}
-      />
-
-      <LeaveDesignateModal
-        target={target}
-        memberName={target ? memberMap.get(target.memberId)?.name : undefined}
-        confirmLoading={designateM.isPending}
-        onCancel={() => setTarget(null)}
-        onSubmit={(dates, reason) =>
-          designateM.mutate({
-            id: target!.promotionLogId,
-            dates,
-            reason,
-          })
-        }
       />
     </Space>
   );

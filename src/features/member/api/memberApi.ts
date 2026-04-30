@@ -45,6 +45,24 @@ export type MemberSummary = {
   status?: string;
 };
 
+export type MemberLookupRow = {
+  memberId: string;
+  name?: string;
+  email?: string;
+  organizationName?: string;
+  jobTitleName?: string;
+};
+
+export type MemberLookupPage = {
+  content: MemberLookupRow[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+  first: boolean;
+  last: boolean;
+};
+
 /** GET /member/list — 전자결재 참조·공람 선택용 (memberId·memberPositionId 필수) */
 export type MemberListItemForApproval = {
   memberId: string;
@@ -614,16 +632,23 @@ export const memberApi = {
    * ES(`/search/employees`) 없이도 동작해 급여 설정 등에서 권장.
    */
   async searchMembersLookup(params: { keyword: string; page?: number; size?: number }): Promise<
-    {
-      memberId: string;
-      name?: string;
-      email?: string;
-      organizationName?: string;
-      jobTitleName?: string;
-    }[]
+    MemberLookupRow[]
   > {
     const kw = params.keyword?.trim() ?? '';
     if (!kw) return [];
+    const result = await this.searchMembersLookupPage({
+      keyword: kw,
+      page: params.page,
+      size: params.size,
+    });
+    return result.content;
+  },
+  async searchMembersLookupPage(params: {
+    keyword?: string;
+    page?: number;
+    size?: number;
+  }): Promise<MemberLookupPage> {
+    const kw = params.keyword?.trim() ?? '';
     const response = await httpClient.get('/member/search', {
       params: { keyword: kw, page: params.page ?? 0, size: params.size ?? 30 },
     });
@@ -631,13 +656,7 @@ export const memberApi = {
     if (!raw || typeof raw !== 'object') return [];
     const pageObj = raw as Record<string, unknown>;
     const content = Array.isArray(pageObj.content) ? pageObj.content : [];
-    const out: {
-      memberId: string;
-      name?: string;
-      email?: string;
-      organizationName?: string;
-      jobTitleName?: string;
-    }[] = [];
+    const out: MemberLookupRow[] = [];
     for (const row of content) {
       if (!row || typeof row !== 'object') continue;
       const o = row as Record<string, unknown>;
@@ -651,7 +670,19 @@ export const memberApi = {
         jobTitleName: asTextMemberField(o.jobTitleName ?? o.job_title_name) || undefined,
       });
     }
-    return out;
+    return {
+      content: out,
+      page: typeof pageObj.number === 'number' ? pageObj.number : params.page ?? 0,
+      size: typeof pageObj.size === 'number' ? pageObj.size : params.size ?? 30,
+      totalElements:
+        typeof pageObj.totalElements === 'number' ? pageObj.totalElements : out.length,
+      totalPages: typeof pageObj.totalPages === 'number' ? pageObj.totalPages : 1,
+      first: typeof pageObj.first === 'boolean' ? pageObj.first : (params.page ?? 0) <= 0,
+      last:
+        typeof pageObj.last === 'boolean'
+          ? pageObj.last
+          : (typeof pageObj.totalPages === 'number' ? (params.page ?? 0) + 1 >= pageObj.totalPages : true),
+    };
   },
   async detail(memberId: string) {
     const id = memberId?.trim();

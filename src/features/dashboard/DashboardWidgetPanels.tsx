@@ -2,6 +2,7 @@ import {
   CalendarOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
+  DollarOutlined,
   TeamOutlined,
   UserOutlined,
 } from '@ant-design/icons';
@@ -20,6 +21,7 @@ import {
 } from '@/features/calendar/api/calendarApi';
 import { DASHBOARD_WIDGET_LABELS, type DashboardWidgetId } from '@/features/dashboard/dashboardWidgetsModel';
 import { memberApi } from '@/features/member/api/memberApi';
+import { salaryApi } from '@/features/salary-service/api/salaryApi';
 
 dayjs.locale('ko');
 
@@ -527,6 +529,110 @@ export function DashboardNotificationsBlock() {
   );
 }
 
+/**
+ * 시스템 관리자만 의미 있는 위젯 — 회사 Salary 목록에서 활성·기본급 0원인 행 = 급여 미등록 신규 입사자.
+ * 클릭 시 [직원 급여 관리] 의 신규 입사자 필터가 켜진 화면으로 이동.
+ */
+function DashboardPayrollNewHiresBlock({ user }: { user: Me | null }) {
+  const isAdmin = Boolean(user?.isSystemAdmin);
+  // 권한 없는 사용자는 query 자체를 발사하지 않는다 (백엔드 403 이슈 + 무의미한 0명 표시 방지).
+  const salariesQ = useQuery({
+    queryKey: ['salary', 'salaries'],
+    queryFn: () => salaryApi.salary.listByCompany(),
+    enabled: isAdmin,
+    staleTime: 60_000,
+  });
+  // 임시 Salary 시그니처 — SalaryTab 의 isProvisionalSalary 와 동일 기준.
+  // - 연봉제 자동 행: baseSalary === 0 && step == null
+  // - 호봉제 자동 행: step === 1 (호봉표 1호봉 가격이 baseSalary 에 자동 적용되므로 baseSalary 만으로는 식별 불가)
+  const newHires = useMemo(() => {
+    const today = dayjs().startOf('day');
+    const list = salariesQ.data ?? [];
+    return list.filter((s) => {
+      if (!s.effectiveFrom) return false;
+      const startedOk = !dayjs(s.effectiveFrom).startOf('day').isAfter(today);
+      const notEnded = !s.effectiveTo || !dayjs(s.effectiveTo).startOf('day').isBefore(today);
+      const isActive = startedOk && notEnded;
+      if (!isActive) return false;
+      const isAutoYearly = (s.baseSalary ?? 0) === 0 && s.step == null;
+      const isAutoStep = s.step === 1;
+      return isAutoYearly || isAutoStep;
+    });
+  }, [salariesQ.data]);
+
+  if (!isAdmin) {
+    // 비관리자에게는 위젯 자체를 비워둔다 (껍데기만 남기면 혼란).
+    return null;
+  }
+
+  return cardShell(
+    DASHBOARD_WIDGET_LABELS.payrollNewHires,
+    <Link
+      to="/app/payroll/admin"
+      search={{ tab: 'register' }}
+      className="tw-text-[13px] tw-font-medium tw-text-[#2563EB]"
+    >
+      바로 등록 →
+    </Link>,
+    salariesQ.isLoading ? (
+      <div className="tw-flex tw-justify-center tw-py-6">
+        <Spin />
+      </div>
+    ) : newHires.length === 0 ? (
+      <div className="tw-py-2 tw-text-sm tw-text-slate-500">
+        급여 미등록 신규 입사자가 없습니다.
+      </div>
+    ) : (
+      <div>
+        <div className="tw-flex tw-items-baseline tw-gap-2">
+          <DollarOutlined className="tw-text-amber-500" />
+          <span className="tw-text-2xl tw-font-bold tw-text-slate-900">{newHires.length}</span>
+          <span className="tw-text-sm tw-text-slate-500">명 — 기본급 등록 필요</span>
+        </div>
+        <List
+          size="small"
+          className="tw-mt-2"
+          dataSource={newHires.slice(0, 5)}
+          renderItem={(s) => (
+            <List.Item
+              actions={[
+                s.memberId ? (
+                  <Link
+                    key="register"
+                    to="/app/payroll/admin"
+                    search={{ tab: 'register', createForMemberId: s.memberId }}
+                    className="tw-text-xs tw-font-medium tw-text-[#2563EB]"
+                  >
+                    등록
+                  </Link>
+                ) : null,
+              ].filter(Boolean)}
+            >
+              <List.Item.Meta
+                title={
+                  <span className="tw-text-sm tw-font-medium tw-text-slate-800">
+                    {s.name ?? '—'}
+                  </span>
+                }
+                description={
+                  <span className="tw-text-xs tw-text-slate-500">
+                    {[s.organizationName, s.sabun].filter(Boolean).join(' · ') || '—'}
+                  </span>
+                }
+              />
+            </List.Item>
+          )}
+        />
+        {newHires.length > 5 ? (
+          <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-xs">
+            외 {newHires.length - 5}명 — [바로 등록] 에서 전체 보기
+          </Typography.Paragraph>
+        ) : null}
+      </div>
+    ),
+  );
+}
+
 export function renderDashboardWidget(id: DashboardWidgetId, user: Me | null): ReactNode {
   switch (id) {
     case 'profile':
@@ -541,6 +647,8 @@ export function renderDashboardWidget(id: DashboardWidgetId, user: Me | null): R
       return <DashboardLeaveBlock key={id} />;
     case 'notifications':
       return <DashboardNotificationsBlock key={id} />;
+    case 'payrollNewHires':
+      return <DashboardPayrollNewHiresBlock key={id} user={user} />;
     default:
       return null;
   }

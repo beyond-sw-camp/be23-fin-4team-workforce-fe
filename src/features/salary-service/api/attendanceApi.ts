@@ -48,6 +48,7 @@ import type {
   WorkTripUpdatePayload,
 } from '@/features/salary-service/types';
 import { httpClient } from '@/shared/api/httpClient';
+import type { ApiError } from '@/shared/api/types';
 import { unwrapApiResponse } from '@/shared/api/response';
 
 const BASE = '';
@@ -58,6 +59,10 @@ function unwrapMessage(payload: unknown): string | undefined {
     return typeof m === 'string' ? m : undefined;
   }
   return undefined;
+}
+
+function isApiError(e: unknown): e is ApiError {
+  return typeof e === 'object' && e !== null && 'status' in e && typeof (e as ApiError).status === 'number';
 }
 
 export const attendanceApi = {
@@ -71,6 +76,13 @@ export const attendanceApi = {
 
     async clockOut(body?: AttendanceLogCreatePayload): Promise<DailyAttendance> {
       const { data } = await httpClient.post(`${BASE}/attendance/clock-out`, body ?? {});
+      unwrapMessage(data);
+      return unwrapApiResponse<DailyAttendance>(data);
+    },
+
+    /** 잘못 누른 퇴근 취소 — 오늘자 ClosureStatus=OPEN 일 때만 허용 */
+    async cancelClockOut(): Promise<DailyAttendance> {
+      const { data } = await httpClient.delete(`${BASE}/attendance/clock-out`);
       unwrapMessage(data);
       return unwrapApiResponse<DailyAttendance>(data);
     },
@@ -685,10 +697,16 @@ export const attendanceApi = {
 
     // 내 포괄임금 초과 근무 현황
     async getMy(baseDate?: string): Promise<ComprehensiveOvertimeStatus | null> {
-      const { data } = await httpClient.get(`${BASE}/attendance/comprehensive-overtime/my`, {
-        params: baseDate ? { baseDate } : undefined,
-      });
-      return unwrapApiResponse<ComprehensiveOvertimeStatus | null>(data);
+      try {
+        const { data } = await httpClient.get(`${BASE}/attendance/comprehensive-overtime/my`, {
+          params: baseDate ? { baseDate } : undefined,
+        });
+        return unwrapApiResponse<ComprehensiveOvertimeStatus | null>(data);
+      } catch (e) {
+        // 백엔드에 해당 API가 아직 배포되지 않은 환경(404)은 미적용(null)로 안전 처리
+        if (isApiError(e) && e.status === 404) return null;
+        throw e;
+      }
     },
   },
 };

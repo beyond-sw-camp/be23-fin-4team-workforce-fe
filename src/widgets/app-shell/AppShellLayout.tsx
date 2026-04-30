@@ -410,6 +410,12 @@ function buildAppShellMenuItems(
                             label: APP_MENU_LABEL['/app/leave/policies'],
                             title: APP_MENU_LABEL['/app/leave/policies'],
                         },
+                        {
+                            key: '/app/leave/promotion-no-response',
+                            icon: <BellOutlined className="tw-text-lg"/>,
+                            label: APP_MENU_LABEL['/app/leave/promotion-no-response'],
+                            title: APP_MENU_LABEL['/app/leave/promotion-no-response'],
+                        },
                     );
                 }
                 if (leaveChildren.length === 0) {
@@ -495,14 +501,8 @@ function buildAppShellMenuItems(
                                           {
                                               key: '/app/payroll/admin',
                                               icon: <DollarOutlined className="tw-text-lg"/>,
-                                              label: '월 급여대장',
-                                              title: '월 급여대장',
-                                          },
-                                          {
-                                              key: '/app/payroll/admin/allowances',
-                                              icon: <DollarOutlined className="tw-text-lg"/>,
-                                              label: APP_MENU_LABEL['/app/payroll/admin/allowances'] ?? '수당 관리',
-                                              title: APP_MENU_LABEL['/app/payroll/admin/allowances'] ?? '수당 관리',
+                                              label: '급여 정산',
+                                              title: '급여 정산',
                                           },
                                           {
                                               key: '/app/salary/negotiations',
@@ -519,12 +519,6 @@ function buildAppShellMenuItems(
                                       icon: <DollarOutlined className="tw-text-lg"/>,
                                       label: APP_MENU_LABEL['/app/payroll/admin'],
                                       title: APP_MENU_LABEL['/app/payroll/admin'],
-                                  },
-                                  {
-                                      key: '/app/payroll/admin/allowances',
-                                      icon: <DollarOutlined className="tw-text-lg"/>,
-                                      label: APP_MENU_LABEL['/app/payroll/admin/allowances'] ?? '수당 관리',
-                                      title: APP_MENU_LABEL['/app/payroll/admin/allowances'] ?? '수당 관리',
                                   },
                               ]),
                         {
@@ -1491,7 +1485,7 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
     if (pathname === '/app/leave/types') return ['/app/leave/types'];
     // 사이드바 노출 제거 — 부모 메뉴 /app/leave 로 하이라이트
     if (pathname === '/app/leave/my-promotion') return ['/app/leave'];
-    if (pathname === '/app/leave/promotion-no-response') return ['/app/leave/policies'];
+    if (pathname === '/app/leave/promotion-no-response') return ['/app/leave/promotion-no-response'];
     if (pathname === '/app/leave') return ['/app/leave'];
     if (pathname === '/app/salary/unused-leave') return ['/app/payroll/admin'];
     if (pathname === '/app/salary/settings') return ['/app/salary/settings'];
@@ -1505,7 +1499,8 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
     if (pathname === '/app/payroll/annual') return ['/app/payroll/annual'];
     if (pathname === '/app/income') return ['/app/income'];
     if (pathname === '/app/payroll/tax-summary') return ['/app/payroll/tax-summary'];
-    if (pathname === '/app/payroll/admin/allowances') return ['/app/payroll/admin/allowances'];
+    // 수당 관리는 월 급여대장의 탭으로 통합 — 사이드바는 월 급여대장 메뉴를 활성화
+    if (pathname === '/app/payroll/admin/allowances') return ['/app/payroll/admin'];
     if (pathname.startsWith('/app/payroll/admin')) return ['/app/payroll/admin'];
     if (pathname === '/app/payroll' || /^\/app\/payroll\/[^/]+$/.test(pathname)) return ['/app/payroll'];
     if (pathname.startsWith('/app/approvals')) {

@@ -508,9 +508,6 @@ export function AdminAttendancePage() {
               <Descriptions.Item label="근무">
                 {formatHm(drawerRow.workedMinutes)}
               </Descriptions.Item>
-              <Descriptions.Item label="휴게">
-                {formatHm(drawerRow.totalBreakMinutes ?? drawerRow.breakMinutes)}
-              </Descriptions.Item>
               <Descriptions.Item label="연장">
                 {formatHm(drawerRow.overtimeMinutes)}
               </Descriptions.Item>

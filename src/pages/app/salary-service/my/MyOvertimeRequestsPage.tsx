@@ -6,6 +6,7 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  Alert,
   App,
   Button,
   Card,
@@ -17,9 +18,11 @@ import {
   Modal,
   Popconfirm,
   Select,
+  Statistic,
   Space,
   Table,
   Tag,
+  TimePicker,
   Typography,
 } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
@@ -30,13 +33,8 @@ import type { OvertimeRequest, OvertimeRequestCreatePayload } from '@/features/s
 
 type FormValues = {
   targetDate: dayjs.Dayjs;
-  requestType: 'PRE' | 'POST';
-  plannedStartTime?: string;
-  plannedEndTime?: string;
-  requestedMinutes?: number;
-  actualStartTime?: string;
-  actualEndTime?: string;
-  actualMinutes?: number;
+  startTime?: dayjs.Dayjs;
+  endTime?: dayjs.Dayjs;
   reason?: string;
 };
 
@@ -82,6 +80,16 @@ function formatHours(minutes: number | null | undefined): string {
   return (minutes / 60).toFixed(2).replace(/\.?0+$/, '');
 }
 
+function calcMinutes(start?: dayjs.Dayjs | null, end?: dayjs.Dayjs | null): number | null {
+  if (!start || !end) return null;
+  const s = start.hour() * 60 + start.minute();
+  const e = end.hour() * 60 + end.minute();
+  if (e === s) return null;
+  // 자정을 넘기는 경우(예: 18:00 ~ 00:00)는 다음날 종료로 간주
+  const adjustedEnd = e < s ? e + 24 * 60 : e;
+  return adjustedEnd - s;
+}
+
 export function MyOvertimeRequestsPage() {
   const { message } = App.useApp();
   const qc = useQueryClient();
@@ -108,7 +116,7 @@ export function MyOvertimeRequestsPage() {
     onSuccess: () => {
       message.success('초과근무 신청이 등록되었습니다. (전자결재 자동 발의)');
       form.resetFields();
-      form.setFieldsValue({ requestType: 'PRE', targetDate: dayjs() });
+      form.setFieldsValue({ targetDate: dayjs() });
       setCreateOpen(false);
       void qc.invalidateQueries({ queryKey: ['salary', 'attendance', 'overtime', 'my'] });
     },
@@ -137,6 +145,14 @@ export function MyOvertimeRequestsPage() {
       })
       .sort((a, b) => (b.targetDate ?? '').localeCompare(a.targetDate ?? ''));
   }, [rows, period, statusFilter]);
+
+  const stats = useMemo(() => {
+    const total = filteredRows.length;
+    const pending = filteredRows.filter((r) => r.approvalStatus === 'PENDING').length;
+    const approved = filteredRows.filter((r) => r.approvalStatus === 'APPROVED').length;
+    const rejected = filteredRows.filter((r) => r.approvalStatus === 'REJECTED').length;
+    return { total, pending, approved, rejected };
+  }, [filteredRows]);
 
   // 컬럼 구조 사용자 지정
   const columns = useMemo<ColumnsType<OvertimeRequest>>(
@@ -264,14 +280,14 @@ export function MyOvertimeRequestsPage() {
       {/* 헤더 */}
       <div className="tw-flex tw-flex-wrap tw-justify-between tw-items-center tw-gap-2">
         <Typography.Title level={2} className="!tw-m-0 !tw-text-slate-900">
-          초과근무 관리
+          초과 근무 관리
         </Typography.Title>
         <Button
           type="primary"
           icon={<PlusOutlined />}
           onClick={() => {
             form.resetFields();
-            form.setFieldsValue({ requestType: 'PRE', targetDate: dayjs() });
+            form.setFieldsValue({ targetDate: dayjs() });
             setCreateOpen(true);
           }}
         >
@@ -279,7 +295,21 @@ export function MyOvertimeRequestsPage() {
         </Button>
       </div>
 
-      <Card title="초과근무 관리 내역" className="tw-border-slate-200/80 tw-shadow-sm">
+      <Card title="초과 근무 관리 내역" className="tw-border-slate-200/80 tw-shadow-sm">
+        <Alert
+          type="info"
+          showIcon
+          className="tw-mb-3"
+          message="승인 완료 건만 급여 연장근무 계산에 반영됩니다."
+        />
+
+        <div className="tw-grid tw-grid-cols-2 md:tw-grid-cols-4 tw-gap-3 tw-mb-4">
+          <Card size="small"><Statistic title="전체" value={stats.total} suffix="건" /></Card>
+          <Card size="small"><Statistic title="대기" value={stats.pending} suffix="건" /></Card>
+          <Card size="small"><Statistic title="승인" value={stats.approved} suffix="건" /></Card>
+          <Card size="small"><Statistic title="반려" value={stats.rejected} suffix="건" /></Card>
+        </div>
+
         {/* 필터 */}
         <Space wrap className="tw-mb-4">
           <span className="tw-text-sm tw-text-slate-600">기간</span>
@@ -302,6 +332,17 @@ export function MyOvertimeRequestsPage() {
               { value: 'CANCELLED', label: '취소' },
             ]}
           />
+          <Space size={6}>
+            <Button size="small" type={statusFilter === 'PENDING' ? 'primary' : 'default'} onClick={() => setStatusFilter('PENDING')}>
+              대기만
+            </Button>
+            <Button size="small" type={statusFilter === 'APPROVED' ? 'primary' : 'default'} onClick={() => setStatusFilter('APPROVED')}>
+              승인만
+            </Button>
+            <Button size="small" onClick={() => setStatusFilter('ALL')}>
+              초기화
+            </Button>
+          </Space>
           <Button type="primary" onClick={() => listQ.refetch()}>
             조회
           </Button>
@@ -331,69 +372,64 @@ export function MyOvertimeRequestsPage() {
         width={620}
       >
         <Typography.Paragraph type="secondary" className="!tw-text-xs">
-          신청 시 전자결재 시스템에 자동으로 결재 문서가 발의됩니다.
+          신청 시 전자결재 시스템으로 이동됩니다.
         </Typography.Paragraph>
+        <Alert
+          type="warning"
+          showIcon
+          className="tw-mb-3"
+          message="현재 시각 기준으로 종료 00:00은 다음날 00:00으로 처리됩니다."
+        />
         <Form<FormValues>
           form={form}
           layout="vertical"
-          initialValues={{ requestType: 'PRE', targetDate: dayjs() }}
+          initialValues={{ targetDate: dayjs() }}
           onFinish={(v) =>
-            createM.mutate({
-              targetDate: v.targetDate.format('YYYY-MM-DD'),
-              requestType: v.requestType,
-              plannedStartTime: v.requestType === 'PRE' ? v.plannedStartTime ?? null : null,
-              plannedEndTime: v.requestType === 'PRE' ? v.plannedEndTime ?? null : null,
-              requestedMinutes: v.requestType === 'PRE' ? v.requestedMinutes ?? null : null,
-              actualStartTime: v.requestType === 'POST' ? v.actualStartTime ?? null : null,
-              actualEndTime: v.requestType === 'POST' ? v.actualEndTime ?? null : null,
-              actualMinutes: v.requestType === 'POST' ? v.actualMinutes ?? null : null,
-              reason: v.reason?.trim() || null,
-            })
+            (() => {
+              const now = dayjs();
+              const cutoff = now.startOf('day').hour(18);
+              const requestType: 'PRE' | 'POST' = now.isAfter(cutoff) ? 'POST' : 'PRE';
+              const minutes = calcMinutes(v.startTime, v.endTime);
+              createM.mutate({
+                targetDate: v.targetDate.format('YYYY-MM-DD'),
+                requestType,
+                plannedStartTime: requestType === 'PRE' ? v.startTime?.format('HH:mm') ?? null : null,
+                plannedEndTime: requestType === 'PRE' ? v.endTime?.format('HH:mm') ?? null : null,
+                requestedMinutes: requestType === 'PRE' ? minutes : null,
+                actualStartTime: requestType === 'POST' ? v.startTime?.format('HH:mm') ?? null : null,
+                actualEndTime: requestType === 'POST' ? v.endTime?.format('HH:mm') ?? null : null,
+                actualMinutes: requestType === 'POST' ? minutes : null,
+                reason: v.reason?.trim() || null,
+              });
+            })()
           }
         >
-          <Space wrap align="start" size={12}>
-            <Form.Item name="targetDate" label="대상일" rules={[{ required: true }]}>
-              <DatePicker format="YYYY-MM-DD" />
+          <Space wrap align="start" size={20} className="tw-w-full">
+            <Form.Item name="targetDate" label="대상일" rules={[{ required: true }]} style={{ minWidth: 160 }}>
+              <DatePicker format="YYYY-MM-DD" style={{ width: 160 }} />
             </Form.Item>
-            <Form.Item name="requestType" label="구분" rules={[{ required: true }]}>
-              <Select
-                style={{ width: 120 }}
-                options={[
-                  { value: 'PRE', label: '사전' },
-                  { value: 'POST', label: '사후' },
-                ]}
-              />
+            <Form.Item name="startTime" label="시작" rules={[{ required: true }]} style={{ minWidth: 150 }}>
+              <TimePicker format="HH:mm" minuteStep={5} style={{ width: 140 }} />
+            </Form.Item>
+            <Form.Item
+              name="endTime"
+              label="종료"
+              style={{ minWidth: 150 }}
+              rules={[
+                { required: true },
+                ({ getFieldValue }) => ({
+                  validator(_, value) {
+                    const start = getFieldValue('startTime') as dayjs.Dayjs | undefined;
+                    const mins = calcMinutes(start, value as dayjs.Dayjs | undefined);
+                    if (mins && mins > 0) return Promise.resolve();
+                    return Promise.reject(new Error('시작/종료 시간이 동일하면 안 됩니다.'));
+                  },
+                }),
+              ]}
+            >
+              <TimePicker format="HH:mm" minuteStep={5} style={{ width: 140 }} />
             </Form.Item>
           </Space>
-          <Form.Item noStyle shouldUpdate={(p, c) => p.requestType !== c.requestType}>
-            {({ getFieldValue }) =>
-              getFieldValue('requestType') === 'PRE' ? (
-                <Space wrap align="start" size={12}>
-                  <Form.Item name="plannedStartTime" label="시작(HH:mm)" rules={[{ required: true }]}>
-                    <Input style={{ width: 120 }} placeholder="18:00" />
-                  </Form.Item>
-                  <Form.Item name="plannedEndTime" label="종료(HH:mm)" rules={[{ required: true }]}>
-                    <Input style={{ width: 120 }} placeholder="21:00" />
-                  </Form.Item>
-                  <Form.Item name="requestedMinutes" label="신청분" rules={[{ required: true }]}>
-                    <InputNumber min={1} style={{ width: 120 }} />
-                  </Form.Item>
-                </Space>
-              ) : (
-                <Space wrap align="start" size={12}>
-                  <Form.Item name="actualStartTime" label="실근무 시작(HH:mm)" rules={[{ required: true }]}>
-                    <Input style={{ width: 130 }} placeholder="18:00" />
-                  </Form.Item>
-                  <Form.Item name="actualEndTime" label="실근무 종료(HH:mm)" rules={[{ required: true }]}>
-                    <Input style={{ width: 130 }} placeholder="21:00" />
-                  </Form.Item>
-                  <Form.Item name="actualMinutes" label="실근무분" rules={[{ required: true }]}>
-                    <InputNumber min={1} style={{ width: 120 }} />
-                  </Form.Item>
-                </Space>
-              )
-            }
-          </Form.Item>
           <Form.Item name="reason" label="사유" rules={[{ required: true, message: '사유를 입력하세요.' }]}>
             <Input.TextArea rows={3} maxLength={300} showCount />
           </Form.Item>

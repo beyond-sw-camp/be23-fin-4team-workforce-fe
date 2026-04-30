@@ -17,5 +17,9 @@ export type Member = {
   department: string;
   /** 사번 — 백엔드 필드명이 `sabun` / `employeeNumber` 등으로 올 수 있음 */
   sabun?: string;
+  /** 직책 (예: 팀장, 파트장). /member/list, /member/search 응답에서 옴 */
+  jobTitleName?: string;
+  /** 직급 (예: 사원, 대리). /member/list, /member/search 응답에서 옴 */
+  jobGradeName?: string;
   status: 'ACTIVE' | 'DORMANT' | 'LEAVE';
 };

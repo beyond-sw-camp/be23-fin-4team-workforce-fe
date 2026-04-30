@@ -12,7 +12,6 @@ import { useAuth } from '@/features/auth/useAuth';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import type {
   AttendanceLog,
-  ComprehensiveOvertimeStatus,
   DailyAttendance,
 } from '@/features/salary-service/types';
 import { AttendanceStatusTag } from '@/features/salary-service/ui/AttendanceStatusTag';
@@ -65,7 +64,7 @@ function formatDt(iso?: string | null) {
 }
 
 export function MyAttendancePage() {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const qc = useQueryClient();
   const { user } = useAuth();
   const [picked, setPicked] = useState<Dayjs>(() => dayjs());
@@ -102,14 +101,8 @@ export function MyAttendancePage() {
     queryFn: () => attendanceApi.attendance.getMyWorkTimeSummary(dateIso),
   });
 
-  // 포괄임금제 적용 직원만 데이터 반환 비포괄/미적용은 null
-  const comprehensiveQ = useQuery<ComprehensiveOvertimeStatus | null>({
-    queryKey: ['salary', 'attendance', 'my', 'comprehensive-overtime', dateIso],
-    queryFn: () => attendanceApi.comprehensiveOvertime.getMy(dateIso),
-  });
-
   const summary = summaryQ.data;
-  const comprehensive = comprehensiveQ.data;
+  const comprehensive = null;
   const totalSev = severityOf(summary?.totalUsagePercent);
   const otSev = severityOf(summary?.overtimeUsagePercent);
 
@@ -167,9 +160,19 @@ export function MyAttendancePage() {
     onError: (e: Error) => message.error(e.message || '퇴근 처리에 실패했습니다.'),
   });
 
+  const cancelClockOutM = useMutation({
+    mutationFn: () => attendanceApi.attendance.cancelClockOut(),
+    onSuccess: () => {
+      message.success('퇴근이 취소되었습니다.');
+      invalidate();
+    },
+    onError: (e: Error) => message.error(e.message || '퇴근 취소에 실패했습니다.'),
+  });
+
   const busy =
     clockInM.isPending ||
-    clockOutM.isPending;
+    clockOutM.isPending ||
+    cancelClockOutM.isPending;
 
   const visibleLogs = useMemo(
     () =>
@@ -247,7 +250,12 @@ export function MyAttendancePage() {
               대상 주간 {summary.weekStart ?? '—'} ~ {summary.weekEnd ?? '—'}
             </Typography.Text>
 
-            <div className="tw-grid tw-grid-cols-2 md:tw-grid-cols-4 tw-gap-3">
+            {/* 포괄임금제 직원만 OT 한도 카드 노출 → 컬럼 수 동적 */}
+            <div className={`tw-grid tw-grid-cols-2 ${
+              comprehensive && comprehensive.fixedLimit != null
+                ? 'md:tw-grid-cols-4'
+                : 'md:tw-grid-cols-3'
+            } tw-gap-3`}>
               <Card size="small" className="tw-border-slate-200/80">
                 <Statistic
                   title="주 총 근무"
@@ -263,7 +271,7 @@ export function MyAttendancePage() {
                   status={totalSev === 'exceeded' ? 'exception' : 'normal'}
                 />
                 <Typography.Text type="secondary" className="tw-text-xs">
-                  {formatHm(summary.totalWorkedMinutes)} / {formatHm(summary.totalLimitMinutes)} (법정 52h)
+                  {formatHm(summary.totalWorkedMinutes)} / {formatHm(summary.totalLimitMinutes)} (법정 기준 52시간)
                 </Typography.Text>
               </Card>
 
@@ -282,7 +290,7 @@ export function MyAttendancePage() {
                   status={otSev === 'exceeded' ? 'exception' : 'normal'}
                 />
                 <Typography.Text type="secondary" className="tw-text-xs">
-                  {formatHm(summary.overtimeApprovedMinutes)} / {formatHm(summary.overtimeLimitMinutes)} (법정 12h)
+                  {formatHm(summary.overtimeApprovedMinutes)} / {formatHm(summary.overtimeLimitMinutes)} (법정 기준 12시간)
                 </Typography.Text>
               </Card>
 
@@ -303,11 +311,12 @@ export function MyAttendancePage() {
                   </Tag>
                 </div>
                 <Typography.Text type="secondary" className="tw-text-xs">
-                  근기법 55조
+                  근로기준법 55조
                 </Typography.Text>
               </Card>
 
-              {comprehensive && comprehensive.fixedLimit != null ? (
+              {/* 포괄임금제 직원만 OT 한도 카드. 비포괄은 카드 자체 숨김 (그리드 3컬럼). */}
+              {comprehensive && comprehensive.fixedLimit != null && (
                 <Card size="small" className="tw-border-slate-200/80">
                   <Statistic
                     title="포괄임금 OT (월)"
@@ -343,17 +352,6 @@ export function MyAttendancePage() {
                     ) : null}
                   </Typography.Text>
                 </Card>
-              ) : (
-                <Card size="small" className="tw-border-slate-200/80">
-                  <Statistic
-                    title="포괄임금 OT"
-                    value="미적용"
-                    valueStyle={{ fontSize: 18, color: '#6b7280' }}
-                  />
-                  <Typography.Text type="secondary" className="tw-text-xs">
-                    실연장근무 정산 대상
-                  </Typography.Text>
-                </Card>
               )}
             </div>
 
@@ -369,9 +367,32 @@ export function MyAttendancePage() {
           <Button type="primary" loading={busy} onClick={() => clockInM.mutate()}>
             출근
           </Button>
-          <Button loading={busy} onClick={() => clockOutM.mutate()}>
-            퇴근
-          </Button>
+          {/* 퇴근 버튼은 상태에 따라 분기 처리:
+              - 아직 퇴근 전이면 일반 퇴근 처리
+              - 이미 퇴근됐다면 confirm 후 취소 처리 (잘못 누른 경우 복구) */}
+          {daily?.lastClockOut ? (
+            <Button
+              loading={busy}
+              danger
+              onClick={() => {
+                modal.confirm({
+                  title: '퇴근을 취소하시겠습니까?',
+                  content:
+                    '잘못 누른 경우에 사용하세요. 퇴근 기록과 근무·연장 분이 초기화되며, 다시 퇴근하려면 [퇴근] 버튼을 누르면 됩니다. (이미 마감된 근태는 취소할 수 없습니다.)',
+                  okText: '퇴근 취소',
+                  okButtonProps: { danger: true },
+                  cancelText: '닫기',
+                  onOk: () => cancelClockOutM.mutateAsync(),
+                });
+              }}
+            >
+              퇴근 취소
+            </Button>
+          ) : (
+            <Button loading={busy} onClick={() => clockOutM.mutate()}>
+              퇴근
+            </Button>
+          )}
         </Space>
       </Card>
 

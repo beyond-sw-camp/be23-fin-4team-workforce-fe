@@ -29,7 +29,6 @@ import type {
   RetirementPolicyCreatePayload,
   RetirementPolicyUpdatePayload,
   Salary,
-  SalaryBootstrapPayload,
   SalaryCreatePayload,
   SalaryItemTemplate,
   SalaryItemTemplateCreatePayload,
@@ -42,6 +41,7 @@ import type {
   SalaryPolicyCreatePayload,
   SalaryPolicyUpdatePayload,
   SalaryUpdatePayload,
+  PayrollPrecheckRes,
   TaxRate,
   TaxRateCreatePayload,
   TaxRateUpdatePayload,
@@ -303,6 +303,12 @@ export const salaryApi = {
       return Array.isArray(unwrapped) ? unwrapped : [];
     },
 
+    /** 급여대장 생성 직전 사전 검증 — 활성 Salary 미등록 / 계좌 미등록 직원 목록. */
+    async precheck(): Promise<PayrollPrecheckRes> {
+      const { data } = await httpClient.get(`${BASE}/salary/salaries/precheck`);
+      return unwrapApiResponse<PayrollPrecheckRes>(data);
+    },
+
     async getById(salaryId: string): Promise<Salary> {
       const { data } = await httpClient.get(
         `${BASE}/salary/salaries/${encodeURIComponent(salaryId)}`,
@@ -322,20 +328,6 @@ export const salaryApi = {
       const { data } = await httpClient.post(`${BASE}/salary/salaries/create`, payload);
       unwrapMessage(data);
       return unwrapApiResponse<Salary>(data);
-    },
-
-    /** 입사 누락 복구 — Kafka 실패/백필 시 수동 트리거.
-     *  - 활성 SalaryPolicy 필수, 없으면 백엔드가 skip */
-    async bootstrap(payload: SalaryBootstrapPayload): Promise<void> {
-      const { data } = await httpClient.post(`${BASE}/salary/salaries/bootstrap`, {
-        memberId: payload.memberId,
-        hireDate: payload.hireDate,
-        baseSalary: payload.baseSalary ?? null,
-        jobGradeId: payload.jobGradeId ?? null,
-        jobGradeName: payload.jobGradeName ?? null,
-        jobTitleName: payload.jobTitleName ?? null,
-      });
-      unwrapMessage(data);
     },
 
     async update(salaryId: string, payload: SalaryUpdatePayload): Promise<Salary> {
@@ -384,8 +376,10 @@ export const salaryApi = {
       return unwrapApiResponse<SalaryPolicy>(data);
     },
 
-    async delete(id: string): Promise<void> {
-      await httpClient.delete(`${BASE}/salary/salary-policies/${encodeURIComponent(id)}`);
+    async delete(id: string, options?: { force?: boolean }): Promise<void> {
+      await httpClient.delete(`${BASE}/salary/salary-policies/${encodeURIComponent(id)}`, {
+        params: options?.force ? { force: true } : undefined,
+      });
     },
   },
 
@@ -599,21 +593,71 @@ export const salaryApi = {
       unwrapMessage(data);
     },
 
-    async listByStatus(status?: string): Promise<MemberAllowance[]> {
+    /** 회사 전체 수당 조회 — status·yearMonth 모두 optional. yearMonth=YYYY-MM */
+    async listByCompany(params?: { status?: string; yearMonth?: string }): Promise<MemberAllowance[]> {
       const { data } = await httpClient.get(`${BASE}/salary/admin/allowances`, {
-        params: status ? { status } : undefined,
+        params: {
+          ...(params?.status ? { status: params.status } : {}),
+          ...(params?.yearMonth ? { yearMonth: params.yearMonth } : {}),
+        },
       });
       const unwrapped = unwrapApiResponse<MemberAllowance[] | null>(data);
       return Array.isArray(unwrapped) ? unwrapped : [];
     },
 
-    async listActiveByMember(memberId: string, date: string): Promise<MemberAllowance[]> {
+    /** [구버전 호환] status 만 받는 alias */
+    async listByStatus(status?: string): Promise<MemberAllowance[]> {
+      return this.listByCompany({ status });
+    },
+
+    /** 특정 직원의 yearMonth 활성 수당 — yearMonth=YYYY-MM */
+    async listActiveByMember(memberId: string, yearMonth: string): Promise<MemberAllowance[]> {
       const { data } = await httpClient.get(
         `${BASE}/salary/admin/allowances/members/${encodeURIComponent(memberId)}/active`,
-        { params: { date } },
+        { params: { yearMonth } },
       );
       const unwrapped = unwrapApiResponse<MemberAllowance[] | null>(data);
       return Array.isArray(unwrapped) ? unwrapped : [];
+    },
+
+    /** orphan 수당 정리 - Salary 없는 직원의 잔여 수당을 일괄 소프트 삭제.
+     *  반환값: 정리된 행 수. */
+    async cleanupOrphans(): Promise<number> {
+      const { data } = await httpClient.post(`${BASE}/salary/admin/allowances/cleanup-orphans`);
+      const unwrapped = unwrapApiResponse<number | null>(data);
+      return typeof unwrapped === 'number' ? unwrapped : 0;
+    },
+
+    /** 관리자가 특정 직원/템플릿의 활성 수당을 즉시 종료.
+     *  급여 수정 시 부가 수당 토글 해제된 항목 한 건씩 끌 때 사용. */
+    async closeByTemplate(payload: {
+      memberId: string;
+      templateId: string;
+      closeAt?: string; // YYYY-MM-DD, 미지정 시 오늘
+    }): Promise<void> {
+      await httpClient.post(
+        `${BASE}/salary/admin/allowances/members/${encodeURIComponent(payload.memberId)}/templates/${encodeURIComponent(payload.templateId)}/close`,
+        null,
+        { params: payload.closeAt ? { closeAt: payload.closeAt } : {} },
+      );
+    },
+
+    /** 관리자가 특정 직원/템플릿의 모든 활성 행을 hard-delete (소프트 삭제).
+     *  미래 effectiveFrom 수당을 토글 해제해서 완전히 없애고 싶을 때 사용. */
+    async deleteByTemplate(payload: {
+      memberId: string;
+      templateId: string;
+    }): Promise<void> {
+      await httpClient.delete(
+        `${BASE}/salary/admin/allowances/members/${encodeURIComponent(payload.memberId)}/templates/${encodeURIComponent(payload.templateId)}`,
+      );
+    },
+
+    /** [수당 관리] 행별 단건 삭제. */
+    async deleteOne(memberAllowanceId: string): Promise<void> {
+      await httpClient.delete(
+        `${BASE}/salary/admin/allowances/${encodeURIComponent(memberAllowanceId)}`,
+      );
     },
   },
 

@@ -343,9 +343,22 @@ const PRE_ACTION_CONFIGS: PreActionConfig[] = [
       if (!targetYearMonth || !slotId) {
         throw new Error('대상 연월·슬롯은 필수입니다.');
       }
+      // HH:mm 형식 입력을 HH:mm:ss 로 정규화
+      const normalizeTime = (raw: string): string | null => {
+        const s = raw.trim();
+        if (!s) return null;
+        // HH:mm 또는 HH:mm:ss 만 허용
+        if (/^\d{1,2}:\d{2}$/.test(s)) return `${s.padStart(5, '0')}:00`;
+        if (/^\d{1,2}:\d{2}:\d{2}$/.test(s)) return s;
+        return null;
+      };
+      const breakStart = normalizeTime(readStr(content, 'breakStart'));
+      const breakEnd = normalizeTime(readStr(content, 'breakEnd'));
       const r = await attendanceApi.scheduleSelection.createMy({
         targetYearMonth,
         slotId,
+        breakStart,
+        breakEnd,
         requestReason: readStr(content, 'requestReason') || null,
       });
       if (!r.selectionId) throw new Error('슬롯 선택 ID 를 받지 못했습니다.');
@@ -2293,6 +2306,8 @@ export function ApprovalsPage() {
       const parsed = JSON.parse(raw) as {
         targetYearMonth?: string;
         slotId?: string;
+        breakStart?: string | null;
+        breakEnd?: string | null;
         requestReason?: string | null;
       };
       if (!parsed.targetYearMonth || !parsed.slotId) return;
@@ -2302,6 +2317,8 @@ export function ApprovalsPage() {
           ...current,
           targetYearMonth: parsed.targetYearMonth,
           slotId: parsed.slotId,
+          breakStart: parsed.breakStart ?? '12:00',
+          breakEnd: parsed.breakEnd ?? '13:00',
           requestReason: parsed.requestReason ?? '',
         },
       });
@@ -3114,8 +3131,8 @@ export function ApprovalsPage() {
   const navigateViewerInboxTab = (key: string) => {
     navigate({
       to: '/app/approvals',
-      search: (prev: Record<string, string | undefined>) => ({
-        ...(prev as Record<string, string | undefined>),
+      search: (prev) => ({
+        ...prev,
         tab: 'my',
         box: 'per-viewers',
         viewerSub: key === 'circ' ? 'circ' : undefined,
@@ -4367,7 +4384,9 @@ export function ApprovalsPage() {
                 optionFilterProp="label"
                 onSelect={(val) =>
                   setQuickHomeFormsDraft((prev) =>
-                    prev.includes(val) || prev.length >= 3 ? prev : [...prev, val],
+                    typeof val !== 'string' || prev.includes(val) || prev.length >= 3
+                      ? prev
+                      : [...prev, val],
                   )
                 }
               />
