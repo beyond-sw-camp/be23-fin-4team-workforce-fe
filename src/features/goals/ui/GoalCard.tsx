@@ -1,9 +1,9 @@
-import { Card, Tag } from 'antd';
+import { Card, Progress, Tag } from 'antd';
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { useMemberDisplayNames } from '@/features/members/hooks/useMemberDisplayNames';
 import { goalApi } from '../api/goalApi';
-import type { Goal, GoalStatus } from '../model/types';
+import type { Goal, GoalHealthStatus, GoalStatus } from '../model/types';
 
 const STATUS_COLOR: Record<GoalStatus, string> = {
   DRAFT: 'default',
@@ -23,6 +23,22 @@ const STATUS_LABEL: Record<GoalStatus, string> = {
   SKIPPED: '제외',
 };
 
+const HEALTH_LABEL: Record<GoalHealthStatus, string> = {
+  NOT_STARTED: '미시작',
+  ON_TRACK: '정상',
+  AT_RISK: '주의',
+  BEHIND: '지연',
+  COMPLETED: '완료',
+};
+
+const HEALTH_COLOR: Record<GoalHealthStatus, string> = {
+  NOT_STARTED: 'default',
+  ON_TRACK: 'green',
+  AT_RISK: 'gold',
+  BEHIND: 'red',
+  COMPLETED: 'blue',
+};
+
 const VISIBILITY_LABEL = {
   COMPANY: '전사',
   TEAM: '팀',
@@ -40,6 +56,8 @@ export function GoalCard({ goal, onClick, showOwnerName = false, compact = false
   const isObjective = goal.ownerType === 'ORGANIZATION';
   const memberIds = showOwnerName && goal.ownerType === 'MEMBER' ? [goal.ownerId] : [];
   const { labelFor } = useMemberDisplayNames(memberIds);
+  const progressPct = Math.max(0, Math.min(100, Number(goal.achievementPct ?? goal.rolledAchievementPct ?? 0)));
+  const healthStatus = goal.healthStatus ?? 'NOT_STARTED';
 
   const { data: aggregate } = useQuery({
     queryKey: ['goal-aggregate', goal.goalId],
@@ -105,6 +123,14 @@ export function GoalCard({ goal, onClick, showOwnerName = false, compact = false
             >
               {STATUS_LABEL[goal.status]}
             </Tag>
+            {!isObjective && (
+              <Tag
+                color={HEALTH_COLOR[healthStatus] as any}
+                className="!tw-m-0 !tw-rounded-full !tw-px-2.5 !tw-py-0.5 !tw-text-[11px] !tw-font-semibold"
+              >
+                {HEALTH_LABEL[healthStatus]}
+              </Tag>
+            )}
             <Tag
               bordered={false}
               className="!tw-m-0 !tw-rounded-full !tw-bg-slate-100 !tw-px-2.5 !tw-py-0.5 !tw-text-[11px] !tw-font-medium !tw-text-slate-700"
@@ -152,13 +178,13 @@ export function GoalCard({ goal, onClick, showOwnerName = false, compact = false
                 <span className="tw-truncate tw-text-slate-700">{alignedObjective?.title ?? goal.objectiveTitle ?? '연결 필요'}</span>
               </div>
               <div className="tw-rounded-lg tw-border tw-border-blue-100 tw-bg-blue-50/60 tw-px-3 tw-py-2 tw-text-[11px] tw-text-slate-600">
-                이 개인 목표는 상위 조직 목표의 S/A/B/C 평가 기준을 참조합니다.
+                개인 목표는 상위 조직 목표의 S/A/B/C 평가 기준을 참고합니다.
               </div>
             </div>
           ) : null}
         </div>
 
-        <div className="tw-shrink-0 tw-pl-2 tw-text-right">
+        <div className="tw-w-[112px] tw-shrink-0 tw-pl-2 tw-text-right">
           {isObjective ? (
             <>
               <div className={compact ? 'tw-text-[16px] tw-font-bold tw-leading-none tw-text-[#1e3a5f]' : 'tw-text-[20px] tw-font-bold tw-leading-none tw-text-[#1e3a5f]'}>
@@ -166,7 +192,7 @@ export function GoalCard({ goal, onClick, showOwnerName = false, compact = false
                 <span className="tw-text-xs tw-font-semibold tw-text-slate-400"> 점</span>
               </div>
               <div className="tw-mt-1 tw-text-[10px] tw-text-slate-400">
-                {aggregate?.weightedAvgScore != null ? '확정 평가 기준 가중 평균' : '평가 확정 전'}
+                {aggregate?.weightedAvgScore != null ? '확정 평가 기준 가중평균' : '평가 확정 전'}
               </div>
               {!compact && aggregate?.simpleAvgScore != null && (
                 <div className="tw-text-[10px] tw-text-slate-400">단순 평균 {aggregate.simpleAvgScore.toFixed(1)}점</div>
@@ -183,9 +209,15 @@ export function GoalCard({ goal, onClick, showOwnerName = false, compact = false
                 {goal.weightPct}
                 <span className="tw-text-base tw-font-semibold tw-text-slate-400">%</span>
               </div>
-              {!compact && <div className="tw-mt-1 tw-text-[11px] tw-text-slate-400">조직 목표 평가 기준 참조</div>}
-              {!compact && goal.status === 'ACTIVE' && (
-                <div className="tw-mt-1 tw-text-[11px] tw-text-amber-600">승인 후에는 수정 대신 취소 후 재작성으로 관리합니다.</div>
+              <div className="tw-mt-1 tw-text-[11px] tw-text-slate-400">가중치</div>
+              {!compact && (
+                <div className="tw-mt-3">
+                  <div className="tw-mb-1 tw-flex tw-items-center tw-justify-between tw-text-[10px] tw-text-slate-500">
+                    <span>진행률</span>
+                    <span>{progressPct.toFixed(0)}%</span>
+                  </div>
+                  <Progress percent={progressPct} showInfo={false} size="small" strokeColor="#059669" />
+                </div>
               )}
             </>
           )}

@@ -1,6 +1,6 @@
-import { App, Card, Modal, Space, Tag, Tooltip } from 'antd';
+import { App, Card, Modal, Tag, Tooltip } from 'antd';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useMemberDisplayNames } from '@/features/members/hooks/useMemberDisplayNames';
 import { evaluationRedesignApi } from '../api/evaluationRedesignApi';
 import { AppButton } from '@/shared/ui/AppButton';
@@ -35,6 +35,7 @@ export function SeasonActivationButton({ seasonId, disabled, disabledTooltip }: 
     onSuccess: () => {
       message.success('시즌이 활성화되었습니다.');
       queryClient.invalidateQueries({ queryKey: ['eval-seasons'] });
+      queryClient.invalidateQueries({ queryKey: ['season-goal-readiness', seasonId] });
     },
     onError: (err: any) => {
       const status = err?.response?.status as number | undefined;
@@ -87,28 +88,20 @@ export function SeasonActivationButton({ seasonId, disabled, disabledTooltip }: 
     </AppButton>
   );
 
-  const trigger =
-    disabled && disabledTooltip ? (
-      <Tooltip title={disabledTooltip}>
-        <span className="tw-inline-flex tw-max-w-full">{button}</span>
-      </Tooltip>
-    ) : (
-      button
-    );
-
   return (
     <>
-      {trigger}
+      {disabled && disabledTooltip ? (
+        <Tooltip title={disabledTooltip}>
+          <span className="tw-inline-flex tw-max-w-full">{button}</span>
+        </Tooltip>
+      ) : (
+        button
+      )}
 
       <Modal
         open={!!leadBlockMessage}
         onCancel={() => setLeadBlockMessage(null)}
-        title={
-          <div className="tw-flex tw-items-center tw-gap-2">
-            <span className="tw-text-amber-600">Lead</span>
-            <span>평가 책임자를 확정할 수 없습니다</span>
-          </div>
-        }
+        title="Lead 평가자가 필요합니다"
         width={520}
         destroyOnHidden
         footer={
@@ -125,11 +118,7 @@ export function SeasonActivationButton({ seasonId, disabled, disabledTooltip }: 
       <Modal
         open={!!blocked}
         onCancel={() => setBlocked(null)}
-        title={
-          <div className="tw-flex tw-items-center tw-gap-2">
-            <span className="tw-text-rose-600">시즌 활성화 점검</span>
-          </div>
-        }
+        title="시즌 활성화 전 확인이 필요합니다"
         width={700}
         destroyOnHidden
         footer={
@@ -148,38 +137,21 @@ export function SeasonActivationButton({ seasonId, disabled, disabledTooltip }: 
                 eyebrow="AUTO EXCLUDED"
                 value={excludedCount}
                 label="자동 제외 대상"
-                description="휴직, 비활성, 중도 입사 등 정책상 이번 시즌 평가 대상에 포함되지 않는 구성원입니다."
+                description="퇴사, 휴직 등 이번 시즌 평가 대상에서 제외되는 구성원입니다."
               />
               <SummaryCard
                 tone="rose"
                 eyebrow="BLOCKERS"
                 value={blockedCount}
                 label="활성화 차단 대상"
-                description="아래 사유가 해결되어야 시즌 활성화를 진행할 수 있습니다."
+                description="아래 이슈가 해결되어야 시즌을 활성화할 수 있습니다."
               />
             </div>
 
-            <ExcludedSection
-              label="자동 제외 대상"
-              description="재직 상태 또는 입사일 기준으로 이번 시즌 평가 대상에서 제외됩니다."
-              members={blocked.inactiveMembers}
-            />
-
-            <BlockedSection
-              label="가중치 100% 미충족"
-              members={blocked.weightShortageMembers}
-              variant="rose"
-            />
-            <BlockedSection
-              label="승인 대기 bundle 존재"
-              members={blocked.pendingBundleMembers}
-              variant="amber"
-            />
-            <BlockedSection
-              label="KR 없음 또는 정렬/목표 누락"
-              members={blocked.missingGoalsMembers}
-              variant="slate"
-            />
+            <MemberSection label="자동 제외 대상" members={blocked.inactiveMembers} variant="slate" />
+            <MemberSection label="가중치 100% 미충족" members={blocked.weightShortageMembers} variant="rose" />
+            <MemberSection label="승인 대기 bundle 존재" members={blocked.pendingBundleMembers} variant="amber" />
+            <MemberSection label="개인 목표 없음" members={blocked.missingGoalsMembers} variant="slate" />
           </div>
         ) : null}
       </Modal>
@@ -194,16 +166,12 @@ function LeadFailureBody({ message }: { message: string }) {
   return (
     <div className="tw-space-y-3 tw-text-sm tw-text-slate-700">
       <p>
-        응답을 생성하거나 확정하려면 최종 책임자인 <strong>Lead evaluator</strong> 가 필요합니다. 현재
-        그룹 매핑이나 직속 상사 정보만으로는 Lead 를 확정할 수 없습니다.
-      </p>
-      <p className="tw-rounded-xl tw-border tw-border-amber-100 tw-bg-amber-50 tw-px-3 tw-py-2 tw-text-xs">
-        해결 방법: 시즌 상세에서 그룹의 평가자 매핑을 열고, 해당 구성원에게 상급자(Downward) 평가자를 직접
-        지정한 뒤 다시 활성화해 주세요.
+        시즌을 활성화하려면 최종 평가 책임자인 <strong>Lead 평가자</strong>가 필요합니다. 해당 구성원의
+        DOWNWARD 평가자를 지정한 뒤 다시 활성화해 주세요.
       </p>
       {memberId ? (
-        <div className="tw-text-xs tw-text-slate-500">
-          확인이 필요한 대상: <span className="tw-font-medium tw-text-slate-800">{labelFor(memberId)}</span>
+        <div className="tw-rounded-xl tw-border tw-border-amber-100 tw-bg-amber-50 tw-px-3 tw-py-2 tw-text-xs">
+          확인 대상: <span className="tw-font-medium tw-text-slate-800">{labelFor(memberId)}</span>
           <code className="tw-ml-2 tw-text-[10px] tw-text-slate-400">{memberId}</code>
         </div>
       ) : null}
@@ -243,45 +211,7 @@ function SummaryCard({
   );
 }
 
-function ExcludedSection({
-  label,
-  description,
-  members,
-}: {
-  label: string;
-  description: string;
-  members?: string[];
-}) {
-  const ids = useMemo(() => members ?? [], [members]);
-  const { labelFor } = useMemberDisplayNames(ids);
-
-  if (!members || members.length === 0) return null;
-
-  return (
-    <Card className="tw-rounded-2xl tw-border tw-border-slate-200/90" styles={{ body: { padding: 16 } }}>
-      <div className="tw-flex tw-items-center tw-gap-2 tw-mb-1">
-        <Tag bordered={false} className="!tw-m-0 !tw-rounded-full !tw-bg-slate-100 !tw-px-3 !tw-py-0.5 !tw-text-[11px] !tw-font-semibold !tw-text-slate-600">
-          {label}
-        </Tag>
-        <span className="tw-text-sm tw-text-slate-500">{members.length}명</span>
-      </div>
-      <div className="tw-mb-3 tw-text-xs tw-text-slate-500">{description}</div>
-      <ul className="tw-space-y-1 tw-max-h-40 tw-overflow-auto wf-scrollbar-modal">
-        {members.map((id) => (
-          <li
-            key={id}
-            className="tw-flex tw-items-center tw-justify-between tw-rounded-xl tw-bg-slate-50 tw-px-3 tw-py-2 tw-text-sm"
-          >
-            <span className="tw-font-medium tw-text-slate-800">{labelFor(id)}</span>
-            <code className="tw-text-[10px] tw-text-slate-400">{id.slice(0, 8)}..</code>
-          </li>
-        ))}
-      </ul>
-    </Card>
-  );
-}
-
-function BlockedSection({
+function MemberSection({
   label,
   members,
   variant,
@@ -290,7 +220,7 @@ function BlockedSection({
   members?: string[];
   variant: 'rose' | 'amber' | 'slate';
 }) {
-  const ids = useMemo(() => members ?? [], [members]);
+  const ids = members ?? [];
   const { labelFor } = useMemberDisplayNames(ids);
 
   if (!members || members.length === 0) return null;
@@ -303,19 +233,13 @@ function BlockedSection({
 
   return (
     <Card className="tw-rounded-2xl tw-border tw-border-slate-200/90" styles={{ body: { padding: 16 } }}>
-      <div className="tw-flex tw-items-center tw-gap-2 tw-mb-3">
-        <Tag
-          bordered
-          className={
-            '!tw-m-0 !tw-rounded-full !tw-px-3 !tw-py-0.5 !tw-text-[11px] !tw-font-semibold ' +
-            variantClass[variant]
-          }
-        >
+      <div className="tw-mb-3 tw-flex tw-items-center tw-gap-2">
+        <Tag bordered className={`!tw-m-0 !tw-rounded-full !tw-px-3 !tw-py-0.5 !tw-text-[11px] !tw-font-semibold ${variantClass[variant]}`}>
           {label}
         </Tag>
         <span className="tw-text-sm tw-text-slate-500">{members.length}명</span>
       </div>
-      <ul className="tw-space-y-1 tw-max-h-40 tw-overflow-auto wf-scrollbar-modal">
+      <ul className="wf-scrollbar-modal tw-max-h-40 tw-space-y-1 tw-overflow-auto">
         {members.map((id) => (
           <li
             key={id}

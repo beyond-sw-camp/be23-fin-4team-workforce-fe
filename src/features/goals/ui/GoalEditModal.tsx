@@ -3,6 +3,7 @@ import { App, DatePicker, Form, Input, InputNumber, Radio, Select, Switch, Typog
 import dayjs, { type Dayjs } from 'dayjs';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/features/auth/useAuth';
+import { memberApi } from '@/features/member/api/memberApi';
 import { SingleMemberOrgChartSelectModal } from '@/features/members/ui/SingleMemberOrgChartSelectModal';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { goalApi } from '../api/goalApi';
@@ -80,6 +81,18 @@ export function GoalEditModal({
   const selectedObjectiveId = Form.useWatch('alignedOrgGoalId', form);
   const isObjective = ownerType === 'ORGANIZATION';
 
+  const { data: currentMemberDetail } = useQuery({
+    queryKey: ['member-detail', user?.id],
+    queryFn: () => memberApi.detail(user!.id),
+    enabled: open && !!user?.id,
+    staleTime: 60_000,
+  });
+
+  const defaultObjectiveOwnerId =
+    defaultOwnerType === 'ORGANIZATION'
+      ? currentMemberDetail?.organizationId || defaultOwnerId || ''
+      : defaultOwnerId || '';
+
   const { data: availableObjectives = [], isLoading: isObjectivesLoading } = useQuery({
     queryKey: ['goal-my-objectives-for-create'],
     queryFn: () => goalApi.listMyObjectives(),
@@ -129,7 +142,7 @@ export function GoalEditModal({
     form.resetFields();
     form.setFieldsValue({
       ownerType: defaultOwnerType ?? 'MEMBER',
-      ownerId: defaultOwnerId ?? '',
+      ownerId: defaultObjectiveOwnerId,
       alignedOrgGoalId: presetAlignedOrgGoalId ?? null,
       cycle: 'QUARTERLY',
       cycleYear: dayjs().year(),
@@ -143,7 +156,16 @@ export function GoalEditModal({
       gradeC: '',
     });
     setSelectedOwnerMemberLabel('');
-  }, [defaultOwnerId, defaultOwnerType, form, goal, open, presetAlignedOrgGoalId]);
+  }, [defaultObjectiveOwnerId, defaultOwnerType, form, goal, open, presetAlignedOrgGoalId]);
+
+  useEffect(() => {
+    if (!open || isEdit || ownerType !== 'ORGANIZATION' || !currentMemberDetail?.organizationId) return;
+    const currentOwnerId = form.getFieldValue('ownerId');
+    if (!currentOwnerId || currentOwnerId === defaultOwnerId) {
+      form.setFieldValue('ownerId', currentMemberDetail.organizationId);
+      form.validateFields(['ownerId']).catch(() => undefined);
+    }
+  }, [currentMemberDetail?.organizationId, defaultOwnerId, form, isEdit, open, ownerType]);
 
   useEffect(() => {
     if (!open || isEdit || ownerType !== 'MEMBER' || !selectedObjective) return;
@@ -174,8 +196,13 @@ export function GoalEditModal({
       if (!goal) throw new Error('goal is required');
       const targetGoalId = goal.goalId;
       const values = await form.validateFields();
+      if (isObjective && !values.ownerId) {
+        form.setFields([{ name: 'ownerId', errors: ['소유 조직을 선택해 주세요.'] }]);
+        throw new Error('소유 조직을 선택해 주세요.');
+      }
       const payload = isObjective
         ? {
+            ownerId: values.ownerId,
             title: values.title,
             description: values.description,
             visibility: values.visibility,
@@ -210,6 +237,11 @@ export function GoalEditModal({
     }
 
     const values = await form.validateFields();
+    if (values.ownerType === 'ORGANIZATION' && !values.ownerId) {
+      form.setFields([{ name: 'ownerId', errors: ['소유 조직을 선택해 주세요.'] }]);
+      message.warning('소유 조직을 선택해 주세요.');
+      return;
+    }
     const period =
       values.manualPeriodEnabled && values.manualCycleRange
         ? {
@@ -505,7 +537,9 @@ export function GoalEditModal({
     queryClient.invalidateQueries({ queryKey: ['goals-mine'] });
     queryClient.invalidateQueries({ queryKey: ['goals-my-objectives'] });
     queryClient.invalidateQueries({ queryKey: ['goals-company'] });
+    queryClient.invalidateQueries({ queryKey: ['goals-company-all'] });
     queryClient.invalidateQueries({ queryKey: ['goals-org'] });
+    queryClient.invalidateQueries({ queryKey: ['goals-org-objectives'] });
     queryClient.invalidateQueries({ queryKey: ['goal-available-objectives'] });
   }
 
@@ -545,4 +579,3 @@ function SectionHeader({ title, className }: { title: string; className?: string
     </div>
   );
 }
-

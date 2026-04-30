@@ -1,5 +1,5 @@
 ﻿import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { App as AntdApp, Alert, Card, Input, List, Progress, Select, Space, Tabs, Tag, Typography } from 'antd';
+import { App as AntdApp, Alert, Card, Form, Input, InputNumber, List, Progress, Select, Space, Tabs, Tag, Typography } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import { DownOutlined, RightOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -12,7 +12,7 @@ import type { GoalApprovalBundle } from '@/features/approval/model/types';
 import { ApprovalQueueList } from '@/features/approval/ui/ApprovalQueueList';
 import { BundleDetailModal } from '@/features/approval/ui/BundleDetailModal';
 import { goalApi } from '@/features/goals/api/goalApi';
-import type { Goal, KpiCycle } from '@/features/goals/model/types';
+import type { Goal, GoalHealthStatus, KpiCycle } from '@/features/goals/model/types';
 import { memberApi } from '@/features/member/api/memberApi';
 import { useMemberDisplayNames } from '@/features/members/hooks/useMemberDisplayNames';
 import { SingleMemberOrgChartSelectModal } from '@/features/members/ui/SingleMemberOrgChartSelectModal';
@@ -1157,49 +1157,165 @@ function GoalDetailModal({
   onEdit: (goal: Goal) => void;
   canEditObjective: boolean;
 }) {
+  const { message } = AntdApp.useApp();
+  const queryClient = useQueryClient();
+  const [progressForm] = Form.useForm<{ value: number; status: GoalHealthStatus; note?: string }>();
+  const [progressOpen, setProgressOpen] = useState(false);
   const canEditInModal =
     !!goal &&
     (goal.ownerType === 'MEMBER'
       ? goal.status === 'DRAFT' &&
         !myBundles.some((b) => b.cycleKey === goal.cycleKey && b.status === 'PENDING')
       : goal.ownerType === 'ORGANIZATION' && canEditObjective);
-  const confirmText = goal?.ownerType === 'MEMBER' ? '개인 목표 수정' : '조직 목표 수정';
+  const canUpdateProgress = !!goal && goal.ownerType === 'MEMBER' && goal.status === 'ACTIVE';
+  const progressPct = Math.max(0, Math.min(100, Number(goal?.achievementPct ?? 0)));
+  const confirmText = canUpdateProgress ? '진행 업데이트' : goal?.ownerType === 'MEMBER' ? '개인 목표 수정' : '조직 목표 수정';
+  const { data: progressUpdates = [], isLoading: isProgressLoading } = useQuery({
+    queryKey: ['goal-progress-updates', goal?.goalId],
+    queryFn: () => goalApi.listProgressUpdates(goal!.goalId),
+    enabled: !!goal && canUpdateProgress,
+  });
+  const progressMut = useMutation({
+    mutationFn: (values: { value: number; status: GoalHealthStatus; note?: string }) =>
+      goalApi.addProgressUpdate(goal!.goalId, values),
+    onSuccess: () => {
+      message.success('진행률을 업데이트했어요.');
+      setProgressOpen(false);
+      progressForm.resetFields();
+      queryClient.invalidateQueries({ queryKey: ['goal-progress-updates', goal?.goalId] });
+      queryClient.invalidateQueries({ queryKey: ['goals-mine'] });
+      queryClient.invalidateQueries({ queryKey: ['goals-my-objectives'] });
+      queryClient.invalidateQueries({ queryKey: ['goal-children'] });
+      queryClient.invalidateQueries({ queryKey: ['goal-aggregate'] });
+    },
+    onError: (error: any) => message.error(error?.message ?? '진행률 업데이트에 실패했어요.'),
+  });
+
   return (
-    <AppDoubleActionModal
-      open={!!goal}
-      title={goal ? ((goal.ownerType === 'ORGANIZATION' ? '조직 목표' : '개인 목표') + ' 상세') : '상세'}
-      onClose={onClose}
-      onConfirm={() => {
-        if (goal && canEditInModal) onEdit(goal);
-      }}
-      cancelText="닫기"
-      confirmText={confirmText}
-      confirmDisabled={!canEditInModal}
-      width={860}
-      destroyOnHidden
-    >
-      {goal ? (
-        <div className="tw-space-y-4 tw-px-5 tw-py-4">
-          <GoalCard goal={goal} />
-          <div className="tw-rounded-xl tw-border tw-border-slate-200 tw-bg-white tw-p-4">
-            <div className="tw-mb-2 tw-text-xs tw-font-semibold tw-uppercase tw-tracking-wide tw-text-slate-500">설명</div>
-            <div className="tw-whitespace-pre-wrap tw-text-sm tw-text-slate-700">{goal.description || '-'}</div>
-          </div>
-          <div className="tw-grid tw-grid-cols-2 tw-gap-3">
-            <div className="tw-rounded-xl tw-border tw-border-slate-200 tw-bg-slate-50 tw-p-3">
-              <div className="tw-text-xs tw-text-slate-500">사이클</div>
-              <div className="tw-mt-1 tw-text-sm tw-font-semibold tw-text-slate-900">{goal.cycleKey}</div>
+    <>
+      <AppDoubleActionModal
+        open={!!goal}
+        title={goal ? ((goal.ownerType === 'ORGANIZATION' ? '조직 목표' : '개인 목표') + ' 상세') : '상세'}
+        onClose={onClose}
+        onConfirm={() => {
+          if (goal && canUpdateProgress) {
+            progressForm.setFieldsValue({
+              value: progressPct,
+              status: goal.healthStatus ?? 'ON_TRACK',
+              note: '',
+            });
+            setProgressOpen(true);
+            return;
+          }
+          if (goal && canEditInModal) onEdit(goal);
+        }}
+        cancelText="닫기"
+        confirmText={confirmText}
+        confirmDisabled={!canEditInModal && !canUpdateProgress}
+        width={860}
+        destroyOnHidden
+      >
+        {goal ? (
+          <div className="tw-space-y-4 tw-px-5 tw-py-4">
+            <GoalCard goal={goal} />
+            <div className="tw-rounded-xl tw-border tw-border-slate-200 tw-bg-white tw-p-4">
+              <div className="tw-mb-2 tw-text-xs tw-font-semibold tw-uppercase tw-tracking-wide tw-text-slate-500">설명</div>
+              <div className="tw-whitespace-pre-wrap tw-text-sm tw-text-slate-700">{goal.description || '-'}</div>
             </div>
-            <div className="tw-rounded-xl tw-border tw-border-slate-200 tw-bg-slate-50 tw-p-3">
-              <div className="tw-text-xs tw-text-slate-500">{goal.ownerType === 'ORGANIZATION' ? '공개 범위' : '가중치'}</div>
-              <div className="tw-mt-1 tw-text-sm tw-font-semibold tw-text-slate-900">
-                {goal.ownerType === 'ORGANIZATION' ? goal.visibility : `${goal.weightPct}%`}
+            <div className="tw-grid tw-grid-cols-2 tw-gap-3">
+              <div className="tw-rounded-xl tw-border tw-border-slate-200 tw-bg-slate-50 tw-p-3">
+                <div className="tw-text-xs tw-text-slate-500">사이클</div>
+                <div className="tw-mt-1 tw-text-sm tw-font-semibold tw-text-slate-900">{goal.cycleKey}</div>
+              </div>
+              <div className="tw-rounded-xl tw-border tw-border-slate-200 tw-bg-slate-50 tw-p-3">
+                <div className="tw-text-xs tw-text-slate-500">{goal.ownerType === 'ORGANIZATION' ? '공개 범위' : '가중치'}</div>
+                <div className="tw-mt-1 tw-text-sm tw-font-semibold tw-text-slate-900">
+                  {goal.ownerType === 'ORGANIZATION' ? goal.visibility : `${goal.weightPct}%`}
+                </div>
               </div>
             </div>
+            {canUpdateProgress && (
+              <div className="tw-rounded-xl tw-border tw-border-emerald-100 tw-bg-emerald-50/50 tw-p-4">
+                <div className="tw-flex tw-items-center tw-justify-between tw-gap-3">
+                  <div>
+                    <div className="tw-text-sm tw-font-semibold tw-text-slate-900">승인 이후 진행 관리</div>
+                    <div className="tw-mt-1 tw-text-xs tw-text-slate-500">
+                      승인된 목표는 내용 수정 대신 진행률과 메모를 남기고, 이 기록이 평가 단계의 참고 자료가 됩니다.
+                    </div>
+                  </div>
+                  <Tag color="green" className="!tw-m-0 !tw-rounded-full">{progressPct.toFixed(0)}%</Tag>
+                </div>
+                <Progress className="!tw-mt-3" percent={progressPct} showInfo={false} strokeColor="#059669" />
+                <div className="tw-mt-4">
+                  <div className="tw-mb-2 tw-text-xs tw-font-semibold tw-text-slate-500">최근 업데이트</div>
+                  <List
+                    size="small"
+                    loading={isProgressLoading}
+                    dataSource={progressUpdates.slice(0, 3)}
+                    locale={{ emptyText: '아직 업데이트 이력이 없어요.' }}
+                    renderItem={(item) => (
+                      <List.Item className="!tw-px-0">
+                        <div className="tw-w-full">
+                          <div className="tw-flex tw-items-center tw-justify-between tw-gap-3">
+                            <span className="tw-text-sm tw-font-semibold tw-text-slate-800">{item.value ?? 0}%</span>
+                            <span className="tw-text-xs tw-text-slate-400">{item.createdAt ? item.createdAt.slice(0, 10) : ''}</span>
+                          </div>
+                          {item.note && <div className="tw-mt-1 tw-text-xs tw-text-slate-500">{item.note}</div>}
+                        </div>
+                      </List.Item>
+                    )}
+                  />
+                </div>
+              </div>
+            )}
           </div>
-        </div>
-      ) : null}
-    </AppDoubleActionModal>
+        ) : null}
+      </AppDoubleActionModal>
+      <AppDoubleActionModal
+        open={progressOpen}
+        title="진행률 업데이트"
+        onClose={() => setProgressOpen(false)}
+        onConfirm={() => progressForm.submit()}
+        cancelText="취소"
+        confirmText="저장"
+        confirmLoading={progressMut.isPending}
+        width={520}
+        destroyOnHidden
+      >
+        <Form
+          form={progressForm}
+          layout="vertical"
+          className="tw-px-5 tw-py-4"
+          onFinish={(values) => progressMut.mutate(values)}
+        >
+          <Form.Item
+            name="value"
+            label="진행률"
+            rules={[{ required: true, message: '진행률을 입력해 주세요.' }]}
+          >
+            <InputNumber min={0} max={100} precision={0} addonAfter="%" className="!tw-w-full" />
+          </Form.Item>
+          <Form.Item
+            name="status"
+            label="상태"
+            rules={[{ required: true, message: '상태를 선택해 주세요.' }]}
+          >
+            <Select
+              options={[
+                { value: 'NOT_STARTED', label: '미시작' },
+                { value: 'ON_TRACK', label: '정상' },
+                { value: 'AT_RISK', label: '주의' },
+                { value: 'BEHIND', label: '지연' },
+                { value: 'COMPLETED', label: '완료' },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item name="note" label="메모">
+            <Input.TextArea rows={4} placeholder="진행 상황, 이슈, 다음 액션을 간단히 남겨 주세요." />
+          </Form.Item>
+        </Form>
+      </AppDoubleActionModal>
+    </>
   );
 }
 
