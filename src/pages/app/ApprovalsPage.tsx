@@ -1952,6 +1952,12 @@ export function ApprovalsPage() {
     await qc.invalidateQueries({ queryKey: ['approval', 'documents', 'active'] });
   };
 
+  const hardReloadToMyInbox = () => {
+    const params = new URLSearchParams({ tab: 'my', box: 'per-all' });
+    if (isEmbedComposeModal) params.set('embed', APPROVAL_EMBED_QUERY);
+    window.location.replace(`/app/approvals?${params.toString()}`);
+  };
+
   const createRequestM = useMutation({
     mutationFn: (vars: { payload: CreateApprovalRequestPayload; attachmentFiles?: File[] }) =>
       createApprovalRequestWithAttachments(vars.payload, vars.attachmentFiles, {
@@ -1983,7 +1989,7 @@ export function ApprovalsPage() {
         composeDraftHydratingRef.current = false;
       });
       await refreshUserQueries();
-      navigate({ to: '/app/approvals', search: { tab: 'my', box: 'per-all', ...embedSearchSuffix }, replace: true });
+      hardReloadToMyInbox();
     },
     onError: (e: Error) => message.error(e.message || '결재 요청 처리에 실패했습니다.'),
   });
@@ -2019,7 +2025,7 @@ export function ApprovalsPage() {
         composeDraftHydratingRef.current = false;
       });
       await refreshUserQueries();
-      navigate({ to: '/app/approvals', search: { tab: 'my', box: 'per-all', ...embedSearchSuffix }, replace: true });
+      hardReloadToMyInbox();
     },
     onError: (e: Error) => message.error(e.message || '결재 요청 처리에 실패했습니다.'),
   });

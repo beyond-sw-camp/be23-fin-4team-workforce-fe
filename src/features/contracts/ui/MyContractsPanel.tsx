@@ -15,7 +15,7 @@ import {
   ApprovalFormPaperLayout,
 } from '@/features/approvals/ui/ApprovalFormPaperLayout';
 
-type ContractSchemaField = { key: string; label: string; type: string };
+type ContractSchemaField = { key: string; label: string; type: string; sourceField?: string };
 
 const STATUS_OPTIONS = [
   { value: 'ALL', label: '전체' },
@@ -36,8 +36,9 @@ function parseSchemaFields(raw: string): ContractSchemaField[] {
         const key = String(o.key ?? o.name ?? '').trim();
         const label = String(o.label ?? '').trim();
         const type = String(o.type ?? 'text').trim();
+        const sourceField = typeof o.sourceField === 'string' ? o.sourceField.trim() : '';
         if (!key || !label) return null;
-        return { key, label, type };
+        return { key, label, type, ...(sourceField ? { sourceField } : {}) };
       })
       .filter((v): v is ContractSchemaField => v != null);
   } catch {
@@ -309,7 +310,7 @@ export function MyContractsPanel() {
                     detailFields.map((field) => (
                       <ApprovalFormPaperFieldRow key={field.key} label={field.label}>
                         <Typography.Text className={field.type === 'textarea' ? 'tw-whitespace-pre-wrap tw-break-words' : undefined}>
-                          {formatValue(detailContent[field.key])}
+                          {formatValue(detailContent[field.key] ?? (field.sourceField ? detailContent[field.sourceField] : undefined))}
                         </Typography.Text>
                       </ApprovalFormPaperFieldRow>
                     ))
