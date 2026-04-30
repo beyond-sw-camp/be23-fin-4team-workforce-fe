@@ -147,6 +147,7 @@ import {
   parseFormSchema,
   stripNonPersistedApprovalContentFields,
 } from '@/features/approvals/lib/approvalFormSchema';
+import { composeContentPatchWithDefaultTitle } from '@/features/approvals/lib/approvalComposeDefaultTitle';
 import { syncApprovalQueryCachesAfterAct } from '@/features/approvals/lib/syncApprovalQueryCaches';
 import {
   APPROVAL_GUIDE_BOX_LABEL,
@@ -486,6 +487,12 @@ const APPROVAL_HOME_COMPOSE_FORMS_CARD_CLASS =
 
 const APPROVAL_EMBED_QUERY = 'compose-modal';
 
+/**
+ * 결재 작성 본 화면(워크벤치). `sideNav`가 비어 있으면 허브 대시보드만 보이므로,
+ * 임시저장 이어쓰기·허브에서 양식 선택 후 작성 등은 이 값으로 구분한다.
+ */
+const APPROVAL_COMPOSE_WORKBENCH_SIDE_NAV = 'workbench';
+
 /** 공문 문서함 — 상태 필터 탭(URL `myStatus`와 동기화) */
 const OFFICIAL_INBOX_FILTER_TABS: { key: 'ALL' | ApprovalRequestStatus; label: string }[] = [
   { key: 'ALL', label: '전체' },
@@ -511,7 +518,10 @@ function buildApprovalEmbedUrl(pathname: string, search: Record<string, string |
 type ComposeHomeEmbedPanel = 'my-all' | 'viewers' | 'department' | 'official' | 'draft' | 'absence';
 type ApprovalNotificationModal = 'pending' | 'my-all' | 'viewers' | 'official' | 'draft';
 
-function composeHomeEmbedPanelUrl(panel: ComposeHomeEmbedPanel): string {
+function composeHomeEmbedPanelUrl(
+  panel: ComposeHomeEmbedPanel,
+  opts?: { composeDraftId?: string },
+): string {
   switch (panel) {
     case 'my-all':
       return buildApprovalEmbedUrl('/app/approvals/my-requests', {});
@@ -522,6 +532,13 @@ function composeHomeEmbedPanelUrl(panel: ComposeHomeEmbedPanel): string {
     case 'official':
       return buildApprovalEmbedUrl('/app/approvals', { tab: 'my', box: 'per-official' });
     case 'draft':
+      if (opts?.composeDraftId) {
+        return buildApprovalEmbedUrl('/app/approvals', {
+          tab: 'compose',
+          sideNav: APPROVAL_COMPOSE_WORKBENCH_SIDE_NAV,
+          composeDraftId: opts.composeDraftId,
+        });
+      }
       return buildApprovalEmbedUrl('/app/approvals', { tab: 'my', box: 'per-draft' });
     case 'absence':
       return buildApprovalEmbedUrl('/app/approvals/absence-proxy', {});
@@ -1350,6 +1367,7 @@ export function ApprovalsPage() {
         box?: string;
         viewerSub?: string;
         embed?: string;
+        composeDraftId?: string;
         docId?: string;
         approvalModal?: string;
         approvalOpenAt?: string;
@@ -1373,7 +1391,7 @@ export function ApprovalsPage() {
   const [composeApprovalInfoModalOpen, setComposeApprovalInfoModalOpen] = useState(false);
   const [composePreviewOpen, setComposePreviewOpen] = useState(false);
   const [composeHomeMoreModal, setComposeHomeMoreModal] = useState<
-    | { kind: 'iframe'; panel: ComposeHomeEmbedPanel }
+    | { kind: 'iframe'; panel: ComposeHomeEmbedPanel; composeDraftId?: string }
     | { kind: 'pending-inbox'; title: string }
     | null
   >(null);
@@ -1412,6 +1430,8 @@ export function ApprovalsPage() {
   /** 부서 문서함 목록 공개 여부 — POST/PATCH `isDeptVisibleYn`, 공문은 Y 고정 */
   const [composeDeptVisibleYn, setComposeDeptVisibleYn] = useState<'Y' | 'N'>('Y');
   const composeDraftHydratingRef = useRef(false);
+  /** 허브 모달 iframe에서 `composeDraftId`로 자동 이어쓰기 시 중복 호출 방지 */
+  const embedComposeDraftBootRef = useRef<string | null>(null);
   /** 회의록 `ai_transcribe` + attachAudio 일 때 임시저장/제출 직후 첨부 업로드용 */
   const composeMeetingAudioBlobRef = useRef<Blob | null>(null);
   const [form] = Form.useForm();
@@ -1434,6 +1454,13 @@ export function ApprovalsPage() {
     return typeof rawTab === 'string' && allowedTabs.includes(rawTab) ? rawTab : 'compose';
   }, [routeSearch.tab, allowedTabs]);
   const sideNav = typeof routeSearch.sideNav === 'string' ? routeSearch.sideNav.trim() : '';
+  const navigateToComposeWorkbench = useCallback(() => {
+    navigate({
+      to: '/app/approvals',
+      search: { tab: 'compose', sideNav: APPROVAL_COMPOSE_WORKBENCH_SIDE_NAV, ...embedSearchSuffix },
+      replace: true,
+    });
+  }, [embedSearchSuffix, navigate]);
   const onComposeHub = tab === 'compose' && !isEmbedComposeModal && (sideNav === '' || sideNav === 'request-compose');
   const approvalNotificationModal = useMemo<ApprovalNotificationModal | null>(() => {
     const raw = String(routeSearch.approvalModal ?? '')
@@ -2028,17 +2055,17 @@ export function ApprovalsPage() {
   }, [form]);
 
   const openDraftForCompose = useCallback(
-    async (requestId: string) => {
+    async (requestId: string): Promise<boolean> => {
       try {
         const detail = await approvalRequestApi.getRequest(requestId);
         if (String(detail.requestStatus).toUpperCase() !== 'DRAFT') {
           message.warning('임시저장 상태의 문서만 불러올 수 있습니다.');
-          return;
+          return false;
         }
         const doc = activeDocuments.find((d) => d.documentId === detail.documentId);
         if (!doc) {
           message.warning('해당 양식이 비활성화되었거나 목록에 없습니다.');
-          return;
+          return false;
         }
         composeDraftHydratingRef.current = true;
         setComposeAttachmentFiles([]);
@@ -2076,7 +2103,24 @@ export function ApprovalsPage() {
         setOrgTreeSelectedKey(undefined);
         setComposePhase('fill');
         setLineInfoTab('approval');
-        navigate({ to: '/app/approvals', search: { tab: 'compose', ...embedSearchSuffix }, replace: true });
+        if (isEmbedComposeModal) {
+          navigate({
+            to: '/app/approvals',
+            search: (prev) => {
+              const next: Record<string, unknown> = {
+                ...(prev as Record<string, unknown>),
+                tab: 'compose',
+                sideNav: APPROVAL_COMPOSE_WORKBENCH_SIDE_NAV,
+                embed: APPROVAL_EMBED_QUERY,
+              };
+              delete next.composeDraftId;
+              return next as typeof prev;
+            },
+            replace: true,
+          });
+        } else {
+          navigateToComposeWorkbench();
+        }
         message.success('임시저장 문서를 불러왔습니다.');
         void qc.invalidateQueries({ queryKey: ['approval-user', 'my-requests'] });
         void qc.invalidateQueries({ queryKey: ['approval', 'attachments', requestId] });
@@ -2084,12 +2128,14 @@ export function ApprovalsPage() {
           composeDraftHydratingRef.current = false;
         });
         queueMicrotask(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
+        return true;
       } catch (e) {
         composeDraftHydratingRef.current = false;
         message.error(e instanceof Error ? e.message : '문서를 불러오지 못했습니다.');
+        return false;
       }
     },
-    [activeDocuments, embedSearchSuffix, form, message, navigate, qc],
+    [activeDocuments, form, isEmbedComposeModal, message, navigate, navigateToComposeWorkbench, qc],
   );
 
   const cancelRequestM = useMutation({
@@ -2248,7 +2294,7 @@ export function ApprovalsPage() {
       }
       pushRecentApprovalForm(doc);
       if (opts?.navigateCompose ?? true) {
-        navigate({ to: '/app/approvals', search: { tab: 'compose', ...embedSearchSuffix }, replace: true });
+        navigateToComposeWorkbench();
       }
       setComposeEditingRequestId(null);
       setApprovalLineDrafts([]);
@@ -2257,7 +2303,11 @@ export function ApprovalsPage() {
       setCirculationViewers([]);
       setOfficialRecipients([]);
       setComposeDeptVisibleYn('Y');
-      form.setFieldsValue({ documentId, content: {} });
+      const contentPatch = composeContentPatchWithDefaultTitle(
+        doc.formSchema,
+        formatApprovalDocumentName(doc.documentName),
+      );
+      form.setFieldsValue({ documentId, content: contentPatch });
       setSelectedDocumentId(documentId);
       setComposeSidebarTab('line');
       setLineInfoTab('approval');
@@ -2265,7 +2315,7 @@ export function ApprovalsPage() {
       setComposePhase('fill');
       queueMicrotask(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
     },
-    [applyPolicyLineDrafts, embedSearchSuffix, form, navigate],
+    [applyPolicyLineDrafts, form, navigateToComposeWorkbench],
   );
 
   const handleApprovalFormSelectConfirm = useCallback(
@@ -2279,6 +2329,23 @@ export function ApprovalsPage() {
   );
 
   const embedDocId = typeof routeSearch.docId === 'string' ? routeSearch.docId.trim() : '';
+  const composeDraftIdFromUrl =
+    typeof routeSearch.composeDraftId === 'string' ? routeSearch.composeDraftId.trim() : '';
+
+  useEffect(() => {
+    if (!isEmbedComposeModal || !composeDraftIdFromUrl) {
+      embedComposeDraftBootRef.current = null;
+      return;
+    }
+    if (!activeDocuments.length) return;
+    if (embedComposeDraftBootRef.current === composeDraftIdFromUrl) return;
+    embedComposeDraftBootRef.current = composeDraftIdFromUrl;
+    void (async () => {
+      const ok = await openDraftForCompose(composeDraftIdFromUrl);
+      if (!ok) embedComposeDraftBootRef.current = null;
+    })();
+  }, [activeDocuments.length, composeDraftIdFromUrl, isEmbedComposeModal, openDraftForCompose]);
+
   useEffect(() => {
     if (tab !== 'compose') return;
     if (!embedDocId) return;
@@ -4189,7 +4256,12 @@ export function ApprovalsPage() {
             {
               accent: 'blue',
               actionLabel: '이어쓰기',
-              onAction: (row) => void openDraftForCompose(row.requestId),
+              onAction: (row) =>
+                setComposeHomeMoreModal({
+                  kind: 'iframe',
+                  panel: 'draft',
+                  composeDraftId: row.requestId,
+                }),
               fullListEmbed: { panel: 'draft' },
             },
           )}
@@ -4337,9 +4409,11 @@ export function ApprovalsPage() {
             />
           ) : composeHomeMoreModal?.kind === 'iframe' ? (
             <iframe
-              key={composeHomeMoreModal.panel}
+              key={`${composeHomeMoreModal.panel}-${composeHomeMoreModal.composeDraftId ?? ''}`}
               title="전자결재 문서함"
-              src={composeHomeEmbedPanelUrl(composeHomeMoreModal.panel)}
+              src={composeHomeEmbedPanelUrl(composeHomeMoreModal.panel, {
+                composeDraftId: composeHomeMoreModal.composeDraftId,
+              })}
               className="tw-h-full tw-min-h-0 tw-w-full tw-border-0"
             />
           ) : null}
@@ -4512,12 +4586,20 @@ export function ApprovalsPage() {
                       setCirculationViewers([]);
                 setOfficialRecipients([]);
                 setComposeDeptVisibleYn('Y');
-                      form.setFieldValue('content', {});
                 const nextDocId =
                   typeof changed.documentId === 'string' && changed.documentId.trim().length > 0
                     ? changed.documentId
                     : undefined;
                 const nextDoc = nextDocId ? activeDocuments.find((d) => d.documentId === nextDocId) : undefined;
+                form.setFieldValue(
+                  'content',
+                  nextDoc
+                    ? composeContentPatchWithDefaultTitle(
+                        nextDoc.formSchema,
+                        formatApprovalDocumentName(nextDoc.documentName),
+                      )
+                    : {},
+                );
                 setSelectedDocumentId(nextDocId);
                 setComposeSidebarTab('line');
                 setLineInfoTab('approval');
@@ -4564,7 +4646,7 @@ export function ApprovalsPage() {
                         loading={docsLoading}
                   onAfterPick={(documentId, doc) => {
                     if (isComposeHubEntry) {
-                      navigate({ to: '/app/approvals', search: { tab: 'compose', ...embedSearchSuffix }, replace: true });
+                      navigateToComposeWorkbench();
                     }
                     setSelectedDocumentId(documentId);
                     setComposeSidebarTab('line');
@@ -4817,7 +4899,18 @@ export function ApprovalsPage() {
                                 return (
                             <ApprovalFormPaperFieldRow key={field.name} label={field.label} required={fieldLocked}>
                               <Form.Item name={namePath} rules={inputRules} className="!tw-mb-0">
-                                      <Input className="!tw-max-w-full" placeholder={ph} />
+                                      <Input
+                                        className="!tw-max-w-full"
+                                        placeholder={ph}
+                                        onFocus={
+                                          field.name === 'title'
+                                            ? (e) => {
+                                                const el = e.target as HTMLInputElement;
+                                                if (typeof el.select === 'function') el.select();
+                                              }
+                                            : undefined
+                                        }
+                                      />
                                     </Form.Item>
                                   </ApprovalFormPaperFieldRow>
                                 );

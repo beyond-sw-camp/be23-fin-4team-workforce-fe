@@ -41,6 +41,7 @@ import {
   formatStoredContentValue,
   parseDetailContentJson,
   parseFormSchema,
+  shouldHideApprovalFormFieldInSelectModalPreview,
 } from '@/features/approvals/lib/approvalFormSchema';
 import {
   ApprovalFormPaperFieldRow,
@@ -48,6 +49,8 @@ import {
   ApprovalFormStampColumn,
 } from '@/features/approvals/ui/ApprovalFormPaperLayout';
 import { memberApi } from '@/features/member/api/memberApi';
+import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
+import { salaryApi } from '@/features/salary-service/api/salaryApi';
 
 const REQUEST_TYPE_LABEL: Record<ApprovalRequestType, string> = {
   VACATION: '휴가',
@@ -81,6 +84,33 @@ function formatDateTime(value?: string | null) {
   if (!value) return '—';
   const d = dayjs(value);
   return d.isValid() ? d.format('YYYY-MM-DD HH:mm') : value;
+}
+
+function displayStoredFieldValue(
+  field: { source?: string; type?: string; options?: string[] },
+  raw: unknown,
+  lookup: {
+    companyLeaveTypeNameById: Map<string, string>;
+    salaryItemTemplateNameById: Map<string, string>;
+    flexibleSlotNameById: Map<string, string>;
+  },
+): string {
+  if (raw == null) return formatStoredContentValue(raw);
+  const rawText = typeof raw === 'string' ? raw.trim() : '';
+  if (!rawText) return formatStoredContentValue(raw);
+  if (field.source === 'companyLeaveType') {
+    return lookup.companyLeaveTypeNameById.get(rawText) ?? rawText;
+  }
+  if (field.source === 'salaryItemTemplate') {
+    return lookup.salaryItemTemplateNameById.get(rawText) ?? rawText;
+  }
+  if (field.source === 'flexibleTimeSlot') {
+    return lookup.flexibleSlotNameById.get(rawText) ?? rawText;
+  }
+  if (field.type === 'select' && Array.isArray(field.options) && field.options.length > 0) {
+    return field.options.includes(rawText) ? rawText : rawText;
+  }
+  return formatStoredContentValue(raw);
 }
 
 function statusTag(status: string) {
@@ -352,6 +382,39 @@ export function ApprovalRequestReadOnlyModal({
     enabled: open,
     staleTime: 60_000,
   });
+  const { data: companyLeaveTypes = [] } = useQuery({
+    queryKey: ['salary', 'company-leave-types'],
+    queryFn: () => attendanceApi.companyLeaveType.list(),
+    enabled: open,
+    staleTime: 60_000,
+  });
+  const { data: salaryItemTemplates = [] } = useQuery({
+    queryKey: ['salary', 'salary-item-templates'],
+    queryFn: () => salaryApi.salaryItemTemplate.list(),
+    enabled: open,
+    staleTime: 60_000,
+  });
+  const { data: workSchedules = [] } = useQuery({
+    queryKey: ['salary', 'work-schedules'],
+    queryFn: () => attendanceApi.workSchedule.list(),
+    enabled: open,
+    staleTime: 60_000,
+  });
+  const flexibleWorkScheduleIds = useMemo(
+    () =>
+      workSchedules
+        .filter((s) => s.workType === 'FLEXIBLE' && s.workScheduleId)
+        .map((s) => s.workScheduleId!),
+    [workSchedules],
+  );
+  const flexibleSlotQueries = useQueries({
+    queries: flexibleWorkScheduleIds.map((wsId) => ({
+      queryKey: ['salary', 'flexible-slots', wsId] as const,
+      queryFn: () => attendanceApi.flexibleSlot.listByWorkSchedule(wsId),
+      enabled: open,
+      staleTime: 60_000,
+    })),
+  });
 
   /** 참조/공람자로 지정된 경우 상세 열람 시 읽음 PATCH — UNREAD일 때만 호출 */
   useEffect(() => {
@@ -528,6 +591,26 @@ export function ApprovalRequestReadOnlyModal({
     () => (requestDetailDocument ? parseFormSchema(requestDetailDocument.formSchema) : { fields: [] }),
     [requestDetailDocument],
   );
+  const companyLeaveTypeNameById = useMemo(
+    () => new Map(companyLeaveTypes.map((row) => [row.companyLeaveTypeId ?? '', row.name ?? ''])),
+    [companyLeaveTypes],
+  );
+  const salaryItemTemplateNameById = useMemo(
+    () => new Map(salaryItemTemplates.map((row) => [row.salaryItemTemplateId ?? '', row.itemName ?? ''])),
+    [salaryItemTemplates],
+  );
+  const flexibleSlotNameById = useMemo(() => {
+    const out = new Map<string, string>();
+    for (const q of flexibleSlotQueries) {
+      for (const slot of q.data ?? []) {
+        const id = slot.slotId ?? '';
+        if (!id) continue;
+        const label = `${slot.slotLabel ?? slot.slotCode ?? '—'} (${(slot.startTime ?? '').slice(0, 5)}~${(slot.endTime ?? '').slice(0, 5)})`;
+        out.set(id, label);
+      }
+    }
+    return out;
+  }, [flexibleSlotQueries]);
 
   const canDeleteAttachments = useMemo(() => {
     if (!selectedRequestDetail || !authMemberId.trim()) return false;
@@ -747,7 +830,12 @@ export function ApprovalRequestReadOnlyModal({
                     >
                       {requestDetailSchema.fields.map((field) => {
                         if (field.type === 'ai_transcribe') return null;
-                        const text = formatStoredContentValue(content[field.name]);
+                        if (shouldHideApprovalFormFieldInSelectModalPreview(field)) return null;
+                        const text = displayStoredFieldValue(field, content[field.name], {
+                          companyLeaveTypeNameById,
+                          salaryItemTemplateNameById,
+                          flexibleSlotNameById,
+                        });
                         return (
                           <ApprovalFormPaperFieldRow key={field.name} label={field.label} required>
                             <Typography.Text

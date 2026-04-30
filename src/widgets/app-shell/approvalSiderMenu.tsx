@@ -57,6 +57,10 @@ export function approvalSiderSelectedMenuKeys(pathname: string, rawSearch: Recor
     return [navDepartment({ deptView })];
   }
   if (pathname !== '/app/approvals') return [];
+  const tab = typeof rawSearch.tab === 'string' ? rawSearch.tab.trim() : '';
+  if (tab === 'admin') {
+    return [encodeWfNavKey({ to: '/app/approvals', search: { tab: 'admin' } })];
+  }
   return [encodeWfNavKey({ to: '/app/approvals' })];
 }
 

@@ -135,6 +135,7 @@ const APP_MENU_ICONS: Record<string, ReactNode> = {
     '/app/attendance/flexible-slots': <ScheduleOutlined className="tw-text-lg"/>,
     '/app/leave': <ScheduleOutlined className="tw-text-lg"/>,
     '/app/approvals': <FileDoneOutlined className="tw-text-lg"/>,
+    '/app/contracts/send': <FormOutlined className="tw-text-lg"/>,
     '/app/contracts': <SafetyCertificateOutlined className="tw-text-lg"/>,
     '/app/approvals/department': <FolderOpenOutlined className="tw-text-lg"/>,
     '/app/payroll': <DollarOutlined className="tw-text-lg"/>,
@@ -175,8 +176,10 @@ const TALENT_HUB_PATHS = [
 const TALENT_HUB_PATH_SET = new Set<string>(TALENT_HUB_PATHS);
 
 const ORG_HR_GROUP_KEY = 'group-org-hr';
+/** 인사 관리 서브메뉴 — 구성원·조직도 접근과 동일하게 `canAccessMemberDirectory` 로 노출 */
 const ORG_HR_PATHS = ['/app/members', '/app/organization'] as const;
-const ORG_HR_PATH_SET = new Set<string>(ORG_HR_PATHS);
+/** 계약 발송 라우트는 HR 그룹에만 속하며, 메뉴 순서는 `hrGroupExtraChildren`에서 결재 양식 다음에 둠 */
+const ORG_HR_PATH_SET = new Set<string>([...ORG_HR_PATHS, '/app/contracts/send']);
 
 const ESG_GROUP_KEY = 'group-esg';
 
@@ -686,26 +689,38 @@ function useAppShellSiderMenuItems(currentPathname: string): {
             isAdmin ||
             canAccessMemberDirectory(hasPermission) ||
             canAccessMemberDirectoryFromPermissionStrings(user?.permissions);
-        const hrGroupExtraChildren: NonNullable<MenuProps['items']> | undefined = showApprovalFormSettings
-            ? [
-                  {
-                      key: encodeWfNavKey({to: '/app/approvals', search: {tab: 'admin'}}),
-                      icon: <SettingOutlined className="tw-text-lg"/>,
-                      label: '결재 양식 설정',
-                      title: '결재 양식 설정',
-                  },
-                  ...(isAdmin
-                      ? [
-                            {
-                                key: '/app/leave/absence',
-                                icon: <PauseCircleOutlined className="tw-text-lg"/>,
-                                label: APP_MENU_LABEL['/app/leave/absence'],
-                                title: APP_MENU_LABEL['/app/leave/absence'],
-                            },
-                        ]
-                      : []),
-              ]
-            : undefined;
+        const contractSendMenuItem = {
+            key: '/app/contracts/send' as const,
+            icon: APP_MENU_ICONS['/app/contracts/send'],
+            label: APP_MENU_LABEL['/app/contracts/send'],
+            title: APP_MENU_LABEL['/app/contracts/send'],
+        };
+        let hrGroupExtraChildren: NonNullable<MenuProps['items']> | undefined;
+        if (showApprovalFormSettings) {
+            hrGroupExtraChildren = [
+                {
+                    key: encodeWfNavKey({to: '/app/approvals', search: {tab: 'admin'}}),
+                    icon: <SettingOutlined className="tw-text-lg"/>,
+                    label: '결재 양식 설정',
+                    title: '결재 양식 설정',
+                },
+                ...(showMemberDirectoryMenu ? [contractSendMenuItem] : []),
+                ...(isAdmin
+                    ? [
+                          {
+                              key: '/app/leave/absence',
+                              icon: <PauseCircleOutlined className="tw-text-lg"/>,
+                              label: APP_MENU_LABEL['/app/leave/absence'],
+                              title: APP_MENU_LABEL['/app/leave/absence'],
+                          },
+                      ]
+                    : []),
+            ];
+        } else if (showMemberDirectoryMenu) {
+            hrGroupExtraChildren = [contractSendMenuItem];
+        } else {
+            hrGroupExtraChildren = undefined;
+        }
         const leavePromotionEnabled = (leavePoliciesForMenu ?? []).some((p) => p.isPromotionYn === 'Y');
         const showSalaryNegotiationSubmenu = hasActiveNegotiationSalaryPolicy(salaryPoliciesForMenu);
         const items = buildAppShellMenuItems(
@@ -1546,6 +1561,7 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
         ...APP_MENU_PATH_ORDER,
         ...ESG_MENU_PATH_ORDER,
         '/app/ai-documents',
+        '/app/contracts/send',
         '/app/contracts',
     ]);
     if (menuPaths.has(pathname)) return [pathname];
@@ -1881,7 +1897,7 @@ function AppShellLayout() {
             <Layout className="tw-flex tw-min-h-0 tw-min-w-0 tw-flex-1 tw-flex-col tw-bg-slate-50">
                 <AppShellHeader/>
                 <Layout.Content
-                    className="wf-scrollbar tw-min-h-0 tw-flex-1 tw-overflow-y-auto tw-bg-transparent tw-p-6">
+                    className="wf-scrollbar tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-y-auto tw-bg-transparent tw-p-6">
                     <Outlet/>
                 </Layout.Content>
             </Layout>
