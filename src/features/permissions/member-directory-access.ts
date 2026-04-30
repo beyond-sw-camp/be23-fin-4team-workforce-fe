@@ -11,7 +11,7 @@ export function isHrManagementPermissionString(p: string): boolean {
 }
 
 /**
- * 인사 관리(구성원·조직도) 메뉴·라우트 — MEMBER:CREATE 또는 MEMBER:UPDATE (범위 접미사 포함).
+ * 인사 관리(구성원·조직도·계약 발송) 메뉴·라우트 — MEMBER:CREATE 또는 MEMBER:UPDATE (범위 접미사 포함).
  * 시스템 관리자는 호출부에서 `isSystemAdmin`으로 별도 허용.
  */
 export function canAccessMemberDirectory(hasPermission: (spec: PermissionSpec) => boolean): boolean {

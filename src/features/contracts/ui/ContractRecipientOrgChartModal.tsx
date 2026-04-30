@@ -1,10 +1,8 @@
 import { RightOutlined, SearchOutlined } from '@ant-design/icons';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Avatar, Checkbox, Input, Spin, Tree, Typography, message } from 'antd';
+import { useEffect, useMemo, useState } from 'react';
+import { Checkbox, Input, Spin, Tree, Typography } from 'antd';
 import type { DataNode } from 'antd/es/tree';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { memberChatApi } from '@/features/member-chat/api/memberChatApi';
-import type { MemberChatRoomSummary } from '@/features/member-chat/model/types';
+import { useQuery } from '@tanstack/react-query';
 import {
   ORG_CHART_HIDDEN_JOB_GRADE,
   type OrgChartOrgNode,
@@ -13,11 +11,6 @@ import {
 import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
 
 const KS = '\x1f';
-
-const ORG_CHART_TREE_LINE_CLASS =
-  '[&_.ant-tree-show-line_.ant-tree-indent-unit::before]:![border-inline-end-color:rgb(226_232_240)] ' +
-  '[&_.ant-tree-switcher-leaf-line::before]:![border-inline-end-color:rgb(226_232_240)] ' +
-  '[&_.ant-tree-switcher-leaf-line::after]:![border-bottom-color:rgb(226_232_240)]';
 
 function orgSubtreeMatchesQuery(node: OrgChartOrgNode, q: string): boolean {
   if (!q) return true;
@@ -46,18 +39,16 @@ function filterOrganizationsByQuery(nodes: OrgChartOrgNode[], q: string): OrgCha
     }));
 }
 
-function isSelectableMember(memberId: string, memberStatus: string | undefined, selfMemberId?: string): boolean {
-  if (memberId === selfMemberId) return false;
+function isSelectableMember(memberStatus: string | undefined): boolean {
   return (memberStatus ?? 'ACTIVE') === 'ACTIVE';
 }
 
-/** 이 조직 노드 서브트리(하위 조직 포함)의 선택 가능한 memberId */
-function collectSelectableMemberIdsFromOrg(org: OrgChartOrgNode, selfMemberId?: string): string[] {
+function collectSelectableMemberIdsFromOrg(org: OrgChartOrgNode): string[] {
   const out: string[] = [];
   const walk = (n: OrgChartOrgNode) => {
     for (const m of n.members) {
       if (m.jobGradeName.trim() === ORG_CHART_HIDDEN_JOB_GRADE) continue;
-      if (isSelectableMember(m.memberId, m.memberStatus, selfMemberId)) out.push(m.memberId);
+      if (isSelectableMember(m.memberStatus)) out.push(m.memberId);
     }
     for (const c of n.children) walk(c);
   };
@@ -65,9 +56,9 @@ function collectSelectableMemberIdsFromOrg(org: OrgChartOrgNode, selfMemberId?: 
   return out;
 }
 
-function collectAllSelectableFromRoots(orgs: OrgChartOrgNode[], selfMemberId?: string): string[] {
+function collectAllSelectableFromRoots(orgs: OrgChartOrgNode[]): string[] {
   const acc: string[] = [];
-  for (const o of orgs) acc.push(...collectSelectableMemberIdsFromOrg(o, selfMemberId));
+  for (const o of orgs) acc.push(...collectSelectableMemberIdsFromOrg(o));
   return acc;
 }
 
@@ -83,53 +74,32 @@ function collectOrgKeys(orgs: OrgChartOrgNode[]): string[] {
   return out;
 }
 
-function buildNameMap(orgs: OrgChartOrgNode[], selfMemberId?: string, bucket = new Map<string, string>()) {
-  for (const org of orgs) {
-    for (const m of org.members) {
-      if (m.jobGradeName.trim() === ORG_CHART_HIDDEN_JOB_GRADE) continue;
-      if (isSelectableMember(m.memberId, m.memberStatus, selfMemberId) && !bucket.has(m.memberId)) {
-        bucket.set(m.memberId, m.name);
-      }
-    }
-    buildNameMap(org.children, selfMemberId, bucket);
-  }
-  return bucket;
-}
-
-function buildDefaultGroupTitle(memberIds: string[], nameById: Map<string, string>): string {
-  const names = memberIds.map((id) => nameById.get(id) ?? '구성원');
-  if (names.length <= 2) return names.join(', ');
-  return `${names[0]}, ${names[1]} 외 ${names.length - 2}명`;
-}
-
-type CreateRoomFromOrgChartModalProps = {
+type ContractRecipientOrgChartModalProps = {
   open: boolean;
-  selfMemberId?: string;
+  initialSelectedMemberIds?: string[];
   onClose: () => void;
-  onCreated: (room: MemberChatRoomSummary) => void;
+  onConfirm: (memberIds: string[]) => void;
 };
 
-export function CreateRoomFromOrgChartModal({
+export function ContractRecipientOrgChartModal({
   open,
-  selfMemberId,
+  initialSelectedMemberIds,
   onClose,
-  onCreated,
-}: CreateRoomFromOrgChartModalProps) {
-  const queryClient = useQueryClient();
+  onConfirm,
+}: ContractRecipientOrgChartModalProps) {
   const [keyword, setKeyword] = useState('');
-  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(initialSelectedMemberIds ?? []));
   const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
 
   useEffect(() => {
-    if (!open) {
-      setKeyword('');
-      setSelected(new Set());
-      setExpandedKeys([]);
-    }
-  }, [open]);
+    if (!open) return;
+    setKeyword('');
+    setExpandedKeys([]);
+    setSelected(new Set(initialSelectedMemberIds ?? []));
+  }, [open, initialSelectedMemberIds]);
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['organization', 'org-chart', 'member-chat-room-create'],
+    queryKey: ['organization', 'org-chart', 'contract-recipient-picker'],
     queryFn: () => organizationApi.getOrgChart(),
     enabled: open,
     staleTime: 60_000,
@@ -140,32 +110,24 @@ export function CreateRoomFromOrgChartModal({
     return filterOrganizationsByQuery(data.organizations, keyword.trim());
   }, [data?.organizations, keyword]);
 
-  const nameById = useMemo(
-    () => (data?.organizations ? buildNameMap(data.organizations, selfMemberId) : new Map<string, string>()),
-    [data?.organizations, selfMemberId],
-  );
-
-  const toggleMember = useCallback((memberId: string, checked: boolean) => {
+  const toggleMember = (memberId: string, checked: boolean) => {
     setSelected((prev) => {
       const next = new Set(prev);
       if (checked) next.add(memberId);
       else next.delete(memberId);
       return next;
     });
-  }, []);
+  };
 
-  const allVisibleIds = useMemo(
-    () => collectAllSelectableFromRoots(filteredRoots, selfMemberId),
-    [filteredRoots, selfMemberId],
-  );
+  const allVisibleIds = useMemo(() => collectAllSelectableFromRoots(filteredRoots), [filteredRoots]);
 
   useEffect(() => {
     if (!open) return;
     const orgKeys = collectOrgKeys(filteredRoots);
     setExpandedKeys(['root-company', ...orgKeys]);
-  }, [open, filteredRoots, keyword]);
+  }, [open, filteredRoots]);
 
-  const applyBulkSelection = useCallback((memberIds: string[], checked: boolean) => {
+  const applyBulkSelection = (memberIds: string[], checked: boolean) => {
     if (memberIds.length === 0) return;
     setSelected((prev) => {
       const next = new Set(prev);
@@ -176,7 +138,7 @@ export function CreateRoomFromOrgChartModal({
       }
       return next;
     });
-  }, []);
+  };
 
   const treeData: DataNode[] = useMemo(() => {
     if (!data) return [];
@@ -201,14 +163,9 @@ export function CreateRoomFromOrgChartModal({
             }
           }}
         >
-          <span className="tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-2">
-            <Avatar size={28} className="tw-shrink-0 tw-bg-slate-200 tw-text-xs tw-text-slate-500">
-              {(m.name || '?').slice(0, 1)}
-            </Avatar>
-            <span className="tw-truncate tw-text-sm tw-text-slate-800">
-              <span className="tw-font-medium">{m.name}</span>{' '}
-              <span className="tw-text-xs tw-font-normal tw-text-slate-500">{m.jobGradeName}</span>
-            </span>
+          <span className="tw-truncate tw-text-sm tw-text-slate-800">
+            <span className="tw-font-medium">{m.name}</span>{' '}
+            <span className="tw-text-xs tw-font-normal tw-text-slate-500">{m.jobGradeName}</span>
           </span>
           <span className="tw-shrink-0" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
             <Checkbox
@@ -248,32 +205,26 @@ export function CreateRoomFromOrgChartModal({
 
     function buildOrgNodes(orgs: OrgChartOrgNode[]): DataNode[] {
       return orgs.map((org) => {
-        const subtreeIds = collectSelectableMemberIdsFromOrg(org, selfMemberId);
+        const subtreeIds = collectSelectableMemberIdsFromOrg(org);
         const checkedCount = subtreeIds.filter((id) => selected.has(id)).length;
         const orgChecked = subtreeIds.length > 0 && checkedCount === subtreeIds.length;
         const orgIndeterminate = checkedCount > 0 && checkedCount < subtreeIds.length;
         const memberNodes: DataNode[] = [];
         for (const m of org.members) {
           if (m.jobGradeName.trim() === ORG_CHART_HIDDEN_JOB_GRADE) continue;
-          if (!isSelectableMember(m.memberId, m.memberStatus, selfMemberId)) continue;
+          if (!isSelectableMember(m.memberStatus)) continue;
           memberNodes.push({
             key: `m${KS}${org.organizationId}${KS}${m.memberId}`,
             title: memberRow(m),
             isLeaf: true,
           });
         }
-
         const childOrgNodes = buildOrgNodes(org.children);
         const children = [...memberNodes, ...childOrgNodes];
-
         return {
           key: `o${KS}${org.organizationId}`,
-          title: orgTitleRow(
-            org.name,
-            subtreeIds.length,
-            orgChecked,
-            orgIndeterminate,
-            (checked) => applyBulkSelection(subtreeIds, checked),
+          title: orgTitleRow(org.name, subtreeIds.length, orgChecked, orgIndeterminate, (checked) =>
+            applyBulkSelection(subtreeIds, checked),
           ),
           selectable: false,
           ...(children.length > 0 ? { children } : { isLeaf: true }),
@@ -309,76 +260,31 @@ export function CreateRoomFromOrgChartModal({
         isLeaf: roots.length === 0,
       },
     ];
-  }, [data, filteredRoots, allVisibleIds, selfMemberId, selected, toggleMember, applyBulkSelection]);
+  }, [data, filteredRoots, allVisibleIds, selected]);
 
-  const createDirectMutation = useMutation({
-    mutationFn: (otherMemberId: string) => memberChatApi.createDirectRoom(otherMemberId),
-    onSuccess: (room) => {
-      void queryClient.invalidateQueries({ queryKey: ['member-chat', 'rooms'] });
-      message.success('1:1 채팅방이 열렸습니다.');
-      onCreated(room);
-      onClose();
-    },
-    onError: (error) => {
-      message.error((error as Error).message || '채팅방을 만들지 못했습니다.');
-    },
-  });
-
-  const createGroupMutation = useMutation({
-    mutationFn: ({ title, memberIds }: { title: string; memberIds: string[] }) =>
-      memberChatApi.createGroupRoom(title, memberIds),
-    onSuccess: (room) => {
-      void queryClient.invalidateQueries({ queryKey: ['member-chat', 'rooms'] });
-      message.success('그룹 채팅방이 열렸습니다.');
-      onCreated(room);
-      onClose();
-    },
-    onError: (error) => {
-      message.error((error as Error).message || '그룹 채팅방을 만들지 못했습니다.');
-    },
-  });
-
-  const pending = createDirectMutation.isPending || createGroupMutation.isPending;
   const selectedCount = selected.size;
-
-  const handleConfirm = () => {
-    const ids = Array.from(selected);
-    if (ids.length === 0) {
-      void message.warning('대화 상대를 한 명 이상 선택해 주세요.');
-      return;
-    }
-    if (ids.length === 1) {
-      void createDirectMutation.mutateAsync(ids[0]!);
-    } else {
-      const title = buildDefaultGroupTitle(ids, nameById);
-      void createGroupMutation.mutateAsync({ title, memberIds: ids });
-    }
-  };
 
   return (
     <AppSingleActionModal
       open={open}
       onClose={onClose}
-      onSubmit={() => void handleConfirm()}
-      submitText="확인"
-      submitLoading={pending}
+      onSubmit={() => onConfirm(Array.from(selected))}
+      submitText="선택 추가"
       submitDisabled={isLoading || selectedCount === 0}
-      submitButtonClassName="!tw-bg-[#00A3C1] hover:!tw-bg-[#008faf] disabled:!tw-bg-slate-200"
       destroyOnHidden
       zIndex={1200}
-      width={560}
-      title={<span className="tw-text-base tw-font-semibold tw-text-slate-900">새 대화</span>}
+      width={640}
+      title={<span className="tw-text-base tw-font-semibold tw-text-slate-900">조직도에서 직원 선택</span>}
     >
       <div className="tw-flex tw-flex-col tw-gap-3 tw-px-5 tw-py-4 tw-pt-2">
         <Input
           allowClear
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
-          placeholder="이름, 직위, 직책, 직급, 부서, 전화, 아이디"
+          placeholder="이름, 직급, 부서 검색"
           prefix={<SearchOutlined className="tw-text-slate-400" />}
           className="tw-rounded-xl tw-bg-slate-50 [&_.ant-input]:tw-bg-transparent"
         />
-
         <div>
           <div className="tw-mb-2 tw-text-xs tw-font-semibold tw-text-slate-500">조직도</div>
           <Spin spinning={isLoading}>
@@ -391,9 +297,7 @@ export function CreateRoomFromOrgChartModal({
                   : '검색 조건에 맞는 조직·구성원이 없습니다.'}
               </Typography.Text>
             ) : (
-              <div
-                className={`tw-max-h-[min(52vh,440px)] tw-overflow-auto tw-rounded-xl tw-border tw-border-slate-200 tw-bg-white tw-p-2 ${ORG_CHART_TREE_LINE_CLASS} [&_.ant-tree-switcher]:tw-flex [&_.ant-tree-switcher]:tw-w-5 [&_.ant-tree-switcher]:tw-shrink-0 [&_.ant-tree-switcher]:tw-items-center [&_.ant-tree-switcher]:tw-justify-center [&_.ant-tree-switcher]:tw-bg-transparent [&_.ant-tree-node-content-wrapper]:tw-rounded-md`}
-              >
+              <div className="tw-max-h-[min(56vh,500px)] tw-overflow-auto tw-rounded-xl tw-border tw-border-slate-200 tw-bg-white tw-p-2">
                 <Tree
                   blockNode
                   expandAction="click"
@@ -412,9 +316,8 @@ export function CreateRoomFromOrgChartModal({
             )}
           </Spin>
         </div>
-
         <Typography.Text type="secondary" className="!tw-mb-0 tw-block tw-text-xs">
-          선택 {selectedCount}명 · 1명이면 1:1, 2명 이상이면 그룹 채팅방이 만들어집니다.
+          선택 {selectedCount}명
         </Typography.Text>
       </div>
     </AppSingleActionModal>

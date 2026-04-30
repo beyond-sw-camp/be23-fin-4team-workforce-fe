@@ -4,7 +4,7 @@ import type { TreeProps } from 'antd';
 import type { DataNode } from 'antd/es/tree';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { APPROVAL_REQUEST_TYPES, type ApprovalDocument, type ApprovalRequestType } from '@/features/approvals/api/approvalApi';
-import { parseFormSchema } from '@/features/approvals/lib/approvalFormSchema';
+import { parseFormSchema, shouldHideApprovalFormFieldInSelectModalPreview } from '@/features/approvals/lib/approvalFormSchema';
 import {
   ApprovalFormPaperFieldRow,
   ApprovalFormPaperLayout,
@@ -142,6 +142,10 @@ export function ApprovalFormSelectModal({
   const selectedDoc = selectedId ? docById.get(selectedId) : undefined;
   const composeDoc = composeDocId ? docById.get(composeDocId) : undefined;
   const selectedSchema = useMemo(() => (selectedDoc ? parseFormSchema(selectedDoc.formSchema) : { fields: [] }), [selectedDoc]);
+  const previewFields = useMemo(
+    () => selectedSchema.fields.filter((f) => !shouldHideApprovalFormFieldInSelectModalPreview(f)),
+    [selectedSchema.fields],
+  );
   const composeIframeSrc = useMemo(() => {
     if (!composeDocId) return '';
     return `/app/approvals?tab=compose&embed=compose-modal&docId=${encodeURIComponent(composeDocId)}`;
@@ -254,8 +258,8 @@ export function ApprovalFormSelectModal({
                       />
                     }
                   >
-                    {selectedSchema.fields.length > 0 ? (
-                      selectedSchema.fields.map((field) => (
+                    {previewFields.length > 0 ? (
+                      previewFields.map((field) => (
                         <ApprovalFormPaperFieldRow
                           key={`${selectedDoc.documentId}-${field.name}`}
                           label={field.label}

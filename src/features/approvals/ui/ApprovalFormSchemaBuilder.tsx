@@ -27,6 +27,8 @@ const TYPE_LABEL: Record<FormFieldType, string> = {
   'datetime-local': '날짜·시간',
   time: '시간',
   select: '선택(드롭다운)',
+  hidden: '숨김(자동)',
+  ai_transcribe: '녹음 받아쓰기(AI)',
 };
 
 const TYPE_OPTIONS = FORM_SCHEMA_FIELD_TYPES.map((t) => ({

@@ -22,6 +22,7 @@
     LineChartOutlined,
     PieChartOutlined,
     MoreOutlined,
+    AudioOutlined,
     MessageOutlined,
     PartitionOutlined,
     PauseCircleOutlined,
@@ -91,6 +92,7 @@ import {
 } from '@/features/approvals/lib/approvalGuideNav';
 import {AppSearchField} from '@/shared/ui/AppSearchField';
 import {AiChatbotFab} from '@/widgets/app-shell/AiChatbotFab';
+import {AiRecordingModal} from '@/widgets/app-shell/AiRecordingModal';
 import {MemberChatProvider, useMemberChatOpener} from '@/widgets/app-shell/MemberChatOpener';
 import {OrgChartModal} from '@/widgets/organization/OrgChartModal';
 import {HeaderSearchMemberDetailModal} from '@/widgets/app-shell/HeaderSearchMemberDetailModal';
@@ -136,6 +138,8 @@ const APP_MENU_ICONS: Record<string, ReactNode> = {
     '/app/attendance/flexible-slots': <ScheduleOutlined className="tw-text-lg"/>,
     '/app/leave': <ScheduleOutlined className="tw-text-lg"/>,
     '/app/approvals': <FileDoneOutlined className="tw-text-lg"/>,
+    '/app/contracts/send': <FormOutlined className="tw-text-lg"/>,
+    '/app/contracts': <SafetyCertificateOutlined className="tw-text-lg"/>,
     '/app/approvals/department': <FolderOpenOutlined className="tw-text-lg"/>,
     '/app/payroll': <DollarOutlined className="tw-text-lg"/>,
     '/app/payroll/annual': <BarChartOutlined className="tw-text-lg"/>,
@@ -174,8 +178,10 @@ const TALENT_HUB_PATHS = [
 const TALENT_HUB_PATH_SET = new Set<string>(TALENT_HUB_PATHS);
 
 const ORG_HR_GROUP_KEY = 'group-org-hr';
+/** 인사 관리 서브메뉴 — 구성원·조직도 접근과 동일하게 `canAccessMemberDirectory` 로 노출 */
 const ORG_HR_PATHS = ['/app/members', '/app/organization'] as const;
-const ORG_HR_PATH_SET = new Set<string>(ORG_HR_PATHS);
+/** 계약 발송 라우트는 HR 그룹에만 속하며, 메뉴 순서는 `hrGroupExtraChildren`에서 결재 양식 다음에 둠 */
+const ORG_HR_PATH_SET = new Set<string>([...ORG_HR_PATHS, '/app/contracts/send']);
 
 const ESG_GROUP_KEY = 'group-esg';
 
@@ -427,6 +433,12 @@ function buildAppShellMenuItems(
                                 label: composeEntry.label,
                                 title: composeEntry.label,
                             },
+                            {
+                                key: '/app/contracts',
+                                icon: <SafetyCertificateOutlined className="tw-text-lg"/>,
+                                label: '전자계약',
+                                title: '전자계약',
+                            },
                             ...APPROVAL_GUIDE_SECTION_ORDER.map((section) => ({
                                 key: `ap-section-${section}`,
                                 label: (
@@ -660,29 +672,39 @@ function useAppShellSiderMenuItems(currentPathname: string): {
             isAdmin ||
             canAccessMemberDirectory(hasPermission) ||
             canAccessMemberDirectoryFromPermissionStrings(user?.permissions);
-        const hrGroupExtraChildren: NonNullable<MenuProps['items']> | undefined = showApprovalFormSettings
-            ? [
-                  {
-                      key: encodeWfNavKey({to: '/app/approvals', search: {tab: 'admin'}}),
-                      icon: <SettingOutlined className="tw-text-lg"/>,
-                      label: '결재 양식 설정',
-                      title: '결재 양식 설정',
-                  },
-                  ...(isAdmin
-                      ? [
-                            {
-                                key: '/app/leave/absence',
-                                icon: <PauseCircleOutlined className="tw-text-lg"/>,
-                                label: APP_MENU_LABEL['/app/leave/absence'],
-                                title: APP_MENU_LABEL['/app/leave/absence'],
-                            },
-                        ]
-                      : []),
-              ]
-            : undefined;
-        // leavePoliciesForMenu 없이 `undefined ?? []`만 넘기면 타입이 never[]로 좁혀져 TS 오류가 나므로 API 복구 시 함께 조정
-        // const leavePromotionEnabled = (leavePoliciesForMenu ?? []).some((p) => p.isPromotionYn === 'Y');
-        const leavePromotionEnabled = false;
+        const contractSendMenuItem = {
+            key: '/app/contracts/send' as const,
+            icon: APP_MENU_ICONS['/app/contracts/send'],
+            label: APP_MENU_LABEL['/app/contracts/send'],
+            title: APP_MENU_LABEL['/app/contracts/send'],
+        };
+        let hrGroupExtraChildren: NonNullable<MenuProps['items']> | undefined;
+        if (showApprovalFormSettings) {
+            hrGroupExtraChildren = [
+                {
+                    key: encodeWfNavKey({to: '/app/approvals', search: {tab: 'admin'}}),
+                    icon: <SettingOutlined className="tw-text-lg"/>,
+                    label: '결재 양식 설정',
+                    title: '결재 양식 설정',
+                },
+                ...(showMemberDirectoryMenu ? [contractSendMenuItem] : []),
+                ...(isAdmin
+                    ? [
+                          {
+                              key: '/app/leave/absence',
+                              icon: <PauseCircleOutlined className="tw-text-lg"/>,
+                              label: APP_MENU_LABEL['/app/leave/absence'],
+                              title: APP_MENU_LABEL['/app/leave/absence'],
+                          },
+                      ]
+                    : []),
+            ];
+        } else if (showMemberDirectoryMenu) {
+            hrGroupExtraChildren = [contractSendMenuItem];
+        } else {
+            hrGroupExtraChildren = undefined;
+        }
+        const leavePromotionEnabled = (leavePoliciesForMenu ?? []).some((p) => p.isPromotionYn === 'Y');
         const showSalaryNegotiationSubmenu = hasActiveNegotiationSalaryPolicy(salaryPoliciesForMenu);
         const items = buildAppShellMenuItems(
             isAdmin,
@@ -1126,6 +1148,7 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
     const [headerDetailMemberId, setHeaderDetailMemberId] = useState<string | null>(null);
     const [notificationPopoverOpen, setNotificationPopoverOpen] = useState(false);
     const [notificationTab, setNotificationTab] = useState<'all' | 'unread'>('all');
+    const [aiRecordingModalOpen, setAiRecordingModalOpen] = useState(false);
 
     useEffect(() => {
         const t = window.setTimeout(() => {
@@ -1424,6 +1447,18 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
 
             <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-3 tw-overflow-visible md:tw-gap-3.5">
                 <SessionAccessTimer/>
+                <Tooltip title="음성 녹음">
+                    <button
+                        type="button"
+                        className={headerGhostIconClass}
+                        aria-label="음성 녹음"
+                        onClick={() => {
+                            setAiRecordingModalOpen(true);
+                        }}
+                    >
+                        <AudioOutlined className="tw-text-[20px]"/>
+                    </button>
+                </Tooltip>
                 <Tooltip title="멤버 채팅">
                     <Badge count={chatUnreadTotal} color="#EF4444" offset={[-8, 8]} showZero={false} overflowCount={99}>
                         <button
@@ -1456,6 +1491,7 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
                 </Popover>
                 <AppShellAccountMenu/>
             </div>
+            <AiRecordingModal open={aiRecordingModalOpen} onClose={() => setAiRecordingModalOpen(false)} />
         </Layout.Header>
     );
 }
@@ -1520,6 +1556,8 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
         ...APP_MENU_PATH_ORDER,
         ...ESG_MENU_PATH_ORDER,
         '/app/ai-documents',
+        '/app/contracts/send',
+        '/app/contracts',
     ]);
     if (menuPaths.has(pathname)) return [pathname];
     return [];
@@ -1854,7 +1892,7 @@ function AppShellLayout() {
             <Layout className="tw-flex tw-min-h-0 tw-min-w-0 tw-flex-1 tw-flex-col tw-bg-slate-50">
                 <AppShellHeader/>
                 <Layout.Content
-                    className="wf-scrollbar tw-min-h-0 tw-flex-1 tw-overflow-y-auto tw-bg-transparent tw-p-6">
+                    className="wf-scrollbar tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-y-auto tw-bg-transparent tw-p-6">
                     <Outlet/>
                 </Layout.Content>
             </Layout>

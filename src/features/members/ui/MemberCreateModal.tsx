@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, DatePicker, Form, Input, Modal, Select, Typography } from 'antd';
+import { App, DatePicker, Form, Input, Select, Typography } from 'antd';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
 import { useEffect, useMemo } from 'react';
@@ -14,6 +14,7 @@ import {
 } from '@/features/members/lib/memberFormShared';
 import { membersCtaButtonClass } from '@/features/members/ui/membersCtaButtonClass';
 import { membersKeys } from '@/features/members/queries';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 
 type FormValues = {
   name: string;
@@ -124,19 +125,19 @@ export function MemberCreateModal({ open, onClose }: Props) {
     <>
       {/* `destroyOnHidden`으로 모달이 닫히면 Form이 제거되어 useForm 경고가 난다. */}
       {!open ? <Form form={form} preserve={false} className="tw-hidden" aria-hidden /> : null}
-      <Modal
+      <AppDoubleActionModal
         title="직원 계정 생성"
         open={open}
-        onCancel={onClose}
-        onOk={() => void handleOk()}
-        okText="생성"
+        onClose={onClose}
+        onConfirm={() => void handleOk()}
+        confirmText="생성"
         cancelText="취소"
-        okButtonProps={{ className: membersCtaButtonClass }}
+        confirmButtonClassName={membersCtaButtonClass}
         width={560}
         destroyOnHidden
         confirmLoading={createM.isPending}
       >
-        <Form<FormValues> form={form} layout="vertical" className="tw-pt-1">
+        <Form<FormValues> form={form} layout="vertical" className="tw-px-5 tw-py-4">
         <Form.Item name="name" label="이름" rules={[{ required: true, message: '이름을 입력하세요.' }]}>
           <Input placeholder="홍길동" maxLength={80} />
         </Form.Item>
@@ -173,7 +174,7 @@ export function MemberCreateModal({ open, onClose }: Props) {
           <Select showSearch optionFilterProp="label" options={roleOptions} placeholder="역할 선택" />
         </Form.Item>
         </Form>
-      </Modal>
+      </AppDoubleActionModal>
     </>
   );
 }
