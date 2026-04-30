@@ -1,8 +1,12 @@
 /**
  * 평가 설계 프리셋 — Design Create 모달에서 "추천 템플릿" 버튼으로 주입된다.
  *
- * 서버 `sectionsJson` / `gradeConfigJson` 과 호환.
- * `KPI_SCORE` 섹션은 시즌 시작 시 캡처된 목표 스냅샷으로 점수가 산출되며 문항은 비워도 됨.
+ * 계약:
+ * - 섹션 가중치 합 100%, 각 섹션에 scale|grade|gap 최소 1문항 (저장 시 문항 가중치 자동/검증)
+ * - 상대평가: targetDist 퍼센트 합 100%
+ * - 등급 라벨: 확정 API `Grade` 는 S/A/B/C 만 — 프리셋도 4단과 맞춤 (목표 등급 enum 과 정합)
+ *
+ * 목표의 S/A/B/C '달성 기준' 텍스트와는 역할이 다름(아래 사용자 안내 참고).
  */
 
 export type PresetQuestion = { text: string; type: string };
@@ -11,9 +15,7 @@ export type PresetSection = {
     title: string;
     weight: number;
     /** 생략 시 MANUAL */
-    type?: 'MANUAL' | 'KPI_SCORE' | 'PEER_FEEDBACK';
-    /** KPI_SCORE 일 때만 의미 있음 (ALL / TEMPLATE_ONLY / kpiTemplateId) */
-    kpiFilter?: string;
+    type?: 'MANUAL' | 'PEER_FEEDBACK';
     questions: PresetQuestion[];
 };
 
@@ -31,17 +33,19 @@ export type DesignPreset = {
 export const DESIGN_PRESETS: DesignPreset[] = [
     {
         key: 'performance',
-        label: '성과 중심 (정량 KPI + 정성)',
+        label: '성과 중심 (정량 + 정성)',
         description:
-            '섹션 1은 KPI_SCORE: 피평가자 목표 스냅샷 가중 평균으로 자동 집계. 섹션 2~3은 리더의 정성 판단. 가중치 합 100%. 상대등급 분포는 강등·캘리브레이션 전제.',
+            '목표 달성·핵심 과업·협업 역량을 균형 있게 평가하는 기본 템플릿. 가중치 합 100%.',
         name: '성과·역량 하이브리드 평가',
         sections: [
             {
-                title: '목표 달성률 (시스템 집계)',
-                type: 'KPI_SCORE',
+                title: '목표 달성 수준',
+                type: 'MANUAL',
                 weight: 50,
-                kpiFilter: 'ALL',
-                questions: [],
+                questions: [
+                    { text: '평가 기간 목표 달성 수준을 종합적으로 평가해 주세요.', type: 'SCALE' },
+                    { text: '주요 성과 근거를 간단히 작성해 주세요.', type: 'TEXT' },
+                ],
             },
             {
                 title: '핵심 과업·산출물',
@@ -70,28 +74,30 @@ export const DESIGN_PRESETS: DesignPreset[] = [
             },
         ],
         gradeType: 'relative',
-        grades: [{ grade: 'S' }, { grade: 'A' }, { grade: 'B' }, { grade: 'C' }, { grade: 'D' }],
+        /** 목표 확정 등급(`Grade`)과 동일 4단 — 확정 API는 S/A/B/C만 허용 */
+        grades: [{ grade: 'S' }, { grade: 'A' }, { grade: 'B' }, { grade: 'C' }],
         targetDist: [
             { grade: 'S', pct: 10 },
             { grade: 'A', pct: 20 },
             { grade: 'B', pct: 40 },
-            { grade: 'C', pct: 20 },
-            { grade: 'D', pct: 10 },
+            { grade: 'C', pct: 30 },
         ],
     },
     {
         key: 'okr',
-        label: 'OKR·목표 달성 (KPI 자동 비중 높음)',
+        label: 'OKR·목표 달성',
         description:
-            'OKR은 KR 달성이 본질이므로 KPI_SCORE 비중을 높임(시스템 집계). 임팩트·난이도 보정과 회고는 MANUAL. KPI 필터는 ALL 기본 — 템플릿만 묶고 싶으면 섹션에서 TEMPLATE_ONLY 로 변경.',
+            'OKR 관점에서 달성·임팩트·회고를 함께 보는 템플릿.',
         name: 'OKR 리뷰 (정량 우선)',
         sections: [
             {
-                title: 'O·KR 달성률 (시스템 집계)',
-                type: 'KPI_SCORE',
+                title: 'O·KR 달성 수준',
+                type: 'MANUAL',
                 weight: 58,
-                kpiFilter: 'ALL',
-                questions: [],
+                questions: [
+                    { text: 'O·KR 목표 달성 수준을 종합적으로 평가해 주세요.', type: 'SCALE' },
+                    { text: '주요 KR의 성과/미달 원인을 작성해 주세요.', type: 'TEXT' },
+                ],
             },
             {
                 title: '임팩트·난이도·기여도 보정',
@@ -110,6 +116,10 @@ export const DESIGN_PRESETS: DesignPreset[] = [
                 type: 'MANUAL',
                 weight: 20,
                 questions: [
+                    {
+                        text: '이번 기간 회고·학습이 다음 업무에 전이될 가능성을 종합적으로 평가해 주세요.',
+                        type: 'SCALE',
+                    },
                     { text: '이번 기간에서 배운 점·재발 방지·재사용 가능한 자산(프로세스, 문서, 코드 등)', type: 'TEXT' },
                     { text: '다음 기간에 가장 우선해야 할 개선 과제 1~2가지', type: 'TEXT' },
                 ],
@@ -160,17 +170,18 @@ export const DESIGN_PRESETS: DesignPreset[] = [
     },
     {
         key: 'multisource',
-        label: '다면(360°) + 목표 앵커',
+        label: '다면(360°) 평가',
         description:
-            '동료·상·하 피드백 정성 평가에 더해, 동일인에 대한 평가 간 왜곡을 줄이기 위해 개인 목표 달성(KPI_SCORE)을 일정 비중으로 고정 앵커로 둠.',
+            '동료·상·하 피드백과 정성 평가를 결합해 다면 관점으로 평가.',
         name: '다면 평가 (목표 앵커)',
         sections: [
             {
-                title: '개인 목표 달성 (시스템 집계)',
-                type: 'KPI_SCORE',
+                title: '개인 목표 달성',
+                type: 'MANUAL',
                 weight: 22,
-                kpiFilter: 'ALL',
-                questions: [],
+                questions: [
+                    { text: '개인 목표 달성 수준을 종합적으로 평가해 주세요.', type: 'SCALE' },
+                ],
             },
             {
                 title: '업무 수행·신뢰',
@@ -202,28 +213,28 @@ export const DESIGN_PRESETS: DesignPreset[] = [
             },
         ],
         gradeType: 'relative',
-        grades: [{ grade: 'S' }, { grade: 'A' }, { grade: 'B' }, { grade: 'C' }, { grade: 'D' }],
+        grades: [{ grade: 'S' }, { grade: 'A' }, { grade: 'B' }, { grade: 'C' }],
         targetDist: [
-            { grade: 'S', pct: 5 },
-            { grade: 'A', pct: 20 },
-            { grade: 'B', pct: 50 },
+            { grade: 'S', pct: 10 },
+            { grade: 'A', pct: 25 },
+            { grade: 'B', pct: 45 },
             { grade: 'C', pct: 20 },
-            { grade: 'D', pct: 5 },
         ],
     },
     {
         key: 'kpi_dominant',
-        label: '정량 우선 (KPI 70%)',
+        label: '정량 우선',
         description:
-            '총점의 대부분을 KPI_SCORE에 할당. 남은 비중은 최소한의 정성 체크리스트. 스냅샷 시점 이후 목표가 크게 바뀐 조직은 설계 수정·시즌 정책을 함께 검토.',
+            '정량 관점 비중이 높은 평가 템플릿.',
         name: '고정 KPI 비중 평가',
         sections: [
             {
-                title: '목표·KPI 달성 (시스템 집계)',
-                type: 'KPI_SCORE',
+                title: '목표 달성',
+                type: 'MANUAL',
                 weight: 70,
-                kpiFilter: 'ALL',
-                questions: [],
+                questions: [
+                    { text: '핵심 목표의 달성 수준을 정량 중심으로 평가해 주세요.', type: 'SCALE' },
+                ],
             },
             {
                 title: '최소 정성 확인',
@@ -236,6 +247,6 @@ export const DESIGN_PRESETS: DesignPreset[] = [
             },
         ],
         gradeType: 'absolute',
-        grades: [{ grade: 'S' }, { grade: 'A' }, { grade: 'B' }, { grade: 'C' }, { grade: 'D' }],
+        grades: [{ grade: 'S' }, { grade: 'A' }, { grade: 'B' }, { grade: 'C' }],
     },
 ];

@@ -1,4 +1,4 @@
-import {
+﻿import {
     ApartmentOutlined,
     AuditOutlined,
     BankOutlined,
@@ -52,7 +52,10 @@ import type {EsgConfig} from '@/features/esg/api/esgApi';
 import {esgApi} from '@/features/esg/api/esgApi';
 import {memberChatApi} from '@/features/member-chat/api/memberChatApi';
 import {notificationApi} from '@/features/notification/api/notificationApi';
-import {buildApprovalNotificationNavigate} from '@/features/notification/lib/approvalNotificationRoute';
+import {
+    buildApprovalNotificationNavigate,
+    buildGoalBundleNotificationNavigate,
+} from '@/features/notification/lib/approvalNotificationRoute';
 import {companyApi} from '@/features/organization/api/companyApi';
 import {searchApi} from '@/features/search/api/searchApi';
 import {organizationApi} from '@/features/organization/api/organizationApi';
@@ -60,6 +63,7 @@ import {memberApi} from '@/features/member/api/memberApi';
 import {attendanceApi} from '@/features/salary-service/api/attendanceApi';
 import {salaryApi} from '@/features/salary-service/api/salaryApi';
 import {hasActiveNegotiationSalaryPolicy} from '@/features/salary-service/lib/salaryPolicyAccess';
+// import {attendanceApi} from '@/features/salary-service/api/attendanceApi'; // leave-policies 호출 비활성화로 AppShell 503 방지
 import {
     canAccessMemberDirectory,
     canAccessMemberDirectoryFromPermissionStrings,
@@ -99,7 +103,7 @@ import {
     encodeWfNavKey,
 } from '@/widgets/app-shell/approvalSiderMenu';
 
-/** 왼쪽 날개 패널 + 본문 — 접기·펼치기 동일 아이콘(선형·둥근 테두리). */
+/** 사이드바 접기용 패널 아이콘(접힘 시 본문 영역과 정렬). */
 function SiderPanelToggleIcon({className}: { className?: string }) {
     return (
         <svg
@@ -140,7 +144,6 @@ const APP_MENU_ICONS: Record<string, ReactNode> = {
     '/app/income': <BankOutlined className="tw-text-lg"/>,
     '/app/notifications': <BellOutlined className="tw-text-lg"/>,
     '/app/performance': <LineChartOutlined className="tw-text-lg"/>,
-    '/app/approval-center': <FileDoneOutlined className="tw-text-lg"/>,
     '/app/evaluations': <StarOutlined className="tw-text-lg"/>,
     '/app/meetings': <VideoCameraOutlined className="tw-text-lg"/>,
     '/app/settings': <SettingOutlined className="tw-text-lg"/>,
@@ -177,23 +180,23 @@ const ORG_HR_PATH_SET = new Set<string>(ORG_HR_PATHS);
 
 const ESG_GROUP_KEY = 'group-esg';
 
-/** 급여·근태: 근무(출퇴근·전사·출장) */
+/** 근무 그룹: 근태(초과·스케줄·월간 등) 및 출장 */
 const WORK_GROUP_KEY = 'group-work';
 const WORK_PATHS = ['/app/attendance', '/app/work-trips'] as const;
 const WORK_PATH_SET = new Set<string>(WORK_PATHS);
 
-/** 급여·근태: 휴가 */
+/** 휴가·근태 설정 그룹(공휴일·유형·정책 등) */
 const LEAVE_GROUP_KEY = 'group-leave';
 const LEAVE_PATHS = ['/app/leave'] as const;
 const LEAVE_PATH_SET = new Set<string>(LEAVE_PATHS);
 
-/** 관리자: 급여 하위(내 급여·관리·미사용 수당·설정) */
+/** 급여 그룹: 급여·소득 하위 메뉴 */
 const PAYROLL_GROUP_KEY = 'group-payroll';
 /** 급여 정산 관리 + 연봉 협상(연봉협상제일 때만) 사이드 서브메뉴 */
 const PAYROLL_SETTLEMENT_MENU_KEY = 'group-payroll-settlement';
 
 const APPROVAL_GROUP_KEY = 'group-approvals';
-/** openKeys: 전자결재 하위 구역(ap-section-*). */
+/** openKeys: 전자결재 하위 영역(ap-section-*). */
 const isApprovalGuideSectionOpenKey = (key: string) => key.startsWith('ap-section-');
 const APPROVAL_SHELL_MENU_ENTRIES = getApprovalShellSiderEntries();
 const APPROVAL_NAV_BY_KEY = new Map(APPROVAL_SHELL_MENU_ENTRIES.map((e) => [e.key, e.navigate]));
@@ -225,8 +228,7 @@ function approvalLeafIcon(box: string) {
 }
 
 /**
- * antd SubMenu는 접힘 상태에서 기본 툴팁이 없음 — 아이콘+텍스트를 한 덩어리로 감싸 호버 시 그룹명 표시.
- * 펼침일 때는 Tooltip을 쓰지 않음(중복 툴팁 방지).
+ * antd SubMenu 접힘 상태에서 기본 title이 없을 때 아이콘·텍스트를 한 줄로 묶고, 그룹명은 Tooltip으로 표시(중복 title 방지).
  */
 function SiderGroupedMenuLabel({icon, text}: { icon: ReactNode; text: string }) {
     const {inlineCollapsed} = useContext(MenuContext);
@@ -388,7 +390,7 @@ function buildAppShellMenuItems(
                 leaveInserted = true;
                 const leaveChildren: NonNullable<MenuProps['items']> = [];
                 if (!isAdmin) {
-                    // 직원 메뉴의 휴가는 '근태' 그룹으로 이동.
+                    // 일반 멤버 휴가 항목은 위쪽 '근무' 그룹으로 이동.
                 }
                 if (isAdmin) {
                     leaveChildren.push(
@@ -608,7 +610,7 @@ function useAppShellSiderMenuItems(currentPathname: string): {
     const {status, user} = useAuth();
     const isAdmin = user?.isSystemAdmin === true;
     const {hasPermission} = usePermissions();
-    /** 결재 양식 설정 메뉴: 시스템 관리자 + 인사팀 + 승인관리 권한 */
+    /** 결재 양식 설정 메뉴: 시스템 관리자 + 문서함 + 결재 관리 권한 */
     const showApprovalFormSettings =
       isAdmin ||
       hasPermission(PERM.APPROVAL_AD_READ) ||
@@ -660,6 +662,13 @@ function useAppShellSiderMenuItems(currentPathname: string): {
         enabled: status === 'authenticated' && isAdmin,
         staleTime: 60_000,
     });
+    // `/leave-policies` 503(Service Unavailable) 회피를 위해 근태 서비스 호출 비활성화. 아래 useQuery 복원 시 leavePromotionEnabled를 policies 기반으로 되돌리기
+    // const {data: leavePoliciesForMenu} = useQuery({
+    //     queryKey: ['salary', 'leave-policies'],
+    //     queryFn: () => attendanceApi.leavePolicy.list(),
+    //     enabled: status === 'authenticated',
+    //     staleTime: 60_000,
+    // });
 
     return useMemo(() => {
         const esgPaths = ESG_MENU_PATH_ORDER.filter((p) => shouldShowEsgMenuItem(p, esgConfig ?? null, isAdmin));
@@ -691,7 +700,9 @@ function useAppShellSiderMenuItems(currentPathname: string): {
                       : []),
               ]
             : undefined;
-        const leavePromotionEnabled = (leavePoliciesForMenu ?? []).some((p) => p.isPromotionYn === 'Y');
+        // leavePoliciesForMenu 없이 `undefined ?? []`만 넘기면 타입이 never[]로 좁혀져 TS 오류가 나므로 API 복구 시 함께 조정
+        // const leavePromotionEnabled = (leavePoliciesForMenu ?? []).some((p) => p.isPromotionYn === 'Y');
+        const leavePromotionEnabled = false;
         const showSalaryNegotiationSubmenu = hasActiveNegotiationSalaryPolicy(salaryPoliciesForMenu);
         const items = buildAppShellMenuItems(
             isAdmin,
@@ -722,7 +733,7 @@ function useAppShellSiderMenuItems(currentPathname: string): {
             return {items: esgMenuItem ? [...items, esgMenuItem] : items, showSalaryNegotiationSubmenu: false};
         }
 
-        /** 시스템 관리자: HR 정책 문서 바로 위에 ESG */
+        /** 시스템 관리자: HR 정책 문서 항목을 메뉴 끝에 ESG 다음에 배치 */
         const doc = {
             key: '/app/ai-documents',
             icon: <RobotOutlined className="tw-text-lg"/>,
@@ -1024,7 +1035,7 @@ function SiderAccountPopoverContent({
     );
 }
 
-/** 헤더 우측(알림 옆) — 프로필·마이페이지·설정·로그아웃 (기존 사이드바 하단 계정 영역 이동) */
+/** 헤더 우측 계정 아바타·설정·로그아웃 (기존 사이드바 하단 계정 영역 이동) */
 function AppShellAccountMenu() {
     const {user, logout} = useAuth();
     const navigate = useNavigate();
@@ -1051,8 +1062,8 @@ function AppShellAccountMenu() {
         memberProfile?.organizationName?.trim() ||
         user?.departmentName?.trim() ||
         user?.companyName?.trim() ||
-        '—';
-    const emailLine = user?.email?.trim() || '—';
+        '소속 정보 없음';
+    const emailLine = user?.email?.trim() || '이메일 정보 없음';
     const profileSrc =
         memberProfile?.profileUrl?.trim() || user?.profileImageUrl?.trim() || undefined;
 
@@ -1179,15 +1190,15 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
     });
 
     /**
-     * 헤더 채팅 아이콘 뱃지 — 내 모든 방의 unreadCount 합.
-     * `MemberChatPanel` 과 동일한 query key 를 공유하므로 캐시/invalidate 가 자동 동기화된다.
+     * 헤더 채팅 아이콘 배지에 모든 방의 unreadCount 합산.
+     * `MemberChatPanel` 과 동일한 query key 를 공유하므로 캐시/invalidate 가 자동으로 맞춤.
      */
     const {data: myChatRooms = []} = useQuery({
         queryKey: ['member-chat', 'rooms'],
         queryFn: () => memberChatApi.listMyRooms(),
         enabled: status === 'authenticated',
-        // 1차 동기화는 MemberChatLiveSyncAgent 의 STOMP 구독이 처리(메시지 도착 시 즉시 invalidate).
-        // 폴링은 STOMP 미연결/네트워크 단절 대비 백업용으로 길게(30s) 유지.
+        // 1차 동기화는 MemberChatLiveSyncAgent 가 STOMP 구독으로 처리(메시지 수신 시 즉시 invalidate).
+        // 백업은 STOMP 미연결·네트워크 끊김 대비 폴링(30s) 융합.
         staleTime: 0,
         refetchInterval: 30_000,
         refetchIntervalInBackground: true,
@@ -1209,6 +1220,17 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
         const t = String(type ?? '').toUpperCase();
         return t.startsWith('APPROVAL_');
     };
+    const isGoalBundleNotification = (type: string, targetType?: string): boolean => {
+        const t = String(type ?? '').toUpperCase();
+        const tt = String(targetType ?? '').toUpperCase();
+        // 과거/향후 스키마 모두 지원:
+        // 1) notificationType=GOAL_BUNDLE_*
+        // 2) notificationType=GOAL_EVALUATED + targetType=GOAL_BUNDLE_*
+        return t.startsWith('GOAL_BUNDLE_') || tt.startsWith('GOAL_BUNDLE_');
+    };
+    const isRoutableNotification = (type: string, targetType?: string): boolean => {
+        return isApprovalNotification(type) || isGoalBundleNotification(type, targetType);
+    };
     const filteredNotifications = notificationTab === 'unread'
         ? notifications.filter((item) => item.isRead !== 'YES')
         : notifications;
@@ -1218,15 +1240,27 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
         if (item.isRead !== 'YES') {
             await markNotificationAsRead.mutateAsync(item.notificationId);
         }
-        await navigate(
-          buildApprovalNotificationNavigate({
-            notificationType: item.notificationType,
-            targetType: item.targetType,
-            title: item.title,
-            content: item.content,
-            targetId: item.targetId,
-          }),
-        );
+        if (isGoalBundleNotification(item.notificationType, item.targetType)) {
+            await navigate(
+                buildGoalBundleNotificationNavigate({
+                    notificationType: item.notificationType,
+                    targetType: item.targetType,
+                    title: item.title,
+                    content: item.content,
+                    targetId: item.targetId,
+                }),
+            );
+        } else {
+            await navigate(
+                buildApprovalNotificationNavigate({
+                    notificationType: item.notificationType,
+                    targetType: item.targetType,
+                    title: item.title,
+                    content: item.content,
+                    targetId: item.targetId,
+                }),
+            );
+        }
         setNotificationPopoverOpen(false);
     };
 
@@ -1266,7 +1300,7 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
                     }`}
                     onClick={() => setNotificationTab('unread')}
                 >
-                    안 읽은 알림
+                    읽지 않은 알림
                 </button>
             </div>
             <div className="tw-max-h-[380px] tw-space-y-2 tw-overflow-y-auto tw-pr-1">
@@ -1276,7 +1310,7 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
                     </div>
                 ) : latestNotifications.length === 0 ? (
                     <div className="tw-rounded-lg tw-border tw-border-slate-200 tw-bg-slate-50 tw-p-5 tw-text-center tw-text-sm tw-text-slate-500">
-                        {notificationTab === 'unread' ? '안 읽은 알림이 없습니다.' : '알림이 없습니다.'}
+                        {notificationTab === 'unread' ? '읽지 않은 알림이 없습니다.' : '알림이 없습니다.'}
                     </div>
                 ) : (
                     latestNotifications.map((item) => (
@@ -1286,15 +1320,15 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
                             tabIndex={0}
                             className={`tw-rounded-xl tw-border tw-px-3 tw-py-2.5 ${
                                 item.isRead !== 'YES' ? 'tw-border-blue-200 tw-bg-blue-50/50' : 'tw-border-slate-200 tw-bg-white'
-                            } ${isApprovalNotification(item.notificationType) ? 'tw-cursor-pointer hover:tw-bg-slate-50' : ''}`}
+                            } ${isRoutableNotification(item.notificationType, item.targetType) ? 'tw-cursor-pointer hover:tw-bg-slate-50' : ''}`}
                             onClick={() => {
-                                if (!isApprovalNotification(item.notificationType)) return;
+                                if (!isRoutableNotification(item.notificationType, item.targetType)) return;
                                 void routeApprovalNotification(item);
                             }}
                             onKeyDown={(e) => {
                                 if (!(e.key === 'Enter' || e.key === ' ')) return;
                                 e.preventDefault();
-                                if (!isApprovalNotification(item.notificationType)) return;
+                                if (!isRoutableNotification(item.notificationType, item.targetType)) return;
                                 void routeApprovalNotification(item);
                             }}
                         >
@@ -1349,7 +1383,7 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
                         className="tw-max-w-2xl"
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
-                        placeholder="메뉴, 동료, 문서 검색..."
+                        placeholder="메뉴, 동료, 문서 검색"
                         aria-label="메뉴, 동료, 문서 검색"
                     />
                     {showSearchPanel && (
@@ -1397,10 +1431,10 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
                                                         {row.name ?? '이름 없음'}
                                                     </div>
                                                     <div className="tw-truncate tw-text-xs tw-text-slate-500">
-                                                        {row.email ?? '—'}
+                                                        {row.email ?? '이메일 정보 없음'}
                                                     </div>
                                                     <div className="tw-truncate tw-text-xs tw-text-slate-400">
-                                                        {[row.organizationName, row.jobTitleName, row.memberStatus].filter(Boolean).join(' · ') || '—'}
+                                                        {[row.organizationName, row.jobTitleName, row.memberStatus].filter(Boolean).join(' · ') || '소속 정보 없음'}
                                                     </div>
                                                 </div>
                                             </div>
@@ -1426,7 +1460,7 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
                         <button
                             type="button"
                             className={headerGhostIconClass}
-                            aria-label={`멤버 채팅${chatUnreadTotal > 0 ? ` (안 읽은 메시지 ${chatUnreadTotal}건)` : ''}`}
+                            aria-label={`멤버 채팅${chatUnreadTotal > 0 ? ` (읽지 않은 메시지 ${chatUnreadTotal}건)` : ''}`}
                             onClick={() => openMemberChat()}
                         >
                             <MessageOutlined className="tw-text-[20px]"/>
@@ -1445,7 +1479,7 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
                         <button
                             type="button"
                             className={headerGhostIconClass}
-                            aria-label={`알림${unreadCount > 0 ? ` (안 읽은 알림 ${unreadCount}건)` : ''}`}
+                            aria-label={`알림${unreadCount > 0 ? ` (읽지 않은 알림 ${unreadCount}건)` : ''}`}
                         >
                             <BellOutlined className="tw-text-[20px]"/>
                         </button>
@@ -1467,7 +1501,7 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
     if (pathname === '/app/attendance/monthly') return ['/app/attendance/monthly'];
     if (pathname === '/app/attendance/schedules/my') return ['/app/attendance/schedules/my'];
     if (pathname === '/app/attendance/overtime') return ['/app/attendance/overtime'];
-    // 내 주간 근무시간은 내 근태로 통합 직접 URL 접근 시 내 근태 메뉴 강조
+    // 월간·근무시간 등 근무 하위를 근무 그룹에 매칭 (직접 URL 진입 시에도 해당 메뉴 선택)
     if (pathname === '/app/attendance/work-time') return ['/app/attendance'];
     if (pathname === '/app/attendance/company/monthly') return ['/app/attendance/company'];
     if (pathname === '/app/attendance/company') return ['/app/attendance/company'];
@@ -1610,7 +1644,7 @@ function menuOpenKeysForPath(
     return keys;
 }
 
-/** `/app/approvals` 이하 경로(부서 문서함, 부재 위임 등)를 포함하는지. */
+/** `/app/approvals` 이하 경로(부서 문서함·부서 결재 등)를 포함하는지 */
 function isApprovalsShellPathname(pathname: string): boolean {
     return pathname === '/app/approvals' || pathname.startsWith('/app/approvals/');
 }
@@ -1618,7 +1652,7 @@ function isApprovalsShellPathname(pathname: string): boolean {
 const SIDER_COLLAPSED_STORAGE_KEY = 'wf-app-shell-sider-collapsed';
 
 function AppShellLayout() {
-    /** TanStack Router `location` — 메뉴 selectedKeys/openKeys를 URL과 동기화(AppShell 유지, Outlet만 교체). */
+    /** TanStack Router location 과 메뉴 selectedKeys/openKeys 를 URL과 동기화(AppShell 레이아웃, Outlet만 분리). */
     const location = useRouterState({select: (state) => state.location});
     const pathname = location.pathname;
     const search = location.search as Record<string, unknown>;
@@ -1647,7 +1681,7 @@ function AppShellLayout() {
     }, [siderCollapsed]);
 
     /**
-     * TanStack Router location 변경 시: `menuOpenKeysForPath`로 현재 경로에 필요한 부모 키만 openKeys에 추가.
+     * TanStack Router location 변경 시 menuOpenKeysForPath로 현재 경로에 필요한 부모 서브메뉴만 openKeys에 병합.
      */
     const [menuOpenKeys, setMenuOpenKeys] = useState<string[]>(() => {
         if (typeof window === 'undefined') return [];
@@ -1675,7 +1709,7 @@ function AppShellLayout() {
         });
     }, [pathname, search, siderCollapsed, isSystemAdmin, showSalaryNegotiationSubmenu]);
 
-    /** 작성 허브「전체」모달 iframe — 사이드·헤더 없이 본문만(실제 라우트 화면과 동일). */
+    /** 전자결재 작성 팝업만 iframe 내 임베드 시(헤더·사이드 없이 본문만 전체 화면과 같이). */
     const embedComposeModal =
         typeof search?.embed === 'string' && search.embed === 'compose-modal' && isApprovalsShellPathname(pathname);
     if (embedComposeModal) {
@@ -1688,7 +1722,7 @@ function AppShellLayout() {
         );
     }
 
-    // 관리자 최초 로그인 온보딩은 독립 화면으로 표시(헤더만 노출, 사이드바/FAB 숨김)
+    // 관리자 최초 로그인 온보딩 전용 화면(헤더만 표시, 사이드바/FAB 숨김)
     if (pathname === '/app/onboarding') {
         return (
             <MemberChatProvider>
@@ -1755,7 +1789,7 @@ function AppShellLayout() {
                             {...(siderCollapsed ? {triggerSubMenuAction: 'click' as const} : {})}
                             getPopupContainer={() => document.body}
                             selectedKeys={menuSelectedKey}
-                            // 접힘 시에도 openKeys를 비우면 팝업 서브메뉴가 절대 열리지 않음 — 항상 동일 상태로 팝업/인라인 전환
+                            // 접힘 시 openKeys를 비우면 팝업 서브메뉴가 닫히지 않는 등 깨짐이 없고, 펼침과 동일한 상태로 팝업/오버레이 전환
                             openKeys={menuOpenKeys}
                             onOpenChange={(keys) => {
                                 setMenuOpenKeys(keys as string[]);
@@ -1865,3 +1899,4 @@ function AppShellLayout() {
 
 
 export default AppShellLayout;
+

@@ -10,7 +10,7 @@ import dayjs from 'dayjs';
 import { APP_POST_LOGIN_PATH } from '@/app/config/paths';
 import { memberApi } from '@/features/member/api/memberApi';
 import { aiApi } from '@/features/ai/api/aiApi';
-import { evaluationApi } from '@/features/evaluation/api/evaluationApi';
+import { evaluationRedesignApi } from '@/features/evaluation/api/evaluationRedesignApi';
 import { esgApi } from '@/features/esg/api/esgApi';
 import { organizationApi } from '@/features/organization/api/organizationApi';
 import { OrganizationRolesSection } from '@/features/organization/ui/OrganizationRolesSection';
@@ -72,7 +72,7 @@ const ONBOARDING_STEPS: OnboardingStep[] = [
   },
   {
     title: '평가 정책 설정',
-    apis: ['POST /evaluation/evaluation-designs'],
+    apis: ['POST /evaluation/designs'],
   },
 ];
 
@@ -431,15 +431,15 @@ export default function OnboardingStepperPage() {
   };
 
   const evalDesignQuery = useQuery({
-    queryKey: ['onboarding', 'evaluation-designs'],
-    queryFn: () => evaluationApi.listDesigns(),
+    queryKey: ['onboarding', 'evaluation-designs-v2'],
+    queryFn: () => evaluationRedesignApi.listDesigns(),
     enabled: current === 8,
   });
   const evalDesignCreate = useMutation({
-    mutationFn: evaluationApi.createDesign,
+    mutationFn: evaluationRedesignApi.createDesign,
     onSuccess: () => {
       message.success('평가 정책(디자인)이 생성되었습니다.');
-      void queryClient.invalidateQueries({ queryKey: ['onboarding', 'evaluation-designs'] });
+      void queryClient.invalidateQueries({ queryKey: ['onboarding', 'evaluation-designs-v2'] });
     },
   });
 

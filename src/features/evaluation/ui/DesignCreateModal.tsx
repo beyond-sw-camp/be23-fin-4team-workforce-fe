@@ -1,4 +1,4 @@
-import {useMutation, useQuery} from '@tanstack/react-query';
+import {useMutation} from '@tanstack/react-query';
 import {useEffect} from 'react';
 import {
     App,
@@ -8,7 +8,6 @@ import {
     Dropdown,
     Form,
     Input,
-    Radio,
     Row,
     Select,
     Tag,
@@ -22,12 +21,16 @@ import {
     ThunderboltOutlined,
 } from '@ant-design/icons';
 import {EVALUATION_PAGE_KO as L} from '@/app/locale/app-ko';
-import {evaluationApi} from '@/features/evaluation/api/evaluationApi';
+import {evaluationRedesignApi} from '@/features/evaluation/api/evaluationRedesignApi';
 import type {CreateDesignPayload, EvaluationDesign, UpdateDesignPayload} from '@/features/evaluation/model/types';
 import {DESIGN_PRESETS} from '@/features/evaluation/lib/designPresets';
+import {
+    assignDefaultQuestionWeights,
+    validateEvaluationDesignWeights,
+    validateRelativeTargetDistributionPct,
+    type DesignSectionDraft,
+} from '@/features/evaluation/lib/designWeightRules';
 import {useAuth} from '@/features/auth/useAuth';
-import {goalApi} from '@/features/goals/api/goalApi';
-import type {KpiTemplate} from '@/features/goals/model/types';
 import {AppDoubleActionModal} from '@/shared/ui/AppDoubleActionModal';
 
 type Props = {
@@ -37,69 +40,14 @@ type Props = {
     initialDesign?: EvaluationDesign | null;
 };
 
-/** 서버 `kpiFilter` ↔ 폼 친화 필드 (라벨은 UI 전용) */
-type KpiTargetScope = 'ALL' | 'TEMPLATE_ONLY' | 'CUSTOM';
-
-function kpiFilterToFormParts(
-    sectionType: string | undefined,
-    kpiFilter?: string | null,
-): { kpiTargetScope?: KpiTargetScope; kpiTemplateId?: string } {
-    if (sectionType !== 'KPI_SCORE') return {};
-    const f = String(kpiFilter ?? 'ALL').trim();
-    if (f === '' || f.toUpperCase() === 'ALL') return { kpiTargetScope: 'ALL', kpiTemplateId: '' };
-    if (f.toUpperCase() === 'TEMPLATE_ONLY') return { kpiTargetScope: 'TEMPLATE_ONLY', kpiTemplateId: '' };
-    return { kpiTargetScope: 'CUSTOM', kpiTemplateId: f };
-}
-
-function formPartsToKpiFilter(
-    sectionType: string,
-    scope?: KpiTargetScope,
-    templateId?: string,
-): string | undefined {
-    if (sectionType !== 'KPI_SCORE') return undefined;
-    const s = scope ?? 'ALL';
-    const tid = String(templateId ?? '').trim();
-    if (s === 'CUSTOM' && tid) return tid;
-    if (s === 'TEMPLATE_ONLY') return 'TEMPLATE_ONLY';
-    return 'ALL';
-}
-
-function kpiTemplateSelectOptions(
-    templates: KpiTemplate[] | undefined,
-    selectedId?: string | null,
-): { value: string; label: string }[] {
-    const list = templates ?? [];
-    const base = list
-        .filter((t) => t.isActive !== false)
-        .map((t) => ({ value: t.id, label: t.name }));
-    const tid = String(selectedId ?? '').trim();
-    if (tid && !base.some((o) => o.value === tid)) {
-        return [
-            {
-                value: tid,
-                label: `${tid.slice(0, 8)}… (목록에 없거나 비활성 템플릿)`,
-            },
-            ...base,
-        ];
-    }
-    return base;
-}
-
 export function DesignCreateModal({open, onClose, onCreated, initialDesign = null}: Props) {
     const {message} = App.useApp();
-    const { user } = useAuth();
-    const companyId = user?.companyId?.trim();
+    useAuth();
     const [form] = Form.useForm();
     const isEditMode = !!initialDesign;
 
-    const templatesQuery = useQuery({
-        queryKey: ['goals', 'kpi-templates', companyId],
-        queryFn: () => goalApi.listKpiTemplates(),
-        enabled: open && Boolean(companyId),
-    });
-
     const createMut = useMutation({
-        mutationFn: (body: CreateDesignPayload) => evaluationApi.createDesign(body),
+        mutationFn: (body: CreateDesignPayload) => evaluationRedesignApi.createDesign(body),
         onSuccess: () => {
             message.success(L.designCreated);
             form.resetFields();
@@ -109,7 +57,7 @@ export function DesignCreateModal({open, onClose, onCreated, initialDesign = nul
     });
     const updateMut = useMutation({
         mutationFn: ({designId, body}: {designId: string; body: UpdateDesignPayload}) =>
-            evaluationApi.updateDesign(designId, body),
+            evaluationRedesignApi.updateDesign(designId, body),
         onSuccess: () => {
             message.success('평가 설계를 수정했습니다.');
             form.resetFields();
@@ -135,14 +83,14 @@ export function DesignCreateModal({open, onClose, onCreated, initialDesign = nul
             : [];
         const sections = (initialDesign.sections ?? []).map((s: any) => {
             const type = s.type ?? 'MANUAL';
-            return {
+                            return {
                 title: s.title,
                 weight: s.weight,
                 type,
-                ...kpiFilterToFormParts(type, s.kpiFilter),
                 questions: (s.questions ?? []).map((q: any) => ({
                     text: q.text ?? q.title ?? '',
                     type: String(q.type ?? 'SCALE').toUpperCase(),
+                    weight: q.weight != null && q.weight !== '' ? Number(q.weight) : undefined,
                 })),
             };
         });
@@ -172,34 +120,42 @@ export function DesignCreateModal({open, onClose, onCreated, initialDesign = nul
                 layout="vertical"
                 className="tw-px-5 tw-py-4"
                 onFinish={(v) => {
-                    for (const s of v.sections ?? []) {
-                        if (
-                            s.type === 'KPI_SCORE' &&
-                            s.kpiTargetScope === 'CUSTOM' &&
-                            !String(s.kpiTemplateId ?? '').trim()
-                        ) {
-                            message.warning(
-                                '「특정 KPI 템플릿 하나만」을 쓰는 섹션에서는 목록에서 KPI 템플릿을 선택해 주세요.',
-                            );
+                    if (v.gradeType === 'relative') {
+                        const distErr = validateRelativeTargetDistributionPct(v.targetDist);
+                        if (distErr) {
+                            message.error(distErr);
                             return;
                         }
                     }
-                    const sections = (v.sections ?? []).map((s: any) => ({
-                        title: s.title,
-                        weight: Number(s.weight) || 0,
-                        // [L-1] 섹션 타입 — 서버 enum 값(MANUAL/KPI_SCORE/PEER_FEEDBACK)으로 전송.
-                        type: s.type || 'MANUAL',
-                        kpiFilter: formPartsToKpiFilter(
-                            s.type || 'MANUAL',
-                            s.kpiTargetScope as KpiTargetScope | undefined,
-                            s.kpiTemplateId,
-                        ),
-                        questions: (s.questions ?? []).map((q: any) => ({
-                            text: q.text,
-                            type: q.type ?? 'SCALE',
-                            required: true,
-                        })),
-                    }));
+                    const sectionsRaw: DesignSectionDraft[] = (v.sections ?? [])
+                        .map((s: any) => ({
+                            title: String(s.title ?? '').trim(),
+                            weight: Number(s.weight) || 0,
+                            type: s.type || 'MANUAL',
+                            questions: (s.questions ?? [])
+                                .map((q: any) => ({
+                                    text: String(q.text ?? '').trim(),
+                                    type: String(q.type ?? 'SCALE').toUpperCase(),
+                                    required: true,
+                                    weight:
+                                        q.weight != null && q.weight !== ''
+                                            ? Number(q.weight)
+                                            : undefined,
+                                }))
+                                .filter((q: any) => q.text),
+                        }))
+                        .filter((s: any) => s.title);
+                    const preErr = validateEvaluationDesignWeights(sectionsRaw);
+                    if (preErr) {
+                        message.error(preErr);
+                        return;
+                    }
+                    const sections = assignDefaultQuestionWeights(sectionsRaw);
+                    const postErr = validateEvaluationDesignWeights(sections);
+                    if (postErr) {
+                        message.error(postErr);
+                        return;
+                    }
                     const gradeConfig: Record<string, unknown> = {
                         type: v.gradeType ?? 'absolute',
                     };
@@ -211,10 +167,12 @@ export function DesignCreateModal({open, onClose, onCreated, initialDesign = nul
                         for (const d of v.targetDist) {
                             if (d.grade?.trim()) dist[d.grade.trim()] = Number(d.pct) || 0;
                         }
-                        gradeConfig.targetDistribution = dist;
+                        if (Object.keys(dist).length) {
+                            gradeConfig.targetDistribution = dist;
+                        }
                     }
                     const payload = {
-                        name: v.name,
+                        name: String(v.name ?? '').trim(),
                         sectionsJson: JSON.stringify(sections),
                         gradeConfigJson: JSON.stringify(gradeConfig),
                     };
@@ -231,7 +189,12 @@ export function DesignCreateModal({open, onClose, onCreated, initialDesign = nul
 
                 {/* 섹션 빌더 */}
                 <div className="tw-flex tw-items-center tw-justify-between tw-mb-2">
-                    <Typography.Text strong>섹션 구성</Typography.Text>
+                    <div>
+                        <Typography.Text strong>섹션 구성</Typography.Text>
+                        <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-xs">
+                            섹션 가중치 합계 100%. 각 섹션에서 scale/grade/gap 문항 가중치 합계 100%(비우면 채점 문항에만 균등 배분). 서술형(text)은 점수 미반영·가중치 0.
+                        </Typography.Paragraph>
+                    </div>
                     <Dropdown
                         menu={{
                             items: DESIGN_PRESETS.map((p) => ({
@@ -254,7 +217,6 @@ export function DesignCreateModal({open, onClose, onCreated, initialDesign = nul
                                             title: s.title,
                                             weight: s.weight,
                                             type,
-                                            ...kpiFilterToFormParts(type, s.kpiFilter?.trim() || 'ALL'),
                                             questions: (s.questions ?? []).map((q) => ({
                                                 text: q.text,
                                                 type: q.type,
@@ -295,11 +257,10 @@ export function DesignCreateModal({open, onClose, onCreated, initialDesign = nul
                                         >
                                             {({getFieldValue}) => {
                                                 const t = (getFieldValue(['sections', name, 'type']) ?? 'MANUAL') as
-                                                    'MANUAL' | 'KPI_SCORE' | 'PEER_FEEDBACK';
+                                                    'MANUAL' | 'PEER_FEEDBACK';
                                                 const title = getFieldValue(['sections', name, 'title']) as string | undefined;
-                                                const meta: Record<'MANUAL' | 'KPI_SCORE' | 'PEER_FEEDBACK', {label: string; color: string}> = {
+                                                const meta: Record<'MANUAL' | 'PEER_FEEDBACK', {label: string; color: string}> = {
                                                     MANUAL: {label: '수동', color: 'default'},
-                                                    KPI_SCORE: {label: 'KPI', color: 'geekblue'},
                                                     PEER_FEEDBACK: {label: '동료', color: 'purple'},
                                                 };
                                                 const m = meta[t] ?? meta.MANUAL;
@@ -345,7 +306,7 @@ export function DesignCreateModal({open, onClose, onCreated, initialDesign = nul
                                             </Form.Item>
                                         </Col>
                                     </Row>
-                                    {/* [L-1] 섹션 타입 선택 */}
+                                    {/* 섹션 타입 선택 */}
                                     <Row gutter={12}>
                                         <Col span={24} md={14}>
                                             <Form.Item
@@ -354,7 +315,7 @@ export function DesignCreateModal({open, onClose, onCreated, initialDesign = nul
                                                 label={
                                                     <span>
                                                         섹션 유형{' '}
-                                                        <Tooltip title="수동: 문항 점수 / KPI 달성률: 목표 스냅샷으로 자동 계산 / 동료: 다른 평가자 응답 평균">
+                                                        <Tooltip title="수동: 문항 점수 / 동료: 다른 평가자 응답 평균">
                                                             <span className="tw-text-gray-400 tw-cursor-help">(?)</span>
                                                         </Tooltip>
                                                     </span>
@@ -364,112 +325,12 @@ export function DesignCreateModal({open, onClose, onCreated, initialDesign = nul
                                                 <Select
                                                     options={[
                                                         {value: 'MANUAL', label: '수동 입력 (문항 응답 기반)'},
-                                                        {value: 'KPI_SCORE', label: 'KPI 달성률 (자동 반영)'},
                                                         {value: 'PEER_FEEDBACK', label: '동료 피드백 집계'},
                                                     ]}
                                                 />
                                             </Form.Item>
                                         </Col>
                                     </Row>
-                                    <Form.Item
-                                        noStyle
-                                        shouldUpdate={(prev, cur) =>
-                                            prev?.sections?.[name]?.type !== cur?.sections?.[name]?.type
-                                        }
-                                    >
-                                        {({getFieldValue}) => {
-                                            if (getFieldValue(['sections', name, 'type']) !== 'KPI_SCORE') {
-                                                return null;
-                                            }
-                                            return (
-                                                <div className="tw-mb-3 tw-rounded-lg tw-border tw-border-slate-200/90 tw-bg-slate-50/90 tw-px-3 tw-py-3">
-                                                    <Form.Item
-                                                        {...restField}
-                                                        name={[name, 'kpiTargetScope']}
-                                                        label="어떤 목표를 이 섹션 점수에 넣을까요?"
-                                                        initialValue="ALL"
-                                                        className="!tw-mb-2"
-                                                    >
-                                                        <Radio.Group className="tw-flex tw-flex-col tw-gap-2">
-                                                            <Radio value="ALL">
-                                                                <span className="tw-font-medium">평가 대상 목표 전체</span>
-                                                                <Typography.Text
-                                                                    type="secondary"
-                                                                    className="tw-ml-1 tw-text-xs tw-block tw-pl-6 tw-font-normal max-md:tw-pl-0"
-                                                                >
-                                                                    시즌에 캡처된 달성률을 목표별 가중치로 합산합니다.
-                                                                </Typography.Text>
-                                                            </Radio>
-                                                            <Radio value="TEMPLATE_ONLY">
-                                                                <span className="tw-font-medium">KPI 템플릿으로 만든 목표만</span>
-                                                                <Typography.Text
-                                                                    type="secondary"
-                                                                    className="tw-ml-1 tw-text-xs tw-block tw-pl-6 tw-font-normal max-md:tw-pl-0"
-                                                                >
-                                                                    템플릿 없이 직접 만든 일회성 목표는 점수에서 뺍니다.
-                                                                </Typography.Text>
-                                                            </Radio>
-                                                            <Radio value="CUSTOM">
-                                                                <span className="tw-font-medium">특정 KPI 템플릿 하나만</span>
-                                                                <Typography.Text
-                                                                    type="secondary"
-                                                                    className="tw-ml-1 tw-text-xs tw-block tw-pl-6 tw-font-normal max-md:tw-pl-0"
-                                                                >
-                                                                    여러 템플릿 중 하나만 반영할 때 사용합니다.
-                                                                </Typography.Text>
-                                                            </Radio>
-                                                        </Radio.Group>
-                                                    </Form.Item>
-                                                    <Form.Item
-                                                        noStyle
-                                                        shouldUpdate={(prev, cur) =>
-                                                            prev?.sections?.[name]?.kpiTargetScope !==
-                                                            cur?.sections?.[name]?.kpiTargetScope
-                                                        }
-                                                    >
-                                                        {({getFieldValue: gf2}) =>
-                                                            gf2(['sections', name, 'kpiTargetScope']) === 'CUSTOM' ? (
-                                                                <Form.Item
-                                                                    {...restField}
-                                                                    name={[name, 'kpiTemplateId']}
-                                                                    label="KPI 템플릿"
-                                                                    extra="성과 메뉴에 등록된 템플릿 중 하나를 선택합니다. 목표는 해당 템플릿으로 생성된 것만 점수에 반영됩니다."
-                                                                >
-                                                                    {!companyId ? (
-                                                                        <Typography.Text type="warning" className="tw-text-sm">
-                                                                            회사 정보를 확인할 수 없어 템플릿 목록을 불러올 수 없습니다.
-                                                                        </Typography.Text>
-                                                                    ) : (
-                                                                        <Select
-                                                                            showSearch
-                                                                            optionFilterProp="label"
-                                                                            placeholder="KPI 템플릿을 선택하세요"
-                                                                            loading={templatesQuery.isPending}
-                                                                            allowClear
-                                                                            className="tw-w-full"
-                                                                            options={kpiTemplateSelectOptions(
-                                                                                templatesQuery.data,
-                                                                                gf2(['sections', name, 'kpiTemplateId']),
-                                                                            )}
-                                                                            notFoundContent={
-                                                                                templatesQuery.isError
-                                                                                    ? '목록을 불러오지 못했습니다.'
-                                                                                    : '등록된 KPI 템플릿이 없습니다. 성과 메뉴에서 템플릿을 먼저 만드세요.'
-                                                                            }
-                                                                        />
-                                                                    )}
-                                                                </Form.Item>
-                                                            ) : null
-                                                        }
-                                                    </Form.Item>
-                                                    <Typography.Text type="secondary" className="tw-text-xs">
-                                                        ※ 점수에 쓰이는 달성률은 평가 시즌 시작 시점에 한 번 저장된 값입니다. 그 이후 목표를
-                                                        많이 바꿔도 이 섹션 점수는 자동으로 따라가지 않습니다.
-                                                    </Typography.Text>
-                                                </div>
-                                            );
-                                        }}
-                                    </Form.Item>
                                     {/* 문항 */}
                                     <Form.List name={[name, 'questions']}>
                                         {(qFields, qOps) => (
@@ -499,6 +360,20 @@ export function DesignCreateModal({open, onClose, onCreated, initialDesign = nul
                                                                         {value: 'GAP', label: L.questionTypeGap},
                                                                     ]}
                                                                     style={{width: '100%'}}
+                                                                />
+                                                            </Form.Item>
+                                                        </Col>
+                                                        <Col flex="88px">
+                                                            <Form.Item
+                                                                name={[qf.name, 'weight']}
+                                                                noStyle
+                                                                tooltip="채점 문항만 합산. 비우면 해당 섹션 채점 문항에 균등 배분(합 100%)."
+                                                            >
+                                                                <Input
+                                                                    type="number"
+                                                                    min={0}
+                                                                    max={100}
+                                                                    placeholder="가중치"
                                                                 />
                                                             </Form.Item>
                                                         </Col>

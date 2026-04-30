@@ -1,9 +1,5 @@
-import type { Goal } from '@/features/goals/model/types';
-
-/** 목표 수치 옆에 붙일 단위 — `unitLabel` 우선, 없으면 `unitType` 코드 */
-export function goalValueUnitSuffix(goal: Goal): string {
-  const custom = goal.unitLabel?.trim();
-  if (custom) return ` · ${custom}`;
-  if (goal.unitType) return ` · ${goal.unitType}`;
+// DEPRECATED — KPI 의존 유틸. redesign 으로 제거됨.
+// 잔여 stub: import 해도 빈 문자열 반환.
+export function goalValueUnitSuffix(): string {
   return '';
 }
