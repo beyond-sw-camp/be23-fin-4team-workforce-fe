@@ -4,6 +4,7 @@ export type GoalVisibility = 'COMPANY' | 'TEAM' | 'PRIVATE';
 export type GoalStatus = 'DRAFT' | 'PENDING' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED' | 'SKIPPED';
 export type GoalApprovalStatus = 'NOT_REQUESTED' | 'PENDING' | 'APPROVED' | 'REJECTED';
 export type Grade = 'S' | 'A' | 'B' | 'C';
+export type GoalHealthStatus = 'NOT_STARTED' | 'ON_TRACK' | 'AT_RISK' | 'BEHIND' | 'COMPLETED';
 
 export type Goal = {
   goalId: string;
@@ -39,6 +40,10 @@ export type Goal = {
   objectiveGradeA?: string;
   objectiveGradeB?: string;
   objectiveGradeC?: string;
+  actualValue?: number | null;
+  achievementPct?: number | null;
+  rolledAchievementPct?: number | null;
+  healthStatus?: GoalHealthStatus | null;
   unitLabel?: string;
   unitType?: string;
   measureType?: string;
@@ -66,6 +71,7 @@ export type GoalCreatePayload = {
 };
 
 export type GoalUpdatePayload = {
+  ownerId?: string;
   title?: string;
   description?: string;
   weightPct?: number;
@@ -99,6 +105,42 @@ export type GradeCriteria = never;
 export type GradeCriteriaPayload = never;
 export type Visibility = GoalVisibility;
 export type GoalApprovalPolicy = 'NONE' | 'ACTIVATION_ONLY' | 'COMPLETION_ONLY' | 'BOTH';
-export type GoalHealthStatus = 'NOT_STARTED' | 'ON_TRACK' | 'AT_RISK' | 'OFF_TRACK' | 'COMPLETED';
 export type BundleApprovalKind = 'ACTIVATION' | 'COMPLETION';
 export type GoalApprovalBundleSummary = { bundleId: string; status: string };
+
+export type GoalProgressUpdatePayload = {
+  value: number;
+  status: GoalHealthStatus;
+  note?: string;
+};
+
+export type GoalProgressUpdate = {
+  updateId: string | null;
+  goalId: string;
+  value: number | null;
+  status: GoalHealthStatus | null;
+  note?: string | null;
+  createdBy?: string | null;
+  createdAt?: string | null;
+};
+
+export type GoalSeasonReadinessIssue = {
+  memberId: string;
+  reason: string;
+  weightSum?: number | null;
+  goalCount?: number | null;
+};
+
+export type GoalSeasonReadiness = {
+  seasonId: string;
+  ready: boolean;
+  targetMemberCount: number;
+  activeGoalCount: number;
+  blockerCount: number;
+  warningCount: number;
+  missingGoals: GoalSeasonReadinessIssue[];
+  weightIssues: GoalSeasonReadinessIssue[];
+  pendingBundles: GoalSeasonReadinessIssue[];
+  missingProgressUpdates: GoalSeasonReadinessIssue[];
+  missingLeads: GoalSeasonReadinessIssue[];
+};

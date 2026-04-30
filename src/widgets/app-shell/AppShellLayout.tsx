@@ -40,9 +40,8 @@
 } from '@ant-design/icons';
 import {Avatar, Badge, Button, Empty, Layout, Menu, Popover, Spin, Tooltip, message} from 'antd';
 import type {MenuProps} from 'antd';
-import MenuContext from 'antd/es/menu/MenuContext';
 import type {ReactNode} from 'react';
-import {useContext, useEffect, useMemo, useState} from 'react';
+import {useEffect, useMemo, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Link, Outlet, useNavigate, useRouterState} from '@tanstack/react-router';
 import {useAuth} from '@/features/auth/useAuth';
@@ -227,25 +226,6 @@ function approvalLeafIcon(box: string) {
     return <FileTextOutlined className="tw-text-lg"/>;
 }
 
-/**
- * antd SubMenu 접힘 상태에서 기본 title이 없을 때 아이콘·텍스트를 한 줄로 묶고, 그룹명은 Tooltip으로 표시(중복 title 방지).
- */
-function SiderGroupedMenuLabel({icon, text}: { icon: ReactNode; text: string }) {
-    const {inlineCollapsed} = useContext(MenuContext);
-    const inner = (
-        <span className="tw-inline-flex tw-min-w-0 tw-w-full tw-items-center tw-gap-3 [&_.anticon]:tw-shrink-0">
-      {icon}
-            <span className="tw-truncate">{text}</span>
-    </span>
-    );
-    if (!inlineCollapsed) return inner;
-    return (
-        <Tooltip title={text} placement="right" mouseEnterDelay={0.12}>
-            {inner}
-        </Tooltip>
-    );
-}
-
 function buildAppShellMenuItems(
     isAdmin: boolean,
     approvalMenuChildren: NonNullable<MenuProps['items']> | undefined,
@@ -267,10 +247,9 @@ function buildAppShellMenuItems(
                 hubInserted = true;
                 items.push({
                     key: TALENT_HUB_GROUP_KEY,
-                    label: (
-                        <SiderGroupedMenuLabel icon={<ProjectOutlined className="tw-text-lg"/>}
-                                               text={APP_MENU_TALENT_HUB_LABEL}/>
-                    ),
+                    icon: <ProjectOutlined className="tw-text-lg"/>,
+                    label: APP_MENU_TALENT_HUB_LABEL,
+                    title: APP_MENU_TALENT_HUB_LABEL,
                     children: TALENT_HUB_PATHS.map((p) => ({
                         key: p,
                         icon: APP_MENU_ICONS[p],
@@ -298,10 +277,9 @@ function buildAppShellMenuItems(
                 orgInserted = true;
                 items.push({
                     key: ORG_HR_GROUP_KEY,
-                    label: (
-                        <SiderGroupedMenuLabel icon={<TeamOutlined className="tw-text-lg"/>}
-                                               text={APP_MENU_ORG_HR_GROUP_LABEL}/>
-                    ),
+                    icon: <TeamOutlined className="tw-text-lg"/>,
+                    label: APP_MENU_ORG_HR_GROUP_LABEL,
+                    title: APP_MENU_ORG_HR_GROUP_LABEL,
                     children: [...baseChildren, ...extras],
                 });
             }
@@ -376,10 +354,9 @@ function buildAppShellMenuItems(
                 }
                 items.push({
                     key: WORK_GROUP_KEY,
-                    label: (
-                        <SiderGroupedMenuLabel icon={<ClockCircleOutlined className="tw-text-lg"/>}
-                                               text={APP_MENU_WORK_GROUP_LABEL}/>
-                    ),
+                    icon: <ClockCircleOutlined className="tw-text-lg"/>,
+                    label: APP_MENU_WORK_GROUP_LABEL,
+                    title: APP_MENU_WORK_GROUP_LABEL,
                     children: workChildren,
                 });
             }
@@ -419,10 +396,9 @@ function buildAppShellMenuItems(
                 }
                 items.push({
                     key: LEAVE_GROUP_KEY,
-                    label: (
-                        <SiderGroupedMenuLabel icon={<ScheduleOutlined className="tw-text-lg"/>}
-                                               text={APP_MENU_LEAVE_GROUP_LABEL}/>
-                    ),
+                    icon: <ScheduleOutlined className="tw-text-lg"/>,
+                    label: APP_MENU_LEAVE_GROUP_LABEL,
+                    title: APP_MENU_LEAVE_GROUP_LABEL,
                     children: leaveChildren,
                 });
             }
@@ -441,9 +417,9 @@ function buildAppShellMenuItems(
                     const leafByKey = new Map(guideLeaves.map((e) => [e.key, e]));
                     items.push({
                         key: APPROVAL_GROUP_KEY,
-                        label: (
-                            <SiderGroupedMenuLabel icon={<FileDoneOutlined className="tw-text-lg"/>} text="전자결재"/>
-                        ),
+                        icon: <FileDoneOutlined className="tw-text-lg"/>,
+                        label: '전자결재',
+                        title: '전자결재',
                         children: [
                             {
                                 key: composeEntry.key,
@@ -481,10 +457,9 @@ function buildAppShellMenuItems(
             if (isAdmin) {
                 items.push({
                     key: PAYROLL_GROUP_KEY,
-                    label: (
-                        <SiderGroupedMenuLabel icon={<DollarOutlined className="tw-text-lg"/>}
-                                               text="급여 관리"/>
-                    ),
+                    icon: <DollarOutlined className="tw-text-lg"/>,
+                    label: '급여 관리',
+                    title: '급여 관리',
                     children: [
                         ...(showSalaryNegotiationSubmenu
                             ? [
@@ -558,10 +533,9 @@ function buildAppShellMenuItems(
             } else {
                 items.push({
                     key: PAYROLL_GROUP_KEY,
-                    label: (
-                        <SiderGroupedMenuLabel icon={<DollarOutlined className="tw-text-lg"/>}
-                                               text="급여"/>
-                    ),
+                    icon: <DollarOutlined className="tw-text-lg"/>,
+                    label: '급여',
+                    title: '급여',
                     children: [
                         {
                             key: '/app/payroll',
@@ -723,9 +697,9 @@ function useAppShellSiderMenuItems(currentPathname: string): {
             esgPaths.length > 0
                 ? {
                       key: ESG_GROUP_KEY,
-                      label: (
-                          <SiderGroupedMenuLabel icon={<GlobalOutlined className="tw-text-lg"/>} text={APP_MENU_ESG_GROUP_LABEL}/>
-                      ),
+                      icon: <GlobalOutlined className="tw-text-lg"/>,
+                      label: APP_MENU_ESG_GROUP_LABEL,
+                      title: APP_MENU_ESG_GROUP_LABEL,
                       children: esgPaths.map((p) => ({
                           key: p,
                           icon: ESG_MENU_ICONS[p],
@@ -1319,50 +1293,39 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
                         {notificationTab === 'unread' ? '읽지 않은 알림이 없습니다.' : '알림이 없습니다.'}
                     </div>
                 ) : (
-                    latestNotifications.map((item) => (
-                        <div
-                            key={item.notificationId}
-                            role="button"
-                            tabIndex={0}
-                            className={`tw-rounded-xl tw-border tw-px-3 tw-py-2.5 ${
-                                item.isRead !== 'YES' ? 'tw-border-blue-200 tw-bg-blue-50/50' : 'tw-border-slate-200 tw-bg-white'
-                            } ${isRoutableNotification(item.notificationType, item.targetType) ? 'tw-cursor-pointer hover:tw-bg-slate-50' : ''}`}
-                            onClick={() => {
-                                if (!isRoutableNotification(item.notificationType, item.targetType)) return;
-                                void routeApprovalNotification(item);
-                            }}
-                            onKeyDown={(e) => {
-                                if (!(e.key === 'Enter' || e.key === ' ')) return;
-                                e.preventDefault();
-                                if (!isRoutableNotification(item.notificationType, item.targetType)) return;
-                                void routeApprovalNotification(item);
-                            }}
-                        >
-                            <div className="tw-flex tw-items-start tw-justify-between tw-gap-2">
-                                <div className="tw-min-w-0">
-                                    <div className="tw-flex tw-items-center tw-gap-1.5">
-                                        <div className="tw-truncate tw-text-sm tw-font-semibold tw-text-slate-900">{item.title}</div>
-                                        {item.isRead !== 'YES' ? <span className="tw-size-1.5 tw-rounded-full tw-bg-red-500"/> : null}
+                    latestNotifications.map((item) => {
+                        const unread = item.isRead !== 'YES';
+                        const routable = isRoutableNotification(item.notificationType, item.targetType);
+                        return (
+                            <div
+                                key={item.notificationId}
+                                role={routable ? 'button' : undefined}
+                                tabIndex={routable ? 0 : undefined}
+                                className={`tw-rounded-xl tw-border tw-px-3 tw-py-2.5 tw-transition-opacity ${
+                                    unread ? 'tw-border-blue-200 tw-bg-blue-50/50 tw-opacity-100' : 'tw-border-slate-200 tw-bg-white tw-opacity-60'
+                                } ${routable ? 'tw-cursor-pointer hover:tw-bg-slate-50' : ''}`}
+                                onClick={() => {
+                                    if (!routable) return;
+                                    void routeApprovalNotification(item);
+                                }}
+                                onKeyDown={(e) => {
+                                    if (!(e.key === 'Enter' || e.key === ' ')) return;
+                                    e.preventDefault();
+                                    if (!routable) return;
+                                    void routeApprovalNotification(item);
+                                }}
+                            >
+                                <div className="tw-flex tw-items-start tw-justify-between tw-gap-2">
+                                    <div className="tw-min-w-0">
+                                        <div className="tw-flex tw-items-center tw-gap-1.5">
+                                            <div className={`tw-truncate tw-text-sm ${unread ? 'tw-font-semibold tw-text-slate-900' : 'tw-font-medium tw-text-slate-600'}`}>{item.title}</div>
+                                            {unread ? <span className="tw-size-1.5 tw-rounded-full tw-bg-red-500"/> : null}
+                                        </div>
+                                        <div className="tw-mt-1 tw-line-clamp-2 tw-text-xs tw-text-slate-600">{item.content}</div>
                                     </div>
-                                    <div className="tw-mt-1 tw-line-clamp-2 tw-text-xs tw-text-slate-600">{item.content}</div>
-                                </div>
-                                <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-2">
-                                    {item.isRead !== 'YES' ? (
-                                        <button
-                                            type="button"
-                                            className="tw-cursor-pointer tw-border-0 tw-bg-transparent tw-text-[11px] tw-font-medium tw-text-blue-600 hover:tw-text-blue-700"
-                                            onClick={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                void markNotificationAsRead.mutateAsync(item.notificationId);
-                                            }}
-                                        >
-                                            읽음
-                                        </button>
-                                    ) : null}
                                     <button
                                         type="button"
-                                        className="tw-cursor-pointer tw-border-0 tw-bg-transparent tw-text-[11px] tw-font-medium tw-text-rose-600 hover:tw-text-rose-700"
+                                        className="tw-shrink-0 tw-cursor-pointer tw-border-0 tw-bg-transparent tw-text-[11px] tw-font-medium tw-text-rose-600 hover:tw-text-rose-700"
                                         onClick={(e) => {
                                             e.preventDefault();
                                             e.stopPropagation();
@@ -1373,8 +1336,8 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
                                     </button>
                                 </div>
                             </div>
-                        </div>
-                    ))
+                        );
+                    })
                 )}
             </div>
         </div>

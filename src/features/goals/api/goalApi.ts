@@ -5,6 +5,10 @@ import type {
   Goal,
   GoalAggregate,
   GoalCreatePayload,
+  GoalProgressUpdate,
+  GoalProgressUpdatePayload,
+  GoalSeasonReadiness,
+  GoalSeasonReadinessIssue,
   GoalStatus,
   GoalUpdatePayload,
   ListCompanyGoalsParams,
@@ -23,6 +27,11 @@ function pickStr(o: any, ...keys: string[]): string {
 function pickNum(o: any, ...keys: string[]): number {
   for (const k of keys) if (o?.[k] != null) return Number(o[k]);
   return 0;
+}
+
+function pickNullableNum(o: any, ...keys: string[]): number | null {
+  for (const k of keys) if (o?.[k] != null) return Number(o[k]);
+  return null;
 }
 
 function pickArr(o: any, ...keys: string[]): any[] {
@@ -84,8 +93,51 @@ function mapGoalFromApi(g: any): Goal {
     objectiveGradeA: pickStr(g, 'objectiveGradeA') || undefined,
     objectiveGradeB: pickStr(g, 'objectiveGradeB') || undefined,
     objectiveGradeC: pickStr(g, 'objectiveGradeC') || undefined,
+    actualValue: pickNullableNum(g, 'actualValue', 'actual_value'),
+    achievementPct: pickNullableNum(g, 'achievementPct', 'achievement_pct'),
+    rolledAchievementPct: pickNullableNum(g, 'rolledAchievementPct', 'rolled_achievement_pct'),
+    healthStatus: g.healthStatus ?? g.health_status ?? null,
     createdAt: g.createdAt,
     updatedAt: g.updatedAt,
+  };
+}
+
+function mapGoalProgressUpdateFromApi(raw: any): GoalProgressUpdate {
+  return {
+    updateId: raw?.updateId != null ? String(raw.updateId) : null,
+    goalId: String(raw?.goalId ?? ''),
+    value: raw?.value != null ? Number(raw.value) : null,
+    status: raw?.status ?? null,
+    note: raw?.note ?? null,
+    createdBy: raw?.createdBy != null ? String(raw.createdBy) : null,
+    createdAt: raw?.createdAt ?? null,
+  };
+}
+
+function mapReadinessIssues(raw: unknown): GoalSeasonReadinessIssue[] {
+  return Array.isArray(raw)
+    ? raw.map((item: any) => ({
+        memberId: String(item?.memberId ?? ''),
+        reason: String(item?.reason ?? ''),
+        weightSum: item?.weightSum != null ? Number(item.weightSum) : null,
+        goalCount: item?.goalCount != null ? Number(item.goalCount) : null,
+      }))
+    : [];
+}
+
+function mapGoalSeasonReadinessFromApi(raw: any, seasonId: string): GoalSeasonReadiness {
+  return {
+    seasonId: String(raw?.seasonId ?? seasonId),
+    ready: Boolean(raw?.ready),
+    targetMemberCount: Number(raw?.targetMemberCount ?? 0),
+    activeGoalCount: Number(raw?.activeGoalCount ?? 0),
+    blockerCount: Number(raw?.blockerCount ?? 0),
+    warningCount: Number(raw?.warningCount ?? 0),
+    missingGoals: mapReadinessIssues(raw?.missingGoals),
+    weightIssues: mapReadinessIssues(raw?.weightIssues),
+    pendingBundles: mapReadinessIssues(raw?.pendingBundles),
+    missingProgressUpdates: mapReadinessIssues(raw?.missingProgressUpdates),
+    missingLeads: mapReadinessIssues(raw?.missingLeads),
   };
 }
 
@@ -178,6 +230,22 @@ export const goalApi = {
     const res = await httpClient.get(`/goal/${goalId}/children`);
     const raw = unwrapApiResponse<unknown>(res.data);
     return normalizeArray<unknown>(raw, ['items', 'data', 'goals', 'list', 'results']).map(mapGoalFromApi);
+  },
+
+  async addProgressUpdate(goalId: string, payload: GoalProgressUpdatePayload): Promise<GoalProgressUpdate> {
+    const res = await httpClient.post(`/goal/${goalId}/updates`, payload);
+    return mapGoalProgressUpdateFromApi(unwrapApiResponse<unknown>(res.data));
+  },
+
+  async listProgressUpdates(goalId: string): Promise<GoalProgressUpdate[]> {
+    const res = await httpClient.get(`/goal/${goalId}/updates`);
+    const raw = unwrapApiResponse<unknown>(res.data);
+    return normalizeArray<unknown>(raw, ['items', 'data', 'updates', 'list', 'results']).map(mapGoalProgressUpdateFromApi);
+  },
+
+  async getSeasonReadiness(seasonId: string): Promise<GoalSeasonReadiness> {
+    const res = await httpClient.get(`/goal/seasons/${seasonId}/readiness`);
+    return mapGoalSeasonReadinessFromApi(unwrapApiResponse<unknown>(res.data), seasonId);
   },
 
   async listGoalApprovalBundles(): Promise<any[]> {

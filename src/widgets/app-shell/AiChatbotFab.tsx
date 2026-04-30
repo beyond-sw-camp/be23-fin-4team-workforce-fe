@@ -31,6 +31,7 @@ const PH_INPUT = '\uBA54\uC2DC\uC9C0\uB97C \uC785\uB825\uD558\uC138\uC694\u2026'
 const HINT_KEYS = 'Enter \uC804\uC1A1 \u00B7 Shift+Enter \uC904\uBC14\uAFC8';
 const AI_TITLE = 'AI \uBE44\uC11C';
 const SOURCES_PREFIX = '\uCC38\uACE0: ';
+const FAB_HOVER_HINT = '\uBB34\uC5C7\uC774\uB4E0 \uAD81\uAE08\uD55C \uC810\uC744 \uCC57\uBD07 AI\uC5D0\uAC8C \uBB3C\uC5B4\uBCF4\uC138\uC694.';
 
 function chatUserMessage(e: unknown, fallback: string): string {
   const err = e as Partial<ApiError>;
@@ -304,6 +305,22 @@ export function AiChatbotFab() {
       </div>
 
       <div className="tw-pointer-events-auto tw-relative tw-inline-flex tw-shrink-0 tw-group">
+        {!open ? (
+          <div
+            className={[
+              'tw-pointer-events-none tw-absolute tw-right-[calc(100%+12px)] tw-top-1/2 -tw-translate-y-1/2',
+              'tw-max-w-[280px] tw-min-w-[230px] tw-rounded-full tw-bg-[#EEF3FF] tw-px-4 tw-py-2.5',
+              'tw-text-sm tw-leading-snug tw-text-[#1E3A8A]',
+              'tw-shadow-[0_8px_20px_rgba(59,130,246,0.16)] tw-ring-1 tw-ring-white/80',
+              'tw-opacity-0 tw-translate-x-1 tw-transition-all tw-duration-300',
+              'group-hover:tw-opacity-100 group-hover:tw-translate-x-0',
+              'group-focus-within:tw-opacity-100 group-focus-within:tw-translate-x-0',
+            ].join(' ')}
+            aria-hidden
+          >
+            <div className="tw-break-keep">{FAB_HOVER_HINT}</div>
+          </div>
+        ) : null}
         <div
           className="tw-pointer-events-none tw-absolute tw-inset-0 tw-rounded-full tw-bg-[#4A7FF7]/18 tw-blur-3xl tw-transition-all tw-duration-700 group-hover:tw-bg-[#4A7FF7]/26"
           aria-hidden
