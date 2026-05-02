@@ -1,12 +1,11 @@
 /** /app/salary/settings — 급여 정책·템플릿·직원 급여·세율 등 (시스템 관리자) */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
   App,
   Button,
   Card,
-  Checkbox,
   DatePicker,
   Form,
   Input,
@@ -15,6 +14,7 @@ import {
   Popconfirm,
   Select,
   Space,
+  Switch,
   Table,
   Tabs,
   Tag,
@@ -75,15 +75,7 @@ function useDebouncedValue<T>(value: T, delayMs: number): T {
  * `GET /member/search`(member-service, QueryDSL) — **호출자와 동일 회사** 사원만.
  * ES 인덱스(`/search/employees`) 없어도 동작한다.
  */
-function MemberIdSearchField({
-  name = 'memberId',
-  initialMemberId,
-}: {
-  name?: string;
-  /** deep-link 등으로 폼에 미리 박혀 들어온 memberId — 검색하지 않아도 이름이 보이도록
-   *  옵션에 미리 끼워준다. */
-  initialMemberId?: string;
-}) {
+function MemberIdSearchField({ name = 'memberId' }: { name?: string }) {
   const [searchText, setSearchText] = useState('');
   const debounced = useDebouncedValue(searchText, 320);
   const { data: rows = [], isFetching, isError, error } = useQuery({
@@ -92,31 +84,14 @@ function MemberIdSearchField({
     enabled: debounced.trim().length >= 1,
     retry: 1,
   });
-
-  // deep-link 진입 시: 검색 결과가 비었어도 이름이 보이도록 사전 조회.
-  const prefillQ = useQuery({
-    queryKey: ['member', 'detail-or-null', 'salary-prefill', initialMemberId],
-    queryFn: () => memberApi.detailOrNull(initialMemberId!),
-    enabled: Boolean(initialMemberId?.trim()),
-    staleTime: 60_000,
-  });
-
-  const options = useMemo(() => {
-    const baseOptions = rows.map((m) => ({
-      value: m.memberId,
-      label: `${m.name ?? '이름 없음'} · ${m.email ?? '—'}`,
-    }));
-    if (initialMemberId && !baseOptions.some((o) => o.value === initialMemberId)) {
-      const prefill = prefillQ.data;
-      const label = prefill
-        ? `${prefill.name ?? '이름 없음'} · ${prefill.email ?? '—'}`
-        : prefillQ.isLoading
-          ? '직원 정보 불러오는 중…'
-          : '직원 정보를 찾을 수 없습니다';
-      baseOptions.unshift({ value: initialMemberId, label });
-    }
-    return baseOptions;
-  }, [rows, initialMemberId, prefillQ.data, prefillQ.isLoading]);
+  const options = useMemo(
+    () =>
+      rows.map((m) => ({
+        value: m.memberId,
+        label: `${m.name ?? '이름 없음'} · ${m.email ?? '—'}`,
+      })),
+    [rows],
+  );
   const errMsg = isError
     ? (error && typeof error === 'object' && 'message' in error && typeof (error as { message?: unknown }).message === 'string'
         ? (error as { message: string }).message
@@ -175,39 +150,29 @@ type SalaryFormValues = {
   effectiveRange: [dayjs.Dayjs, dayjs.Dayjs | null];
   /** 부양가족수 0~11, 기본 1=본인만, 소득세 간이세액표 룩업용 */
   dependentCount?: number;
-  /** 8세 이상 20세 이하 자녀 수 — 자녀세액공제 차원 */
-  childUnder20Count?: number;
-  /** 소득세 감면 유형. NONE = 감면 없음 (기본) */
-  taxReductionType?: 'NONE' | 'YOUTH_SME' | 'DISABLED' | 'FOREIGNER' | 'ETC';
-  /** 감면율 0~100 (UI 표시용 %). 제출 시 1/100 으로 변환해 0.00~1.00 으로 전송 */
-  taxReductionRatePct?: number;
-  /** 감면 종료일 */
-  taxReductionEffectiveToDate?: dayjs.Dayjs | null;
   /** 등록 시 함께 부여할 부가 수당 — 항목 select 만 받고 금액은 template.defaultAmount 자동 사용.
    *  amount 필드는 제출 시 자동 lookup 되므로 form 에는 없음. */
   allowances?: { salaryItemTemplateId?: string }[];
 };
 
-type SalaryTabProps = {
-  /** deep-link 로 진입했을 때, 이 직원으로 prefill 된 [급여 등록] 모달을 자동으로 1회 오픈.
-   *  - 직원 생성 직후 흐름: MemberCreateModal 이 멤버 생성 후 이 파라미터로 이동
-   *  - 직원 상세 [급여 등록] 빠른 액션: MemberDetailPage 가 이 파라미터로 이동
-   *  - [급여 등록] 탭 안에서 인라인으로 모달만 띄울 때 (tableHidden=true 와 함께 사용) */
-  createForMemberId?: string;
-  /** 테이블·필터·안내 Alert·상단 [+ 새 변동 추가] 버튼을 모두 숨기고 모달만 렌더한다.
-   *  [급여 등록] 탭이 자기 테이블을 갖고 있어, 모달 진입 통로로만 SalaryTab 을 재활용할 때 사용. */
-  tableHidden?: boolean;
-  /** 모달이 (취소·저장 어느 쪽으로든) 닫혔을 때 부모에게 통지. tableHidden 모드에서 부모가
-   *  [급여 등록] 버튼 상태(prefill memberId) 를 reset 하기 위해 사용. */
-  onModalClose?: () => void;
+type BootstrapFormValues = {
+  memberId: string;
+  hireDate: dayjs.Dayjs;
+  baseSalary?: number | null;
+  jobGradeName?: string;
+  jobTitleName?: string;
 };
 
-export function SalaryTab({ createForMemberId, tableHidden = false, onModalClose }: SalaryTabProps = {}) {
+export function SalaryTab() {
   const { message, modal } = App.useApp();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Salary | null>(null);
   const [form] = Form.useForm<SalaryFormValues>();
+
+  /** 입사 누락 복구 모달 (자주 쓰는 기능이 아니므로 기본은 숨김) */
+  const [bootstrapOpen, setBootstrapOpen] = useState(false);
+  const [bootstrapForm] = Form.useForm<BootstrapFormValues>();
 
   const listQ = useQuery({ queryKey: ['salary', 'salaries'], queryFn: () => salaryApi.salary.listByCompany() });
   const policiesQ = useQuery({ queryKey: ['salary', 'salary-policies'], queryFn: () => salaryApi.salaryPolicy.list() });
@@ -244,13 +209,7 @@ export function SalaryTab({ createForMemberId, tableHidden = false, onModalClose
       }),
     [allowanceTemplates],
   );
-  /** mutation 실행 시 stale closure 회피용 - 항상 최신 tplQ.data 참조하기 위한 ref */
-  const tplDataRef = useRef(tplQ.data);
-  useEffect(() => {
-    tplDataRef.current = tplQ.data;
-  }, [tplQ.data]);
-
-  /** 템플릿 ID -> defaultAmount 빠른 조회용 (제출 시 amount 자동 채움) */
+  /** 템플릿 ID → defaultAmount 빠른 조회용 (제출 시 amount 자동 채움) */
   const tplDefaultAmountMap = useMemo(() => {
     const m = new Map<string, number | null>();
     allowanceTemplates.forEach((t) => {
@@ -288,56 +247,48 @@ export function SalaryTab({ createForMemberId, tableHidden = false, onModalClose
     return m;
   }, [activePayGrades]);
 
+  const bootstrapM = useMutation({
+    mutationFn: (v: BootstrapFormValues) =>
+      salaryApi.salary.bootstrap({
+        memberId: v.memberId.trim(),
+        hireDate: v.hireDate.format('YYYY-MM-DD'),
+        baseSalary: v.baseSalary ?? null,
+        jobGradeName: v.jobGradeName?.trim() || null,
+        jobTitleName: v.jobTitleName?.trim() || null,
+      }),
+    onSuccess: () => {
+      message.success('복구 요청 완료 — 활성 급여정책이 있어야 실제 Salary가 생성됩니다.');
+      setBootstrapOpen(false);
+      bootstrapForm.resetFields();
+      void qc.invalidateQueries({ queryKey: ['salary', 'salaries'] });
+    },
+    onError: (e: Error) => message.error(e.message || '복구 실패'),
+  });
+
   const createM = useMutation({
     mutationFn: async (v: SalaryFormValues) => {
-      console.log('[SALARY-CREATE] submit values', {
-        memberId: v.memberId,
-        allowancesRaw: v.allowances,
-        allowancesLength: (v.allowances ?? []).length,
-      });
       // 1) 급여 이력 등록
-      // 호봉제일 때도 baseSalary 는 함께 전송 — onValuesChange 에서 호봉표 lookup 값이
-      // form 에 자동 채워져 있으므로 그대로 보내면 된다 (백엔드는 baseSalary 필수).
       const saved = await salaryApi.salary.create({
         memberId: v.memberId.trim(),
         salaryPolicyId: v.salaryPolicyId,
-        baseSalary: v.baseSalary ?? null,
+        baseSalary: v.step != null ? null : v.baseSalary ?? null,
         step: v.step ?? null,
         jobGradeName: v.jobGradeName?.trim() || null,
         jobTitleName: v.jobTitleName?.trim() || null,
         effectiveFrom: v.effectiveRange[0].format('YYYY-MM-DD'),
         effectiveTo: v.effectiveRange[1]?.format('YYYY-MM-DD') ?? null,
         dependentCount: v.dependentCount ?? 1,
-        childUnder20Count: v.childUnder20Count ?? 0,
-        taxReductionType: v.taxReductionType ?? 'NONE',
-        taxReductionRate:
-          v.taxReductionRatePct != null && v.taxReductionRatePct > 0
-            ? Number((v.taxReductionRatePct / 100).toFixed(2))
-            : null,
-        taxReductionEffectiveTo:
-          v.taxReductionEffectiveToDate?.format('YYYY-MM-DD') ?? null,
       });
-      // 2) 부가 수당 함께 등록 - ref 로 최신 tplData 참조 (closure stale 회피)
-      const tplDataNow = tplDataRef.current ?? [];
-      console.log('[SALARY-CREATE] tplDataNow snapshot', {
-        count: tplDataNow.length,
-        ids: tplDataNow.map((t) => t.salaryItemTemplateId).slice(0, 10),
-      });
-      const lookupAmount = (templateId: string): number | null => {
-        const tpl = tplDataNow.find((t) => t.salaryItemTemplateId === templateId);
-        return tpl?.defaultAmount ?? null;
-      };
+      // 2) 부가 수당 함께 등록 — 항목 select 만 받고 금액은 template.defaultAmount 자동 사용.
+      //    defaultAmount 가 null 인 항목은 dropdown 에서 disabled 라 여기 도달하지 않음.
       const validAllowances = (v.allowances ?? [])
         .map((a) => ({
           salaryItemTemplateId: a.salaryItemTemplateId,
-          amount: a.salaryItemTemplateId ? lookupAmount(a.salaryItemTemplateId) : null,
+          amount: a.salaryItemTemplateId
+            ? tplDefaultAmountMap.get(a.salaryItemTemplateId) ?? null
+            : null,
         }))
         .filter((a) => a.salaryItemTemplateId && a.amount != null && a.amount > 0);
-      if ((v.allowances ?? []).length > 0 && validAllowances.length === 0) {
-        console.warn('[SALARY-CREATE] allowances were selected but none have amount lookup',
-          { selected: v.allowances, tplCount: tplDataNow.length });
-      }
-      console.log('[SALARY-CREATE] validAllowances after filter', validAllowances);
       const grantResults = await Promise.allSettled(
         validAllowances.map((a) =>
           salaryApi.memberAllowanceAdmin.autoGrant({
@@ -348,11 +299,6 @@ export function SalaryTab({ createForMemberId, tableHidden = false, onModalClose
           }),
         ),
       );
-      grantResults.forEach((r, i) => {
-        if (r.status === 'rejected') {
-          console.error('[SALARY-CREATE] autoGrant 실패', validAllowances[i], r.reason);
-        }
-      });
       const grantFailed = grantResults.filter((r) => r.status === 'rejected').length;
       return { saved, grantTotal: validAllowances.length, grantFailed };
     },
@@ -360,135 +306,31 @@ export function SalaryTab({ createForMemberId, tableHidden = false, onModalClose
       if (grantTotal === 0) {
         message.success('급여 등록 완료');
       } else if (grantFailed === 0) {
-        message.success(`급여 등록 완료 - 수당 ${grantTotal}건 함께 부여됨`);
+        message.success(`급여 등록 완료 — 수당 ${grantTotal}건 함께 부여됨`);
       } else {
         message.warning(`급여는 등록됐지만 수당 ${grantFailed}/${grantTotal}건 부여 실패. [수당 관리] 에서 확인해주세요.`);
       }
       setOpen(false);
       form.resetFields();
-      onModalClose?.();
       void qc.invalidateQueries({ queryKey: ['salary', 'salaries'] });
-      void qc.invalidateQueries({ queryKey: ['salary', 'salaries', 'precheck'] });
       void qc.invalidateQueries({ queryKey: ['salary', 'allowance', 'admin', 'list'] });
     },
     onError: (e: Error) => message.error(e.message || '실패'),
   });
 
   const updateM = useMutation({
-    mutationFn: async ({ id, v }: { id: string; v: SalaryFormValues }) => {
-      // 1) 급여 본체 수정
-      const updated = await salaryApi.salary.update(id, {
+    mutationFn: ({ id, v }: { id: string; v: SalaryFormValues }) =>
+      salaryApi.salary.update(id, {
         salaryPolicyId: v.salaryPolicyId,
-        // 호봉제: form.baseSalary 에 호봉표 lookup 값이 자동 채워져 있어 그대로 전송
-        // 연봉제: 사용자 입력값
-        baseSalary: v.baseSalary ?? null,
+        baseSalary: v.step != null ? null : v.baseSalary ?? null,
         step: v.step ?? null,
         jobGradeName: v.jobGradeName?.trim() || null,
         jobTitleName: v.jobTitleName?.trim() || null,
         effectiveFrom: v.effectiveRange[0].format('YYYY-MM-DD'),
         effectiveTo: v.effectiveRange[1]?.format('YYYY-MM-DD') ?? null,
         dependentCount: v.dependentCount ?? 1,
-        childUnder20Count: v.childUnder20Count ?? 0,
-        taxReductionType: v.taxReductionType ?? 'NONE',
-        taxReductionRate:
-          v.taxReductionRatePct != null && v.taxReductionRatePct > 0
-            ? Number((v.taxReductionRatePct / 100).toFixed(2))
-            : null,
-        taxReductionEffectiveTo:
-          v.taxReductionEffectiveToDate?.format('YYYY-MM-DD') ?? null,
-      });
-
-      // 2) 부가 수당 diff 처리 - 추가/제거된 templateId 만 API 호출
-      const memberId = editing?.memberId ?? '';
-      const effectiveFrom = v.effectiveRange[0].format('YYYY-MM-DD');
-      const submittedIds = new Set(
-        (v.allowances ?? [])
-          .map((a) => a.salaryItemTemplateId)
-          .filter((x): x is string => Boolean(x)),
-      );
-      const originalIds = editingOriginalAllowanceIdsRef.current;
-      const toAdd = [...submittedIds].filter((tid) => !originalIds.has(tid));
-      const toRemove = [...originalIds].filter((tid) => !submittedIds.has(tid));
-      console.log('[SALARY-UPDATE] allowance diff', {
-        memberId,
-        submitted: [...submittedIds],
-        original: [...originalIds],
-        toAdd,
-        toRemove,
-        effectiveFrom,
-      });
-
-      const tplDataNow = tplDataRef.current ?? [];
-      let allowanceFailed = 0;
-      if (memberId && (toAdd.length > 0 || toRemove.length > 0)) {
-        const ops: Promise<unknown>[] = [];
-        for (const tid of toAdd) {
-          const tpl = tplDataNow.find((t) => t.salaryItemTemplateId === tid);
-          const amount = tpl?.defaultAmount ?? null;
-          if (amount == null || amount <= 0) {
-            console.warn('[SALARY-UPDATE] add 스킵 - 금액 없음', tid, tpl);
-            allowanceFailed++;
-            continue;
-          }
-          ops.push(
-            salaryApi.memberAllowanceAdmin.autoGrant({
-              memberId,
-              salaryItemTemplateId: tid,
-              amount,
-              effectiveFrom,
-            }),
-          );
-        }
-        // 종료일은 새 salary effectiveFrom 의 전날로 설정 (그 다음날부터 빠지도록)
-        const closeAtForRemove = dayjs(effectiveFrom).subtract(1, 'day').format('YYYY-MM-DD');
-        // 편집 대상 salary 의 effectiveFrom 이 미래(아직 적용 안 됨)면 - 해제된 수당도 아직 적용 안 된
-        // 미래 row 일 가능성이 높으므로 close 대신 hard-delete (소프트 삭제). 과거/오늘이면 close 로 history 보존.
-        const isFutureSalary = dayjs(effectiveFrom).startOf('day').isAfter(dayjs().startOf('day'));
-        for (const tid of toRemove) {
-          if (isFutureSalary) {
-            ops.push(
-              salaryApi.memberAllowanceAdmin.deleteByTemplate({
-                memberId,
-                templateId: tid,
-              }),
-            );
-          } else {
-            ops.push(
-              salaryApi.memberAllowanceAdmin.closeByTemplate({
-                memberId,
-                templateId: tid,
-                closeAt: closeAtForRemove,
-              }),
-            );
-          }
-        }
-        const results = await Promise.allSettled(ops);
-        results.forEach((res, i) => {
-          if (res.status === 'rejected') {
-            console.error('[SALARY-UPDATE] op 실패', i, res.reason);
-          }
-        });
-        allowanceFailed += results.filter((r) => r.status === 'rejected').length;
-      }
-      return { updated, addCount: toAdd.length, removeCount: toRemove.length, allowanceFailed };
-    },
-    onSuccess: ({ addCount, removeCount, allowanceFailed }) => {
-      const changedSummary = (addCount > 0 || removeCount > 0)
-        ? ` - 수당 추가 ${addCount}, 종료 ${removeCount}건`
-        : '';
-      if (allowanceFailed > 0) {
-        message.warning(`수정 완료 (수당 변경 일부 실패 ${allowanceFailed}건). [수당 관리] 에서 확인.`);
-      } else {
-        message.success(`수정 완료${changedSummary}`);
-      }
-      setOpen(false);
-      setEditing(null);
-      form.resetFields();
-      onModalClose?.();
-      void qc.invalidateQueries({ queryKey: ['salary', 'salaries'] });
-      void qc.invalidateQueries({ queryKey: ['salary', 'salaries', 'precheck'] });
-      void qc.invalidateQueries({ queryKey: ['salary', 'allowance', 'admin', 'list'] });
-    },
+      }),
+    onSuccess: () => { message.success('수정 완료'); setOpen(false); setEditing(null); form.resetFields(); void qc.invalidateQueries({ queryKey: ['salary', 'salaries'] }); },
     onError: (e: Error) => message.error(e.message || '실패'),
   });
 
@@ -543,145 +385,8 @@ export function SalaryTab({ createForMemberId, tableHidden = false, onModalClose
   const [keyword, setKeyword] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'ENDED'>('ALL');
   const [departmentFilter, setDepartmentFilter] = useState<string | 'ALL'>('ALL');
-
-  /** 수정 모드 진입 시 그 시점의 active 수당 templateId 스냅샷.
-   *  submit 시 폼의 selected vs 스냅샷 diff 로 add(autoGrant) / remove(closeByTemplate) 처리. */
-  const editingOriginalAllowanceIdsRef = useRef<Set<string>>(new Set());
-
-  /** createForMemberId 는 1회성 트리거. 같은 값으로 재렌더돼도 한 번만 모달을 열도록 ref 로 추적.
-   *  값이 비어졌다 다시 같은 memberId 가 들어오는 경우(등록 탭에서 같은 직원 재클릭)에도 다시 열려야 하므로
-   *  비워질 때 ref 도 함께 리셋한다. */
-  const handledCreateMemberIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!createForMemberId) {
-      handledCreateMemberIdRef.current = null;
-      return;
-    }
-    if (handledCreateMemberIdRef.current === createForMemberId) return;
-    // 활성 급여정책이 로드되어야 prefill 의미가 있다. 로드 전이면 아직 처리하지 않고 다음 effect 호출에서 다시 시도.
-    if (!defaultPolicyId) return;
-    handledCreateMemberIdRef.current = createForMemberId;
-    setEditing(null);
-    form.resetFields();
-    form.setFieldsValue({
-      memberId: createForMemberId,
-      salaryPolicyId: defaultPolicyId,
-      baseSalary: 0,
-      step: null,
-      effectiveRange: [dayjs(), null],
-      // dependentCount 는 default 두지 않고 사용자가 명시적으로 입력하도록 비워둔다.
-      allowances: [],
-    });
-    setOpen(true);
-  }, [createForMemberId, defaultPolicyId, form]);
-
-  /** [+ 새 변동 추가] 흐름 - memberId 가 폼에 들어오면 그 직원의 최신 활성 Salary 와
-   *  활성 수당을 자동으로 prefill 한다. 호봉 승급·연봉 인상 시 일일이 다시 입력하지 않게 함.
-   *  - editing != null (수정 모드) 면 무시 (수정은 그 행 데이터로 이미 채워짐)
-   *  - 모달이 열려있을 때만 동작
-   *  - 해당 직원의 기존 Salary 가 0건이면 prefill 안 함 (신규 입사자 흐름 유지) */
-  const watchedMemberId = Form.useWatch('memberId', form);
-  const lastPrefilledMemberIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (editing) return;
-    if (!open) return;
-    if (!watchedMemberId) {
-      lastPrefilledMemberIdRef.current = null;
-      return;
-    }
-    if (lastPrefilledMemberIdRef.current === watchedMemberId) return;
-
-    const memberSalaries = (listQ.data ?? [])
-      .filter((s) => s.memberId === watchedMemberId)
-      .sort((a, b) => (b.effectiveFrom ?? '').localeCompare(a.effectiveFrom ?? ''));
-    // 시간상 가장 최근 행 (effectiveFrom 최대) - active/ended/future 무관.
-    // 호봉 승급·연봉 인상 등 새 변동은 가장 최근 행을 기준으로 한 단계 더 추가하는 흐름이므로,
-    // 진행중이든 미래 행이든 상관없이 timeline 상 마지막을 base 로 가져간다.
-    const latest = memberSalaries[0];
-    if (!latest) return; // 신규 입사자 - default 유지
-
-    lastPrefilledMemberIdRef.current = watchedMemberId;
-
-    // 새 변동 시작일 후보:
-    //  1) 최신 행이 effectiveTo 가 있으면 -> effectiveTo + 1
-    //  2) 최신 행이 effectiveTo 없음 (진행중) 이면:
-    //     - effectiveFrom 이 미래 -> effectiveFrom + 1 (그 행 다음에 새 변동)
-    //     - effectiveFrom 이 오늘/과거 -> today (backend 가 이전 활성 행을 자동으로 close)
-    const today = dayjs().startOf('day');
-    const latestFrom = latest.effectiveFrom ? dayjs(latest.effectiveFrom).startOf('day') : today;
-    let newStart: dayjs.Dayjs;
-    if (latest.effectiveTo) {
-      newStart = dayjs(latest.effectiveTo).startOf('day').add(1, 'day');
-    } else if (latestFrom.isAfter(today)) {
-      newStart = latestFrom.add(1, 'day');
-    } else {
-      newStart = today;
-    }
-
-    form.setFieldsValue({
-      salaryPolicyId: latest.salaryPolicyId ?? defaultPolicyId,
-      baseSalary: Number(latest.baseSalary ?? 0),
-      step: latest.step ?? null,
-      jobGradeName: latest.jobGradeName ?? '',
-      jobTitleName: latest.jobTitleName ?? '',
-      effectiveRange: [newStart, null],
-      dependentCount: latest.dependentCount ?? 1,
-      childUnder20Count: latest.childUnder20Count ?? 0,
-      taxReductionType: (latest.taxReductionType as SalaryFormValues['taxReductionType']) ?? 'NONE',
-      taxReductionRatePct:
-        latest.taxReductionRate != null
-          ? Math.round(Number(latest.taxReductionRate) * 100)
-          : undefined,
-      taxReductionEffectiveToDate: latest.taxReductionEffectiveTo
-        ? dayjs(latest.taxReductionEffectiveTo)
-        : null,
-    });
-
-    // 활성 수당 fetch -> 체크박스 prefill
-    // race condition: 비동기 응답이 늦게 도착하면 사용자가 그 사이에 토글한 값을 덮어쓸 수 있음 ->
-    // resolve 시 form 의 현재 allowances 가 비어있을 때만 set (사용자가 손대지 않은 경우만 prefill)
-    // 조회 월은 latest salary 의 effectiveFrom 월로 - 미래 effectiveFrom 의 수당까지 잡히도록.
-    const ym = latest.effectiveFrom
-      ? dayjs(latest.effectiveFrom).format('YYYY-MM')
-      : dayjs().format('YYYY-MM');
-    void salaryApi.memberAllowanceAdmin
-      .listActiveByMember(watchedMemberId, ym)
-      .then((allowanceRows) => {
-        const current = form.getFieldValue('allowances') as
-          | { salaryItemTemplateId?: string }[]
-          | undefined;
-        const userTouched = current && current.some((a) => a.salaryItemTemplateId);
-        if (userTouched) return; // 사용자 이미 토글함 -> prefill 스킵 (덮어쓰기 방지)
-        form.setFieldsValue({
-          allowances: allowanceRows
-            .filter((r) => r.salaryItemTemplateId)
-            .map((r) => ({ salaryItemTemplateId: r.salaryItemTemplateId! })),
-        });
-      })
-      .catch(() => {
-        // 수당 prefill 실패해도 주 흐름 영향 없음
-      });
-  }, [watchedMemberId, editing, open, listQ.data, defaultPolicyId, form]);
-
-  /** 직원별 시간상 가장 최근 (effectiveFrom 최대) salaryId 집합.
-   *  과거 이력 행은 [수정] 버튼을 숨기고, 최신 행만 [수정] 노출. */
-  const latestSalaryIdByMember = useMemo(() => {
-    const grouped = new Map<string, Salary[]>();
-    for (const s of salaries) {
-      if (!s.memberId) continue;
-      const arr = grouped.get(s.memberId) ?? [];
-      arr.push(s);
-      grouped.set(s.memberId, arr);
-    }
-    const ids = new Set<string>();
-    grouped.forEach((arr) => {
-      const sorted = [...arr].sort((a, b) =>
-        (b.effectiveFrom ?? '').localeCompare(a.effectiveFrom ?? ''),
-      );
-      if (sorted[0]?.salaryId) ids.add(sorted[0].salaryId);
-    });
-    return ids;
-  }, [salaries]);
+  /** 신규 입사자(급여 미등록 default 상태) 만 보기 토글 */
+  const [onlyNewHires, setOnlyNewHires] = useState(false);
 
   // 백엔드 응답에 이미 sabun/name/organizationName 결합되어 옴 N+1 호출 제거
   const enrichedRows = useMemo(
@@ -709,6 +414,12 @@ export function SalaryTab({ createForMemberId, tableHidden = false, onModalClose
     return enrichedRows.filter((row) => {
       if (statusFilter !== 'ALL' && row.salaryStatus !== statusFilter) return false;
       if (departmentFilter !== 'ALL' && row.organizationName !== departmentFilter) return false;
+      // 신규 입사자(급여 미등록) = 활성 Salary 행인데 baseSalary == 0
+      if (onlyNewHires) {
+        const isActive = row.salaryStatus === 'ACTIVE';
+        const isDefaultPay = (row.baseSalary ?? 0) === 0;
+        if (!(isActive && isDefaultPay)) return false;
+      }
       if (!k) return true;
       return (
         (row.sabun?.toLowerCase().includes(k) ?? false) ||
@@ -716,7 +427,13 @@ export function SalaryTab({ createForMemberId, tableHidden = false, onModalClose
         (row.organizationName?.toLowerCase().includes(k) ?? false)
       );
     });
-  }, [departmentFilter, enrichedRows, keyword, statusFilter]);
+  }, [departmentFilter, enrichedRows, keyword, onlyNewHires, statusFilter]);
+
+  // 신규 입사자 카운트 — 토글 옆에 표시
+  const newHireCount = useMemo(
+    () => enrichedRows.filter((r) => r.salaryStatus === 'ACTIVE' && (r.baseSalary ?? 0) === 0).length,
+    [enrichedRows],
+  );
 
   const cols = useMemo<ColumnsType<Salary>>(() => [
     { title: '사번', dataIndex: 'sabun', key: 'sabun', width: 120, render: (v) => v ?? '-' },
@@ -743,103 +460,65 @@ export function SalaryTab({ createForMemberId, tableHidden = false, onModalClose
     { title: '적용 기간', key: 'eff', width: 220, render: (_, r) => `${r.effectiveFrom ?? ''} ~ ${r.effectiveTo ?? '진행중'}` },
     {
       title: '액션', key: 'actions', width: 140,
-      render: (_, r) => {
-        const isLatest = r.salaryId ? latestSalaryIdByMember.has(r.salaryId) : false;
-        return (
+      render: (_, r) => (
         <Space>
-          {isLatest && (
           <Button size="small" onClick={() => {
-            // 직원의 시간상 가장 최근 행만 수정 가능. 과거 행은 [삭제] 만.
-            const memberRows = (listQ.data ?? [])
-              .filter((s) => s.memberId === r.memberId)
-              .sort((a, b) => (b.effectiveFrom ?? '').localeCompare(a.effectiveFrom ?? ''));
-            const target = memberRows[0] ?? r;
-            console.log('[SALARY-EDIT] open', { clicked: r.salaryId, target: target.salaryId, totalRows: memberRows.length });
-            setEditing(target); setOpen(true);
-            // active 수당 prefill - 비동기 fetch 시작 (resolve 후 form.allowances 채움)
-            // 조회 월은 편집 대상 salary 의 effectiveFrom 월로 (그 시점에 active 인 수당이 의미 있음).
-            // 현재 월로 잡으면 미래 effectiveFrom 의 수당이 누락됨.
-            editingOriginalAllowanceIdsRef.current = new Set();
-            const ym = target.effectiveFrom
-              ? dayjs(target.effectiveFrom).format('YYYY-MM')
-              : dayjs().format('YYYY-MM');
-            console.log('[SALARY-EDIT] query month', ym);
-            if (target.memberId) {
-              void salaryApi.memberAllowanceAdmin
-                .listActiveByMember(target.memberId, ym)
-                .then((rows) => {
-                  const ids = rows
-                    .map((a) => a.salaryItemTemplateId)
-                    .filter((x): x is string => Boolean(x));
-                  editingOriginalAllowanceIdsRef.current = new Set(ids);
-                  console.log('[SALARY-EDIT] active allowances loaded', ids);
-                  form.setFieldsValue({
-                    allowances: ids.map((salaryItemTemplateId) => ({ salaryItemTemplateId })),
-                  });
-                })
-                .catch((err) => {
-                  console.error('[SALARY-EDIT] active allowances fetch failed', err);
-                });
-            }
+            setEditing(r); setOpen(true);
             form.setFieldsValue({
-              memberId: target.memberId ?? '',
-              salaryPolicyId: target.salaryPolicyId ?? '',
-              baseSalary: Number(target.baseSalary ?? 0),
-              step: target.step ?? null,
-              jobGradeName: target.jobGradeName ?? '',
-              jobTitleName: target.jobTitleName ?? '',
-              effectiveRange: [target.effectiveFrom ? dayjs(target.effectiveFrom) : dayjs(), target.effectiveTo ? dayjs(target.effectiveTo) : null],
-              dependentCount: target.dependentCount ?? 1,
-              childUnder20Count: target.childUnder20Count ?? 0,
-              taxReductionType: (target.taxReductionType as SalaryFormValues['taxReductionType']) ?? 'NONE',
-              taxReductionRatePct:
-                target.taxReductionRate != null
-                  ? Math.round(Number(target.taxReductionRate) * 100)
-                  : undefined,
-              taxReductionEffectiveToDate: target.taxReductionEffectiveTo
-                ? dayjs(target.taxReductionEffectiveTo)
-                : null,
-              allowances: [], // 비동기 응답 도착 전 임시값
+              memberId: r.memberId ?? '',
+              salaryPolicyId: r.salaryPolicyId ?? '',
+              baseSalary: Number(r.baseSalary ?? 0),
+              step: r.step ?? null,
+              jobGradeName: r.jobGradeName ?? '',
+              jobTitleName: r.jobTitleName ?? '',
+              effectiveRange: [r.effectiveFrom ? dayjs(r.effectiveFrom) : dayjs(), r.effectiveTo ? dayjs(r.effectiveTo) : null],
+              dependentCount: r.dependentCount ?? 1,
             });
           }}>수정</Button>
-          )}
           <Button size="small" danger onClick={() => handleDelete(r)}>
             삭제
           </Button>
         </Space>
-        );
-      },
+      ),
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [form, latestSalaryIdByMember]);
+  ], [form]);
 
   return (
     <>
-      {!tableHidden && (
-        <div className="tw-flex tw-flex-wrap tw-justify-between tw-items-center tw-gap-2 tw-mb-3">
-          <Typography.Text type="secondary" className="!tw-text-sm">
-            연봉 인상·호봉 승급·직급 변경 시 새 변동 이력을 추가합니다. 신규 입사자 첫 등록은 [급여 등록] 탭에서 처리하세요.
-          </Typography.Text>
-          <Space>
-            <Button type="primary" onClick={() => {
-              setEditing(null);
-              form.resetFields();
-              form.setFieldsValue({
-                salaryPolicyId: defaultPolicyId,  // 활성 정책 자동 선택
-                baseSalary: 0,
-                step: null,
-                effectiveRange: [dayjs(), null],
-                // dependentCount 는 default 두지 않고 사용자가 명시적으로 입력하도록 비워둔다.
-                allowances: [],
-              });
-              setOpen(true);
-            }}>
-              + 새 변동 추가
-            </Button>
-          </Space>
-        </div>
-      )}
-      {!tableHidden && (
+      <Alert
+        showIcon
+        type="info"
+        className="tw-mb-3"
+        message="신규 입사자는 임시로 0원(연봉제) / 1호봉(호봉제) 으로 자동 생성됩니다. 
+        정확한 기본급과 호봉은 [급여 등록] 으로 등록해주세요."
+        description="연봉 인상, 직급 변경 시에도 동일하게 새 급여 이력을 추가합니다."
+      />
+      <div className="tw-flex tw-flex-wrap tw-justify-between tw-items-center tw-gap-2 tw-mb-3">
+        <Typography.Text type="secondary" className="!tw-text-xs">
+        
+        </Typography.Text>
+        <Space>
+          <Button onClick={() => { bootstrapForm.resetFields(); bootstrapForm.setFieldsValue({ hireDate: dayjs() }); setBootstrapOpen(true); }}>
+            입사 누락 복구
+          </Button>
+          <Button type="primary" onClick={() => {
+            setEditing(null);
+            form.resetFields();
+            form.setFieldsValue({
+              salaryPolicyId: defaultPolicyId,  // 활성 정책 자동 선택
+              baseSalary: 0,
+              step: null,
+              effectiveRange: [dayjs(), null],
+              dependentCount: 1,
+              allowances: [],
+            });
+            setOpen(true);
+          }}>
+            급여 등록
+          </Button>
+        </Space>
+      </div>
       <Space wrap className="tw-mb-3">
         <Input.Search
           placeholder="이름·사번·부서 검색"
@@ -864,9 +543,20 @@ export function SalaryTab({ createForMemberId, tableHidden = false, onModalClose
           style={{ width: 150 }}
           options={[{ value: 'ALL', label: '부서 전체' }, ...departmentOptions]}
         />
+        <Space size={6} className="tw-pl-2 tw-border-l tw-border-slate-200">
+          <Switch
+            size="small"
+            checked={onlyNewHires}
+            onChange={setOnlyNewHires}
+          />
+          <Typography.Text className="!tw-text-sm">
+            신규 입사자(급여 등록 대상)만
+          </Typography.Text>
+          {newHireCount > 0 && (
+            <Tag color={onlyNewHires ? 'orange' : 'default'}>{newHireCount}명</Tag>
+          )}
+        </Space>
       </Space>
-      )}
-      {!tableHidden && (
       <Table<Salary>
         rowKey={(r) => r.salaryId ?? Math.random().toString()}
         loading={listQ.isLoading}
@@ -875,8 +565,7 @@ export function SalaryTab({ createForMemberId, tableHidden = false, onModalClose
         pagination={{ pageSize: 20 }}
         locale={{ emptyText: '등록된 급여 이력이 없습니다.' }}
       />
-      )}
-      <Modal open={open} onCancel={() => { setOpen(false); setEditing(null); form.resetFields(); onModalClose?.(); }} onOk={() => form.submit()} confirmLoading={createM.isPending || updateM.isPending} okText={editing ? '수정' : '등록'} cancelText="취소" title={editing ? '급여 수정' : '급여 등록'} destroyOnClose width={760}>
+      <Modal open={open} onCancel={() => { setOpen(false); setEditing(null); form.resetFields(); }} onOk={() => form.submit()} confirmLoading={createM.isPending || updateM.isPending} okText={editing ? '수정' : '등록'} cancelText="취소" title={editing ? '급여 수정' : '급여 등록'} destroyOnClose width={560}>
         <Form<SalaryFormValues>
           form={form}
           layout="vertical"
@@ -900,56 +589,63 @@ export function SalaryTab({ createForMemberId, tableHidden = false, onModalClose
             // 별도 onValuesChange 처리 불필요.
           }}
         >
-          {/* 1행: 대상 직원 + (활성 정책 1개면 정책 표시 / 여러 개면 정책 select) */}
           {!editing && (
-            <div className="tw-grid tw-grid-cols-2 tw-gap-3">
-              {/* MemberIdSearchField 내부가 이미 Form.Item(name="memberId") */}
-              <MemberIdSearchField initialMemberId={createForMemberId} />
-              {activePolicies.length === 1 ? (
-                <>
-                  <Form.Item name="salaryPolicyId" hidden>
-                    <Input />
-                  </Form.Item>
-                  <Form.Item label="급여 정책">
-                    <div className="tw-flex tw-h-[32px] tw-items-center tw-gap-2 tw-rounded-md tw-border tw-border-slate-200 tw-bg-slate-50/60 tw-px-3 tw-text-sm">
-                      <span className="tw-truncate">{activePolicies[0].policyName}</span>
-                      {activePolicies[0].usePayGradeYn === 'Y' ? (
-                        <Tag color="blue" className="!tw-m-0">호봉제</Tag>
-                      ) : (
-                        <Tag color="purple" className="!tw-m-0">연봉제</Tag>
-                      )}
-                    </div>
-                  </Form.Item>
-                </>
-              ) : (
-                <Form.Item
-                  label="급여 정책"
-                  name="salaryPolicyId"
-                  rules={[{ required: true, message: '급여 정책을 선택하세요.' }]}
-                >
-                  <Select options={policyOptions} placeholder="정책 선택" loading={policiesQ.isLoading} />
-                </Form.Item>
-              )}
+            <Alert
+              type="info"
+              showIcon
+              className="!tw-mb-4"
+              message={
+                <Typography.Text className="!tw-text-sm">
+                  급여를 등록하시려면 직원을 선택해주세요.
+                </Typography.Text>
+              }
+            />
+          )}
+
+          {/* ─── 1. 대상 직원 ─── */}
+          {!editing && (
+            <div className="tw-mb-3">
+              <Typography.Text strong className="!tw-text-xs !tw-text-slate-500 tw-block tw-mb-1">
+                1. 대상 직원
+              </Typography.Text>
+              <MemberIdSearchField />
             </div>
           )}
-          {editing && activePolicies.length > 1 && (
-            <Form.Item
-              label="급여 정책"
-              name="salaryPolicyId"
-              rules={[{ required: true, message: '급여 정책을 선택하세요.' }]}
-            >
-              <Select options={policyOptions} placeholder="정책 선택" loading={policiesQ.isLoading} />
-            </Form.Item>
-          )}
-          {/* 수정 모드 + 활성 정책 1개 — UI 노출 없이 폼에만 등록해두지 않으면 onFinish 시 salaryPolicyId 가
-              빠져서 백엔드가 "급여 정책 ID는 필수" 검증 실패한다. */}
-          {editing && activePolicies.length <= 1 && (
-            <Form.Item name="salaryPolicyId" hidden>
-              <Input />
+
+          {/* ─── 2. 급여 정책 + 호봉/기본급 ─── */}
+          <Typography.Text strong className="!tw-text-xs !tw-text-slate-500 tw-block tw-mb-1">
+            2. 급여 정책 · 기본급
+          </Typography.Text>
+          {/* 활성 정책이 1개면 자동 선택됨 — 정보 표시만, 사용자 선택 불필요.
+              여러 개일 땐 select 노출. 수정 모드에서도 그대로 노출(기존 정책 변경 가능). */}
+          {activePolicies.length === 1 && !editing ? (
+            <>
+              <Form.Item name="salaryPolicyId" hidden>
+                <Input />
+              </Form.Item>
+              <Alert
+                type="info"
+                showIcon
+                className="!tw-mb-3"
+                message={
+                  <Typography.Text className="!tw-text-sm">
+                    적용 급여 정책: <Typography.Text strong>{activePolicies[0].policyName}</Typography.Text>
+                    {activePolicies[0].usePayGradeYn === 'Y' ? (
+                      <Tag color="blue" className="!tw-ml-2">호봉제</Tag>
+                    ) : (
+                      <Tag color="purple" className="!tw-ml-2">연봉제</Tag>
+                    )}
+                  </Typography.Text>
+                }
+              />
+            </>
+          ) : (
+            <Form.Item label="급여 정책" name="salaryPolicyId" rules={[{ required: true, message: '급여 정책을 선택하세요.' }]}>
+              <Select options={policyOptions} placeholder="정책을 선택하면 호봉제/연봉제에 따라 입력 필드가 바뀝니다" loading={policiesQ.isLoading} />
             </Form.Item>
           )}
 
-          {/* 2행: 호봉(호봉제) 또는 기본급(연봉제) + 기본급 자동 계산 표시 */}
+          {/* 정책 usePayGradeYn 따라 호봉/기본급 필드 분기 */}
           <Form.Item noStyle shouldUpdate={(p, c) => p.salaryPolicyId !== c.salaryPolicyId || p.step !== c.step}>
             {({ getFieldValue }) => {
               const policyId = getFieldValue('salaryPolicyId') as string | undefined;
@@ -957,7 +653,7 @@ export function SalaryTab({ createForMemberId, tableHidden = false, onModalClose
               if (!policy) {
                 return (
                   <Typography.Text type="secondary" className="!tw-text-xs tw-block tw-mb-3">
-                    급여 정책을 선택해 주세요.
+                    급여 정책을 선택해주세요.
                   </Typography.Text>
                 );
               }
@@ -967,15 +663,24 @@ export function SalaryTab({ createForMemberId, tableHidden = false, onModalClose
 
               if (isPayGrade) {
                 return (
-                  <div className="tw-grid tw-grid-cols-2 tw-gap-3">
+                  <>
                     <Form.Item
-                      label={<Space size={6}>호봉<Tag color="blue" className="!tw-m-0">호봉제</Tag></Space>}
+                      label={
+                        <Space size={6}>
+                          호봉
+                          <Tag color="blue">호봉제</Tag>
+                        </Space>
+                      }
                       name="step"
                       rules={[{ required: true, message: '호봉을 선택하세요.' }]}
-                      extra={activePayGrades.length === 0 ? '⚠️ 호봉표 미등록 — 호봉표 관리에서 먼저 등록' : undefined}
+                      extra={
+                        activePayGrades.length === 0
+                          ? '⚠️ 활성 호봉이 없습니다. 호봉표 관리에서 먼저 등록하세요.'
+                          : '호봉을 선택하면 호봉표의 기본급이 자동 적용됩니다.'
+                      }
                     >
                       <Select
-                        placeholder="호봉 선택"
+                        placeholder="호봉 선택 (예: 1호봉, 2호봉 …)"
                         loading={payGradesQ.isLoading}
                         options={activePayGrades.map((p) => ({
                           value: p.step!,
@@ -985,23 +690,28 @@ export function SalaryTab({ createForMemberId, tableHidden = false, onModalClose
                         optionFilterProp="label"
                       />
                     </Form.Item>
-                    {/* form.baseSalary 가 onValuesChange 에서 호봉표 lookup 값으로 자동 채워짐.
-                        name 을 부여해야 form 에 등록되어 onFinish/payload 에 포함된다. */}
-                    <Form.Item label="기본급 (자동)" name="baseSalary">
+                    <Form.Item label="기본급 (원, 자동 계산)">
                       <InputNumber
+                        value={autoBase ?? 0}
                         disabled
                         style={{ width: '100%' }}
-                        formatter={(v) => (v != null && v !== '' ? `${Number(v).toLocaleString('ko-KR')}원` : '0원')}
+                        formatter={(v) => (v ? `${Number(v).toLocaleString('ko-KR')}원` : '0원')}
                       />
                     </Form.Item>
-                  </div>
+                  </>
                 );
               }
               return (
                 <Form.Item
-                  label={<Space size={6}>월 기본급<Tag color="purple" className="!tw-m-0">연봉제</Tag></Space>}
+                  label={
+                    <Space size={6}>
+                      기본급 (월, 원)
+                      <Tag color="purple">연봉제</Tag>
+                    </Space>
+                  }
                   name="baseSalary"
                   rules={[{ required: true, message: '기본급을 입력하세요.' }, { type: 'number', min: 0 }]}
+                  extra="만원 단위 권장. 연봉제는 월 기본급을 입력합니다."
                 >
                   <InputNumber
                     min={0}
@@ -1016,177 +726,118 @@ export function SalaryTab({ createForMemberId, tableHidden = false, onModalClose
             }}
           </Form.Item>
 
-          {/* 3행: 부양가족수 + 적용 기간 — 같은 줄 */}
-          <div className="tw-grid tw-grid-cols-2 tw-gap-3">
-            <Form.Item
-              label="부양가족수 (본인 포함, 1~11)"
-              name="dependentCount"
-              rules={[{ required: true, message: '부양가족수를 입력하세요.' }]}
-            >
-              <InputNumber
-                min={1}
-                max={11}
-                style={{ width: '100%' }}
-                placeholder="예: 본인만 1, 본인+배우자 2"
-              />
-            </Form.Item>
-            <Form.Item
-              label="적용 기간"
-              name="effectiveRange"
-              rules={[{ required: true, message: '적용 시작일을 선택하세요.' }]}
-              extra="종료일 미입력 시 계속 적용"
-            >
-              <DatePicker.RangePicker allowEmpty={[false, true]} format="YYYY-MM-DD" style={{ width: '100%' }} />
-            </Form.Item>
-          </div>
+          {/* 직급명·직책명은 인사정보 등록 시 입력값을 사용 — 모달에서 입력받지 않음.
+              SalaryFormValues 의 jobGradeName/jobTitleName 은 수정 모드 값 보존용으로만 form 에 유지 */}
 
-          {/* 4행: 8~20세 자녀수 + 소득세 감면 유형 */}
-          <div className="tw-grid tw-grid-cols-2 tw-gap-3">
-            <Form.Item
-              label="8~20세 자녀 수"
-              name="childUnder20Count"
-              extra="자녀세액공제 차원 (간이세액표). 미입력 시 0."
-            >
-              <InputNumber min={0} max={11} style={{ width: '100%' }} placeholder="예: 1" />
-            </Form.Item>
-            <Form.Item
-              label="소득세 감면 유형"
-              name="taxReductionType"
-              extra="청년 SME 등 조세특례제한법상 감면. 없으면 NONE."
-            >
-              <Select
-                options={[
-                  { value: 'NONE', label: '없음 (NONE)' },
-                  { value: 'YOUTH_SME', label: '청년 중소기업 (YOUTH_SME)' },
-                  { value: 'DISABLED', label: '장애인 감면 (DISABLED)' },
-                  { value: 'FOREIGNER', label: '외국인 단일세율 (FOREIGNER)' },
-                  { value: 'ETC', label: '기타 (ETC)' },
-                ]}
-              />
-            </Form.Item>
-          </div>
-
-          {/* 감면율·종료일 — type이 NONE 이 아닐 때만 노출 */}
-          <Form.Item noStyle shouldUpdate={(p, c) => p.taxReductionType !== c.taxReductionType}>
-            {({ getFieldValue }) => {
-              const t = getFieldValue('taxReductionType');
-              if (!t || t === 'NONE') return null;
-              return (
-                <div className="tw-grid tw-grid-cols-2 tw-gap-3">
-                  <Form.Item
-                    label="감면율 (%)"
-                    name="taxReductionRatePct"
-                    extra="청년 SME 1~3년차 90%, 4~5년차 70% 등"
-                    rules={[{ required: true, type: 'number', min: 1, max: 100, message: '1~100 사이로 입력' }]}
-                  >
-                    <InputNumber min={0} max={100} step={10} style={{ width: '100%' }} placeholder="예: 90" />
-                  </Form.Item>
-                  <Form.Item
-                    label="감면 종료일"
-                    name="taxReductionEffectiveToDate"
-                    extra="청년 SME 5년 한정 등. 종료일 이후엔 자동으로 풀세금."
-                    rules={[{ required: true, message: '감면 종료일을 입력하세요.' }]}
-                  >
-                    <DatePicker format="YYYY-MM-DD" style={{ width: '100%' }} />
-                  </Form.Item>
-                </div>
-              );
-            }}
+          {/* ─── 3. 부양가족 + 적용 기간 ─── */}
+          <Typography.Text strong className="!tw-text-xs !tw-text-slate-500 tw-block tw-mb-1 tw-mt-3">
+            3. 부양가족 · 적용 기간
+          </Typography.Text>
+          <Form.Item
+            label="부양가족수"
+            name="dependentCount"
+            rules={[{ required: true, message: '부양가족수를 입력하세요.' }]}
+            extra="본인 포함 (예: 본인만 1, 본인+배우자 2). 소득세 간이세액표 룩업에 사용됩니다."
+          >
+            <InputNumber min={0} max={11} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item
+            label="적용 기간"
+            name="effectiveRange"
+            rules={[{ required: true, message: '적용 시작일을 선택하세요.' }]}
+            extra="시작일은 신규 적용일, 종료일은 비워두면 진행중. 기존 이력과 같은 시작일은 거부됩니다."
+          >
+            <DatePicker.RangePicker allowEmpty={[false, true]} format="YYYY-MM-DD" style={{ width: '100%' }} />
           </Form.Item>
 
-          {/* allowances 는 토글 UI 에서 setFieldValue 로 다루지만, name 등록된 Form.Item 이 없으면
-              onFinish values 에 포함되지 않아 submit 시 undefined 가 됨. 빈 hidden Form.Item 으로 등록만 해둔다. */}
-          <Form.Item name="allowances" hidden>
-            <Input />
-          </Form.Item>
-
-          {/* ─── 부가 수당 (선택) - 등록/수정 모두 노출. 수정 시 active 수당이 자동 prefill 되어 체크돼있고
-                토글 해제 시 종료(closeByTemplate), 새로 체크 시 추가(autoGrant) 된다. */}
-          <>
-              <div className="tw-flex tw-items-baseline tw-justify-between tw-mb-1">
-                <Typography.Text strong className="!tw-text-xs !tw-text-slate-500">
-                  부가 수당 <Typography.Text type="secondary" className="!tw-text-xs">
-                    {editing ? '(수정 시 적용일부터 추가/종료 처리)' : '(선택, 클릭하여 토글)'}
-                  </Typography.Text>
-                </Typography.Text>
-                <Typography.Text type="secondary" className="!tw-text-xs">
-                  금액은 [지급 항목(수당)] 의 회사 기본값 자동 적용
-                </Typography.Text>
-              </div>
-              <Form.Item
-                shouldUpdate={(prev, next) => prev.allowances !== next.allowances}
-                noStyle
-              >
-                {() => {
-                  if (allowanceTemplates.length === 0) {
-                    return (
-                      <div className="tw-rounded-lg tw-border tw-border-dashed tw-border-slate-200 tw-bg-slate-50/40 tw-px-4 tw-py-6 tw-text-center">
-                        <Typography.Text type="secondary" className="!tw-text-xs">
-                          등록 가능한 수당 항목이 없습니다. [지급 항목(수당)] 탭에서 항목을 먼저 만들어 주세요.
-                        </Typography.Text>
-                      </div>
-                    );
-                  }
-                  // 외부 form instance 직접 사용 (render-prop destructure 가 어떤 환경에서 unbound 가 되는 케이스 회피)
-                  const current = (form.getFieldValue('allowances') as { salaryItemTemplateId?: string }[] | undefined) ?? [];
-                  const selectedIds = new Set(
-                    current.map((a) => a.salaryItemTemplateId).filter((v): v is string => Boolean(v)),
-                  );
-                  const toggle = (id: string) => {
-                    const next = new Set(selectedIds);
-                    if (next.has(id)) next.delete(id);
-                    else next.add(id);
-                    const newValue = Array.from(next).map((salaryItemTemplateId) => ({ salaryItemTemplateId }));
-                    form.setFieldsValue({ allowances: newValue });
-                    console.log('[ALLOWANCE-TOGGLE]', { id, newValue });
-                  };
-                  return (
-                    <div className="tw-grid tw-grid-cols-2 sm:tw-grid-cols-3 tw-gap-2">
-                      {allowanceTemplates.map((t) => {
-                        const id = t.salaryItemTemplateId!;
-                        const checked = selectedIds.has(id);
-                        const hasAmount = t.defaultAmount != null;
-                        const isCompanyWide = t.applyToAllYn === 'Y';
-                        const disabled = !hasAmount;
-                        return (
-                          <button
-                            key={id}
-                            type="button"
-                            onClick={() => !disabled && toggle(id)}
-                            disabled={disabled}
-                            className={[
-                              'tw-flex tw-w-full tw-items-start tw-gap-3 tw-rounded-lg tw-border tw-px-3 tw-py-2.5 tw-text-left tw-transition-colors',
-                              disabled
-                                ? 'tw-cursor-not-allowed tw-border-slate-200 tw-bg-slate-50/60 tw-opacity-60'
-                                : checked
-                                  ? 'tw-border-blue-400 tw-bg-blue-50/50 tw-shadow-sm'
-                                  : 'tw-border-slate-200 tw-bg-white hover:tw-border-blue-300 hover:tw-bg-blue-50/30',
-                            ].join(' ')}
-                          >
-                            <Checkbox checked={checked} disabled={disabled} className="tw-mt-0.5" />
-                            <div className="tw-min-w-0 tw-flex-1">
-                              <div className="tw-flex tw-items-center tw-gap-1.5">
-                                <span className="tw-truncate tw-text-sm tw-font-medium tw-text-slate-800">
-                                  {t.itemName ?? '—'}
-                                </span>
-                                <Tag color={isCompanyWide ? 'blue' : 'purple'} className="!tw-m-0">
-                                  {isCompanyWide ? '회사 공통' : '개인 차등'}
-                                </Tag>
-                              </div>
-                              <div className="tw-mt-0.5 tw-text-xs tw-text-slate-500">
-                                {hasAmount
-                                  ? `${t.defaultAmount!.toLocaleString('ko-KR')}원`
-                                  : '금액 미지정 — [지급 항목(수당)] 에서 먼저 셋업'}
-                              </div>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  );
-                }}
-              </Form.Item>
+          {/* ─── 4. 부가 수당 (선택, 등록 모드만) ─── */}
+          {!editing && (
+            <>
+              <Typography.Text strong className="!tw-text-xs !tw-text-slate-500 tw-block tw-mb-1 tw-mt-3">
+                4. 부가 수당 <Typography.Text type="secondary" className="!tw-text-xs">(선택)</Typography.Text>
+              </Typography.Text>
+              <Typography.Paragraph type="secondary" className="!tw-mb-2 !tw-text-xs">
+                자격수당·직책수당·자녀수당 등 개인 차등 수당을 함께 등록합니다. 적용 시작일은 위
+                급여 적용 시작일과 동일하게 자동 부여(AUTO)됩니다.
+              </Typography.Paragraph>
+              <Form.List name="allowances">
+                {(fields, { add, remove }) => (
+                  <Space direction="vertical" className="tw-w-full" size={8}>
+                    {fields.map(({ key, name, ...restField }) => (
+                      <Space key={key} align="baseline" className="tw-w-full" wrap={false}>
+                        <Form.Item
+                          {...restField}
+                          name={[name, 'salaryItemTemplateId']}
+                          rules={[{ required: true, message: '수당 항목 선택' }]}
+                          className="!tw-mb-0 tw-w-full"
+                          style={{ flex: 1, minWidth: 320 }}
+                        >
+                          <Select
+                            placeholder="수당 항목 선택"
+                            options={allowanceTemplateOptions}
+                            loading={tplQ.isLoading}
+                            showSearch
+                            optionFilterProp="label"
+                          />
+                        </Form.Item>
+                        <Button type="link" danger onClick={() => remove(name)}>
+                          삭제
+                        </Button>
+                      </Space>
+                    ))}
+                    <Button
+                      type="dashed"
+                      onClick={() => add({})}
+                      className="tw-w-full"
+                      disabled={allowanceTemplateOptions.length === 0}
+                    >
+                      + 수당 추가
+                    </Button>
+                    {allowanceTemplateOptions.length === 0 ? (
+                      <Typography.Text type="secondary" className="!tw-text-xs">
+                        등록 가능한 수당 항목이 없습니다. [지급 항목(수당)] 탭에서 항목을 먼저 만들어주세요.
+                      </Typography.Text>
+                    ) : (
+                      <Typography.Text type="secondary" className="!tw-text-xs">
+                        금액은 [지급 항목(수당)] 에 셋업한 회사 기본 금액이 자동 적용됩니다. 금액 미지정 항목은 비활성화 — 먼저 메뉴에서 금액을 셋업해주세요.
+                      </Typography.Text>
+                    )}
+                  </Space>
+                )}
+              </Form.List>
             </>
+          )}
+        </Form>
+      </Modal>
+
+      <Modal
+        open={bootstrapOpen}
+        onCancel={() => { setBootstrapOpen(false); bootstrapForm.resetFields(); }}
+        onOk={() => bootstrapForm.submit()}
+        confirmLoading={bootstrapM.isPending}
+        okText="복구 요청"
+        cancelText="취소"
+        title="입사 누락 Salary 복구"
+        destroyOnClose
+        width={520}
+      >
+        <Alert
+          type="warning"
+          showIcon
+          className="tw-mb-3"
+          message="활성 급여정책(SalaryPolicy)이 없으면 백엔드가 조용히 skip 합니다."
+          description="먼저 '급여 정책' 탭에서 입사일 기준 활성 정책을 등록했는지 확인하세요."
+        />
+        <Form<BootstrapFormValues>
+          form={bootstrapForm}
+          layout="vertical"
+          onFinish={(v) => bootstrapM.mutate(v)}
+        >
+          <MemberIdSearchField />
+          <Form.Item label="입사일 (hireDate)" name="hireDate" rules={[{ required: true }]}><DatePicker className="tw-w-full" format="YYYY-MM-DD" /></Form.Item>
+          <Form.Item label="기본급 (원, 생략 시 회사 기본값)" name="baseSalary"><InputNumber min={0} step={10000} style={{ width: '100%' }} /></Form.Item>
+          <Form.Item label="직급명" name="jobGradeName"><Input maxLength={40} /></Form.Item>
+          <Form.Item label="직책명" name="jobTitleName"><Input maxLength={40} /></Form.Item>
         </Form>
       </Modal>
     </>
@@ -1253,27 +904,10 @@ function SalaryPolicyTab() {
     onError: (e: Error) => message.error(e.message || '실패'),
   });
   const deleteM = useMutation({
-    mutationFn: ({ id, force }: { id: string; force?: boolean }) => salaryApi.salaryPolicy.delete(id, { force }),
+    mutationFn: (id: string) => salaryApi.salaryPolicy.delete(id),
     onSuccess: () => { message.success('삭제 완료'); void qc.invalidateQueries({ queryKey: ['salary', 'salary-policies'] }); },
     onError: (e: Error) => message.error(e.message || '실패'),
   });
-  const endM = useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: ReturnType<typeof buildPayload> }) =>
-      salaryApi.salaryPolicy.update(id, payload),
-    onSuccess: () => {
-      message.success('정책 종료 처리 완료');
-      void qc.invalidateQueries({ queryKey: ['salary', 'salary-policies'] });
-    },
-    onError: (e: Error) => message.error(e.message || '실패'),
-  });
-
-  const isPolicyActive = (p: SalaryPolicy) => {
-    if (!p.effectiveFrom) return false;
-    const today = dayjs().startOf('day');
-    const started = !dayjs(p.effectiveFrom).startOf('day').isAfter(today);
-    const notEnded = !p.effectiveTo || !dayjs(p.effectiveTo).startOf('day').isBefore(today);
-    return started && notEnded;
-  };
 
   const cols = useMemo<ColumnsType<SalaryPolicy>>(() => [
     { title: '정책명', dataIndex: 'policyName', key: 'policyName' },
@@ -1313,41 +947,9 @@ function SalaryPolicyTab() {
     },
     { title: '적용 기간', key: 'eff', width: 220, render: (_, r) => `${r.effectiveFrom ?? ''} ~ ${r.effectiveTo ?? '진행중'}` },
     {
-      title: '액션', key: 'a', width: 220,
+      title: '액션', key: 'a', width: 140,
       render: (_, r) => (
         <Space>
-          {isPolicyActive(r) && r.salaryPolicyId && (
-            <Popconfirm
-              title="이 정책을 오늘 날짜로 종료할까요?"
-              okText="종료"
-              cancelText="취소"
-              onConfirm={() => {
-                const today = dayjs().format('YYYY-MM-DD');
-                endM.mutate({
-                  id: r.salaryPolicyId!,
-                  payload: {
-                    policyName: (r.policyName ?? '').trim(),
-                    payDay: r.payDay ?? 25,
-                    usePayGradeYn: r.usePayGradeYn === 'Y' ? 'Y' : 'N',
-                    wageSystemType: (r.wageSystemType as WageSystemTypeCode) ?? 'NON_COMPREHENSIVE',
-                    fixedOvertimeMinutes:
-                      (r.wageSystemType as WageSystemTypeCode) === 'NON_COMPREHENSIVE'
-                        ? 0
-                        : (r.fixedOvertimeMinutes ?? 0),
-                    periodStartType: 'FIRST' as PeriodStartTypeCode,
-                    periodEndType: 'LAST' as PeriodEndTypeCode,
-                    payDayShiftRule: (r.payDayShiftRule as PayDayShiftRuleCode) ?? 'BEFORE',
-                    monthlyOrdinaryHours: r.monthlyOrdinaryHours ?? 209,
-                    prorationMethod: (r.prorationMethod as ProrationMethodCode) ?? 'DAYS_IN_MONTH',
-                    effectiveFrom: r.effectiveFrom ?? today,
-                    effectiveTo: today,
-                  },
-                });
-              }}
-            >
-              <Button size="small">종료</Button>
-            </Popconfirm>
-          )}
           <Button size="small" onClick={() => {
             setEditing(r); setOpen(true);
             form.setFieldsValue({
@@ -1361,18 +963,11 @@ function SalaryPolicyTab() {
               effectiveRange: [r.effectiveFrom ? dayjs(r.effectiveFrom) : dayjs(), r.effectiveTo ? dayjs(r.effectiveTo) : null],
             });
           }}>수정</Button>
-          <Popconfirm
-            title={isPolicyActive(r) ? '진행중 정책입니다. 강제 삭제할까요?' : '삭제?'}
-            okText="삭제"
-            cancelText="취소"
-            onConfirm={() => r.salaryPolicyId && deleteM.mutate({ id: r.salaryPolicyId, force: isPolicyActive(r) })}
-          >
-            <Button size="small" danger>삭제</Button>
-          </Popconfirm>
+          <Popconfirm title="삭제?" okText="삭제" cancelText="취소" onConfirm={() => r.salaryPolicyId && deleteM.mutate(r.salaryPolicyId)}><Button size="small" danger>삭제</Button></Popconfirm>
         </Space>
       ),
     },
-  ], [deleteM, endM, form]);
+  ], [deleteM, form]);
 
   return (
     <>
@@ -1873,82 +1468,69 @@ function SalaryItemTemplateTab() {
         className="!tw-text-[15px]"
         locale={{ emptyText: '등록된 항목이 없습니다.' }}
       />
-      <Modal open={open} onCancel={() => { setOpen(false); setEditing(null); form.resetFields(); }} onOk={() => form.submit()} confirmLoading={createM.isPending || updateM.isPending} okText={editing ? '수정' : '등록'} cancelText="취소" title={editing ? (editing.isSystemDefault ? '시스템 기본 항목(수당) 수정' : '항목(수당) 수정') : '항목(수당) 등록'} destroyOnClose width={720}>
+      <Modal open={open} onCancel={() => { setOpen(false); setEditing(null); form.resetFields(); }} onOk={() => form.submit()} confirmLoading={createM.isPending || updateM.isPending} okText={editing ? '수정' : '등록'} cancelText="취소" title={editing ? (editing.isSystemDefault ? '시스템 기본 항목(수당) 수정' : '항목(수당) 수정') : '항목(수당) 등록'} destroyOnClose width={480}>
         <Form<TemplateFormValues> form={form} layout="vertical" onFinish={(v) => editing?.salaryItemTemplateId ? updateM.mutate({ id: editing.salaryItemTemplateId, v }) : createM.mutate(v)}>
+          <Form.Item label="수당명" name="itemName" rules={[{ required: true }]}>
+            <Input maxLength={40} placeholder="예: 직책수당, 식대" />
+          </Form.Item>
           {/* 유형은 항상 EARNING 으로 자동 — 공제(세금/4대보험) 는 [세금·4대보험] 메뉴에서 별도 관리 */}
           <Form.Item name="itemType" hidden initialValue="EARNING">
             <Input />
           </Form.Item>
-
-          {/* 1행: 수당명 + 표시 순서 */}
-          <div className="tw-grid tw-grid-cols-[1fr_140px] tw-gap-3">
-            <Form.Item label="수당명" name="itemName" rules={[{ required: true }]}>
-              <Input maxLength={40} placeholder="예: 직책수당, 식대" />
-            </Form.Item>
-            <Form.Item label="표시 순서" name="displayOrder" rules={[{ required: true }]}>
-              <InputNumber min={0} style={{ width: '100%' }} />
-            </Form.Item>
-          </div>
-
-          {/* 2행: 과세 여부 + 통상임금 포함 */}
-          <div className="tw-grid tw-grid-cols-2 tw-gap-3">
-            <Form.Item
-              label="과세 여부"
-              name="isTaxableYn"
-              rules={[{ required: true }]}
-              extra="과세=소득세·4대보험 포함 / 비과세=식대·자가운전 등 세법 한도 적용"
-            >
-              <Select
-                disabled={!!editing?.isSystemDefault}
-                options={[{ value: 'Y', label: '과세' }, { value: 'N', label: '비과세' }]}
-              />
-            </Form.Item>
-            <Form.Item
-              label="통상임금 포함"
-              name="isOrdinaryWageYn"
-              rules={[{ required: true }]}
-              extra="매달 고정 수당만 포함 (연장·야간·휴일수당 시급 환산 기준)"
-            >
-              <Select
-                options={[
-                  { value: 'N', label: '제외 (성과급·식대·자가운전 등 변동·실비)' },
-                  { value: 'Y', label: '포함 (직책수당·자격수당 등 매월 고정)' },
-                ]}
-              />
-            </Form.Item>
-          </div>
-
-          {/* 3행: 적용 범위 + 수당 금액 */}
-          <div className="tw-grid tw-grid-cols-2 tw-gap-3">
-            <Form.Item
-              label="적용 범위"
-              name="applyToAllYn"
-              rules={[{ required: true }]}
-              extra="회사 공통=전 직원 자동 합산 / 개인 차등=직원별 부여 시에만 적용"
-            >
-              <Select
-                options={[
-                  { value: 'N', label: '개인 차등 (직원별로 부여)' },
-                  { value: 'Y', label: '회사 공통 (전 직원 자동 적용)' },
-                ]}
-              />
-            </Form.Item>
-            <Form.Item
-              label="수당 금액 (월, 원)"
-              name="defaultAmount"
-              extra="회사 공통=자동 합산 금액 / 개인 차등=부여 시 기본값. 비우면 자동 적용 없음"
-            >
-              <InputNumber
-                min={0}
-                step={10000}
-                style={{ width: '100%' }}
-                placeholder="예: 200,000"
-                formatter={(v) => (v ? `${Number(v).toLocaleString('ko-KR')}` : '')}
-                parser={(v) => Number(String(v ?? '').replace(/[^\d]/g, '')) as 0 | number}
-              />
-            </Form.Item>
-          </div>
-
+          <Form.Item label="표시 순서" name="displayOrder" rules={[{ required: true }]}>
+            <InputNumber min={0} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item
+            label="과세 여부"
+            name="isTaxableYn"
+            rules={[{ required: true }]}
+            extra="과세 = 소득세·4대보험 계산에 포함. 비과세 = 식대·자가운전·보육수당 등 세법상 비과세 한도 적용."
+          >
+            <Select
+              disabled={!!editing?.isSystemDefault}
+              options={[{ value: 'Y', label: '과세' }, { value: 'N', label: '비과세' }]}
+            />
+          </Form.Item>
+          <Form.Item
+            label="통상임금 포함"
+            name="isOrdinaryWageYn"
+            rules={[{ required: true }]}
+            extra="포함하면 연장·야간·휴일수당 시급 환산 기준에 합산됩니다. 매달 같은 금액으로 받는 정기 수당(직책수당·자격수당)만 포함하세요."
+          >
+            <Select
+              options={[
+                { value: 'N', label: '제외 (성과급·식대·자가운전 등 변동·실비)' },
+                { value: 'Y', label: '포함 (직책수당·자격수당 등 매월 고정)' },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item
+            label="적용 범위"
+            name="applyToAllYn"
+            rules={[{ required: true }]}
+            extra="회사 공통: 정한 금액이 모든 직원에게 자동 합산 (식대·자가운전·보육수당 등). 개인 차등: 직원별로 [수당 관리] 에서 부여한 사람만 적용 (직책수당·자녀수당 등)."
+          >
+            <Select
+              options={[
+                { value: 'N', label: '개인 차등 (직원별로 부여)' },
+                { value: 'Y', label: '회사 공통 (전 직원 자동 적용)' },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item
+            label="수당 금액 (월, 원)"
+            name="defaultAmount"
+            extra="회사 공통이면 모든 직원에게 매달 이 금액이 자동으로 합산됩니다. 개인 차등이면 부여 시 기본값으로 사용되며 직원별 다른 금액으로 변경할 수 있습니다. 비워두면 자동 적용·자동 채움이 없습니다."
+          >
+            <InputNumber
+              min={0}
+              step={10000}
+              style={{ width: '100%' }}
+              placeholder="예: 200000"
+              formatter={(v) => (v ? `${Number(v).toLocaleString('ko-KR')}` : '')}
+              parser={(v) => Number(String(v ?? '').replace(/[^\d]/g, '')) as 0 | number}
+            />
+          </Form.Item>
           {editing?.isSystemDefault && (
             <Typography.Paragraph type="secondary" className="!tw-mb-0 tw-text-xs">
               시스템 기본 항목은 이름·표시 순서만 수정됩니다. 과세 여부는 변경할 수 없습니다.

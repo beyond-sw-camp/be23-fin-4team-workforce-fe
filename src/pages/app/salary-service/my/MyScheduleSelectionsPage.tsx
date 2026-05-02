@@ -19,6 +19,7 @@ import {
   Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import { ClockCircleOutlined, CoffeeOutlined, WarningOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { approvalApi } from '@/features/approvals/api/approvalApi';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
@@ -540,14 +541,22 @@ export function MyScheduleSelectionsPage() {
     return fuzzy?.documentId;
   }, [docsQ.data]);
 
+  // 직접 모달 폐기 - [스케줄 변경 신청] 버튼은 바로 결재 모달로 이동, 대상월은 다음달로 강제 prefill
   const openApply = () => {
-    form.resetFields();
-    form.setFieldsValue({
-      targetYearMonth: calendarMonth,
-      slotId: undefined,
-      requestReason: '',
+    if (!scheduleChangeDocId) {
+      message.error('출퇴근시간 변경 신청서 양식을 찾을 수 없습니다. 전자결재 양식 설정을 확인해 주세요.');
+      return;
+    }
+    const nextMonth = dayjs().add(1, 'month').format('YYYY-MM');
+    void navigate({
+      to: '/app/approvals',
+      search: {
+        tab: 'compose',
+        docId: scheduleChangeDocId,
+        autoCompose: '1',
+        schYearMonth: nextMonth,
+      },
     });
-    setOpenApplyModal(true);
   };
 
   const submitToApprovals = (v: FormValues) => {
@@ -555,22 +564,21 @@ export function MyScheduleSelectionsPage() {
       message.error('출퇴근시간 변경 신청서 양식을 찾을 수 없습니다. 전자결재 양식 설정을 확인해 주세요.');
       return;
     }
-    // 슬롯에 박힌 점심시간을 그대로 prefill 에도 실어서 결재 본문에 표시되게 한다.
+    // iframe 자동 모달에선 부모 sessionStorage 접근 불가 - URL params 로 prefill 데이터 전달
     const slot = (slotsQ.data ?? []).find((s) => s.slotId === v.slotId);
-    sessionStorage.setItem(
-      SCHEDULE_SELECTION_PREFILL_STORAGE_KEY,
-      JSON.stringify({
-        targetYearMonth: v.targetYearMonth.format('YYYY-MM'),
-        slotId: v.slotId,
-        breakStart: slot?.breakStart ? slot.breakStart.slice(0, 5) : null,
-        breakEnd: slot?.breakEnd ? slot.breakEnd.slice(0, 5) : null,
-        requestReason: v.requestReason?.trim() || null,
-      }),
-    );
     setOpenApplyModal(false);
     void navigate({
       to: '/app/approvals',
-      search: { tab: 'compose', docId: scheduleChangeDocId },
+      search: {
+        tab: 'compose',
+        docId: scheduleChangeDocId,
+        autoCompose: '1',
+        schYearMonth: v.targetYearMonth.format('YYYY-MM'),
+        schSlotId: v.slotId,
+        ...(slot?.breakStart ? { schBreakStart: slot.breakStart.slice(0, 5) } : {}),
+        ...(slot?.breakEnd ? { schBreakEnd: slot.breakEnd.slice(0, 5) } : {}),
+        ...(v.requestReason?.trim() ? { schReason: v.requestReason.trim() } : {}),
+      },
     });
   };
 
@@ -604,17 +612,14 @@ export function MyScheduleSelectionsPage() {
             월별 달력으로 스케줄과 근무 현황을 확인하고, 스케줄 변경 신청을 전자결재로 바로 연동합니다.
           </Typography.Paragraph>
         </div>
+        {/* 우측 month picker 제거 - 다음달 스케줄만 신청 가능하므로 사용자가 월 변경할 필요 없음 */}
+        {/* 스케줄 변경 신청 버튼은 회사가 유연근무(FLEXIBLE) 운영 중일 때만 노출 */}
         <Space>
-          <DatePicker
-            picker="month"
-            value={calendarMonth}
-            format="YYYY-MM"
-            allowClear={false}
-            onChange={(v) => v && setCalendarMonth(v.startOf('month'))}
-          />
-          <Button type="primary" onClick={openApply}>
-            스케줄 변경 신청
-          </Button>
+          {activeFlexibleSchedule ? (
+            <Button type="primary" onClick={openApply}>
+              스케줄 변경 신청
+            </Button>
+          ) : null}
         </Space>
       </div>
 
@@ -711,37 +716,59 @@ export function MyScheduleSelectionsPage() {
             name="slotId"
             label="변경 신청 스케줄"
             rules={[{ required: true }]}
-            extra={
-              <Form.Item
-                shouldUpdate={(prev, next) => prev.slotId !== next.slotId}
-                noStyle
-              >
-                {() => {
-                  const slotId = form.getFieldValue('slotId') as string | undefined;
-                  if (!slotId) {
-                    return '슬롯에 회사가 미리 정한 출퇴근/점심시간이 박혀있어, 선택만 하면 자동 적용됩니다.';
-                  }
-                  const slot = (slotsQ.data ?? []).find((s) => s.slotId === slotId);
-                  if (!slot) return null;
-                  const work = slot.startTime && slot.endTime
-                    ? `출퇴근: ${slot.startTime.slice(0, 5)} ~ ${slot.endTime.slice(0, 5)}`
-                    : '출퇴근 시간 미설정';
-                  const lunch = slot.breakStart && slot.breakEnd
-                    ? `점심: ${slot.breakStart.slice(0, 5)} ~ ${slot.breakEnd.slice(0, 5)}`
-                    : '점심시간 미설정';
-                  return (
-                    <span>
-                      {work} · {lunch}
-                      {(!slot.startTime || !slot.endTime || !slot.breakStart || !slot.breakEnd) && (
-                        <span className="tw-text-amber-600"> (관리자에게 문의)</span>
-                      )}
-                    </span>
-                  );
-                }}
-              </Form.Item>
-            }
           >
             <Select options={slotOptions} loading={slotsQ.isLoading} />
+          </Form.Item>
+          <Form.Item
+            shouldUpdate={(prev, next) => prev.slotId !== next.slotId}
+            noStyle
+          >
+            {() => {
+              const slotId = form.getFieldValue('slotId') as string | undefined;
+              if (!slotId) {
+                return (
+                  <div className="tw-mt-1 tw-mb-4 tw-rounded-md tw-border tw-border-dashed tw-border-slate-300 tw-bg-slate-50/50 tw-px-3 tw-py-2 tw-text-xs tw-text-slate-500">
+                    슬롯을 선택하면 회사가 미리 정한 <b>출퇴근/점심시간</b> 이 자동으로 적용됩니다.
+                  </div>
+                );
+              }
+              const slot = (slotsQ.data ?? []).find((s) => s.slotId === slotId);
+              if (!slot) return null;
+              const hasWork = slot.startTime && slot.endTime;
+              const hasLunch = slot.breakStart && slot.breakEnd;
+              return (
+                <div className="tw-mt-1 tw-mb-4 tw-rounded-lg tw-border tw-border-blue-200 tw-bg-blue-50/40 tw-p-3">
+                  <div className="tw-grid tw-grid-cols-2 tw-gap-3">
+                    {/* 출퇴근 */}
+                    <div className="tw-flex tw-items-center tw-gap-2 tw-rounded-md tw-bg-white tw-px-3 tw-py-2 tw-shadow-sm">
+                      <ClockCircleOutlined className="!tw-text-blue-500 tw-text-base" />
+                      <div className="tw-flex tw-flex-col tw-leading-tight">
+                        <span className="tw-text-[11px] tw-text-slate-500">출퇴근</span>
+                        <span className="tw-text-sm tw-font-semibold tw-text-slate-800">
+                          {hasWork ? `${slot.startTime!.slice(0, 5)} ~ ${slot.endTime!.slice(0, 5)}` : '미설정'}
+                        </span>
+                      </div>
+                    </div>
+                    {/* 점심 */}
+                    <div className="tw-flex tw-items-center tw-gap-2 tw-rounded-md tw-bg-white tw-px-3 tw-py-2 tw-shadow-sm">
+                      <CoffeeOutlined className="!tw-text-amber-500 tw-text-base" />
+                      <div className="tw-flex tw-flex-col tw-leading-tight">
+                        <span className="tw-text-[11px] tw-text-slate-500">점심</span>
+                        <span className="tw-text-sm tw-font-semibold tw-text-slate-800">
+                          {hasLunch ? `${slot.breakStart!.slice(0, 5)} ~ ${slot.breakEnd!.slice(0, 5)}` : '미설정'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  {(!hasWork || !hasLunch) && (
+                    <div className="tw-mt-2 tw-flex tw-items-center tw-gap-1 tw-text-xs tw-text-amber-600">
+                      <WarningOutlined />
+                      <span>일부 시간이 미설정 - 관리자에게 슬롯 보완을 요청하세요.</span>
+                    </div>
+                  )}
+                </div>
+              );
+            }}
           </Form.Item>
           <Form.Item name="requestReason" label="신청 사유" rules={[{ required: true, message: '사유를 입력하세요.' }]}>
             <Input.TextArea rows={3} maxLength={300} showCount />

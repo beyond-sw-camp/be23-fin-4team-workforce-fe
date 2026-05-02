@@ -30,6 +30,68 @@ function formatMinutesWithDuration(value?: number | null): string {
   return `${total}(${hours}시간 ${minutes}분)`;
 }
 
+/**
+ * 연장근로 정책 입력값 cross-field 검증.
+ * 통과하면 null, 실패하면 첫 번째 오류 메시지 반환.
+ *
+ * 검증 규칙:
+ *  - 모든 한도값(분) 0 이상
+ *  - 일 최대 근무 <= 1440 (24시간)
+ *  - 주 최대 총 <= 10080 (7일)
+ *  - 월 최대 연장 >= 일 최대 근무
+ *  - 월 최대 연장 >= 주 최대 연장
+ *  - 주 최대 총 >= 일 최대 근무
+ *  - 주 최대 총 >= 주 최대 연장
+ *  - 야간 시작/종료 시각 같으면 안 됨
+ *  - 적용 종료일 >= 적용 시작일 (있을 때)
+ *  - 사후 결재 마감 시간 0 이상
+ */
+function validateOvertimePolicyValues(v: FormValues): string | null {
+  const dayMax = v.dailyOvertimeLimitMinutes;
+  const monthMax = v.monthlyOvertimeLimitMinutes;
+  const weekMax = v.weeklyOvertimeLimitMinutes;
+  const weekTotal = v.weeklyTotalLimitMinutes;
+
+  // 절대 한계
+  if (dayMax != null && dayMax > 1440) return '일 최대 근무시간은 24시간(1440분)을 넘을 수 없습니다.';
+  if (weekTotal != null && weekTotal > 10080) return '주 최대 총 근무시간은 168시간(10080분)을 넘을 수 없습니다.';
+
+  // 월 최대 연장 vs 일/주 최대
+  if (monthMax != null && dayMax != null && monthMax < dayMax) {
+    return '월 최대 연장근무시간은 일 최대 근무시간보다 크거나 같아야 합니다.';
+  }
+  if (monthMax != null && weekMax != null && monthMax < weekMax) {
+    return '월 최대 연장근무시간은 주 최대 연장근무시간보다 크거나 같아야 합니다.';
+  }
+
+  // 주 최대 총 vs 일/주 최대
+  if (weekTotal != null && dayMax != null && weekTotal < dayMax) {
+    return '주 최대 총 근무시간은 일 최대 근무시간보다 크거나 같아야 합니다.';
+  }
+  if (weekTotal != null && weekMax != null && weekTotal < weekMax) {
+    return '주 최대 총 근무시간은 주 최대 연장근무시간보다 크거나 같아야 합니다.';
+  }
+
+  // 야간 시각
+  if (v.nightStartTime && v.nightEndTime && v.nightStartTime === v.nightEndTime) {
+    return '야간 시작/종료 시각이 같을 수 없습니다.';
+  }
+
+  // 적용 기간
+  if (v.effectiveFrom && v.effectiveTo) {
+    if (v.effectiveTo.isBefore(v.effectiveFrom, 'day')) {
+      return '적용 종료일은 적용 시작일보다 이후여야 합니다.';
+    }
+  }
+
+  // 사후 결재 마감
+  if (v.postApprovalDeadlineHours != null && v.postApprovalDeadlineHours < 0) {
+    return '사후 결재 마감 시간은 0 이상이어야 합니다.';
+  }
+
+  return null;
+}
+
 export function AdminOvertimePoliciesPage() {
   const { message } = App.useApp();
   const qc = useQueryClient();
@@ -180,7 +242,18 @@ export function AdminOvertimePoliciesPage() {
             setEditing(null);
             setOpen(true);
             form.resetFields();
-            form.setFieldsValue({ overtimeFloorMinutes: 15, effectiveFrom: dayjs() });
+            // 폼 초기값 - 가이드의 예시값을 기본 입력값으로 채워 운영 기준에 맞게 수정만 하면 되도록
+            form.setFieldsValue({
+              overtimeFloorMinutes: 15,
+              postApprovalDeadlineHours: 24,
+              dailyOvertimeLimitMinutes: 600,
+              monthlyOvertimeLimitMinutes: 2400,
+              weeklyOvertimeLimitMinutes: 720,
+              weeklyTotalLimitMinutes: 3120,
+              nightStartTime: '22:00',
+              nightEndTime: '06:00',
+              effectiveFrom: dayjs(),
+            });
           }}
         >
           정책 등록
@@ -212,7 +285,19 @@ export function AdminOvertimePoliciesPage() {
           form={form}
           layout="vertical"
           className="[&_.ant-form-item]:!tw-mb-3"
-          onFinish={(v) => (editing?.overtimePolicyId ? updateM.mutate({ id: editing.overtimePolicyId, v }) : createM.mutate(v))}
+          onFinish={(v) => {
+            // cross-field 논리 검증 - 단일 필드 rule 로 잡기 어려운 상호 관계 검증
+            const err = validateOvertimePolicyValues(v);
+            if (err) {
+              void message.error(err);
+              return;
+            }
+            if (editing?.overtimePolicyId) {
+              updateM.mutate({ id: editing.overtimePolicyId, v });
+            } else {
+              createM.mutate(v);
+            }
+          }}
         >
           <Alert
             type="info"

@@ -332,12 +332,6 @@ function buildAppShellMenuItems(
                             title: APP_MENU_LABEL['/app/attendance/schedules/my'],
                         },
                         {
-                            key: '/app/attendance/monthly',
-                            icon: <CalendarOutlined className="tw-text-lg"/>,
-                            label: APP_MENU_LABEL['/app/attendance/monthly'],
-                            title: APP_MENU_LABEL['/app/attendance/monthly'],
-                        },
-                        {
                             key: '/app/leave',
                             icon: APP_MENU_ICONS['/app/leave'],
                             label: APP_MENU_LABEL['/app/leave'],
@@ -412,12 +406,7 @@ function buildAppShellMenuItems(
                             label: APP_MENU_LABEL['/app/leave/policies'],
                             title: APP_MENU_LABEL['/app/leave/policies'],
                         },
-                        {
-                            key: '/app/leave/promotion-no-response',
-                            icon: <BellOutlined className="tw-text-lg"/>,
-                            label: APP_MENU_LABEL['/app/leave/promotion-no-response'],
-                            title: APP_MENU_LABEL['/app/leave/promotion-no-response'],
-                        },
+                        // 연차 촉진 알림 현황은 인사 관리 그룹으로 이동됨 (운영 모니터링 성격)
                     );
                 }
                 if (leaveChildren.length === 0) {
@@ -695,6 +684,13 @@ function useAppShellSiderMenuItems(currentPathname: string): {
                                 icon: <PauseCircleOutlined className="tw-text-lg"/>,
                                 label: APP_MENU_LABEL['/app/leave/absence'],
                                 title: APP_MENU_LABEL['/app/leave/absence'],
+                            },
+                            // 연차 촉진 알림 현황 - 운영 모니터링 메뉴이므로 인사 관리 그룹으로 이동
+                            {
+                                key: '/app/leave/promotion-no-response',
+                                icon: <BellOutlined className="tw-text-lg"/>,
+                                label: APP_MENU_LABEL['/app/leave/promotion-no-response'],
+                                title: APP_MENU_LABEL['/app/leave/promotion-no-response'],
                             },
                         ]
                       : []),
@@ -1498,7 +1494,7 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
     if (/^\/app\/evaluation-flow(\/|$)/.test(pathname)) return ['/app/evaluations'];
     if (/^\/app\/my-evaluation-result-v2(\/|$)/.test(pathname)) return ['/app/evaluations'];
     if (/^\/app\/evaluation-admin(\/|$)/.test(pathname)) return ['/app/evaluations'];
-    if (pathname === '/app/attendance/monthly') return ['/app/attendance/monthly'];
+    if (pathname === '/app/attendance/monthly') return ['/app/attendance'];
     if (pathname === '/app/attendance/schedules/my') return ['/app/attendance/schedules/my'];
     if (pathname === '/app/attendance/overtime') return ['/app/attendance/overtime'];
     // 월간·근무시간 등 근무 하위를 근무 그룹에 매칭 (직접 URL 진입 시에도 해당 메뉴 선택)
@@ -1574,6 +1570,10 @@ function menuOpenKeysForPath(
         keys.push(ORG_HR_GROUP_KEY);
     }
     if (pathname === '/app/leave/absence') {
+        keys.push(ORG_HR_GROUP_KEY);
+    }
+    // 연차 촉진 알림 현황은 인사 관리 그룹으로 이동됨
+    if (pathname === '/app/leave/promotion-no-response') {
         keys.push(ORG_HR_GROUP_KEY);
     }
     if (

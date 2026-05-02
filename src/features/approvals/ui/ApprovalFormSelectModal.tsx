@@ -255,7 +255,9 @@ export function ApprovalFormSelectModal({
                     }
                   >
                     {selectedSchema.fields.length > 0 ? (
-                      selectedSchema.fields.map((field) => (
+                      selectedSchema.fields
+                        .filter((field) => field.type !== 'hidden') // hidden 필드는 미리보기에 미표시
+                        .map((field) => (
                         <ApprovalFormPaperFieldRow
                           key={`${selectedDoc.documentId}-${field.name}`}
                           label={field.label}

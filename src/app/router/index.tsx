@@ -318,6 +318,26 @@ const approvalsSearchSchema = z.object({
   fromHome: z.string().optional(),
   /** 작성 허브 모달 iframe에서 앱 셸 없이 본문만 표시 */
   embed: z.string().optional(),
+  /** 근태정정신청 prefill: 행별 버튼에서 넘겨주는 첫 행 시드값 */
+  corrDate: z.string().optional(),
+  corrClockIn: z.string().optional(),
+  corrClockOut: z.string().optional(),
+  /** 연장근무신청 prefill: 내 근태 행별 버튼에서 넘겨주는 시드값 */
+  otDate: z.string().optional(),
+  otStartTime: z.string().optional(),
+  otEndTime: z.string().optional(),
+  /** 조퇴계 prefill: 내 근태 행별 [조퇴 신청] 버튼에서 넘겨주는 시드값 */
+  elDate: z.string().optional(),
+  elTime: z.string().optional(),
+  /** 자동 모달 진입 플래그 - sessionStorage prefill 양식(출퇴근시간 변경 신청서 등)에서 사용
+   *  TanStack Router 가 숫자-like 문자열을 number 로 자동 캐스팅하므로 union 으로 받음 */
+  autoCompose: z.union([z.string(), z.number()]).optional(),
+  /** 출퇴근시간 변경 신청서 prefill - 개인 근무 스케줄 [스케줄 변경 신청] 버튼에서 넘겨주는 시드값 */
+  schYearMonth: z.string().optional(),
+  schSlotId: z.string().optional(),
+  schBreakStart: z.string().optional(),
+  schBreakEnd: z.string().optional(),
+  schReason: z.string().optional(),
 });
 
 const approvalsAdminRoute = createRoute({
@@ -468,6 +488,10 @@ const myAttendanceRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/attendance',
   component: MyAttendancePage,
+  validateSearch: (search): { view?: 'daily' | 'weekly' } => {
+    const v = String((search as Record<string, unknown>).view ?? '').toLowerCase();
+    return { view: v === 'weekly' ? 'weekly' : v === 'daily' ? 'daily' : undefined };
+  },
 });
 
 const myAttendanceMonthlyRoute = createRoute({
@@ -484,6 +508,11 @@ const myScheduleSelectionsRoute = createRoute({
 const myOvertimeRequestsRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/attendance/overtime',
+  validateSearch: z.object({
+    // 내 근태 행별 버튼에서 진입 시 자동 모달 오픈 + targetDate prefill
+    openCreate: z.string().optional(),
+    date: z.string().optional(),
+  }),
   component: MyOvertimeRequestsPage,
 });
 
@@ -602,10 +631,13 @@ const myLeaveRoute = createRoute({
   component: MyLeavePage,
 });
 
-// 직원 본인이 받은 연차 사용 촉진 통보 회신 페이지
+// 휴가 계획 관리 페이지에 통합. 구 경로는 /app/leave 로 redirect
 const myLeavePromotionRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/leave/my-promotion',
+  beforeLoad: () => {
+    throw redirect({ to: '/app/leave' });
+  },
   component: MyLeavePromotionPage,
 });
 

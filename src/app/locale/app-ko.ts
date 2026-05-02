@@ -38,7 +38,7 @@ export const APP_MENU_LABEL: Record<string, string> = {
   '/app/leave/absence': '휴직 관리',
   '/app/leave/types': '휴가 종류 관리',
   '/app/leave/my-promotion': '휴가 계획 회신',
-  '/app/leave/promotion-no-response': '연차 촉진 알림 현황',
+  '/app/leave/promotion-no-response': '촉진 알림 현황',
   '/app/payroll/admin': '급여 정산 관리',
   '/app/payroll/admin/allowances': '수당 관리',
   '/app/payroll/tax-summary': '세금·4대보험',

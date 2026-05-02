@@ -211,6 +211,24 @@ export const attendanceApi = {
       unwrapMessage(data);
       return unwrapApiResponse<MemberBalance>(data);
     },
+
+    // 이월 동의 회신 (회사 정책 isCarryoverConsentYn='Y' 일 때만 사용)
+    async agreeCarryover(memberBalanceId: string): Promise<MemberBalance> {
+      const { data } = await httpClient.post(
+        `${BASE}/member-balance/${encodeURIComponent(memberBalanceId)}/carryover-consent`,
+      );
+      unwrapMessage(data);
+      return unwrapApiResponse<MemberBalance>(data);
+    },
+
+    // 이월 동의 철회
+    async revokeCarryoverConsent(memberBalanceId: string): Promise<MemberBalance> {
+      const { data } = await httpClient.delete(
+        `${BASE}/member-balance/${encodeURIComponent(memberBalanceId)}/carryover-consent`,
+      );
+      unwrapMessage(data);
+      return unwrapApiResponse<MemberBalance>(data);
+    },
   },
 
   /** /leave-policies — 연차 정책 CRUD */
@@ -258,6 +276,14 @@ export const attendanceApi = {
       const { data } = await httpClient.post(
         `${BASE}/leave-promotions/${encodeURIComponent(promotionLogId)}/respond`,
         payload,
+      );
+      unwrapMessage(data);
+    },
+
+    // 직원 통보 열람 기록 첫 호출만 viewedAt 기록 이후는 멱등 무시
+    async markViewed(promotionLogId: string): Promise<void> {
+      const { data } = await httpClient.post(
+        `${BASE}/leave-promotions/${encodeURIComponent(promotionLogId)}/view`,
       );
       unwrapMessage(data);
     },
@@ -684,7 +710,7 @@ export const attendanceApi = {
     },
   },
 
-  /** /attendance/comprehensive-overtime — 포괄임금 OT 한도 현황 */
+  /** /attendance/comprehensive-overtime — 포괄임금 연장근무 한도 현황 */
   comprehensiveOvertime: {
     // 관리자 전체 현황 (사용률 50% 이상만, 내림차순)
     async getStatus(baseDate?: string): Promise<ComprehensiveOvertimeStatus[]> {

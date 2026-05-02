@@ -48,7 +48,7 @@ export function NotificationsPage() {
       t === 'LEAVE_PROMOTION_SECOND' ||
       t === 'LEAVE_DESIGNATION'
     ) {
-      await navigate({ to: '/app/leave/my-promotion' });
+      await navigate({ to: '/app/leave' });
       return;
     }
     await navigate(

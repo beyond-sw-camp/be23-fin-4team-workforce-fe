@@ -288,6 +288,10 @@ export type MemberBalance = {
   expirationDate?: string | null;
   isUsableYn?: string | null;
   isExpireYn?: string | null;
+  /** 이월 동의 여부 - 회사 정책 isCarryoverConsentYn='Y' 일 때만 의미 */
+  carryoverConsentYn?: string | null;
+  /** 이월 동의 회신 시각 */
+  carryoverConsentAt?: string | null;
 };
 
 export type MemberBalanceGrantPayload = {
@@ -480,6 +484,8 @@ export type LeavePolicy = {
   promotion2ndBeforeDays?: number | null;
   isCarryoverYn?: string | null;
   carryoverDays?: number | null;
+  /** 이월 동의서 사용 여부 - 'Y' 면 직원별 동의 받아야 이월 처리 진행 */
+  isCarryoverConsentYn?: string | null;
   isPayoutYn?: string | null;
   defaultAnnualDays?: number | null;
   /** 매 N년마다 추가 부여 단위 근로기준법 디폴트 1 */
@@ -508,6 +514,8 @@ export type LeavePromotionMy = {
   status: PromotionLogStatusCode;
   sentOn: string;
   acknowledgedAt?: string | null;
+  // 직원이 처음 통보를 열람한 시각 - markViewed 호출 시 기록 (멱등)
+  viewedAt?: string | null;
   balanceExpirationDate?: string | null;
   remainingDays?: number | null;
   // 직원이 회신한 사용 계획 날짜 ACKNOWLEDGED 일 때만 채워짐
@@ -561,6 +569,7 @@ export type LeavePolicyCreatePayload = {
   promotion2ndBeforeDays?: number | null;
   isCarryoverYn?: string | null;
   carryoverDays?: number | null;
+  isCarryoverConsentYn?: string | null;
   isPayoutYn?: string | null;
   defaultAnnualDays?: number | null;
   extraDaysPerInterval?: number | null;
