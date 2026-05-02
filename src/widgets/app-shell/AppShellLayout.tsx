@@ -316,12 +316,6 @@ function buildAppShellMenuItems(
                             title: APP_MENU_LABEL['/app/attendance/schedules/my'],
                         },
                         {
-                            key: '/app/attendance/monthly',
-                            icon: <CalendarOutlined className="tw-text-lg"/>,
-                            label: APP_MENU_LABEL['/app/attendance/monthly'],
-                            title: APP_MENU_LABEL['/app/attendance/monthly'],
-                        },
-                        {
                             key: '/app/leave',
                             icon: APP_MENU_ICONS['/app/leave'],
                             label: APP_MENU_LABEL['/app/leave'],
@@ -395,6 +389,7 @@ function buildAppShellMenuItems(
                             label: APP_MENU_LABEL['/app/leave/policies'],
                             title: APP_MENU_LABEL['/app/leave/policies'],
                         },
+                        // 연차 촉진 알림 현황은 인사 관리 그룹으로 이동됨 (운영 모니터링 성격)
                     );
                 }
                 if (leaveChildren.length === 0) {
@@ -484,14 +479,8 @@ function buildAppShellMenuItems(
                                           {
                                               key: '/app/payroll/admin',
                                               icon: <DollarOutlined className="tw-text-lg"/>,
-                                              label: '월 급여대장',
-                                              title: '월 급여대장',
-                                          },
-                                          {
-                                              key: '/app/payroll/admin/allowances',
-                                              icon: <DollarOutlined className="tw-text-lg"/>,
-                                              label: APP_MENU_LABEL['/app/payroll/admin/allowances'] ?? '수당 관리',
-                                              title: APP_MENU_LABEL['/app/payroll/admin/allowances'] ?? '수당 관리',
+                                              label: '급여 정산',
+                                              title: '급여 정산',
                                           },
                                           {
                                               key: '/app/salary/negotiations',
@@ -508,12 +497,6 @@ function buildAppShellMenuItems(
                                       icon: <DollarOutlined className="tw-text-lg"/>,
                                       label: APP_MENU_LABEL['/app/payroll/admin'],
                                       title: APP_MENU_LABEL['/app/payroll/admin'],
-                                  },
-                                  {
-                                      key: '/app/payroll/admin/allowances',
-                                      icon: <DollarOutlined className="tw-text-lg"/>,
-                                      label: APP_MENU_LABEL['/app/payroll/admin/allowances'] ?? '수당 관리',
-                                      title: APP_MENU_LABEL['/app/payroll/admin/allowances'] ?? '수당 관리',
                                   },
                               ]),
                         {
@@ -695,6 +678,13 @@ function useAppShellSiderMenuItems(currentPathname: string): {
                               icon: <PauseCircleOutlined className="tw-text-lg"/>,
                               label: APP_MENU_LABEL['/app/leave/absence'],
                               title: APP_MENU_LABEL['/app/leave/absence'],
+                          },
+                          // 연차 촉진 알림 현황 - 운영 모니터링 메뉴 (인사 관리 그룹)
+                          {
+                              key: '/app/leave/promotion-no-response',
+                              icon: <BellOutlined className="tw-text-lg"/>,
+                              label: APP_MENU_LABEL['/app/leave/promotion-no-response'],
+                              title: APP_MENU_LABEL['/app/leave/promotion-no-response'],
                           },
                       ]
                     : []),
@@ -1503,7 +1493,7 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
     if (/^\/app\/evaluation-flow(\/|$)/.test(pathname)) return ['/app/evaluations'];
     if (/^\/app\/my-evaluation-result-v2(\/|$)/.test(pathname)) return ['/app/evaluations'];
     if (/^\/app\/evaluation-admin(\/|$)/.test(pathname)) return ['/app/evaluations'];
-    if (pathname === '/app/attendance/monthly') return ['/app/attendance/monthly'];
+    if (pathname === '/app/attendance/monthly') return ['/app/attendance'];
     if (pathname === '/app/attendance/schedules/my') return ['/app/attendance/schedules/my'];
     if (pathname === '/app/attendance/overtime') return ['/app/attendance/overtime'];
     // 월간·근무시간 등 근무 하위를 근무 그룹에 매칭 (직접 URL 진입 시에도 해당 메뉴 선택)
@@ -1524,7 +1514,7 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
     if (pathname === '/app/leave/types') return ['/app/leave/types'];
     // 사이드바 노출 제거 — 부모 메뉴 /app/leave 로 하이라이트
     if (pathname === '/app/leave/my-promotion') return ['/app/leave'];
-    if (pathname === '/app/leave/promotion-no-response') return ['/app/leave/policies'];
+    if (pathname === '/app/leave/promotion-no-response') return ['/app/leave/promotion-no-response'];
     if (pathname === '/app/leave') return ['/app/leave'];
     if (pathname === '/app/salary/unused-leave') return ['/app/payroll/admin'];
     if (pathname === '/app/salary/settings') return ['/app/salary/settings'];
@@ -1538,7 +1528,8 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
     if (pathname === '/app/payroll/annual') return ['/app/payroll/annual'];
     if (pathname === '/app/income') return ['/app/income'];
     if (pathname === '/app/payroll/tax-summary') return ['/app/payroll/tax-summary'];
-    if (pathname === '/app/payroll/admin/allowances') return ['/app/payroll/admin/allowances'];
+    // 수당 관리는 월 급여대장의 탭으로 통합 — 사이드바는 월 급여대장 메뉴를 활성화
+    if (pathname === '/app/payroll/admin/allowances') return ['/app/payroll/admin'];
     if (pathname.startsWith('/app/payroll/admin')) return ['/app/payroll/admin'];
     if (pathname === '/app/payroll' || /^\/app\/payroll\/[^/]+$/.test(pathname)) return ['/app/payroll'];
     if (pathname.startsWith('/app/approvals')) {
@@ -1580,6 +1571,10 @@ function menuOpenKeysForPath(
         keys.push(ORG_HR_GROUP_KEY);
     }
     if (pathname === '/app/leave/absence') {
+        keys.push(ORG_HR_GROUP_KEY);
+    }
+    // 연차 촉진 알림 현황은 인사 관리 그룹으로 이동됨
+    if (pathname === '/app/leave/promotion-no-response') {
         keys.push(ORG_HR_GROUP_KEY);
     }
     if (

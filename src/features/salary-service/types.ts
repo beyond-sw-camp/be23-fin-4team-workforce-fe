@@ -59,8 +59,6 @@ export type DailyAttendance = {
   workScheduleId?: string;
   firstClockIn?: string | null;
   lastClockOut?: string | null;
-  breakMinutes?: number | null;
-  totalBreakMinutes?: number | null;
   workedMinutes?: number | null;
   overtimeMinutes?: number | null;
 };
@@ -181,7 +179,10 @@ export type FlexibleTimeSlot = {
   startTime?: string;
   endTime?: string;
   workMinutes?: number | null;
-  breakMinutes?: number | null;
+  /** 슬롯에 박힌 점심·휴게 시작 시각 (HH:mm:ss). 직원이 슬롯을 고르면 이 점심시간이 함께 적용된다. */
+  breakStart?: string | null;
+  /** 슬롯에 박힌 점심·휴게 종료 시각 (HH:mm:ss). */
+  breakEnd?: string | null;
   isDefault?: boolean | null;
   delYn?: string | null;
 };
@@ -193,7 +194,10 @@ export type FlexibleTimeSlotCreatePayload = {
   startTime: string;
   endTime: string;
   workMinutes: number;
-  breakMinutes: number;
+  /** 슬롯 점심 시작 시각 (HH:mm:ss). 디폴트 12:00. */
+  breakStart?: string | null;
+  /** 슬롯 점심 종료 시각 (HH:mm:ss). 디폴트 13:00. */
+  breakEnd?: string | null;
   isDefault?: boolean;
 };
 
@@ -214,6 +218,12 @@ export type MemberScheduleSelection = {
   slotId?: string;
   slotLabel?: string | null;
   requestReason?: string | null;
+  /** FLEXIBLE 직원이 매월 슬롯 선택 시 함께 정한 점심·휴게 시작 시각 (HH:mm:ss) */
+  breakStart?: string | null;
+  /** FLEXIBLE 직원이 매월 슬롯 선택 시 함께 정한 점심·휴게 종료 시각 (HH:mm:ss) */
+  breakEnd?: string | null;
+  /** 서버 산출 점심 분(편의용) */
+  breakMinutes?: number | null;
   approvalStatus?: ScheduleApprovalStatusCode;
   approvalRequestId?: string | null;
   createdAt?: string | null;
@@ -225,6 +235,10 @@ export type MemberScheduleSelectionCreatePayload = {
   targetYearMonth: string;
   slotId: string;
   requestReason?: string | null;
+  /** FLEXIBLE 직원이 함께 선택한 점심 시작 시각 (HH:mm:ss) */
+  breakStart?: string | null;
+  /** FLEXIBLE 직원이 함께 선택한 점심 종료 시각 (HH:mm:ss) */
+  breakEnd?: string | null;
 };
 
 export type MemberAllowance = {
@@ -274,6 +288,10 @@ export type MemberBalance = {
   expirationDate?: string | null;
   isUsableYn?: string | null;
   isExpireYn?: string | null;
+  /** 이월 동의 여부 - 회사 정책 isCarryoverConsentYn='Y' 일 때만 의미 */
+  carryoverConsentYn?: string | null;
+  /** 이월 동의 회신 시각 */
+  carryoverConsentAt?: string | null;
 };
 
 export type MemberBalanceGrantPayload = {
@@ -447,6 +465,10 @@ export type SalaryItemTemplate = {
   /** 회사 기본 지급 금액 (수당 산식 v1) — 부가 수당 부여 시 자동 채워짐.
    *  null 이면 부여 시 admin 이 직접 입력. 향후 v2 에서 식("BASE * 0.05") 으로 확장. */
   defaultAmount?: number | null;
+  /** 회사 공통 적용 여부 Y/N.
+   *  Y면 모든 직원 PayrollItem 에 defaultAmount 가 자동 합산됨 (식대 등).
+   *  N면 MemberAllowance 가 명시된 직원만 적용 (직책수당, 자녀수당 등). */
+  applyToAllYn?: string | null;
   /** 시스템 기본 항목 여부. true 면 삭제 불가, 일부 필드 수정 제한 */
   isSystemDefault?: boolean | null;
   delYn?: string | null;
@@ -462,6 +484,8 @@ export type LeavePolicy = {
   promotion2ndBeforeDays?: number | null;
   isCarryoverYn?: string | null;
   carryoverDays?: number | null;
+  /** 이월 동의서 사용 여부 - 'Y' 면 직원별 동의 받아야 이월 처리 진행 */
+  isCarryoverConsentYn?: string | null;
   isPayoutYn?: string | null;
   defaultAnnualDays?: number | null;
   /** 매 N년마다 추가 부여 단위 근로기준법 디폴트 1 */
@@ -490,6 +514,8 @@ export type LeavePromotionMy = {
   status: PromotionLogStatusCode;
   sentOn: string;
   acknowledgedAt?: string | null;
+  // 직원이 처음 통보를 열람한 시각 - markViewed 호출 시 기록 (멱등)
+  viewedAt?: string | null;
   balanceExpirationDate?: string | null;
   remainingDays?: number | null;
   // 직원이 회신한 사용 계획 날짜 ACKNOWLEDGED 일 때만 채워짐
@@ -543,6 +569,7 @@ export type LeavePolicyCreatePayload = {
   promotion2ndBeforeDays?: number | null;
   isCarryoverYn?: string | null;
   carryoverDays?: number | null;
+  isCarryoverConsentYn?: string | null;
   isPayoutYn?: string | null;
   defaultAnnualDays?: number | null;
   extraDaysPerInterval?: number | null;
@@ -582,6 +609,12 @@ export type WorkSchedule = {
   startTime?: string;
   endTime?: string;
   workMinutes?: number | null;
+  /** 회사 정책 점심·휴게 시작 시각 (HH:mm:ss). FIXED 만 의미 있음. */
+  breakStart?: string | null;
+  /** 회사 정책 점심·휴게 종료 시각 (HH:mm:ss). FIXED 만 의미 있음. */
+  breakEnd?: string | null;
+  /** breakStart/breakEnd 로부터 계산된 점심 분(서버 산출, 표시·계산용). */
+  breakMinutes?: number | null;
   effectiveFrom?: string;
   effectiveTo?: string | null;
 };
@@ -596,6 +629,10 @@ export type WorkScheduleCreatePayload = {
   startTime: string | null;
   endTime: string | null;
   workMinutes: number | null;
+  /** FIXED 만 사용. FLEXIBLE 은 null/생략. 디폴트 12:00. */
+  breakStart?: string | null;
+  /** FIXED 만 사용. FLEXIBLE 은 null/생략. 디폴트 13:00. */
+  breakEnd?: string | null;
   effectiveFrom: string;
   effectiveTo?: string | null;
 };
@@ -640,6 +677,15 @@ export type WorkTripUpdatePayload = {
  * 급여(Salary) 관리 — 관리자 설정 영역
  * ────────────────────────────────────────────── */
 
+/** 소득세 감면 유형 (조세특례제한법 등). NONE = 감면 없음. */
+export type TaxReductionTypeCode =
+  | 'NONE'
+  | 'YOUTH_SME'
+  | 'DISABLED'
+  | 'FOREIGNER'
+  | 'ETC'
+  | string;
+
 /** 기본급 (Salary) */
 export type Salary = {
   salaryId?: string;
@@ -655,6 +701,14 @@ export type Salary = {
   effectiveTo?: string | null;
   /** 부양가족수 (간이세액표 룩업용, 0~11, 기본 1=본인만) */
   dependentCount?: number | null;
+  /** 8세 이상 20세 이하 자녀 수 (자녀세액공제 차원). 기본 0. */
+  childUnder20Count?: number | null;
+  /** 소득세 감면 유형. 미지정 시 NONE. */
+  taxReductionType?: TaxReductionTypeCode | null;
+  /** 감면율 0.00 ~ 1.00 (예: 청년 SME 90% 감면 → 0.90) */
+  taxReductionRate?: number | string | null;
+  /** 감면 종료일. 청년 SME 5년 한정 등. */
+  taxReductionEffectiveTo?: string | null;
   /** 회사 단위 목록 조회 시 member-service 결합 결과 */
   sabun?: string | null;
   name?: string | null;
@@ -676,21 +730,30 @@ export type SalaryCreatePayload = {
   effectiveTo?: string | null;
   /** 부양가족수 0~11, 미입력 시 서버가 1로 기본 처리 */
   dependentCount?: number | null;
+  /** 8세 이상 20세 이하 자녀 수, 미입력 시 0 */
+  childUnder20Count?: number | null;
+  /** 소득세 감면 유형, 미입력 시 NONE */
+  taxReductionType?: TaxReductionTypeCode | null;
+  /** 감면율 0.00 ~ 1.00 */
+  taxReductionRate?: number | string | null;
+  taxReductionEffectiveTo?: string | null;
 };
 
 export type SalaryUpdatePayload = Omit<SalaryCreatePayload, 'memberId'>;
 
-/** `POST /salary/salaries/bootstrap` — 입사 누락 복구용
- *  - 백엔드가 `MemberHiredEvent`를 바디로 받아 `bootstrapSalary()` 호출
- *  - 활성 급여정책이 이미 있어야 Salary가 생성됨
- *  - `companyId`는 X-User-CompanyId 헤더로 주입되므로 바디에서 생략 */
-export type SalaryBootstrapPayload = {
+/** 급여대장 생성 사전 검증 응답 */
+export type PayrollPrecheckRes = {
+  totalActiveMembers: number;
+  missingSalaryCount: number;
+  missingSalary: PayrollPrecheckMemberRef[];
+  missingBankAccountCount: number;
+  missingBankAccount: PayrollPrecheckMemberRef[];
+};
+export type PayrollPrecheckMemberRef = {
   memberId: string;
-  hireDate: string;
-  baseSalary?: number | null;
-  jobGradeId?: string | null;
-  jobGradeName?: string | null;
-  jobTitleName?: string | null;
+  name?: string | null;
+  sabun?: string | null;
+  organizationName?: string | null;
 };
 
 /** 급여 정책 (SalaryPolicy) */
@@ -969,6 +1032,8 @@ export type SalaryItemTemplateCreatePayload = {
   isOrdinaryWageYn?: string | null;
   /** 회사 기본 지급 금액 (수당 산식 v1) */
   defaultAmount?: number | null;
+  /** 회사 공통 적용 여부 Y/N. Y면 모든 직원에게 defaultAmount 자동 합산 */
+  applyToAllYn?: string | null;
 };
 
 export type SalaryItemTemplateUpdatePayload = SalaryItemTemplateCreatePayload;

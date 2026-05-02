@@ -33,7 +33,9 @@ type FormValues = {
   workType: WorkTypeCode;
   /** workType=FIXED 일 때만 사용. FLEXIBLE 이면 undefined → 페이로드에서 null 전송. */
   timeRange?: [dayjs.Dayjs, dayjs.Dayjs];
-  /** timeRange 기준 자동 계산. FLEXIBLE 이면 undefined → null 전송. */
+  /** workType=FIXED 일 때 회사 정책 점심·휴게 시작/종료 시각. FLEXIBLE 은 직원이 매월 선택. */
+  breakRange?: [dayjs.Dayjs, dayjs.Dayjs];
+  /** timeRange + breakRange 기준 자동 계산. FLEXIBLE 이면 undefined → null 전송. */
   workMinutes?: number;
   effectiveRange: [dayjs.Dayjs, dayjs.Dayjs | null];
 };
@@ -49,15 +51,26 @@ const WORK_TYPE_KO: Record<string, string> = {
   FIXED: '고정',
   FLEXIBLE: '유연근무(시차출퇴근)',
 };
-const LUNCH_BREAK_MINUTES = 60;
+const DEFAULT_BREAK_START = '12:00:00';
+const DEFAULT_BREAK_END = '13:00:00';
 
-function calcNetWorkMinutes(timeRange?: [dayjs.Dayjs, dayjs.Dayjs]): number {
-  if (!timeRange) return 0;
-  const [start, end] = timeRange;
-  if (!start || !end) return 0;
-  const adjustedEnd = end.isBefore(start) ? end.add(1, 'day') : end;
-  const totalMinutes = adjustedEnd.diff(start, 'minute');
-  return Math.max(totalMinutes - LUNCH_BREAK_MINUTES, 0);
+/** 두 dayjs 간 분 차이 (자정 넘김 보정). 둘 중 하나라도 없으면 0. */
+function durationMinutes(range?: [dayjs.Dayjs, dayjs.Dayjs]): number {
+  if (!range) return 0;
+  const [a, b] = range;
+  if (!a || !b) return 0;
+  const adjustedB = b.isBefore(a) ? b.add(1, 'day') : b;
+  return Math.max(adjustedB.diff(a, 'minute'), 0);
+}
+
+function calcNetWorkMinutes(
+  timeRange?: [dayjs.Dayjs, dayjs.Dayjs],
+  breakRange?: [dayjs.Dayjs, dayjs.Dayjs],
+): number {
+  const total = durationMinutes(timeRange);
+  if (total === 0) return 0;
+  const breakMin = durationMinutes(breakRange);
+  return Math.max(total - breakMin, 0);
 }
 
 export function AdminWorkSchedulesPage() {
@@ -86,15 +99,23 @@ export function AdminWorkSchedulesPage() {
     return map;
   }, [membersQ.data]);
 
-  /** FLEXIBLE 일 때는 시간 필드를 null 로 전송. 백엔드는 workType 분기로 검증. */
+  /** FLEXIBLE 일 때는 시간/점심 필드를 null 로 전송. 백엔드는 workType 분기로 검증. */
   const buildTimePayload = (v: FormValues) => {
     if (v.workType === 'FLEXIBLE' || !v.timeRange) {
-      return { startTime: null, endTime: null, workMinutes: null };
+      return { startTime: null, endTime: null, workMinutes: null, breakStart: null, breakEnd: null };
     }
+    const breakRange =
+      v.breakRange ??
+      ([
+        dayjs(`1970-01-01T${DEFAULT_BREAK_START}`),
+        dayjs(`1970-01-01T${DEFAULT_BREAK_END}`),
+      ] as [dayjs.Dayjs, dayjs.Dayjs]);
     return {
       startTime: v.timeRange[0].format('HH:mm:ss'),
       endTime: v.timeRange[1].format('HH:mm:ss'),
-      workMinutes: calcNetWorkMinutes(v.timeRange),
+      workMinutes: calcNetWorkMinutes(v.timeRange, breakRange),
+      breakStart: breakRange[0].format('HH:mm:ss'),
+      breakEnd: breakRange[1].format('HH:mm:ss'),
     };
   };
 
@@ -214,6 +235,45 @@ export function AdminWorkSchedulesPage() {
           r.workType === 'FLEXIBLE' ? <span className="tw-text-slate-400">—</span> : v,
       },
       {
+        title: '점심시간',
+        key: 'break',
+        width: 160,
+        render: (_, r) => {
+          if (r.workType === 'FLEXIBLE') {
+            return (
+              <Tooltip title="유연근무는 시차 슬롯마다 점심시간이 박혀 있습니다. 시차 출퇴근 시간대 관리 화면에서 확인하세요.">
+                <span className="tw-text-slate-400">슬롯별 운영</span>
+              </Tooltip>
+            );
+          }
+          /** 1순위: 백엔드가 내려준 점심 시작/종료 시각 그대로 표시. */
+          if (r.breakStart && r.breakEnd) {
+            return `${r.breakStart.slice(0, 5)} ~ ${r.breakEnd.slice(0, 5)}`;
+          }
+          /** 2순위: 시각이 비어있어도 점심 분량을 알면 분으로 표시 (서버 산출 breakMinutes 우선,
+           *  없으면 출퇴근 - 근무분 으로 역산). 완전 누락된 구버전 데이터 호환용. */
+          const computedBreakMin = (() => {
+            if (typeof r.breakMinutes === 'number' && r.breakMinutes > 0) return r.breakMinutes;
+            if (r.startTime && r.endTime && typeof r.workMinutes === 'number') {
+              const total = durationMinutes([
+                dayjs(`1970-01-01T${r.startTime}`),
+                dayjs(`1970-01-01T${r.endTime}`),
+              ]);
+              return Math.max(total - r.workMinutes, 0);
+            }
+            return 0;
+          })();
+          if (computedBreakMin > 0) {
+            return (
+              <Tooltip title="점심 시작·종료 시각이 비어 있어 분량으로 표시합니다. 수정에서 시각을 다시 저장하면 시간대로 표시됩니다.">
+                <span>{computedBreakMin}분</span>
+              </Tooltip>
+            );
+          }
+          return '-';
+        },
+      },
+      {
         title: '적용기간',
         key: 'effective',
         width: 220,
@@ -239,11 +299,19 @@ export function AdminWorkSchedulesPage() {
                         dayjs(`1970-01-01T${r.startTime}`),
                         dayjs(`1970-01-01T${r.endTime}`),
                       ] as [dayjs.Dayjs, dayjs.Dayjs]);
+                const breakRange: [dayjs.Dayjs, dayjs.Dayjs] | undefined =
+                  isFlexible
+                    ? undefined
+                    : ([
+                        dayjs(`1970-01-01T${r.breakStart ?? DEFAULT_BREAK_START}`),
+                        dayjs(`1970-01-01T${r.breakEnd ?? DEFAULT_BREAK_END}`),
+                      ] as [dayjs.Dayjs, dayjs.Dayjs]);
                 form.setFieldsValue({
                   scheduleName: r.scheduleName ?? '',
                   workType: (r.workType as WorkTypeCode) ?? 'FIXED',
                   timeRange,
-                  workMinutes: timeRange ? calcNetWorkMinutes(timeRange) : undefined,
+                  breakRange,
+                  workMinutes: timeRange ? calcNetWorkMinutes(timeRange, breakRange) : undefined,
                   effectiveRange: [
                     r.effectiveFrom ? dayjs(r.effectiveFrom) : dayjs(),
                     r.effectiveTo ? dayjs(r.effectiveTo) : null,
@@ -300,10 +368,15 @@ export function AdminWorkSchedulesPage() {
                 dayjs('1970-01-01T09:00:00'),
                 dayjs('1970-01-01T18:00:00'),
               ];
+              const defaultBreakRange: [dayjs.Dayjs, dayjs.Dayjs] = [
+                dayjs(`1970-01-01T${DEFAULT_BREAK_START}`),
+                dayjs(`1970-01-01T${DEFAULT_BREAK_END}`),
+              ];
               form.setFieldsValue({
                 workType: 'FIXED',
                 timeRange: defaultTimeRange,
-                workMinutes: calcNetWorkMinutes(defaultTimeRange),
+                breakRange: defaultBreakRange,
+                workMinutes: calcNetWorkMinutes(defaultTimeRange, defaultBreakRange),
                 effectiveRange: [dayjs(), null],
               });
               setOpen(true);
@@ -379,10 +452,17 @@ function ScheduleForm({ form, editing, onSubmit, onGoToFlexibleSlots }: Schedule
       form={form}
       layout="vertical"
       onValuesChange={(changed) => {
-        /** FIXED 모드에서 시간 변경 시 근무분 자동 재계산. FLEXIBLE 은 시간 자체를 받지 않음. */
-        if ('timeRange' in changed) {
-          const nextTimeRange = changed.timeRange as [dayjs.Dayjs, dayjs.Dayjs] | undefined;
-          form.setFieldValue('workMinutes', calcNetWorkMinutes(nextTimeRange));
+        /** FIXED 모드에서 시간/점심 변경 시 근무분 자동 재계산. FLEXIBLE 은 시간 자체를 받지 않음. */
+        if ('timeRange' in changed || 'breakRange' in changed) {
+          const nextTimeRange =
+            'timeRange' in changed
+              ? (changed.timeRange as [dayjs.Dayjs, dayjs.Dayjs] | undefined)
+              : (form.getFieldValue('timeRange') as [dayjs.Dayjs, dayjs.Dayjs] | undefined);
+          const nextBreakRange =
+            'breakRange' in changed
+              ? (changed.breakRange as [dayjs.Dayjs, dayjs.Dayjs] | undefined)
+              : (form.getFieldValue('breakRange') as [dayjs.Dayjs, dayjs.Dayjs] | undefined);
+          form.setFieldValue('workMinutes', calcNetWorkMinutes(nextTimeRange, nextBreakRange));
         }
       }}
       onFinish={onSubmit}
@@ -420,10 +500,18 @@ function ScheduleForm({ form, editing, onSubmit, onGoToFlexibleSlots }: Schedule
             <TimePicker.RangePicker format="HH:mm" minuteStep={5} style={{ width: '100%' }} />
           </Form.Item>
           <Form.Item
+            label="점심·휴게 시각"
+            name="breakRange"
+            rules={[{ required: true, message: '점심 시작·종료 시각을 입력하세요.' }]}
+            extra="고정근무 직원 전체에 회사 정책으로 적용됩니다. 유연근무는 직원이 매월 직접 선택합니다."
+          >
+            <TimePicker.RangePicker format="HH:mm" minuteStep={5} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item
             label="근무시간(분)"
             name="workMinutes"
             rules={[{ required: true }]}
-            extra="출퇴근 시각 기준 자동 계산 (점심 60분 차감). 예: 09:00~18:00 → 480분(8시간)"
+            extra="출퇴근 시각 - 점심·휴게 시간으로 자동 계산. 예: 09:00~18:00 + 60분 점심 → 480분(8시간)"
           >
             <InputNumber min={0} step={30} style={{ width: '100%' }} disabled />
           </Form.Item>

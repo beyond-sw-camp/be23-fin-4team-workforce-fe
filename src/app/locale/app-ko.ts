@@ -31,17 +31,16 @@ export const APP_MENU_LABEL: Record<string, string> = {
   '/app/attendance/work-time': '내 주간 근무시간',
   '/app/attendance/company': '근태 현황',
   '/app/attendance/corrections': '출퇴근 정정 검토',
-  '/app/attendance/holidays': '휴무일/공휴일 관리',
+  '/app/attendance/holidays': '공휴일 관리',
   '/app/attendance/schedules': '근무스케줄 관리',
   '/app/attendance/overtime-policies': '연장근로 정책',
   '/app/attendance/flexible-slots': '시차 출퇴근 시간대',
   '/app/attendance/overtime-status': '초과근무 현황',
-  '/app/leave/grant': '특별휴가 일괄 부여',
   '/app/leave/policies': '연차 정책 관리',
   '/app/leave/absence': '휴직 관리',
-  '/app/leave/types': '휴가 관리',
+  '/app/leave/types': '휴가 종류 관리',
   '/app/leave/my-promotion': '휴가 계획 회신',
-  '/app/leave/promotion-no-response': '연차 통보 미응답자 관리',
+  '/app/leave/promotion-no-response': '촉진 알림 현황',
   '/app/payroll/admin': '급여 정산 관리',
   '/app/payroll/admin/allowances': '수당 관리',
   '/app/payroll/tax-summary': '세금·4대보험',
@@ -101,10 +100,10 @@ export const APP_MENU_ORG_CHART_LABEL = '전체 조직도';
 export const APP_MENU_ESG_GROUP_LABEL = 'ESG';
 
 /** 근무 묶음 */
-export const APP_MENU_WORK_GROUP_LABEL = '근태';
+export const APP_MENU_WORK_GROUP_LABEL = '근태 관리';
 
 /** 휴가 묶음 */
-export const APP_MENU_LEAVE_GROUP_LABEL = '휴가';
+export const APP_MENU_LEAVE_GROUP_LABEL = '휴무 관리';
 
 /** 상단 헤더 등에 표시하는 현재 화면 제목 */
 export function appHeaderTitleFromPath(
@@ -120,13 +119,12 @@ export function appHeaderTitleFromPath(
   if (pathname === '/app/me/edit') return '내 정보 수정';
   if (pathname === '/app/attendance/monthly') return '개인 월근태근무';
   if (pathname === '/app/attendance/schedules/my') return '개인 근무 스케줄';
-  if (pathname === '/app/attendance/overtime') return '초과근무 관리';
+  if (pathname === '/app/attendance/overtime') return '초과 근무 관리';
   if (pathname === '/app/attendance/work-time') return '내 주간 근무시간';
   if (pathname === '/app/attendance/company') return '근태 현황';
   if (pathname === '/app/attendance/overtime-policies') return '연장근로 정책';
   if (pathname === '/app/attendance/overtime-status') return '초과근무 현황';
   if (pathname === '/app/attendance/flexible-slots') return '시차 출퇴근 시간대';
-  if (pathname === '/app/leave/grant') return '특별휴가 일괄 부여';
   if (pathname === '/app/leave/policies') return '연차 정책 관리';
   if (pathname === '/app/leave/absence') return '휴직 관리';
   if (pathname === '/app/leave/types') return '휴가 종류 관리';

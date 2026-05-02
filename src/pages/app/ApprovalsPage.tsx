@@ -42,6 +42,7 @@ import {
   Avatar,
   Button,
   Card,
+  DatePicker,
   Descriptions,
   Divider,
   Empty,
@@ -122,6 +123,7 @@ import {
 import { memberApi } from '@/features/member/api/memberApi';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
+import type { FlexibleTimeSlot } from '@/features/salary-service/types';
 import {
   buildOrgTreeWithMemberLeaves,
   flattenDirectMembersDeduped,
@@ -285,20 +287,19 @@ const PRE_ACTION_CONFIGS: PreActionConfig[] = [
     documentName: '연장근무신청',
     entityIdField: 'overtimeRequestId',
     submitEntity: async (content) => {
-      const timing = readStr(content, 'timing');
-      const workType = readStr(content, 'workType');
       const workDate = readStr(content, 'workDate');
       const startTime = readStr(content, 'startTime');
       const endTime = readStr(content, 'endTime');
-      if (!timing || !workType || !workDate || !startTime || !endTime) {
-        throw new Error('신청 구분·근무구분·근무일자·시간은 필수입니다.');
+      if (!workDate || !startTime || !endTime) {
+        throw new Error('근무일자·시간은 필수입니다.');
       }
-      // 사전=PRE / 사후=POST 매핑, 사전이면 planned*, 사후면 actual* 전송
-      const isPost = timing === '사후';
+      // PRE/POST 자동 도출: workDate < 오늘 -> 사후(POST), 그 외(미래·오늘) -> 사전(PRE)
+      const today = dayjs().startOf('day');
+      const isPost = dayjs(workDate).startOf('day').isBefore(today);
       const startDt = toLocalDateTime(workDate, startTime);
       const endDt = toLocalDateTime(workDate, endTime);
       const minutes = minutesBetweenTimes(startTime, endTime);
-      const reason = readStr(content, 'requestReason') || `${workType} 근무 신청`;
+      const reason = readStr(content, 'requestReason') || '연장 근무 신청';
       const r = await attendanceApi.overtimeRequest.createMy({
         targetDate: workDate,
         requestType: isPost ? 'POST' : 'PRE',
@@ -345,12 +346,29 @@ const PRE_ACTION_CONFIGS: PreActionConfig[] = [
     submitEntity: async (content) => {
       const targetYearMonth = readStr(content, 'targetYearMonth');
       const slotId = readStr(content, 'slotId');
-      if (!targetYearMonth || !slotId) {
-        throw new Error('대상 연월·슬롯은 필수입니다.');
+      // 어느 필드가 비어있는지 분리 안내, slot 미선택이 가장 흔한 케이스
+      if (!targetYearMonth) {
+        throw new Error('대상 연월이 비어있습니다. 다시 시도해 주세요.');
       }
+      if (!slotId) {
+        throw new Error('시차출퇴근 스케줄을 선택해 주세요.');
+      }
+      // HH:mm 형식 입력을 HH:mm:ss 로 정규화
+      const normalizeTime = (raw: string): string | null => {
+        const s = raw.trim();
+        if (!s) return null;
+        // HH:mm 또는 HH:mm:ss 만 허용
+        if (/^\d{1,2}:\d{2}$/.test(s)) return `${s.padStart(5, '0')}:00`;
+        if (/^\d{1,2}:\d{2}:\d{2}$/.test(s)) return s;
+        return null;
+      };
+      const breakStart = normalizeTime(readStr(content, 'breakStart'));
+      const breakEnd = normalizeTime(readStr(content, 'breakEnd'));
       const r = await attendanceApi.scheduleSelection.createMy({
         targetYearMonth,
         slotId,
+        breakStart,
+        breakEnd,
         requestReason: readStr(content, 'requestReason') || null,
       });
       if (!r.selectionId) throw new Error('슬롯 선택 ID 를 받지 못했습니다.');
@@ -1372,6 +1390,26 @@ export function ApprovalsPage() {
         approvalModal?: string;
         approvalOpenAt?: string;
         approvalRequestId?: string;
+        // 근태정정신청 prefill - MyAttendancePage 행별 버튼에서 넘어오는 첫 행 시드값
+        corrDate?: string;
+        corrClockIn?: string;
+        corrClockOut?: string;
+        // 연장근무신청 prefill - MyAttendancePage 행별 버튼에서 넘어오는 시드값
+        otDate?: string;
+        otStartTime?: string;
+        otEndTime?: string;
+        // 조퇴계 prefill - MyAttendancePage 행별 [조퇴 신청] 버튼에서 넘어오는 시드값
+        elDate?: string;
+        elTime?: string;
+        // 자동 모달 진입 플래그 - prefill 양식 (출퇴근시간 변경 신청서 등)
+        // 라우터가 '1' 을 number 1 로 캐스팅하는 케이스 호환
+        autoCompose?: string | number;
+        // 출퇴근시간 변경 신청서 prefill
+        schYearMonth?: string;
+        schSlotId?: string;
+        schBreakStart?: string;
+        schBreakEnd?: string;
+        schReason?: string;
       },
   });
   const isEmbedComposeModal = routeSearch.embed === APPROVAL_EMBED_QUERY;
@@ -1400,6 +1438,8 @@ export function ApprovalsPage() {
   const [quickHomeFormsDraft, setQuickHomeFormsDraft] = useState<string[]>([]);
   const [composeFormSelectModalOpen, setComposeFormSelectModalOpen] = useState(false);
   const [composeFormSelectInitialId, setComposeFormSelectInitialId] = useState<string | undefined>(undefined);
+  // 근태정정신청 자동 모달 - corrDate 진입 시 기존 결재 모달 흐름과 동일한 모양으로 띄움
+  const [correctionEmbedSrc, setCorrectionEmbedSrc] = useState<string | null>(null);
   /** 저장 시 업로드할 로컬 파일 — 임시저장/제출 직후 POST /approval/attachments */
   const [composeAttachmentFiles, setComposeAttachmentFiles] = useState<File[]>([]);
   const [composeSidebarTab, setComposeSidebarTab] = useState<'line' | 'doc'>('line');
@@ -1454,6 +1494,13 @@ export function ApprovalsPage() {
     return typeof rawTab === 'string' && allowedTabs.includes(rawTab) ? rawTab : 'compose';
   }, [routeSearch.tab, allowedTabs]);
   const sideNav = typeof routeSearch.sideNav === 'string' ? routeSearch.sideNav.trim() : '';
+  // 결재 양식별 자동 모달 진입 케이스 - 허브 화면 위에 작성 모달 자동 오픈용 플래그
+  // 근태정정신청(corrDate) / 연장근무신청(otDate) / autoCompose 플래그(스케줄 등 sessionStorage 사용)
+  const isCorrectionEntry = Boolean(routeSearch.corrDate);
+  const isOvertimeEntry = Boolean(routeSearch.otDate);
+  const isEarlyLeaveEntry = Boolean(routeSearch.elDate);
+  const isAutoComposeEntry = String(routeSearch.autoCompose ?? '') === '1';
+  const isAutoOpenEntry = isCorrectionEntry || isOvertimeEntry || isEarlyLeaveEntry || isAutoComposeEntry;
   const navigateToComposeWorkbench = useCallback(() => {
     navigate({
       to: '/app/approvals',
@@ -1615,6 +1662,16 @@ export function ApprovalsPage() {
       staleTime: 60_000,
     })),
   });
+  /** slotId -> 슬롯 전체 객체. 폼에서 선택된 슬롯의 출퇴근/점심 시간 표시용. */
+  const flexibleSlotById = useMemo(() => {
+    const m = new Map<string, FlexibleTimeSlot>();
+    for (const q of flexibleSlotQueries) {
+      for (const slot of q.data ?? []) {
+        if (slot.slotId) m.set(slot.slotId, slot);
+      }
+    }
+    return m;
+  }, [flexibleSlotQueries]);
   const flexibleTimeSlotOptions = useMemo(() => {
     const seen = new Set<string>();
     const opts: { value: string; label: string }[] = [];
@@ -2366,34 +2423,227 @@ export function ApprovalsPage() {
     initializeComposeForDocument,
   ]);
 
+  // 근태정정신청 자동 모달 - 부모 ApprovalsPage(허브)에서 corrDate 받으면 embed 모달 1회 오픈
+  // 모달 안의 iframe 은 embed=compose-modal 모드라 작성 화면만 표시됨
+  const correctionAutoOpenRef = useRef(false);
+  useEffect(() => {
+    // embed 모드(모달 안쪽) 이거나 진입 케이스 아니면 무시
+    if (isEmbedComposeModal) return;
+    if (!isAutoOpenEntry) {
+      correctionAutoOpenRef.current = false;
+      return;
+    }
+    if (correctionAutoOpenRef.current) return;
+    if (!routeSearch.docId) return;
+
+    const params = new URLSearchParams();
+    params.set('tab', 'compose');
+    params.set('embed', APPROVAL_EMBED_QUERY);
+    params.set('docId', routeSearch.docId);
+    // 근태정정신청 prefill
+    if (routeSearch.corrDate) params.set('corrDate', routeSearch.corrDate);
+    if (routeSearch.corrClockIn) params.set('corrClockIn', routeSearch.corrClockIn);
+    if (routeSearch.corrClockOut) params.set('corrClockOut', routeSearch.corrClockOut);
+    // 조퇴계 prefill
+    if (routeSearch.elDate) params.set('elDate', routeSearch.elDate);
+    if (routeSearch.elTime) params.set('elTime', routeSearch.elTime);
+    // 연장근무신청 prefill
+    if (routeSearch.otDate) params.set('otDate', routeSearch.otDate);
+    if (routeSearch.otStartTime) params.set('otStartTime', routeSearch.otStartTime);
+    if (routeSearch.otEndTime) params.set('otEndTime', routeSearch.otEndTime);
+    // 자동 모달 플래그
+    if (isAutoComposeEntry) params.set('autoCompose', '1');
+    // 출퇴근시간 변경 신청서 prefill
+    if (routeSearch.schYearMonth) params.set('schYearMonth', routeSearch.schYearMonth);
+    if (routeSearch.schSlotId) params.set('schSlotId', routeSearch.schSlotId);
+    if (routeSearch.schBreakStart) params.set('schBreakStart', routeSearch.schBreakStart);
+    if (routeSearch.schBreakEnd) params.set('schBreakEnd', routeSearch.schBreakEnd);
+    if (routeSearch.schReason) params.set('schReason', routeSearch.schReason);
+    setCorrectionEmbedSrc(`/app/approvals?${params.toString()}`);
+    correctionAutoOpenRef.current = true;
+  }, [
+    isEmbedComposeModal,
+    isAutoOpenEntry,
+    isAutoComposeEntry,
+    routeSearch.docId,
+    routeSearch.corrDate,
+    routeSearch.corrClockIn,
+    routeSearch.corrClockOut,
+    routeSearch.otDate,
+    routeSearch.otStartTime,
+    routeSearch.otEndTime,
+    routeSearch.elDate,
+    routeSearch.elTime,
+    routeSearch.schYearMonth,
+    routeSearch.schSlotId,
+    routeSearch.schBreakStart,
+    routeSearch.schBreakEnd,
+    routeSearch.schReason,
+  ]);
+
+  // 근태정정신청 prefill - URL 로 넘어온 corrDate 있으면 form 표준 필드에 채우기, 양식 진입 직후 1회만
+  const correctionPrefillAppliedRef = useRef(false);
+  useEffect(() => {
+    if (composePhase !== 'fill') return;
+    const doc = activeDocuments.find((d) => d.documentId === selectedDocumentId);
+    if (!doc || doc.documentName !== '근태정정신청') {
+      correctionPrefillAppliedRef.current = false;
+      return;
+    }
+    if (correctionPrefillAppliedRef.current) return;
+    if (!routeSearch.corrDate) return;
+    const date = routeSearch.corrDate;
+    // 출/퇴근시각 기본값 - URL prefill 우선, 없으면 09:00 / 18:00 으로 채움 (HH:mm 시간만, 직원이 수정 가능)
+    const inTime = routeSearch.corrClockIn || '09:00';
+    const outTime = routeSearch.corrClockOut || '18:00';
+    form.setFieldsValue({
+      content: {
+        attendanceDate: date,
+        requestedClockIn: inTime,
+        requestedClockOut: outTime,
+      },
+    });
+    correctionPrefillAppliedRef.current = true;
+  }, [
+    composePhase,
+    selectedDocumentId,
+    activeDocuments,
+    routeSearch.corrDate,
+    routeSearch.corrClockIn,
+    routeSearch.corrClockOut,
+    form,
+  ]);
+
+  // 연장근무신청 prefill - 내 근태 행별 [초과근무 신청] 진입 시 workDate/startTime/endTime 자동 채움
+  const overtimePrefillAppliedRef = useRef(false);
+  useEffect(() => {
+    if (composePhase !== 'fill') return;
+    const doc = activeDocuments.find((d) => d.documentId === selectedDocumentId);
+    if (!doc || doc.documentName !== '연장근무신청') {
+      overtimePrefillAppliedRef.current = false;
+      return;
+    }
+    if (overtimePrefillAppliedRef.current) return;
+    if (!routeSearch.otDate) return;
+    // 출/퇴근 default 09:00/18:00 동일 규칙, 연장근무는 보통 정규근무 이후 시작이지만 진입 시 시작값으로 안내
+    const start = routeSearch.otStartTime || '18:00';
+    const end = routeSearch.otEndTime || '20:00';
+    form.setFieldsValue({
+      content: {
+        workDate: routeSearch.otDate,
+        startTime: start,
+        endTime: end,
+      },
+    });
+    overtimePrefillAppliedRef.current = true;
+  }, [
+    composePhase,
+    selectedDocumentId,
+    activeDocuments,
+    routeSearch.otDate,
+    routeSearch.otStartTime,
+    routeSearch.otEndTime,
+    form,
+  ]);
+
+  // 조퇴계 prefill - 내 근태 행별 [조퇴 신청] 진입 시 attendanceDate/earlyLeaveTime 자동 채움
+  const earlyLeavePrefillAppliedRef = useRef(false);
+  useEffect(() => {
+    if (composePhase !== 'fill') return;
+    const doc = activeDocuments.find((d) => d.documentId === selectedDocumentId);
+    if (!doc || doc.documentName !== '조퇴계') {
+      earlyLeavePrefillAppliedRef.current = false;
+      return;
+    }
+    if (earlyLeavePrefillAppliedRef.current) return;
+    if (!routeSearch.elDate) return;
+    const time = routeSearch.elTime || dayjs().format('HH:mm');
+    form.setFieldsValue({
+      content: {
+        attendanceDate: routeSearch.elDate,
+        earlyLeaveTime: time,
+      },
+    });
+    earlyLeavePrefillAppliedRef.current = true;
+  }, [
+    composePhase,
+    selectedDocumentId,
+    activeDocuments,
+    routeSearch.elDate,
+    routeSearch.elTime,
+    form,
+  ]);
+
+  // 출퇴근시간 변경 신청서 prefill - URL params(schYearMonth/schSlotId/...) 우선, 없으면 기존 sessionStorage fallback
+  // iframe embed 모달에선 부모 sessionStorage 접근 불가 → URL params 가 정공법, sessionStorage 는 호환 유지
+  const schedulePrefillAppliedRef = useRef(false);
   useEffect(() => {
     if (tab !== 'compose' || composePhase !== 'fill') return;
-    if (!selectedDocument || selectedDocument.documentName !== '출퇴근시간 변경 신청서') return;
-    const raw = sessionStorage.getItem(SCHEDULE_SELECTION_PREFILL_STORAGE_KEY);
-    if (!raw) return;
-    try {
-      const parsed = JSON.parse(raw) as {
-        targetYearMonth?: string;
-        slotId?: string;
-        requestReason?: string | null;
-      };
-      if (!parsed.targetYearMonth || !parsed.slotId) return;
-      const current = (form.getFieldValue('content') ?? {}) as Record<string, unknown>;
-      form.setFieldsValue({
-        content: {
-          ...current,
-          targetYearMonth: parsed.targetYearMonth,
-          slotId: parsed.slotId,
-          requestReason: parsed.requestReason ?? '',
-        },
-      });
-      message.info('스케줄 변경 신청 값이 자동 입력되었습니다.');
-    } catch {
-      // ignore bad prefill payload
-    } finally {
-      sessionStorage.removeItem(SCHEDULE_SELECTION_PREFILL_STORAGE_KEY);
+    if (!selectedDocument || selectedDocument.documentName !== '출퇴근시간 변경 신청서') {
+      schedulePrefillAppliedRef.current = false;
+      return;
     }
-  }, [composePhase, form, message, selectedDocument, tab]);
+    if (schedulePrefillAppliedRef.current) return;
+
+    let yearMonth = routeSearch.schYearMonth ?? '';
+    let slotId = routeSearch.schSlotId ?? '';
+    let breakStart = routeSearch.schBreakStart ?? '';
+    let breakEnd = routeSearch.schBreakEnd ?? '';
+    let reason = routeSearch.schReason ?? '';
+
+    // sessionStorage fallback - URL params 가 비어있을 때만
+    if (!yearMonth || !slotId) {
+      const raw = sessionStorage.getItem(SCHEDULE_SELECTION_PREFILL_STORAGE_KEY);
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw) as {
+            targetYearMonth?: string;
+            slotId?: string;
+            breakStart?: string | null;
+            breakEnd?: string | null;
+            requestReason?: string | null;
+          };
+          yearMonth = yearMonth || parsed.targetYearMonth || '';
+          slotId = slotId || parsed.slotId || '';
+          breakStart = breakStart || parsed.breakStart || '';
+          breakEnd = breakEnd || parsed.breakEnd || '';
+          reason = reason || parsed.requestReason || '';
+        } catch {
+          // ignore bad prefill payload
+        } finally {
+          sessionStorage.removeItem(SCHEDULE_SELECTION_PREFILL_STORAGE_KEY);
+        }
+      }
+    }
+
+    // 출퇴근시간 변경 신청서는 다음달만 신청 가능 - URL prefill 없으면 다음달로 자동 채움
+    if (!yearMonth) {
+      yearMonth = dayjs().add(1, 'month').format('YYYY-MM');
+    }
+    const current = (form.getFieldValue('content') ?? {}) as Record<string, unknown>;
+    form.setFieldsValue({
+      content: {
+        ...current,
+        targetYearMonth: yearMonth,
+        ...(slotId ? { slotId } : {}),
+        ...(breakStart ? { breakStart } : {}),
+        ...(breakEnd ? { breakEnd } : {}),
+        ...(reason ? { requestReason: reason } : {}),
+      },
+    });
+    schedulePrefillAppliedRef.current = true;
+  }, [
+    composePhase,
+    form,
+    message,
+    selectedDocument,
+    tab,
+    routeSearch.schYearMonth,
+    routeSearch.schSlotId,
+    routeSearch.schBreakStart,
+    routeSearch.schBreakEnd,
+    routeSearch.schReason,
+  ]);
 
   const toggleBookmark = useCallback((requestId: string) => {
     setBookmarkedRequestIds((prev) => {
@@ -2765,8 +3015,20 @@ export function ApprovalsPage() {
         }
       }
 
+      // 근태정정신청 special - 출근/퇴근 시각 중 하나 이상은 필수, form 검증으로 못 잡으니 별도 체크
+      if (selectedDocument.documentName === '근태정정신청' && status === 'WAIT') {
+        const inVal = readStr(contentForSubmit, 'requestedClockIn');
+        const outVal = readStr(contentForSubmit, 'requestedClockOut');
+        if (!inVal && !outVal) {
+          message.warning('정정 출근시각 또는 퇴근시각 중 하나 이상을 입력해 주세요.');
+          return;
+        }
+      }
+
+      // 저장 안 할 필드 제거
       stripNonPersistedApprovalContentFields(contentForSubmit, selectedSchema.fields);
 
+      // 회의 녹음(ai_transcribe) + 일반 첨부 합해서 3개 초과 차단
       const wantsMeetingAudio = selectedSchema.fields.some(
         (f) => f.type === 'ai_transcribe' && f.config?.attachAudio === true,
       );
@@ -3231,8 +3493,8 @@ export function ApprovalsPage() {
   const navigateViewerInboxTab = (key: string) => {
     navigate({
       to: '/app/approvals',
-      search: (prev: Record<string, string | undefined>) => ({
-        ...(prev as Record<string, string | undefined>),
+      search: (prev) => ({
+        ...prev,
         tab: 'my',
         box: 'per-viewers',
         viewerSub: key === 'circ' ? 'circ' : undefined,
@@ -4430,6 +4692,47 @@ export function ApprovalsPage() {
           initialDocumentId={composeFormSelectInitialId}
           onConfirm={handleApprovalFormSelectConfirm}
         />
+
+        {/* 근태정정신청 자동 모달 - corrDate 진입 시 기존 결재 작성 모달 흐름과 동일한 모양으로 띄움 */}
+        <Modal
+          title="전자결재"
+          open={correctionEmbedSrc != null}
+          onCancel={() => {
+            setCorrectionEmbedSrc(null);
+            // 모달 닫을 때 prefill 파라미터 제거하고 허브로 복귀
+            navigate({
+              to: '/app/approvals',
+              search: { tab: 'compose' },
+              replace: true,
+            });
+          }}
+          footer={null}
+          width={1120}
+          destroyOnHidden
+          style={{ top: 48 }}
+          styles={{
+            content: {
+              height: 820,
+              maxHeight: '90vh',
+              resize: 'both',
+              display: 'flex',
+              flexDirection: 'column',
+              padding: 0,
+              overflow: 'auto',
+            },
+            header: { flexShrink: 0, marginBottom: 0, padding: '12px 16px' },
+            body: { flex: 1, minHeight: 0, padding: 0, overflow: 'hidden' },
+          }}
+        >
+          {correctionEmbedSrc ? (
+            <iframe
+              key={correctionEmbedSrc}
+              title="근태정정신청 작성"
+              src={correctionEmbedSrc}
+              className="tw-h-full tw-min-h-0 tw-w-full tw-border-0"
+            />
+          ) : null}
+        </Modal>
         <AppDoubleActionModal
           title="퀵 메뉴 설정"
           open={quickHomeFormsSettingOpen}
@@ -4492,7 +4795,9 @@ export function ApprovalsPage() {
                 optionFilterProp="label"
                 onSelect={(val) =>
                   setQuickHomeFormsDraft((prev) =>
-                    prev.includes(val) || prev.length >= 3 ? prev : [...prev, val],
+                    typeof val !== 'string' || prev.includes(val) || prev.length >= 3
+                      ? prev
+                      : [...prev, val],
                   )
                 }
               />
@@ -4732,7 +5037,14 @@ export function ApprovalsPage() {
                         {renderComposeToolbar()}
                   <div className="tw-min-h-0 tw-flex-1 tw-overflow-auto tw-rounded-none tw-bg-white wf-scrollbar">
                     <div className="tw-flex tw-flex-col tw-gap-4 tw-p-2 sm:tw-p-3">
-                            <ApprovalFormPaperLayout
+                      {selectedDocument.documentName === '출퇴근시간 변경 신청서' && (
+                        <Alert
+                          type="warning"
+                          showIcon
+                          message="동일 대상 연월에 2번 이상 신청할 경우, 가장 마지막에 승인된 신청 내용이 적용됩니다."
+                        />
+                      )}
+                      <ApprovalFormPaperLayout
                         documentName={formatApprovalDocumentName(selectedDocument.documentName)}
                               categoryLabel={
                                 REQUEST_TYPE_LABEL[normalizeApprovalRequestType(selectedDocument.requestType)] ??
@@ -4784,8 +5096,25 @@ export function ApprovalsPage() {
                           if (isAllowanceChangeDocument && field.name === 'amount') return null;
                           // hidden 필드는 제출 시 프론트가 auto-populate (예: leaveRequestId), UI 에 미표시
                           if (field.type === 'hidden') return null;
-                                const namePath: (string | number)[] = ['content', field.name];
-                                const ph = field.placeholder;
+                          // 근태정정신청 출/퇴근시각 - 기존 회사에 이전 datetime-local 로 박혀있는 schema 호환, 강제 time(HH:mm) 렌더
+                          if (
+                            selectedDocument.documentName === '근태정정신청' &&
+                            (field.name === 'requestedClockIn' || field.name === 'requestedClockOut')
+                          ) {
+                            const fieldLockedCorr = field.locked === true;
+                            const inputRulesCorr = fieldLockedCorr
+                              ? [{ required: true as const, message: `${field.label} 입력` }]
+                              : [];
+                            return (
+                              <ApprovalFormPaperFieldRow key={field.name} label={field.label} required={fieldLockedCorr}>
+                                <Form.Item name={['content', field.name]} rules={inputRulesCorr} className="!tw-mb-0">
+                                  <Input type="time" className="!tw-max-w-xs" step={60} />
+                                </Form.Item>
+                              </ApprovalFormPaperFieldRow>
+                            );
+                          }
+                          const namePath: (string | number)[] = ['content', field.name];
+                          const ph = field.placeholder;
                           const fieldLocked = field.locked === true;
                           if (field.type === 'ai_transcribe') {
                             return (
@@ -4822,22 +5151,27 @@ export function ApprovalsPage() {
                                   return (
                               <ApprovalFormPaperFieldRow key={field.name} label={field.label} required={fieldLocked}>
                                 <Form.Item name={namePath} rules={inputRules} className="!tw-mb-0">
-                                        <Input type="number" className="!tw-max-w-xs" placeholder={ph} />
-                                      </Form.Item>
-                                    </ApprovalFormPaperFieldRow>
-                                  );
-                                }
-                                if (field.type === 'date') {
-                                  return (
+                                  <Input type="number" className="!tw-max-w-xs" placeholder={ph} />
+                                </Form.Item>
+                              </ApprovalFormPaperFieldRow>
+                            );
+                          }
+                          if (field.type === 'date') {
+                            // 근태정정신청 정정 일자 - 내 근태 행별 버튼(corrDate 있음) 진입 시만 disabled, 전자결재 메뉴 직접 진입은 자유 선택
+                            const dateDisabled =
+                              selectedDocument.documentName === '근태정정신청' &&
+                              field.name === 'attendanceDate' &&
+                              Boolean(routeSearch.corrDate);
+                            return (
                               <ApprovalFormPaperFieldRow key={field.name} label={field.label} required={fieldLocked}>
                                 <Form.Item name={namePath} rules={inputRules} className="!tw-mb-0">
-                                        <Input type="date" className="!tw-max-w-xs" />
-                                      </Form.Item>
-                                    </ApprovalFormPaperFieldRow>
-                                  );
-                                }
-                                if (field.type === 'datetime-local') {
-                                  return (
+                                  <Input type="date" className="!tw-max-w-xs" disabled={dateDisabled} />
+                                </Form.Item>
+                              </ApprovalFormPaperFieldRow>
+                            );
+                          }
+                          if (field.type === 'datetime-local') {
+                            return (
                               <ApprovalFormPaperFieldRow key={field.name} label={field.label} required={fieldLocked}>
                                 <Form.Item name={namePath} rules={inputRules} className="!tw-mb-0">
                                         <Input type="datetime-local" className="!tw-max-w-xs" />
@@ -4882,7 +5216,9 @@ export function ApprovalsPage() {
                             const selectOptions = dynamicOptions
                               ? dynamicOptions
                               : (field.options ?? []).map((opt) => ({ value: opt, label: opt }));
-                                  return (
+                            // flexibleTimeSlot select 는 선택된 슬롯의 출퇴근/점심 시간을 카드로 보여준다
+                            const showSlotInfo = field.source === 'flexibleTimeSlot';
+                            return (
                               <ApprovalFormPaperFieldRow key={field.name} label={field.label} required={fieldLocked}>
                                 <Form.Item name={namePath} rules={selectRules} className="!tw-mb-0">
                                         <Select
@@ -4891,12 +5227,70 @@ export function ApprovalsPage() {
                                     options={selectOptions}
                                     showSearch
                                     optionFilterProp="label"
-                                        />
-                                      </Form.Item>
-                                    </ApprovalFormPaperFieldRow>
-                                  );
-                                }
-                                return (
+                                  />
+                                </Form.Item>
+                                {showSlotInfo && (
+                                  <Form.Item
+                                    shouldUpdate={(prev, next) =>
+                                      JSON.stringify(prev?.content?.[field.name]) !== JSON.stringify(next?.content?.[field.name])
+                                    }
+                                    noStyle
+                                  >
+                                    {() => {
+                                      const slotId = form.getFieldValue(namePath) as string | undefined;
+                                      if (!slotId) return null;
+                                      const slot = flexibleSlotById.get(slotId);
+                                      if (!slot) return null;
+                                      const work = slot.startTime && slot.endTime
+                                        ? `${slot.startTime.slice(0, 5)} ~ ${slot.endTime.slice(0, 5)}`
+                                        : '미설정';
+                                      const lunch = slot.breakStart && slot.breakEnd
+                                        ? `${slot.breakStart.slice(0, 5)} ~ ${slot.breakEnd.slice(0, 5)}`
+                                        : '미설정';
+                                      return (
+                                        <div className="tw-mt-2 tw-flex tw-flex-wrap tw-gap-2">
+                                          <span className="tw-inline-flex tw-items-center tw-gap-1 tw-rounded-md tw-border tw-border-blue-200 tw-bg-blue-50/60 tw-px-2.5 tw-py-1 tw-text-xs tw-text-slate-700">
+                                            <span className="tw-text-[11px] tw-text-slate-500">출퇴근</span>
+                                            <span className="tw-font-semibold">{work}</span>
+                                          </span>
+                                          <span className="tw-inline-flex tw-items-center tw-gap-1 tw-rounded-md tw-border tw-border-amber-200 tw-bg-amber-50/60 tw-px-2.5 tw-py-1 tw-text-xs tw-text-slate-700">
+                                            <span className="tw-text-[11px] tw-text-slate-500">점심</span>
+                                            <span className="tw-font-semibold">{lunch}</span>
+                                          </span>
+                                        </div>
+                                      );
+                                    }}
+                                  </Form.Item>
+                                )}
+                              </ApprovalFormPaperFieldRow>
+                            );
+                          }
+                          // 대상 연월 (targetYearMonth) -> 월 선택 DatePicker 로 보강. 저장은 YYYY-MM 문자열.
+                          // 출퇴근시간 변경 신청서는 다음달만 신청 가능하므로 disabled (개인 근무 스케줄 진입 시 prefill 로 다음달 자동 입력)
+                          if (field.name === 'targetYearMonth') {
+                            const ymDisabled =
+                              selectedDocument.documentName === '출퇴근시간 변경 신청서';
+                            return (
+                              <ApprovalFormPaperFieldRow key={field.name} label={field.label} required={fieldLocked}>
+                                <Form.Item
+                                  name={namePath}
+                                  rules={inputRules}
+                                  className="!tw-mb-0"
+                                  getValueProps={(v) => ({ value: v ? dayjs(v as string, 'YYYY-MM') : null })}
+                                  getValueFromEvent={(d: dayjs.Dayjs | null) => (d ? d.format('YYYY-MM') : '')}
+                                >
+                                  <DatePicker
+                                    picker="month"
+                                    format="YYYY-MM"
+                                    placeholder="대상 연월 선택"
+                                    className="!tw-max-w-xs"
+                                    disabled={ymDisabled}
+                                  />
+                                </Form.Item>
+                              </ApprovalFormPaperFieldRow>
+                            );
+                          }
+                          return (
                             <ApprovalFormPaperFieldRow key={field.name} label={field.label} required={fieldLocked}>
                               <Form.Item name={namePath} rules={inputRules} className="!tw-mb-0">
                                       <Input

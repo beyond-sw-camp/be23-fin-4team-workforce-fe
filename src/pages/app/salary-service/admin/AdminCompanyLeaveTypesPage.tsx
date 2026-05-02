@@ -36,7 +36,6 @@ import dayjs, { type Dayjs } from 'dayjs';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import { memberApi } from '@/features/member/api/memberApi';
 import { useAuth } from '@/features/auth/useAuth';
-import { AdminLeaveGrantPage } from '@/pages/app/salary-service/admin/AdminLeaveGrantPage';
 import type {
   BalanceTypeCode,
   CompanyLeaveType,
@@ -385,7 +384,9 @@ export function AdminCompanyLeaveTypesPage() {
       (r) => r.companyLeaveTypeId === record.companyLeaveTypeId,
     );
     if (idx <= 0) return;
-    swapM.mutate({ a: record, b: sortedRows[idx - 1] });
+    const target = sortedRows[idx - 1];
+    if (!target) return;
+    swapM.mutate({ a: record, b: target });
   };
 
   const moveDown = (record: CompanyLeaveType) => {
@@ -393,7 +394,9 @@ export function AdminCompanyLeaveTypesPage() {
       (r) => r.companyLeaveTypeId === record.companyLeaveTypeId,
     );
     if (idx === -1 || idx >= sortedRows.length - 1) return;
-    swapM.mutate({ a: record, b: sortedRows[idx + 1] });
+    const target = sortedRows[idx + 1];
+    if (!target) return;
+    swapM.mutate({ a: record, b: target });
   };
 
   const initDefaultsM = useMutation({
@@ -977,11 +980,6 @@ export function AdminCompanyLeaveTypesPage() {
       </Modal>
             </Space>
           ),
-        },
-        {
-          key: 'grant',
-          label: '수동 휴가 부여',
-          children: <AdminLeaveGrantPage />,
         },
       ]}
     />
