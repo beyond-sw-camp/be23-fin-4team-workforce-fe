@@ -42,6 +42,7 @@ import {
   isHrTeamMember,
 } from '@/features/permissions/member-directory-access';
 import { usePermissions } from '@/features/permissions/usePermissionsHook';
+import { ContractTemplatesAdminPanel } from '@/features/contracts/ui/ContractTemplatesAdminPanel';
 
 type DocForm = {
   documentName: string;
@@ -143,7 +144,7 @@ export function ApprovalsAdminPage() {
   const { user } = useAuth();
   const isSystemAdmin = user?.isSystemAdmin === true;
   const [createOpen, setCreateOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'documents' | 'policy-lines'>('documents');
+  const [activeTab, setActiveTab] = useState<'documents' | 'policy-lines' | 'contract-templates'>('documents');
   const [selectedDocumentId, setSelectedDocumentId] = useState<string>('');
   const [policyDrafts, setPolicyDrafts] = useState<PolicyLineDraft[]>([]);
   const [schemaFields, setSchemaFields] = useState<FormFieldSchema[]>(() => defaultSchemaFields());
@@ -201,17 +202,6 @@ export function ApprovalsAdminPage() {
     }));
   }, [orgTree]);
 
-  const jobTitleNameById = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const o of jobTitleOptions) m.set(o.value, o.label);
-    return m;
-  }, [jobTitleOptions]);
-
-  const organizationNameById = useMemo(() => {
-    const flat = flattenOrganizationsWithMeta(orgTree);
-    return new Map(flat.map((row) => [row.id, row.name] as const));
-  }, [orgTree]);
-
   const { data: policyLines = [], isFetching: policyLoading } = useQuery({
     queryKey: ['approval', 'policy-lines', selectedDocumentId],
     queryFn: () => approvalApi.getPolicyLines(selectedDocumentId),
@@ -222,12 +212,6 @@ export function ApprovalsAdminPage() {
     () => documents.find((doc) => doc.documentId === selectedDocumentId) ?? null,
     [documents, selectedDocumentId],
   );
-  const { data: policyLineCandidates = [], isFetching: candidatesLoading } = useQuery({
-    queryKey: ['approval', 'policy-lines', 'candidates', selectedDocumentId],
-    queryFn: () => approvalApi.getPolicyLineCandidates(selectedDocumentId),
-    enabled: selectedDocumentId.length > 0,
-  });
-
   useEffect(() => {
     if (!selectedDocumentId && documents.length > 0) {
       const firstDocument = documents[0];
@@ -540,7 +524,7 @@ export function ApprovalsAdminPage() {
       ) : (
         <Tabs
           activeKey={activeTab}
-          onChange={(key) => setActiveTab(key as 'documents' | 'policy-lines')}
+          onChange={(key) => setActiveTab(key as 'documents' | 'policy-lines' | 'contract-templates')}
           items={[
             {
               key: 'documents',
@@ -791,81 +775,15 @@ export function ApprovalsAdminPage() {
                       ]}
                       locale={{ emptyText: selectedDocumentId ? '정책라인이 없습니다.' : '양식을 먼저 선택하세요.' }}
                     />
-                    <Card
-                      size="small"
-                      title="후보 결재자 미리보기"
-                      extra={
-                        <Button
-                          size="small"
-                          icon={<ReloadOutlined />}
-                          loading={candidatesLoading}
-                          onClick={() =>
-                            void qc.invalidateQueries({
-                              queryKey: ['approval', 'policy-lines', 'candidates', selectedDocumentId],
-                            })
-                          }
-                        >
-                          새로고침
-                        </Button>
-                      }
-                    >
-                      <Table
-                          rowKey={(row) => row.policyLineId}
-                          size="small"
-                          loading={candidatesLoading}
-                          pagination={{ pageSize: 5, showSizeChanger: false }}
-                          dataSource={policyLineCandidates}
-                          locale={{
-                            emptyText: selectedDocumentId
-                              ? '후보 결재자가 없습니다. 직책/조직 설정 또는 사용자 배치를 확인하세요.'
-                              : '양식을 먼저 선택하세요.',
-                          }}
-                          columns={[
-                            {
-                              title: '순서',
-                              dataIndex: 'stepOrder',
-                              key: 'stepOrder',
-                              width: 90,
-                            },
-                            {
-                              title: '직책',
-                              dataIndex: 'jobTitleId',
-                              key: 'jobTitleId',
-                              width: 220,
-                              ellipsis: true,
-                              render: (id: string) => jobTitleNameById.get(id) ?? id,
-                            },
-                            {
-                              title: '조직 제한',
-                              dataIndex: 'organizationId',
-                              key: 'organizationId',
-                              width: 220,
-                              render: (v: string | null) =>
-                                v == null || v === '' ? '없음' : (organizationNameById.get(v) ?? v),
-                            },
-                            {
-                              title: '후보',
-                              key: 'candidates',
-                              render: (_: unknown, row: (typeof policyLineCandidates)[number]) =>
-                                row.candidates.length === 0 ? (
-                                  <Typography.Text type="secondary">없음</Typography.Text>
-                                ) : (
-                                  <Space wrap size={[6, 6]}>
-                                    {row.candidates.map((c) => (
-                                      <Tag key={`${row.policyLineId}-${c.memberPositionId}`}>
-                                        {c.memberName} ({c.organizationName || '-'} / {c.jobTitleName || '-'})
-                                      </Tag>
-                                    ))}
-                                  </Space>
-                                ),
-                            },
-                          ]}
-                        />
-                    </Card>
 
                   </Space>
                 </Card>
               ),
+            },
+            {
+              key: 'contract-templates',
+              label: '전자계약 양식 관리',
+              children: <ContractTemplatesAdminPanel showTemplateSection showSendSection={false} />,
             },
           ]}
         />

@@ -22,6 +22,7 @@
     LineChartOutlined,
     PieChartOutlined,
     MoreOutlined,
+    AudioOutlined,
     MessageOutlined,
     PartitionOutlined,
     PauseCircleOutlined,
@@ -40,9 +41,8 @@
 } from '@ant-design/icons';
 import {Avatar, Badge, Button, Empty, Layout, Menu, Popover, Spin, Tooltip, message} from 'antd';
 import type {MenuProps} from 'antd';
-import MenuContext from 'antd/es/menu/MenuContext';
 import type {ReactNode} from 'react';
-import {useContext, useEffect, useMemo, useState} from 'react';
+import {useEffect, useMemo, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Link, Outlet, useNavigate, useRouterState} from '@tanstack/react-router';
 import {useAuth} from '@/features/auth/useAuth';
@@ -92,6 +92,7 @@ import {
 } from '@/features/approvals/lib/approvalGuideNav';
 import {AppSearchField} from '@/shared/ui/AppSearchField';
 import {AiChatbotFab} from '@/widgets/app-shell/AiChatbotFab';
+import {AiRecordingModal} from '@/widgets/app-shell/AiRecordingModal';
 import {MemberChatProvider, useMemberChatOpener} from '@/widgets/app-shell/MemberChatOpener';
 import {OrgChartModal} from '@/widgets/organization/OrgChartModal';
 import {HeaderSearchMemberDetailModal} from '@/widgets/app-shell/HeaderSearchMemberDetailModal';
@@ -137,6 +138,8 @@ const APP_MENU_ICONS: Record<string, ReactNode> = {
     '/app/attendance/flexible-slots': <ScheduleOutlined className="tw-text-lg"/>,
     '/app/leave': <ScheduleOutlined className="tw-text-lg"/>,
     '/app/approvals': <FileDoneOutlined className="tw-text-lg"/>,
+    '/app/contracts/send': <FormOutlined className="tw-text-lg"/>,
+    '/app/contracts': <SafetyCertificateOutlined className="tw-text-lg"/>,
     '/app/approvals/department': <FolderOpenOutlined className="tw-text-lg"/>,
     '/app/payroll': <DollarOutlined className="tw-text-lg"/>,
     '/app/payroll/annual': <BarChartOutlined className="tw-text-lg"/>,
@@ -175,8 +178,10 @@ const TALENT_HUB_PATHS = [
 const TALENT_HUB_PATH_SET = new Set<string>(TALENT_HUB_PATHS);
 
 const ORG_HR_GROUP_KEY = 'group-org-hr';
+/** 인사 관리 서브메뉴 — 구성원·조직도 접근과 동일하게 `canAccessMemberDirectory` 로 노출 */
 const ORG_HR_PATHS = ['/app/members', '/app/organization'] as const;
-const ORG_HR_PATH_SET = new Set<string>(ORG_HR_PATHS);
+/** 계약 발송 라우트는 HR 그룹에만 속하며, 메뉴 순서는 `hrGroupExtraChildren`에서 결재 양식 다음에 둠 */
+const ORG_HR_PATH_SET = new Set<string>([...ORG_HR_PATHS, '/app/contracts/send']);
 
 const ESG_GROUP_KEY = 'group-esg';
 
@@ -227,25 +232,6 @@ function approvalLeafIcon(box: string) {
     return <FileTextOutlined className="tw-text-lg"/>;
 }
 
-/**
- * antd SubMenu 접힘 상태에서 기본 title이 없을 때 아이콘·텍스트를 한 줄로 묶고, 그룹명은 Tooltip으로 표시(중복 title 방지).
- */
-function SiderGroupedMenuLabel({icon, text}: { icon: ReactNode; text: string }) {
-    const {inlineCollapsed} = useContext(MenuContext);
-    const inner = (
-        <span className="tw-inline-flex tw-min-w-0 tw-w-full tw-items-center tw-gap-3 [&_.anticon]:tw-shrink-0">
-      {icon}
-            <span className="tw-truncate">{text}</span>
-    </span>
-    );
-    if (!inlineCollapsed) return inner;
-    return (
-        <Tooltip title={text} placement="right" mouseEnterDelay={0.12}>
-            {inner}
-        </Tooltip>
-    );
-}
-
 function buildAppShellMenuItems(
     isAdmin: boolean,
     approvalMenuChildren: NonNullable<MenuProps['items']> | undefined,
@@ -267,10 +253,9 @@ function buildAppShellMenuItems(
                 hubInserted = true;
                 items.push({
                     key: TALENT_HUB_GROUP_KEY,
-                    label: (
-                        <SiderGroupedMenuLabel icon={<ProjectOutlined className="tw-text-lg"/>}
-                                               text={APP_MENU_TALENT_HUB_LABEL}/>
-                    ),
+                    icon: <ProjectOutlined className="tw-text-lg"/>,
+                    label: APP_MENU_TALENT_HUB_LABEL,
+                    title: APP_MENU_TALENT_HUB_LABEL,
                     children: TALENT_HUB_PATHS.map((p) => ({
                         key: p,
                         icon: APP_MENU_ICONS[p],
@@ -298,10 +283,9 @@ function buildAppShellMenuItems(
                 orgInserted = true;
                 items.push({
                     key: ORG_HR_GROUP_KEY,
-                    label: (
-                        <SiderGroupedMenuLabel icon={<TeamOutlined className="tw-text-lg"/>}
-                                               text={APP_MENU_ORG_HR_GROUP_LABEL}/>
-                    ),
+                    icon: <TeamOutlined className="tw-text-lg"/>,
+                    label: APP_MENU_ORG_HR_GROUP_LABEL,
+                    title: APP_MENU_ORG_HR_GROUP_LABEL,
                     children: [...baseChildren, ...extras],
                 });
             }
@@ -370,10 +354,9 @@ function buildAppShellMenuItems(
                 }
                 items.push({
                     key: WORK_GROUP_KEY,
-                    label: (
-                        <SiderGroupedMenuLabel icon={<ClockCircleOutlined className="tw-text-lg"/>}
-                                               text={APP_MENU_WORK_GROUP_LABEL}/>
-                    ),
+                    icon: <ClockCircleOutlined className="tw-text-lg"/>,
+                    label: APP_MENU_WORK_GROUP_LABEL,
+                    title: APP_MENU_WORK_GROUP_LABEL,
                     children: workChildren,
                 });
             }
@@ -414,10 +397,9 @@ function buildAppShellMenuItems(
                 }
                 items.push({
                     key: LEAVE_GROUP_KEY,
-                    label: (
-                        <SiderGroupedMenuLabel icon={<ScheduleOutlined className="tw-text-lg"/>}
-                                               text={APP_MENU_LEAVE_GROUP_LABEL}/>
-                    ),
+                    icon: <ScheduleOutlined className="tw-text-lg"/>,
+                    label: APP_MENU_LEAVE_GROUP_LABEL,
+                    title: APP_MENU_LEAVE_GROUP_LABEL,
                     children: leaveChildren,
                 });
             }
@@ -436,15 +418,21 @@ function buildAppShellMenuItems(
                     const leafByKey = new Map(guideLeaves.map((e) => [e.key, e]));
                     items.push({
                         key: APPROVAL_GROUP_KEY,
-                        label: (
-                            <SiderGroupedMenuLabel icon={<FileDoneOutlined className="tw-text-lg"/>} text="전자결재"/>
-                        ),
+                        icon: <FileDoneOutlined className="tw-text-lg"/>,
+                        label: '전자결재',
+                        title: '전자결재',
                         children: [
                             {
                                 key: composeEntry.key,
                                 icon: <FormOutlined className="tw-text-lg"/>,
                                 label: composeEntry.label,
                                 title: composeEntry.label,
+                            },
+                            {
+                                key: '/app/contracts',
+                                icon: <SafetyCertificateOutlined className="tw-text-lg"/>,
+                                label: '전자계약',
+                                title: '전자계약',
                             },
                             ...APPROVAL_GUIDE_SECTION_ORDER.map((section) => ({
                                 key: `ap-section-${section}`,
@@ -476,10 +464,9 @@ function buildAppShellMenuItems(
             if (isAdmin) {
                 items.push({
                     key: PAYROLL_GROUP_KEY,
-                    label: (
-                        <SiderGroupedMenuLabel icon={<DollarOutlined className="tw-text-lg"/>}
-                                               text="급여 관리"/>
-                    ),
+                    icon: <DollarOutlined className="tw-text-lg"/>,
+                    label: '급여 관리',
+                    title: '급여 관리',
                     children: [
                         ...(showSalaryNegotiationSubmenu
                             ? [
@@ -541,10 +528,9 @@ function buildAppShellMenuItems(
             } else {
                 items.push({
                     key: PAYROLL_GROUP_KEY,
-                    label: (
-                        <SiderGroupedMenuLabel icon={<DollarOutlined className="tw-text-lg"/>}
-                                               text="급여"/>
-                    ),
+                    icon: <DollarOutlined className="tw-text-lg"/>,
+                    label: '급여',
+                    title: '급여',
                     children: [
                         {
                             key: '/app/payroll',
@@ -669,36 +655,46 @@ function useAppShellSiderMenuItems(currentPathname: string): {
             isAdmin ||
             canAccessMemberDirectory(hasPermission) ||
             canAccessMemberDirectoryFromPermissionStrings(user?.permissions);
-        const hrGroupExtraChildren: NonNullable<MenuProps['items']> | undefined = showApprovalFormSettings
-            ? [
-                  {
-                      key: encodeWfNavKey({to: '/app/approvals', search: {tab: 'admin'}}),
-                      icon: <SettingOutlined className="tw-text-lg"/>,
-                      label: '결재 양식 설정',
-                      title: '결재 양식 설정',
-                  },
-                  ...(isAdmin
-                      ? [
-                            {
-                                key: '/app/leave/absence',
-                                icon: <PauseCircleOutlined className="tw-text-lg"/>,
-                                label: APP_MENU_LABEL['/app/leave/absence'],
-                                title: APP_MENU_LABEL['/app/leave/absence'],
-                            },
-                            // 연차 촉진 알림 현황 - 운영 모니터링 메뉴이므로 인사 관리 그룹으로 이동
-                            {
-                                key: '/app/leave/promotion-no-response',
-                                icon: <BellOutlined className="tw-text-lg"/>,
-                                label: APP_MENU_LABEL['/app/leave/promotion-no-response'],
-                                title: APP_MENU_LABEL['/app/leave/promotion-no-response'],
-                            },
-                        ]
-                      : []),
-              ]
-            : undefined;
-        // leavePoliciesForMenu 없이 `undefined ?? []`만 넘기면 타입이 never[]로 좁혀져 TS 오류가 나므로 API 복구 시 함께 조정
-        // const leavePromotionEnabled = (leavePoliciesForMenu ?? []).some((p) => p.isPromotionYn === 'Y');
-        const leavePromotionEnabled = false;
+        const contractSendMenuItem = {
+            key: '/app/contracts/send' as const,
+            icon: APP_MENU_ICONS['/app/contracts/send'],
+            label: APP_MENU_LABEL['/app/contracts/send'],
+            title: APP_MENU_LABEL['/app/contracts/send'],
+        };
+        let hrGroupExtraChildren: NonNullable<MenuProps['items']> | undefined;
+        if (showApprovalFormSettings) {
+            hrGroupExtraChildren = [
+                {
+                    key: encodeWfNavKey({to: '/app/approvals', search: {tab: 'admin'}}),
+                    icon: <SettingOutlined className="tw-text-lg"/>,
+                    label: '결재 양식 설정',
+                    title: '결재 양식 설정',
+                },
+                ...(showMemberDirectoryMenu ? [contractSendMenuItem] : []),
+                ...(isAdmin
+                    ? [
+                          {
+                              key: '/app/leave/absence',
+                              icon: <PauseCircleOutlined className="tw-text-lg"/>,
+                              label: APP_MENU_LABEL['/app/leave/absence'],
+                              title: APP_MENU_LABEL['/app/leave/absence'],
+                          },
+                          // 연차 촉진 알림 현황 - 운영 모니터링 메뉴 (인사 관리 그룹)
+                          {
+                              key: '/app/leave/promotion-no-response',
+                              icon: <BellOutlined className="tw-text-lg"/>,
+                              label: APP_MENU_LABEL['/app/leave/promotion-no-response'],
+                              title: APP_MENU_LABEL['/app/leave/promotion-no-response'],
+                          },
+                      ]
+                    : []),
+            ];
+        } else if (showMemberDirectoryMenu) {
+            hrGroupExtraChildren = [contractSendMenuItem];
+        } else {
+            hrGroupExtraChildren = undefined;
+        }
+        const leavePromotionEnabled = (leavePoliciesForMenu ?? []).some((p) => p.isPromotionYn === 'Y');
         const showSalaryNegotiationSubmenu = hasActiveNegotiationSalaryPolicy(salaryPoliciesForMenu);
         const items = buildAppShellMenuItems(
             isAdmin,
@@ -713,9 +709,9 @@ function useAppShellSiderMenuItems(currentPathname: string): {
             esgPaths.length > 0
                 ? {
                       key: ESG_GROUP_KEY,
-                      label: (
-                          <SiderGroupedMenuLabel icon={<GlobalOutlined className="tw-text-lg"/>} text={APP_MENU_ESG_GROUP_LABEL}/>
-                      ),
+                      icon: <GlobalOutlined className="tw-text-lg"/>,
+                      label: APP_MENU_ESG_GROUP_LABEL,
+                      title: APP_MENU_ESG_GROUP_LABEL,
                       children: esgPaths.map((p) => ({
                           key: p,
                           icon: ESG_MENU_ICONS[p],
@@ -1142,6 +1138,7 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
     const [headerDetailMemberId, setHeaderDetailMemberId] = useState<string | null>(null);
     const [notificationPopoverOpen, setNotificationPopoverOpen] = useState(false);
     const [notificationTab, setNotificationTab] = useState<'all' | 'unread'>('all');
+    const [aiRecordingModalOpen, setAiRecordingModalOpen] = useState(false);
 
     useEffect(() => {
         const t = window.setTimeout(() => {
@@ -1309,50 +1306,39 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
                         {notificationTab === 'unread' ? '읽지 않은 알림이 없습니다.' : '알림이 없습니다.'}
                     </div>
                 ) : (
-                    latestNotifications.map((item) => (
-                        <div
-                            key={item.notificationId}
-                            role="button"
-                            tabIndex={0}
-                            className={`tw-rounded-xl tw-border tw-px-3 tw-py-2.5 ${
-                                item.isRead !== 'YES' ? 'tw-border-blue-200 tw-bg-blue-50/50' : 'tw-border-slate-200 tw-bg-white'
-                            } ${isRoutableNotification(item.notificationType, item.targetType) ? 'tw-cursor-pointer hover:tw-bg-slate-50' : ''}`}
-                            onClick={() => {
-                                if (!isRoutableNotification(item.notificationType, item.targetType)) return;
-                                void routeApprovalNotification(item);
-                            }}
-                            onKeyDown={(e) => {
-                                if (!(e.key === 'Enter' || e.key === ' ')) return;
-                                e.preventDefault();
-                                if (!isRoutableNotification(item.notificationType, item.targetType)) return;
-                                void routeApprovalNotification(item);
-                            }}
-                        >
-                            <div className="tw-flex tw-items-start tw-justify-between tw-gap-2">
-                                <div className="tw-min-w-0">
-                                    <div className="tw-flex tw-items-center tw-gap-1.5">
-                                        <div className="tw-truncate tw-text-sm tw-font-semibold tw-text-slate-900">{item.title}</div>
-                                        {item.isRead !== 'YES' ? <span className="tw-size-1.5 tw-rounded-full tw-bg-red-500"/> : null}
+                    latestNotifications.map((item) => {
+                        const unread = item.isRead !== 'YES';
+                        const routable = isRoutableNotification(item.notificationType, item.targetType);
+                        return (
+                            <div
+                                key={item.notificationId}
+                                role={routable ? 'button' : undefined}
+                                tabIndex={routable ? 0 : undefined}
+                                className={`tw-rounded-xl tw-border tw-px-3 tw-py-2.5 tw-transition-opacity ${
+                                    unread ? 'tw-border-blue-200 tw-bg-blue-50/50 tw-opacity-100' : 'tw-border-slate-200 tw-bg-white tw-opacity-60'
+                                } ${routable ? 'tw-cursor-pointer hover:tw-bg-slate-50' : ''}`}
+                                onClick={() => {
+                                    if (!routable) return;
+                                    void routeApprovalNotification(item);
+                                }}
+                                onKeyDown={(e) => {
+                                    if (!(e.key === 'Enter' || e.key === ' ')) return;
+                                    e.preventDefault();
+                                    if (!routable) return;
+                                    void routeApprovalNotification(item);
+                                }}
+                            >
+                                <div className="tw-flex tw-items-start tw-justify-between tw-gap-2">
+                                    <div className="tw-min-w-0">
+                                        <div className="tw-flex tw-items-center tw-gap-1.5">
+                                            <div className={`tw-truncate tw-text-sm ${unread ? 'tw-font-semibold tw-text-slate-900' : 'tw-font-medium tw-text-slate-600'}`}>{item.title}</div>
+                                            {unread ? <span className="tw-size-1.5 tw-rounded-full tw-bg-red-500"/> : null}
+                                        </div>
+                                        <div className="tw-mt-1 tw-line-clamp-2 tw-text-xs tw-text-slate-600">{item.content}</div>
                                     </div>
-                                    <div className="tw-mt-1 tw-line-clamp-2 tw-text-xs tw-text-slate-600">{item.content}</div>
-                                </div>
-                                <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-2">
-                                    {item.isRead !== 'YES' ? (
-                                        <button
-                                            type="button"
-                                            className="tw-cursor-pointer tw-border-0 tw-bg-transparent tw-text-[11px] tw-font-medium tw-text-blue-600 hover:tw-text-blue-700"
-                                            onClick={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                void markNotificationAsRead.mutateAsync(item.notificationId);
-                                            }}
-                                        >
-                                            읽음
-                                        </button>
-                                    ) : null}
                                     <button
                                         type="button"
-                                        className="tw-cursor-pointer tw-border-0 tw-bg-transparent tw-text-[11px] tw-font-medium tw-text-rose-600 hover:tw-text-rose-700"
+                                        className="tw-shrink-0 tw-cursor-pointer tw-border-0 tw-bg-transparent tw-text-[11px] tw-font-medium tw-text-rose-600 hover:tw-text-rose-700"
                                         onClick={(e) => {
                                             e.preventDefault();
                                             e.stopPropagation();
@@ -1363,8 +1349,8 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
                                     </button>
                                 </div>
                             </div>
-                        </div>
-                    ))
+                        );
+                    })
                 )}
             </div>
         </div>
@@ -1451,6 +1437,18 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
 
             <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-3 tw-overflow-visible md:tw-gap-3.5">
                 <SessionAccessTimer/>
+                <Tooltip title="음성 녹음">
+                    <button
+                        type="button"
+                        className={headerGhostIconClass}
+                        aria-label="음성 녹음"
+                        onClick={() => {
+                            setAiRecordingModalOpen(true);
+                        }}
+                    >
+                        <AudioOutlined className="tw-text-[20px]"/>
+                    </button>
+                </Tooltip>
                 <Tooltip title="멤버 채팅">
                     <Badge count={chatUnreadTotal} color="#EF4444" offset={[-8, 8]} showZero={false} overflowCount={99}>
                         <button
@@ -1483,6 +1481,7 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
                 </Popover>
                 <AppShellAccountMenu/>
             </div>
+            <AiRecordingModal open={aiRecordingModalOpen} onClose={() => setAiRecordingModalOpen(false)} />
         </Layout.Header>
     );
 }
@@ -1548,6 +1547,8 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
         ...APP_MENU_PATH_ORDER,
         ...ESG_MENU_PATH_ORDER,
         '/app/ai-documents',
+        '/app/contracts/send',
+        '/app/contracts',
     ]);
     if (menuPaths.has(pathname)) return [pathname];
     return [];
@@ -1886,7 +1887,7 @@ function AppShellLayout() {
             <Layout className="tw-flex tw-min-h-0 tw-min-w-0 tw-flex-1 tw-flex-col tw-bg-slate-50">
                 <AppShellHeader/>
                 <Layout.Content
-                    className="wf-scrollbar tw-min-h-0 tw-flex-1 tw-overflow-y-auto tw-bg-transparent tw-p-6">
+                    className="wf-scrollbar tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-y-auto tw-bg-transparent tw-p-6">
                     <Outlet/>
                 </Layout.Content>
             </Layout>

@@ -41,31 +41,17 @@ import {
   formatStoredContentValue,
   parseDetailContentJson,
   parseFormSchema,
+  shouldHideApprovalFormFieldInSelectModalPreview,
 } from '@/features/approvals/lib/approvalFormSchema';
-import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 
-/** slotId UUID 를 슬롯 라벨로 보여주는 작은 컴포넌트.
- *  결재 상세에서 시차출퇴근 신청서의 slotId 필드 표시용. */
-function SlotLabelDisplay({ slotId }: { slotId: string }) {
-  const q = useQuery({
-    queryKey: ['approval-detail', 'flexibleSlot', slotId],
-    queryFn: () => attendanceApi.flexibleSlot.getById(slotId),
-    enabled: Boolean(slotId),
-    staleTime: 5 * 60_000,
-  });
-  if (q.isLoading) return <span>조회 중...</span>;
-  if (!q.data) return <span>{slotId}</span>;
-  const work = q.data.startTime && q.data.endTime
-    ? ` (${q.data.startTime.slice(0, 5)} ~ ${q.data.endTime.slice(0, 5)})`
-    : '';
-  return <span>{(q.data.slotLabel ?? q.data.slotCode ?? slotId) + work}</span>;
-}
 import {
   ApprovalFormPaperFieldRow,
   ApprovalFormPaperLayout,
   ApprovalFormStampColumn,
 } from '@/features/approvals/ui/ApprovalFormPaperLayout';
 import { memberApi } from '@/features/member/api/memberApi';
+import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
+import { salaryApi } from '@/features/salary-service/api/salaryApi';
 
 const REQUEST_TYPE_LABEL: Record<ApprovalRequestType, string> = {
   VACATION: '휴가',
@@ -99,6 +85,33 @@ function formatDateTime(value?: string | null) {
   if (!value) return '—';
   const d = dayjs(value);
   return d.isValid() ? d.format('YYYY-MM-DD HH:mm') : value;
+}
+
+function displayStoredFieldValue(
+  field: { source?: string; type?: string; options?: string[] },
+  raw: unknown,
+  lookup: {
+    companyLeaveTypeNameById: Map<string, string>;
+    salaryItemTemplateNameById: Map<string, string>;
+    flexibleSlotNameById: Map<string, string>;
+  },
+): string {
+  if (raw == null) return formatStoredContentValue(raw);
+  const rawText = typeof raw === 'string' ? raw.trim() : '';
+  if (!rawText) return formatStoredContentValue(raw);
+  if (field.source === 'companyLeaveType') {
+    return lookup.companyLeaveTypeNameById.get(rawText) ?? rawText;
+  }
+  if (field.source === 'salaryItemTemplate') {
+    return lookup.salaryItemTemplateNameById.get(rawText) ?? rawText;
+  }
+  if (field.source === 'flexibleTimeSlot') {
+    return lookup.flexibleSlotNameById.get(rawText) ?? rawText;
+  }
+  if (field.type === 'select' && Array.isArray(field.options) && field.options.length > 0) {
+    return field.options.includes(rawText) ? rawText : rawText;
+  }
+  return formatStoredContentValue(raw);
 }
 
 function statusTag(status: string) {
@@ -370,6 +383,39 @@ export function ApprovalRequestReadOnlyModal({
     enabled: open,
     staleTime: 60_000,
   });
+  const { data: companyLeaveTypes = [] } = useQuery({
+    queryKey: ['salary', 'company-leave-types'],
+    queryFn: () => attendanceApi.companyLeaveType.list(),
+    enabled: open,
+    staleTime: 60_000,
+  });
+  const { data: salaryItemTemplates = [] } = useQuery({
+    queryKey: ['salary', 'salary-item-templates'],
+    queryFn: () => salaryApi.salaryItemTemplate.list(),
+    enabled: open,
+    staleTime: 60_000,
+  });
+  const { data: workSchedules = [] } = useQuery({
+    queryKey: ['salary', 'work-schedules'],
+    queryFn: () => attendanceApi.workSchedule.list(),
+    enabled: open,
+    staleTime: 60_000,
+  });
+  const flexibleWorkScheduleIds = useMemo(
+    () =>
+      workSchedules
+        .filter((s) => s.workType === 'FLEXIBLE' && s.workScheduleId)
+        .map((s) => s.workScheduleId!),
+    [workSchedules],
+  );
+  const flexibleSlotQueries = useQueries({
+    queries: flexibleWorkScheduleIds.map((wsId) => ({
+      queryKey: ['salary', 'flexible-slots', wsId] as const,
+      queryFn: () => attendanceApi.flexibleSlot.listByWorkSchedule(wsId),
+      enabled: open,
+      staleTime: 60_000,
+    })),
+  });
 
   /** 참조/공람자로 지정된 경우 상세 열람 시 읽음 PATCH — UNREAD일 때만 호출 */
   useEffect(() => {
@@ -546,6 +592,26 @@ export function ApprovalRequestReadOnlyModal({
     () => (requestDetailDocument ? parseFormSchema(requestDetailDocument.formSchema) : { fields: [] }),
     [requestDetailDocument],
   );
+  const companyLeaveTypeNameById = useMemo(
+    () => new Map(companyLeaveTypes.map((row) => [row.companyLeaveTypeId ?? '', row.name ?? ''])),
+    [companyLeaveTypes],
+  );
+  const salaryItemTemplateNameById = useMemo(
+    () => new Map(salaryItemTemplates.map((row) => [row.salaryItemTemplateId ?? '', row.itemName ?? ''])),
+    [salaryItemTemplates],
+  );
+  const flexibleSlotNameById = useMemo(() => {
+    const out = new Map<string, string>();
+    for (const q of flexibleSlotQueries) {
+      for (const slot of q.data ?? []) {
+        const id = slot.slotId ?? '';
+        if (!id) continue;
+        const label = `${slot.slotLabel ?? slot.slotCode ?? '—'} (${(slot.startTime ?? '').slice(0, 5)}~${(slot.endTime ?? '').slice(0, 5)})`;
+        out.set(id, label);
+      }
+    }
+    return out;
+  }, [flexibleSlotQueries]);
 
   const canDeleteAttachments = useMemo(() => {
     if (!selectedRequestDetail || !authMemberId.trim()) return false;
@@ -763,33 +829,26 @@ export function ApprovalRequestReadOnlyModal({
                         />
                       }
                     >
-                      {requestDetailSchema.fields
-                        .filter((field) => field.type !== 'hidden') // hidden 필드는 상세에서도 미표시 (selectionId 등 시스템용)
-                        .map((field) => {
-                          const raw = content[field.name];
-                          // 시차출퇴근 슬롯 (source=flexibleTimeSlot) 필드는 UUID 대신 슬롯 라벨로 표시
-                          if (field.source === 'flexibleTimeSlot' && typeof raw === 'string' && raw.trim()) {
-                            return (
-                              <ApprovalFormPaperFieldRow key={field.name} label={field.label} required>
-                                <Typography.Text>
-                                  <SlotLabelDisplay slotId={raw.trim()} />
-                                </Typography.Text>
-                              </ApprovalFormPaperFieldRow>
-                            );
-                          }
-                          const text = formatStoredContentValue(raw);
-                          return (
-                            <ApprovalFormPaperFieldRow key={field.name} label={field.label} required>
-                              <Typography.Text
-                                className={
-                                  field.type === 'textarea' ? 'tw-whitespace-pre-wrap tw-break-words' : undefined
-                                }
-                              >
-                                {text}
-                              </Typography.Text>
-                            </ApprovalFormPaperFieldRow>
-                          );
-                        })}
+                      {requestDetailSchema.fields.map((field) => {
+                        if (field.type === 'ai_transcribe') return null;
+                        if (shouldHideApprovalFormFieldInSelectModalPreview(field)) return null;
+                        const text = displayStoredFieldValue(field, content[field.name], {
+                          companyLeaveTypeNameById,
+                          salaryItemTemplateNameById,
+                          flexibleSlotNameById,
+                        });
+                        return (
+                          <ApprovalFormPaperFieldRow key={field.name} label={field.label} required>
+                            <Typography.Text
+                              className={
+                                field.type === 'textarea' ? 'tw-whitespace-pre-wrap tw-break-words' : undefined
+                              }
+                            >
+                              {text}
+                            </Typography.Text>
+                          </ApprovalFormPaperFieldRow>
+                        );
+                      })}
                     </ApprovalFormPaperLayout>
                   );
                 })()}

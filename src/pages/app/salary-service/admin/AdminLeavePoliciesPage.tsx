@@ -723,7 +723,7 @@ function PolicySimulator({
   isCarryover?: boolean;
   carryoverDays?: number | null;
   isPayout?: boolean;
-  accrualBase?: AccrualBase;
+  accrualBase?: AccrualBaseCode;
 }) {
   const days = typeof defaultDays === 'number' ? defaultDays : 0;
   const carry = typeof carryoverDays === 'number' ? carryoverDays : 0;

@@ -33,6 +33,8 @@ import EvaluationsHubPage from '@/pages/app/evaluations/EvaluationsHubPage';
 import EvaluationSeasonDetailPage from '@/pages/app/evaluations/EvaluationSeasonDetailPage';
 import PerformancePage from '@/pages/app/PerformancePage';
 import { ApprovalsPage } from '@/pages/app/ApprovalsPage';
+import { ContractSendPage } from '@/pages/app/ContractSendPage';
+import { ContractsPage } from '@/pages/app/ContractsPage';
 import { AbsenceProxyPage } from '@/pages/app/AbsenceProxyPage';
 import { DepartmentApprovalSearchPage } from '@/pages/app/DepartmentApprovalSearchPage';
 import { MyApprovalRequestsPage } from '@/pages/app/MyApprovalRequestsPage';
@@ -338,6 +340,8 @@ const approvalsSearchSchema = z.object({
   schBreakStart: z.string().optional(),
   schBreakEnd: z.string().optional(),
   schReason: z.string().optional(),
+  /** 허브 임시저장「이어쓰기」— 모달 iframe에서 해당 임시 문서를 바로 열 때 */
+  composeDraftId: z.string().optional(),
 });
 
 const approvalsAdminRoute = createRoute({
@@ -390,6 +394,21 @@ const absenceProxyRoute = createRoute({
   path: '/approvals/absence-proxy',
   validateSearch: absenceProxySearchSchema,
   component: AbsenceProxyPage,
+});
+
+const electronicContractsRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/contracts',
+  component: ContractsPage,
+});
+
+const contractSendRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/contracts/send',
+  component: ContractSendPage,
+  beforeLoad: ({ context }) => {
+    requireMemberDirectoryAccess(context);
+  },
 });
 
 const evaluationsRoute = createRoute({
@@ -914,6 +933,8 @@ const routeTree = rootRoute.addChildren([
       myApprovalRequestsRoute,
       absenceProxyRoute,
       departmentApprovalsInboxRoute,
+      electronicContractsRoute,
+      contractSendRoute,
       evaluationsRoute,
       evaluationSeasonDetailRoute,
       myEvaluationResultsRoute,

@@ -9,9 +9,19 @@ export const FORM_SCHEMA_FIELD_TYPES = [
   'datetime-local',
   'time',
   'hidden',
+  /** 회의록 등: 녹음 후 STT·요약, contentJson에는 포함하지 않음 */
+  'ai_transcribe',
 ] as const;
 
 export type FormFieldType = (typeof FORM_SCHEMA_FIELD_TYPES)[number];
+
+/** `type: "ai_transcribe"` 필드의 `config` */
+export type AiTranscribeFieldConfig = {
+  fillTranscript: string;
+  fillSummary: string;
+  attachAudio?: boolean;
+  language?: string;
+};
 
 /** select 필드의 options 를 동적으로 로드하는 소스 식별자 */
 export type FormFieldSource = 'companyLeaveType' | string;
@@ -26,11 +36,34 @@ export type FormFieldSchema = {
   placeholder?: string;
   /** true면 양식 수정 API에서 삭제·라벨·타입·순서·잠금 해제 불가 */
   locked?: boolean;
+  /** `ai_transcribe` 전용 */
+  config?: AiTranscribeFieldConfig;
 };
 
 export type FormSchema = {
   fields: FormFieldSchema[];
 };
+
+/**
+ * 결재 생성 시 pre-action으로 contentJson에 주입되는 엔티티 ID 필드명.
+ * `ApprovalsPage`의 `PRE_ACTION_CONFIGS[].entityIdField`와 동기화할 것.
+ */
+export const APPROVAL_PRE_ACTION_ENTITY_ID_FIELD_NAMES = [
+  'leaveRequestId',
+  'overtimeRequestId',
+  'memberAllowanceId',
+  'selectionId',
+  'leaveOfAbsenceId',
+] as const;
+
+/** 양식 선택 모달 등 기안지 미리보기에서 노출하지 않을 필드 */
+export function shouldHideApprovalFormFieldInSelectModalPreview(field: FormFieldSchema): boolean {
+  if (field.type === 'hidden') return true;
+  if ((APPROVAL_PRE_ACTION_ENTITY_ID_FIELD_NAMES as readonly string[]).includes(field.name)) return true;
+  const compact = field.label.replace(/\s+/g, '').toLowerCase();
+  if (compact.includes('salary') && compact.includes('연결')) return true;
+  return false;
+}
 
 /** 연차신청서 등 휴가 양식: 휴가종류 select와 경조사 구분 필드 연동 시 라벨 기준 */
 export const APPROVAL_VACATION_LEAVE_KIND_FIELD_LABEL = '휴가종류';
@@ -67,6 +100,22 @@ export function parseFormSchema(raw: string): FormSchema {
             const placeholder = typeof o.placeholder === 'string' ? o.placeholder.trim() : undefined;
             const locked = o.locked === true;
             if (!name || !label) return null;
+            let config: AiTranscribeFieldConfig | undefined;
+            if (type === 'ai_transcribe' && o.config && typeof o.config === 'object') {
+              const c = o.config as Record<string, unknown>;
+              const fillTranscript =
+                typeof c.fillTranscript === 'string' ? c.fillTranscript.trim() : '';
+              const fillSummary = typeof c.fillSummary === 'string' ? c.fillSummary.trim() : '';
+              const lang = typeof c.language === 'string' ? c.language.trim() : undefined;
+              if (fillTranscript && fillSummary) {
+                config = {
+                  fillTranscript,
+                  fillSummary,
+                  attachAudio: c.attachAudio === true,
+                  ...(lang ? { language: lang } : {}),
+                };
+              }
+            }
             return {
               name,
               label,
@@ -75,6 +124,7 @@ export function parseFormSchema(raw: string): FormSchema {
               ...(source ? { source } : {}),
               ...(placeholder ? { placeholder } : {}),
               ...(locked ? { locked: true } : {}),
+              ...(config ? { config } : {}),
             };
           })
           .filter((f): f is FormFieldSchema => f != null)
@@ -102,6 +152,18 @@ export function getApprovalRequestSubjectLine(detail: ApprovalRequestDetail): st
   const t = c.title;
   if (typeof t === 'string' && t.trim()) return t.trim();
   return '';
+}
+
+/** 제출용 contentJson에서 위젯 전용 필드 제거 (서버는 audio 등을 기대하지 않음) */
+export function stripNonPersistedApprovalContentFields(
+  content: Record<string, unknown>,
+  fields: FormFieldSchema[],
+): void {
+  for (const f of fields) {
+    if (f.type === 'ai_transcribe') {
+      delete content[f.name];
+    }
+  }
 }
 
 export function formatStoredContentValue(value: unknown): string {

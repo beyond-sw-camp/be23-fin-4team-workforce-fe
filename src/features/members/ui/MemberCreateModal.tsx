@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { App, DatePicker, Form, Input, Modal, Select } from 'antd';
+import { App, DatePicker, Form, Input, Select } from 'antd';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
 import { useEffect, useMemo } from 'react';
@@ -15,6 +15,7 @@ import {
 } from '@/features/members/lib/memberFormShared';
 import { membersCtaButtonClass } from '@/features/members/ui/membersCtaButtonClass';
 import { membersKeys } from '@/features/members/queries';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 
 type FormValues = {
   name: string;
@@ -181,14 +182,14 @@ export function MemberCreateModal({ open, onClose }: Props) {
     <>
       {/* `destroyOnHidden`으로 모달이 닫히면 Form이 제거되어 useForm 경고가 난다. */}
       {!open ? <Form form={form} preserve={false} className="tw-hidden" aria-hidden /> : null}
-      <Modal
+      <AppDoubleActionModal
         title="직원 계정 생성"
         open={open}
-        onCancel={onClose}
-        onOk={() => void handleOk()}
-        okText="생성 후 급여 등록"
+        onClose={onClose}
+        onConfirm={() => void handleOk()}
+        confirmText="생성 후 급여 등록"
         cancelText="취소"
-        okButtonProps={{ className: membersCtaButtonClass }}
+        confirmButtonClassName={membersCtaButtonClass}
         width={720}
         destroyOnHidden
         confirmLoading={createM.isPending}
@@ -247,7 +248,7 @@ export function MemberCreateModal({ open, onClose }: Props) {
             </Form.Item>
           </div>
         </Form>
-      </Modal>
+      </AppDoubleActionModal>
     </>
   );
 }

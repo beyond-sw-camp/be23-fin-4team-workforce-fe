@@ -3,6 +3,9 @@ export const DASHBOARD_LAYOUT_STORAGE_KEY = 'workforce.dashboard.layout.v1';
 
 export const ALL_DASHBOARD_WIDGET_IDS = [
   'profile',
+  'performanceGoals',
+  'evaluationTasks',
+  'feedbackMeetings',
   'approvalInbox',
   'calendar',
   'attendance',
@@ -29,6 +32,9 @@ export type DashboardLayout = {
 
 export const DASHBOARD_WIDGET_LABELS: Record<DashboardWidgetId, string> = {
   profile: '프로필',
+  performanceGoals: '내 목표 현황',
+  evaluationTasks: '평가 진행',
+  feedbackMeetings: '피드백 면담',
   approvalInbox: '전자결재 문서함',
   calendar: '캘린더 일정',
   attendance: '근태',
@@ -37,9 +43,9 @@ export const DASHBOARD_WIDGET_LABELS: Record<DashboardWidgetId, string> = {
   payrollNewHires: '급여 미등록 신규 입사자',
 };
 
-const LEFT_COLUMN: DashboardWidgetId[] = ['profile'];
-const MID_COLUMN: DashboardWidgetId[] = ['approvalInbox', 'attendance', 'leave'];
-const RIGHT_COLUMN: DashboardWidgetId[] = ['calendar', 'notifications', 'payrollNewHires'];
+const LEFT_COLUMN: DashboardWidgetId[] = ['profile', 'performanceGoals'];
+const MID_COLUMN: DashboardWidgetId[] = ['approvalInbox', 'evaluationTasks', 'attendance', 'leave'];
+const RIGHT_COLUMN: DashboardWidgetId[] = ['calendar', 'feedbackMeetings', 'notifications', 'payrollNewHires'];
 
 export function createDashboardInstanceId(widgetId: DashboardWidgetId): string {
   return `${widgetId}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -87,6 +93,29 @@ function defaultLayoutFromIds(ids: DashboardWidgetId[]): DashboardLayout {
   return { preset: 'ratio-121', items };
 }
 
+function preferredColumnOf(widgetId: DashboardWidgetId): DashboardColumnKey {
+  if (LEFT_COLUMN.includes(widgetId)) return 'left';
+  if (MID_COLUMN.includes(widgetId)) return 'mid';
+  return 'right';
+}
+
+function withMissingDefaultWidgets(layout: DashboardLayout): DashboardLayout {
+  const existing = new Set(layout.items.map((item) => item.id));
+  const missing = ALL_DASHBOARD_WIDGET_IDS.filter((id) => !existing.has(id));
+  if (missing.length === 0) return layout;
+  return {
+    ...layout,
+    items: [
+      ...layout.items,
+      ...missing.map((id) => ({
+        instanceId: createDashboardInstanceId(id),
+        id,
+        column: preferredColumnOf(id),
+      })),
+    ],
+  };
+}
+
 export function createDefaultDashboardLayout(): DashboardLayout {
   return defaultLayoutFromIds([...ALL_DASHBOARD_WIDGET_IDS]);
 }
@@ -116,7 +145,7 @@ export function loadDashboardLayout(): DashboardLayout {
     const raw = localStorage.getItem(DASHBOARD_LAYOUT_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as DashboardLayout;
-      return normalizeLayout(parsed);
+      return withMissingDefaultWidgets(normalizeLayout(parsed));
     }
   } catch {
     // ignore and fallback

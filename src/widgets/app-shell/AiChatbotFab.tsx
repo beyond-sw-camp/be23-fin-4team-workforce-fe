@@ -1,8 +1,9 @@
-import { CloseOutlined, DeleteOutlined, SendOutlined, UserOutlined } from '@ant-design/icons';
+import { ArrowRightOutlined, CloseOutlined, DeleteOutlined, SendOutlined, UserOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Popconfirm, Spin } from 'antd';
+import { useNavigate } from '@tanstack/react-router';
+import { App, Button, Popconfirm, Spin, Tooltip } from 'antd';
 import dayjs from 'dayjs';
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { aiApi, sortAiChatHistoryChronological } from '@/features/ai/api/aiApi';
 import type { ApiError } from '@/shared/api/types';
 import { AiChatbotLottieIcon } from '@/shared/ui/AiChatbotLottieIcon';
@@ -31,6 +32,7 @@ const PH_INPUT = '\uBA54\uC2DC\uC9C0\uB97C \uC785\uB825\uD558\uC138\uC694\u2026'
 const HINT_KEYS = 'Enter \uC804\uC1A1 \u00B7 Shift+Enter \uC904\uBC14\uAFC8';
 const AI_TITLE = 'AI \uBE44\uC11C';
 const SOURCES_PREFIX = '\uCC38\uACE0: ';
+const FAB_HOVER_HINT = '\uBB34\uC5C7\uC774\uB4E0 \uAD81\uAE08\uD55C \uC810\uC744 \uCC57\uBD07 AI\uC5D0\uAC8C \uBB3C\uC5B4\uBCF4\uC138\uC694.';
 
 function chatUserMessage(e: unknown, fallback: string): string {
   const err = e as Partial<ApiError>;
@@ -57,8 +59,214 @@ function formatAiMsgTime(dt: string): string {
   return `${ap} ${h12}:${m}`;
 }
 
+type AnswerSegment = { type: 'text'; text: string } | { type: 'link'; label: string; href: string };
+
+/** 챗봇 고정 패턴: `관련 메뉴: /path` + `화면명: ...` (줄바꿈 없이 한 줄에 올 수 있음) */
+function extractMenuLink(text: string): { body: string; menuUrl?: string; screenName?: string } {
+  const raw = text ?? '';
+  const menuRegex = /관련\s*메뉴\s*:\s*(\/[^\s]+)/;
+  const screenRegex = /(?:화면명|화면\s*명)\s*:\s*([^\n]+)/;
+  const menuMatch = raw.match(menuRegex);
+  const screenMatch = raw.match(screenRegex);
+  let body = raw;
+  if (menuMatch) body = body.replace(menuMatch[0], '');
+  if (screenMatch) body = body.replace(screenMatch[0], '');
+  body = body.replace(/\n{3,}/g, '\n\n').trim();
+  return {
+    body,
+    menuUrl: menuMatch?.[1]?.trim(),
+    screenName: screenMatch?.[1]?.trim(),
+  };
+}
+
+/** `제목 (부연)` 형태면 짧은 라벨과 괄호 안 부연을 분리 */
+function splitScreenNameDetail(screenNameRaw: string): { short: string; parenthetical?: string } {
+  const t = screenNameRaw.trim();
+  const m = t.match(/^(.+?)\s*\(([^)]+)\)\s*$/);
+  if (m) {
+    return { short: m[1].trim(), parenthetical: m[2].trim() };
+  }
+  return { short: t };
+}
+
+const MD_LINK_RE = /\[([^\]]*)\]\((https?:\/\/[^)\s]+|\/[^)\s]+)\)/g;
+const BARE_URL_RE = /https?:\/\/[^\s<>"')\]]+/gi;
+
+function mergeAdjacentText(segments: AnswerSegment[]): AnswerSegment[] {
+  const out: AnswerSegment[] = [];
+  for (const seg of segments) {
+    if (seg.type === 'text' && seg.text === '') continue;
+    const last = out[out.length - 1];
+    if (seg.type === 'text' && last?.type === 'text') {
+      last.text += seg.text;
+    } else {
+      out.push(seg);
+    }
+  }
+  return out;
+}
+
+function parseBareUrlsInTextSlice(text: string): AnswerSegment[] {
+  if (!text) return [];
+  const parts: AnswerSegment[] = [];
+  let last = 0;
+  BARE_URL_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = BARE_URL_RE.exec(text)) !== null) {
+    if (m.index > last) {
+      parts.push({ type: 'text', text: text.slice(last, m.index) });
+    }
+    const href = m[0];
+    parts.push({ type: 'link', label: href, href });
+    last = m.index + href.length;
+  }
+  if (last < text.length) {
+    parts.push({ type: 'text', text: text.slice(last) });
+  }
+  return mergeAdjacentText(parts);
+}
+
+/** 마크다운 `[label](url)` 및 본문 내 http(s) URL을 링크 구간으로 분해 */
+function parseAnswerSegments(raw: string): AnswerSegment[] {
+  const s = raw ?? '';
+  const mdChunks: { start: number; end: number; label: string; href: string }[] = [];
+  MD_LINK_RE.lastIndex = 0;
+  let mm: RegExpExecArray | null;
+  while ((mm = MD_LINK_RE.exec(s)) !== null) {
+    mdChunks.push({
+      start: mm.index,
+      end: mm.index + mm[0].length,
+      label: mm[1],
+      href: mm[2],
+    });
+  }
+  mdChunks.sort((a, b) => a.start - b.start);
+
+  const segments: AnswerSegment[] = [];
+  let cursor = 0;
+  for (const ch of mdChunks) {
+    if (ch.start > cursor) {
+      segments.push(...parseBareUrlsInTextSlice(s.slice(cursor, ch.start)));
+    }
+    segments.push({ type: 'link', label: (ch.label || '').trim() || ch.href, href: ch.href });
+    cursor = ch.end;
+  }
+  if (cursor < s.length) {
+    segments.push(...parseBareUrlsInTextSlice(s.slice(cursor)));
+  }
+  return mergeAdjacentText(segments);
+}
+
+function linkDisplayLabel(label: string, maxLen = 48): string {
+  const t = label.trim();
+  if (t.length <= maxLen) return t;
+  return `${t.slice(0, maxLen - 1)}\u2026`;
+}
+
+function classifyHref(href: string): { kind: 'internal'; pathWithSearch: string } | { kind: 'external'; href: string } {
+  const h = href.trim();
+  if (h.startsWith('/')) {
+    return { kind: 'internal', pathWithSearch: h };
+  }
+  if (/^https?:\/\//i.test(h)) {
+    try {
+      const u = new URL(h);
+      if (u.origin === window.location.origin) {
+        return { kind: 'internal', pathWithSearch: `${u.pathname}${u.search}${u.hash}` };
+      }
+      return { kind: 'external', href: h };
+    } catch {
+      return { kind: 'external', href: h };
+    }
+  }
+  return { kind: 'external', href: h };
+}
+
+function AiParsedAnswerBody({
+  answer,
+  onNavigateInternal,
+}: {
+  answer: string;
+  onNavigateInternal: (pathWithSearch: string) => void;
+}) {
+  const { body, menuUrl, screenName } = useMemo(() => extractMenuLink(answer), [answer]);
+  const segments = useMemo(() => parseAnswerSegments(body), [body]);
+  const screenDetail = useMemo(
+    () => (screenName ? splitScreenNameDetail(screenName) : null),
+    [screenName],
+  );
+
+  const menuButtonLabel = screenDetail?.short ?? (menuUrl ? '\uAD00\uB828 \uBA54\uB274\uB85C \uC774\uB3D9' : '');
+  const menuTooltip = screenDetail?.parenthetical ?? menuUrl;
+
+  return (
+    <>
+      <span className="tw-block tw-whitespace-pre-wrap tw-break-words">
+        {segments.map((seg, i) => {
+          if (seg.type === 'text') {
+            return <Fragment key={i}>{seg.text}</Fragment>;
+          }
+          const cls = classifyHref(seg.href);
+          const display = linkDisplayLabel(seg.label);
+          const tip = seg.href;
+          const openExternal = () => {
+            window.open(seg.href, '_blank', 'noopener,noreferrer');
+          };
+          if (cls.kind === 'internal') {
+            return (
+              <Tooltip key={i} title={tip}>
+                <Button
+                  type="link"
+                  size="small"
+                  className="!tw-h-auto !tw-p-0 !tw-align-baseline tw-text-[0.8rem]"
+                  onClick={() => onNavigateInternal(cls.pathWithSearch)}
+                >
+                  {display}
+                </Button>
+              </Tooltip>
+            );
+          }
+          return (
+            <Tooltip key={i} title={tip}>
+              <Button
+                type="link"
+                size="small"
+                className="!tw-h-auto !tw-p-0 !tw-align-baseline tw-text-[0.8rem]"
+                onClick={openExternal}
+              >
+                {display}
+              </Button>
+            </Tooltip>
+          );
+        })}
+      </span>
+      {menuUrl ? (
+        <div className="tw-mt-2 tw-border-t tw-border-[#E8ECF0] tw-pt-2">
+          <Tooltip title={menuTooltip || menuUrl}>
+            <Button
+              type="default"
+              size="small"
+              icon={<ArrowRightOutlined />}
+              className="tw-text-[0.8rem]"
+              onClick={() => onNavigateInternal(menuUrl)}
+            >
+              {menuButtonLabel}
+            </Button>
+          </Tooltip>
+          {screenDetail?.parenthetical ? (
+            <p className="tw-m-0 tw-mt-1 tw-text-[10px] tw-leading-snug tw-text-[#64748B]">
+              {screenDetail.parenthetical}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 export function AiChatbotFab() {
   const { message } = App.useApp();
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const titleId = useId();
   const [open, setOpen] = useState(false);
@@ -125,6 +333,25 @@ export function AiChatbotFab() {
     setInput('');
     chatM.mutate(text);
   }, [input, pending, chatM]);
+
+  const navigateFromAnswerLink = useCallback(
+    (pathWithSearch: string) => {
+      try {
+        const u = new URL(pathWithSearch, window.location.origin);
+        const search: Record<string, string> = {};
+        u.searchParams.forEach((v, k) => {
+          search[k] = v;
+        });
+        void navigate({
+          to: u.pathname,
+          ...(Object.keys(search).length > 0 ? { search } : {}),
+        });
+      } catch {
+        void navigate({ to: pathWithSearch });
+      }
+    },
+    [navigate],
+  );
 
   const scrollToBottom = useCallback(() => {
     const el = listRef.current;
@@ -236,7 +463,9 @@ export function AiChatbotFab() {
                   <div className="tw-flex tw-max-w-[72%] tw-flex-col tw-gap-0.5">
                     <span className="tw-mb-0.5 tw-text-[10px] tw-font-bold tw-text-[#475569]">{AI_TITLE}</span>
                     <div className="tw-cursor-default tw-rounded-[2px_14px_14px_14px] tw-bg-white tw-px-3 tw-py-1.5 tw-text-[0.8rem] tw-leading-relaxed tw-text-[#1E293B] tw-shadow-[0_1px_3px_rgba(0,0,0,0.07)] tw-transition-[filter] hover:tw-brightness-[0.97]">
-                      <p className="tw-m-0 tw-whitespace-pre-wrap tw-break-words">{item.answer}</p>
+                      <div className="tw-m-0 tw-text-[0.8rem] tw-leading-relaxed tw-text-[#1E293B]">
+                        <AiParsedAnswerBody answer={item.answer} onNavigateInternal={navigateFromAnswerLink} />
+                      </div>
                       {item.sources && item.sources.length > 0 ? (
                         <div className="tw-mt-2 tw-border-t tw-border-[#E8ECF0] tw-pt-2 tw-text-[10px] tw-text-[#64748B]">
                           {SOURCES_PREFIX}
@@ -304,6 +533,22 @@ export function AiChatbotFab() {
       </div>
 
       <div className="tw-pointer-events-auto tw-relative tw-inline-flex tw-shrink-0 tw-group">
+        {!open ? (
+          <div
+            className={[
+              'tw-pointer-events-none tw-absolute tw-right-[calc(100%+12px)] tw-top-1/2 -tw-translate-y-1/2',
+              'tw-max-w-[280px] tw-min-w-[230px] tw-rounded-full tw-bg-[#EEF3FF] tw-px-4 tw-py-2.5',
+              'tw-text-sm tw-leading-snug tw-text-[#1E3A8A]',
+              'tw-shadow-[0_8px_20px_rgba(59,130,246,0.16)] tw-ring-1 tw-ring-white/80',
+              'tw-opacity-0 tw-translate-x-1 tw-transition-all tw-duration-300',
+              'group-hover:tw-opacity-100 group-hover:tw-translate-x-0',
+              'group-focus-within:tw-opacity-100 group-focus-within:tw-translate-x-0',
+            ].join(' ')}
+            aria-hidden
+          >
+            <div className="tw-break-keep">{FAB_HOVER_HINT}</div>
+          </div>
+        ) : null}
         <div
           className="tw-pointer-events-none tw-absolute tw-inset-0 tw-rounded-full tw-bg-[#4A7FF7]/18 tw-blur-3xl tw-transition-all tw-duration-700 group-hover:tw-bg-[#4A7FF7]/26"
           aria-hidden

@@ -375,7 +375,7 @@ export function MyLeavePage() {
     });
     if (candidates.length === 0) return null;
     candidates.sort();
-    return candidates[0];
+    return candidates[0] ?? null;
   }, [promotionsOfYear, policyQ.data, expirationsWithSecond]);
 
   // 촉진 안내 수신 - 가장 최근 단계 + 열람 여부 보조 표시

@@ -14,6 +14,8 @@ export type ApprovalAttachment = {
 /** 서버·가이드 기준 — 프론트 검증용 */
 export const APPROVAL_ATTACHMENT_MAX_COUNT = 3;
 export const APPROVAL_ATTACHMENT_MAX_FILE_BYTES = 10 * 1024 * 1024;
+/** 회의 녹음 webm 등 Whisper 한도(25MB)에 맞춘 첨부 상한 */
+export const APPROVAL_ATTACHMENT_WEBM_MAX_FILE_BYTES = 26 * 1024 * 1024;
 export const APPROVAL_ATTACHMENT_TOTAL_MAX_BYTES = 50 * 1024 * 1024;
 export const APPROVAL_ATTACHMENT_ALLOWED_EXT = new Set([
   'jpg',
@@ -32,6 +34,7 @@ export const APPROVAL_ATTACHMENT_ALLOWED_EXT = new Set([
   'txt',
   'csv',
   'zip',
+  'webm',
 ]);
 
 function asText(value: unknown): string {
@@ -117,8 +120,11 @@ export function validateApprovalAttachmentCandidate(
   if (!ext || !APPROVAL_ATTACHMENT_ALLOWED_EXT.has(ext)) {
     return `허용되지 않는 파일 형식입니다: ${file.name}`;
   }
-  if (file.size > APPROVAL_ATTACHMENT_MAX_FILE_BYTES) {
-    return '파일당 최대 10MB까지 첨부할 수 있습니다.';
+  const perFileLimit = ext === 'webm' ? APPROVAL_ATTACHMENT_WEBM_MAX_FILE_BYTES : APPROVAL_ATTACHMENT_MAX_FILE_BYTES;
+  if (file.size > perFileLimit) {
+    return ext === 'webm'
+      ? 'webm 녹음 첨부는 파일당 최대 약 25MB까지 가능합니다.'
+      : '파일당 최대 10MB까지 첨부할 수 있습니다.';
   }
   const nextTotal =
     ctx.existingRemoteBytes + ctx.pendingLocalBytes + file.size;

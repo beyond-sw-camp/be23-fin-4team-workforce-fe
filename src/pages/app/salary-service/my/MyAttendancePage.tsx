@@ -5,7 +5,7 @@
  */
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { LoginOutlined, LogoutOutlined } from '@ant-design/icons';
+import { LoginOutlined, LogoutOutlined, RedoOutlined } from '@ant-design/icons';
 import { Alert, App, Button, Card, DatePicker, Progress, Space, Statistic, Table, Tabs, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs, { type Dayjs } from 'dayjs';
@@ -337,15 +337,22 @@ export function MyAttendancePage() {
               },
             });
           };
-          // 정정 완료 후에도 재신청 허용 - Tag + [재신청] 링크 함께 노출
+          // 정정 완료 후에도 재신청 허용 - 완료 Tag + 재신청 ghost 버튼
           if (state === 'COMPLETED') {
             return (
-              <Space size={4}>
+              <div className="tw-flex tw-flex-col tw-items-center tw-gap-1">
                 <Tag color="green" className="!tw-m-0">정정 완료</Tag>
-                <Button type="link" size="small" className="!tw-p-0" disabled={!correctionDocId} onClick={goCompose}>
+                <Button
+                  type="default"
+                  size="small"
+                  icon={<RedoOutlined />}
+                  className="!tw-h-6 !tw-rounded-full !tw-border-slate-200 !tw-px-2 !tw-text-[11px] !tw-text-slate-500 hover:!tw-border-blue-300 hover:!tw-text-blue-500"
+                  disabled={!correctionDocId}
+                  onClick={goCompose}
+                >
                   재신청
                 </Button>
-              </Space>
+              </div>
             );
           }
           return (
@@ -381,15 +388,22 @@ export function MyAttendancePage() {
               },
             });
           };
-          // 승인 완료 후에도 재신청 허용 - Tag + [재신청] 링크 함께 노출
+          // 승인 완료 후에도 재신청 허용 - 완료 Tag + 재신청 ghost 버튼
           if (otState === 'APPROVED') {
             return (
-              <Space size={4}>
+              <div className="tw-flex tw-flex-col tw-items-center tw-gap-1">
                 <Tag color="green" className="!tw-m-0">승인 완료</Tag>
-                <Button type="link" size="small" className="!tw-p-0" disabled={!overtimeDocId} onClick={goCompose}>
+                <Button
+                  type="default"
+                  size="small"
+                  icon={<RedoOutlined />}
+                  className="!tw-h-6 !tw-rounded-full !tw-border-slate-200 !tw-px-2 !tw-text-[11px] !tw-text-slate-500 hover:!tw-border-blue-300 hover:!tw-text-blue-500"
+                  disabled={!overtimeDocId}
+                  onClick={goCompose}
+                >
                   재신청
                 </Button>
-              </Space>
+              </div>
             );
           }
           return (
