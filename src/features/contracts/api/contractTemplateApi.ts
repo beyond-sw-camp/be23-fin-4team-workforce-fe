@@ -85,6 +85,10 @@ export type ContractRecord = {
   revision: number;
   cancelReason: string | null;
   rejectReason: string | null;
+  /** 회사 직인 이미지 URL */
+  sealImageUrl: string | null;
+  /** 계약 문서번호 (예: 근로-2026-0001) */
+  contractNumber: string | null;
 };
 
 /** 계약 본문 또는 직원 당사자에 표시할 거절 사유 */
@@ -260,6 +264,8 @@ function normalizeContractRecord(raw: unknown): ContractRecord | null {
   const prevContract = asText(o.previousContractId ?? o.previous_contract_id);
   const cancelReason = asText(o.cancelReason ?? o.cancel_reason);
   const rejectReasonTop = asText(o.rejectReason ?? o.reject_reason);
+  const sealImageUrl = asText(o.sealImageUrl ?? o.seal_image_url);
+  const contractNumber = asText(o.contractNumber ?? o.contract_number);
   return {
     contractId,
     companyId: asText(o.companyId ?? o.company_id),
@@ -283,6 +289,8 @@ function normalizeContractRecord(raw: unknown): ContractRecord | null {
     revision,
     cancelReason: cancelReason || null,
     rejectReason: rejectReasonTop || null,
+    sealImageUrl: sealImageUrl || null,
+    contractNumber: contractNumber || null,
   };
 }
 
@@ -416,8 +424,17 @@ export const contractTemplateApi = {
       .filter((item): item is ContractRecord => item != null);
   },
 
+  /** 인사팀(CONTRACT:READ) — 전체 계약 상세 */
   async getContract(contractId: string): Promise<ContractRecord> {
     const response = await httpClient.get(`/contract/contracts/${encodeURIComponent(contractId)}`);
+    const normalized = normalizeContractRecord(unwrapApiResponse<unknown>(response.data));
+    if (!normalized) throw new Error('계약 상세 응답을 해석할 수 없습니다.');
+    return normalized;
+  },
+
+  /** 직원 본인 계약만 — GET /{id} 는 인사팀 전용이므로 내 계약 화면에서 사용 */
+  async getContractMy(contractId: string): Promise<ContractRecord> {
+    const response = await httpClient.get(`/contract/contracts/${encodeURIComponent(contractId)}/my`);
     const normalized = normalizeContractRecord(unwrapApiResponse<unknown>(response.data));
     if (!normalized) throw new Error('계약 상세 응답을 해석할 수 없습니다.');
     return normalized;
@@ -455,8 +472,18 @@ export const contractTemplateApi = {
     return normalized;
   },
 
+  /** 인사팀(CONTRACT:READ) — 계약 개정 이력 */
   async getContractHistory(contractId: string): Promise<ContractRecord[]> {
     const response = await httpClient.get(`/contract/contracts/${encodeURIComponent(contractId)}/history`);
+    const unwrapped = unwrapApiResponse<unknown>(response.data);
+    return pickArray(unwrapped)
+      .map((item) => normalizeContractRecord(item))
+      .filter((item): item is ContractRecord => item != null);
+  },
+
+  /** 직원 본인 계약 이력만 — /history 는 인사팀 전용 */
+  async getContractHistoryMy(contractId: string): Promise<ContractRecord[]> {
+    const response = await httpClient.get(`/contract/contracts/${encodeURIComponent(contractId)}/history/my`);
     const unwrapped = unwrapApiResponse<unknown>(response.data);
     return pickArray(unwrapped)
       .map((item) => normalizeContractRecord(item))

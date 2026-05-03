@@ -1,6 +1,6 @@
 import type { NavigateOptions } from '@tanstack/react-router';
 
-const CONTRACT_NOTIF_TYPES = new Set(['CONTRACT_REMIND', 'CONTRACT_SENT']);
+const CONTRACT_NOTIF_TYPES = new Set(['CONTRACT_REMIND', 'CONTRACT_SENT', 'CONTRACT_CANCELED']);
 
 export function isContractNotificationType(type: string | undefined | null): boolean {
   return CONTRACT_NOTIF_TYPES.has(String(type ?? '').trim().toUpperCase());

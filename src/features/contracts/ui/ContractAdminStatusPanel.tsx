@@ -309,6 +309,8 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
         queryClient.invalidateQueries({ queryKey: ['contract', 'admin', 'contracts'] }),
         queryClient.invalidateQueries({ queryKey: ['contract', 'detail', contractId] }),
         queryClient.invalidateQueries({ queryKey: ['contract', 'admin', 'batch-contracts'] }),
+        queryClient.invalidateQueries({ queryKey: ['contract', 'my'] }),
+        queryClient.invalidateQueries({ queryKey: ['contract', 'my-detail', contractId] }),
       ]);
     },
     onError: (e: Error) => message.error(e.message || '서명 리마인드 발송에 실패했습니다.'),
@@ -322,6 +324,8 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
         queryClient.invalidateQueries({ queryKey: ['contract', 'admin', 'contracts'] }),
         queryClient.invalidateQueries({ queryKey: ['contract', 'admin', 'batch-contracts', batchId] }),
         queryClient.invalidateQueries({ queryKey: ['contract', 'admin', 'batches'] }),
+        queryClient.invalidateQueries({ queryKey: ['contract', 'my'] }),
+        queryClient.invalidateQueries({ queryKey: ['contract', 'my-detail'] }),
       ]);
     },
     onError: (e: Error) => message.error(e.message || '일괄 리마인드 발송에 실패했습니다.'),
@@ -488,7 +492,25 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
         { title: '사번', dataIndex: 'employeeSabun', key: 'employeeSabun', width: compact ? 88 : 120, render: (v: string | null) => v || '—' },
         { title: '부서', dataIndex: 'organizationName', key: 'organizationName', width: compact ? 100 : 140, render: (v: string | null) => v || '—' },
         { title: '템플릿', dataIndex: 'templateName', key: 'templateName', ellipsis: true },
+        {
+          title: '문서번호',
+          dataIndex: 'contractNumber',
+          key: 'contractNumber',
+          width: compact ? 120 : 140,
+          ellipsis: true,
+          render: (v: string | null) => v?.trim() || '—',
+        },
         { title: '상태', dataIndex: 'contractStatus', key: 'contractStatus', width: compact ? 100 : 120, render: (v: string) => statusTag(v) },
+        {
+          title: '회수 사유',
+          key: 'cancelReason',
+          width: compact ? 140 : 180,
+          ellipsis: true,
+          render: (_: unknown, row: ContractRecord) =>
+            String(row.contractStatus).toUpperCase() === 'CANCELED' && row.cancelReason?.trim()
+              ? row.cancelReason.trim()
+              : '—',
+        },
         { title: '생성일', dataIndex: 'createdAt', key: 'createdAt', width: compact ? 138 : 170, render: (v: string) => formatDateTime(v) },
       ]}
     />
@@ -667,7 +689,18 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
             <Card size="small" title="기본 정보">
               <div className="tw-grid tw-grid-cols-1 sm:tw-grid-cols-2 tw-gap-2 tw-text-sm">
                 <div><strong>템플릿</strong>: {contractDetail.templateName}</div>
+                <div><strong>문서번호</strong>: {contractDetail.contractNumber?.trim() || '—'}</div>
                 <div><strong>상태</strong>: {statusTag(contractDetail.contractStatus)}</div>
+                {contractDetail.sealImageUrl?.trim() ? (
+                  <div className="sm:tw-col-span-2 tw-flex tw-flex-wrap tw-items-center tw-gap-2">
+                    <strong className="tw-shrink-0">회사 직인</strong>
+                    <img
+                      src={contractDetail.sealImageUrl.trim()}
+                      alt="회사 직인"
+                      className="tw-max-h-24 tw-max-w-[200px] tw-rounded tw-border tw-border-slate-200 tw-object-contain tw-bg-white tw-p-1"
+                    />
+                  </div>
+                ) : null}
                 <div><strong>개정 차수</strong>: {contractDetail.revision ?? 1}</div>
                 <div>
                   <strong>이전 계약</strong>:{' '}
@@ -857,7 +890,25 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
             { title: '직원', dataIndex: 'employeeName', key: 'employeeName', width: 140 },
             { title: '사번', dataIndex: 'employeeSabun', key: 'employeeSabun', width: 120, render: (v: string | null) => v || '—' },
             { title: '부서', dataIndex: 'organizationName', key: 'organizationName', width: 140, render: (v: string | null) => v || '—' },
+            {
+              title: '문서번호',
+              dataIndex: 'contractNumber',
+              key: 'contractNumber',
+              width: 130,
+              ellipsis: true,
+              render: (v: string | null) => v?.trim() || '—',
+            },
             { title: '상태', dataIndex: 'contractStatus', key: 'contractStatus', width: 120, render: (v: string) => statusTag(v) },
+            {
+              title: '회수 사유',
+              key: 'cancelReason',
+              width: 160,
+              ellipsis: true,
+              render: (_: unknown, row: ContractRecord) =>
+                String(row.contractStatus).toUpperCase() === 'CANCELED' && row.cancelReason?.trim()
+                  ? row.cancelReason.trim()
+                  : '—',
+            },
           ]}
         />
         </div>

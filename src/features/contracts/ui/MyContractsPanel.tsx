@@ -128,8 +128,8 @@ export function MyContractsPanel() {
   });
 
   const { data: contractDetail, isFetching: detailLoading } = useQuery({
-    queryKey: ['contract', 'detail', selectedContractId],
-    queryFn: () => contractTemplateApi.getContract(selectedContractId!),
+    queryKey: ['contract', 'my-detail', selectedContractId],
+    queryFn: () => contractTemplateApi.getContractMy(selectedContractId!),
     enabled: Boolean(selectedContractId),
   });
 
@@ -140,7 +140,7 @@ export function MyContractsPanel() {
       message.success('전자계약 서명이 완료되었습니다.');
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['contract', 'my'] }),
-        queryClient.invalidateQueries({ queryKey: ['contract', 'detail', vars.contractId] }),
+        queryClient.invalidateQueries({ queryKey: ['contract', 'my-detail', vars.contractId] }),
       ]);
     },
     onError: (e: Error) => message.error(e.message || '계약 서명에 실패했습니다.'),
@@ -151,13 +151,12 @@ export function MyContractsPanel() {
       contractTemplateApi.rejectContract(vars.contractId, { rejectReason: vars.rejectReason }),
     onSuccess: async (updated, vars) => {
       message.success('계약을 거절했습니다.');
-      queryClient.setQueryData(['contract', 'detail', vars.contractId], updated);
+      queryClient.setQueryData(['contract', 'my-detail', vars.contractId], updated);
       setRejectModalOpen(false);
       setRejectReasonDraft('');
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['contract', 'my'] }),
-        queryClient.invalidateQueries({ queryKey: ['contract', 'detail', vars.contractId] }),
-        queryClient.invalidateQueries({ queryKey: ['contract', 'history', vars.contractId] }),
+        queryClient.invalidateQueries({ queryKey: ['contract', 'my-detail', vars.contractId] }),
         queryClient.invalidateQueries({ queryKey: ['contract', 'admin', 'contracts'] }),
         queryClient.invalidateQueries({ queryKey: ['contract', 'admin', 'batch-contracts'] }),
         queryClient.invalidateQueries({ queryKey: ['contract', 'admin', 'batches'] }),
@@ -241,7 +240,15 @@ export function MyContractsPanel() {
             className: 'tw-cursor-pointer',
           })}
           columns={[
-            { title: '템플릿', dataIndex: 'templateName', key: 'templateName' },
+            { title: '템플릿', dataIndex: 'templateName', key: 'templateName', ellipsis: true },
+            {
+              title: '문서번호',
+              dataIndex: 'contractNumber',
+              key: 'contractNumber',
+              width: 140,
+              ellipsis: true,
+              render: (v: string | null) => v?.trim() || '—',
+            },
             {
               title: '상태',
               dataIndex: 'contractStatus',
@@ -338,7 +345,18 @@ export function MyContractsPanel() {
             <Card size="small" title="기본 정보">
               <div className="tw-grid tw-grid-cols-1 sm:tw-grid-cols-2 tw-gap-2 tw-text-sm">
                 <div><strong>템플릿</strong>: {contractDetail.templateName}</div>
+                <div><strong>문서번호</strong>: {contractDetail.contractNumber?.trim() || '—'}</div>
                 <div><strong>상태</strong>: {statusTag(contractDetail.contractStatus)}</div>
+                {contractDetail.sealImageUrl?.trim() ? (
+                  <div className="sm:tw-col-span-2 tw-flex tw-flex-wrap tw-items-center tw-gap-2">
+                    <strong className="tw-shrink-0">회사 직인</strong>
+                    <img
+                      src={contractDetail.sealImageUrl.trim()}
+                      alt="회사 직인"
+                      className="tw-max-h-24 tw-max-w-[200px] tw-rounded tw-border tw-border-slate-200 tw-object-contain tw-bg-white tw-p-1"
+                    />
+                  </div>
+                ) : null}
                 <div><strong>직원명</strong>: {contractDetail.employeeName || '—'}</div>
                 <div><strong>사번</strong>: {contractDetail.employeeSabun || '—'}</div>
                 <div><strong>부서</strong>: {contractDetail.organizationName || '—'}</div>

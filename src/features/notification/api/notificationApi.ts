@@ -38,6 +38,7 @@ export type NotificationType =
   | 'MEMBER_INFO_UPDATED'
   | 'CONTRACT_REMIND'
   | 'CONTRACT_SENT'
+  | 'CONTRACT_CANCELED'
   | string;
 
 export type NotificationItem = {
@@ -90,6 +91,7 @@ const NOTIFICATION_TYPE_KO: Record<string, string> = {
   LABOR_LAW_WEEKLY_VIOLATION: '주 52시간 초과',
   CONTRACT_REMIND: '계약 서명 리마인드',
   CONTRACT_SENT: '전자계약 도착',
+  CONTRACT_CANCELED: '계약 회수',
 };
 
 const GOAL_BUNDLE_TARGET_TYPE_KO: Record<string, string> = {

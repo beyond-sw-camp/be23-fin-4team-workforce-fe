@@ -49,6 +49,7 @@ function notificationTone(item: NotificationItem): string {
   if (t.startsWith('APPROVAL_')) return 'purple';
   if (t.startsWith('LEAVE_')) return 'green';
   if (t.startsWith('EVALUATION_') || t === 'GOAL_EVALUATED') return 'orange';
+  if (t.startsWith('CONTRACT_')) return 'cyan';
   return 'default';
 }
 
