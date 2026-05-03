@@ -336,7 +336,7 @@ export function AdminLeavePoliciesPage() {
         okText={editing ? '수정' : '등록'}
         cancelText="취소"
         title={editing ? '연차 정책 수정' : '연차 정책 등록'}
-        destroyOnClose
+        destroyOnHidden
         width="min(96vw, 1180px)"
         styles={{
           body: {

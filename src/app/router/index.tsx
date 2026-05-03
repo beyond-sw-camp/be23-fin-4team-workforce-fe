@@ -10,7 +10,7 @@ import type { AppRouterContext } from '@/app/router/types';
 import { requireAuth, requireMemberDirectoryAccess, requirePermissions } from '@/app/router/guards';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import { hasActiveNegotiationSalaryPolicy } from '@/features/salary-service/lib/salaryPolicyAccess';
-import { PERM } from '@/features/permissions/backend-permissions';
+import { PERM, canManageOrganizationScopedGoals } from '@/features/permissions/backend-permissions';
 import { HomePublicLayout } from '@/pages/public/HomePublicLayout';
 import { LandingHomePage } from '@/pages/public/LandingHomePage';
 import LoginPage from '@/pages/public/LoginPage';
@@ -273,7 +273,16 @@ const performanceRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/performance',
   validateSearch: z.object({
-    view: z.enum(['my-kr', 'my-objective', 'company', 'member-kr', 'integrated']).optional(),
+    view: z
+      .string()
+      .optional()
+      .transform((v) =>
+        v === 'my' || v === 'approval' || v === 'org' || v === 'company'
+          ? v === 'approval'
+            ? 'my'
+            : v
+          : undefined,
+      ),
     bundleId: z.string().optional(),
   }),
   component: PerformancePage,
@@ -284,14 +293,14 @@ const evaluationFlowRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/evaluation-flow',
   beforeLoad: () => {
-    throw redirect({ to: '/app/evaluations', search: { view: 'self' } });
+    throw redirect({ to: '/app/evaluations' });
   },
 });
 const myEvaluationResultV2Route = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/my-evaluation-result-v2',
   beforeLoad: () => {
-    throw redirect({ to: '/app/evaluations', search: { view: 'results' } });
+    throw redirect({ to: '/app/evaluations' });
   },
 });
 const evaluationAdminRoute = createRoute({
@@ -418,8 +427,11 @@ const evaluationsRoute = createRoute({
     view: z
       .string()
       .optional()
-      .transform((v) => (v === 'self' || v === 'results' || v === 'overview' ? v : undefined)),
-    adminTab: z.enum(['seasons', 'designs', 'operations']).optional(),
+      .transform((v) => (v === 'overview' || v === 'management' ? 'overview' : undefined)),
+    adminTab: z
+      .string()
+      .optional()
+      .transform((v) => (v === 'operations' ? 'operations' : v === 'seasons' || v === 'designs' ? 'seasons' : undefined)),
   }),
   component: EvaluationsHubPage,
 });
@@ -432,12 +444,18 @@ const evaluationSeasonDetailRoute = createRoute({
   }),
   component: EvaluationSeasonDetailPage,
   beforeLoad: ({ context }) => {
-    // 시즌 상세는 평가 관리 권한(EVALUATION READ/UPDATE/CREATE 중 하나) 필요.
+    // 시즌 상세는 조직 목표 관리 권한 + 평가 운영 권한이 모두 필요.
     // 권한이 없으면 허브로 리다이렉트.
+    const canManageGoals =
+      context.auth.user?.isSystemAdmin === true ||
+      canManageOrganizationScopedGoals(context.permissions.hasPermission);
     const canManage =
-      context.permissions.hasPermission(PERM.EVALUATION_READ) ||
-      context.permissions.hasPermission(PERM.EVALUATION_UPDATE) ||
-      context.permissions.hasPermission(PERM.EVALUATION_CREATE);
+      canManageGoals &&
+      (
+        context.permissions.hasPermission(PERM.EVALUATION_READ) ||
+        context.permissions.hasPermission(PERM.EVALUATION_UPDATE) ||
+        context.permissions.hasPermission(PERM.EVALUATION_CREATE)
+      );
     if (!canManage) {
       throw redirect({ to: '/app/evaluations' });
     }
@@ -448,7 +466,7 @@ const myEvaluationResultsRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/evaluations/my-results',
   beforeLoad: () => {
-    throw redirect({ to: '/app/evaluations', search: { view: 'results' } });
+    throw redirect({ to: '/app/evaluations' });
   },
 });
 

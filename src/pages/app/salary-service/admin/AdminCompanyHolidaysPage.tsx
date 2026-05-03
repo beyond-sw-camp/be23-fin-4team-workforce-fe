@@ -443,7 +443,7 @@ export function AdminCompanyHolidaysPage() {
         okText={editing ? '수정' : '등록'}
         cancelText="취소"
         title={editing ? '공휴일 수정' : '공휴일 추가'}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form<FormValues>
           form={form}

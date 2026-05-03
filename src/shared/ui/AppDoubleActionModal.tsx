@@ -20,7 +20,10 @@ type AppDoubleActionModalProps = {
   cancelDanger?: boolean;
   confirmDanger?: boolean;
   confirmButtonClassName?: string;
+  hideCancel?: boolean;
+  hideConfirm?: boolean;
   destroyOnHidden?: boolean;
+  forceRender?: boolean;
   zIndex?: number;
 };
 
@@ -44,9 +47,14 @@ export function AppDoubleActionModal({
   cancelDanger = false,
   confirmDanger = false,
   confirmButtonClassName,
+  hideCancel = false,
+  hideConfirm = false,
   destroyOnHidden = true,
+  forceRender,
   zIndex,
 }: AppDoubleActionModalProps) {
+  const visibleButtonCount = Number(!hideCancel) + Number(!hideConfirm);
+
   return (
     <AppModal
       open={open}
@@ -54,33 +62,38 @@ export function AppDoubleActionModal({
       onCancel={onClose}
       zIndex={zIndex}
       footer={
-        <div className="tw-grid tw-w-full tw-grid-cols-2 tw-gap-2">
-          <Button
-            onClick={cancelAction ?? onClose}
-            loading={cancelLoading}
-            disabled={cancelDisabled}
-            danger={cancelDanger}
-            className="!tw-h-12 !tw-w-full !tw-rounded-xl !tw-border-slate-300 !tw-bg-white !tw-px-5 !tw-font-semibold !tw-text-slate-700 hover:!tw-border-slate-400 hover:!tw-text-slate-900"
-          >
-            {cancelText}
-          </Button>
-          <Button
-            type="primary"
-            danger={confirmDanger}
-            onClick={onConfirm}
-            loading={confirmLoading}
-            disabled={confirmDisabled}
-            className={clsx(
-              '!tw-h-12 !tw-w-full !tw-rounded-xl !tw-border-0 !tw-bg-[#1e3a5f] !tw-px-5 !tw-font-semibold hover:!tw-bg-[#152a45] disabled:!tw-bg-slate-300',
-              confirmButtonClassName,
-            )}
-          >
-            {confirmText}
-          </Button>
+        <div className={clsx('tw-grid tw-w-full tw-gap-2', visibleButtonCount === 1 ? 'tw-grid-cols-1' : 'tw-grid-cols-2')}>
+          {!hideCancel && (
+            <Button
+              onClick={cancelAction ?? onClose}
+              loading={cancelLoading}
+              disabled={cancelDisabled}
+              danger={cancelDanger}
+              className="!tw-h-12 !tw-w-full !tw-rounded-xl !tw-border-slate-300 !tw-bg-white !tw-px-5 !tw-font-semibold !tw-text-slate-700 hover:!tw-border-slate-400 hover:!tw-text-slate-900"
+            >
+              {cancelText}
+            </Button>
+          )}
+          {!hideConfirm && (
+            <Button
+              type="primary"
+              danger={confirmDanger}
+              onClick={onConfirm}
+              loading={confirmLoading}
+              disabled={confirmDisabled}
+              className={clsx(
+                '!tw-h-12 !tw-w-full !tw-rounded-xl !tw-border-0 !tw-bg-[#1e3a5f] !tw-px-5 !tw-font-semibold hover:!tw-bg-[#152a45] disabled:!tw-bg-slate-300',
+                confirmButtonClassName,
+              )}
+            >
+              {confirmText}
+            </Button>
+          )}
         </div>
       }
       width={width}
       destroyOnHidden={destroyOnHidden}
+      forceRender={forceRender}
       maskClosable={false}
       classNames={{
         content: '!tw-p-0',

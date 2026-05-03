@@ -150,7 +150,7 @@ export function ApprovalLinePicker({ value, onChange, excludeMemberId }: Props) 
         title="결재자 선택"
         onCancel={() => setPickerOpen(false)}
         footer={null}
-        destroyOnClose
+        destroyOnHidden
         width={520}
       >
         <Input.Search

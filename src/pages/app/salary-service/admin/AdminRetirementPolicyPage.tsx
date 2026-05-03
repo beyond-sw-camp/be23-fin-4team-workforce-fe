@@ -271,7 +271,7 @@ export function AdminRetirementPolicyPage() {
         okText={editing ? '수정' : '등록'}
         cancelText="취소"
         title={editing ? '퇴직급여 정책 수정' : '퇴직급여 정책 등록'}
-        destroyOnClose
+        destroyOnHidden
         width={560}
       >
         <Form<PolicyFormValues>

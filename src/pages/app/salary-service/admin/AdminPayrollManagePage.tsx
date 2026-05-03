@@ -542,7 +542,7 @@ function RetroactiveModal({
         onClose();
       }}
       footer={null}
-      destroyOnClose
+      destroyOnHidden
     >
       <Typography.Paragraph type="secondary" className="!tw-text-xs">
         통상임금 인상 시 과거 월 가산수당 (연장 / 야간 / 휴일) 을 새 통상임금 기준으로 재계산해

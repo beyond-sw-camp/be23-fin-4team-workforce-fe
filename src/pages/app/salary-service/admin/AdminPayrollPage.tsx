@@ -616,7 +616,7 @@ export function AdminPayrollPage() {
         okText="생성"
         cancelText="취소"
         title="누락 직원 급여대장 생성"
-        destroyOnClose
+        destroyOnHidden
         width={520}
       >
         <Typography.Paragraph type="secondary" className="!tw-text-xs">

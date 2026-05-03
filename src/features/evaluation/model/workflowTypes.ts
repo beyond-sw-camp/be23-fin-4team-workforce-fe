@@ -13,7 +13,14 @@ export type EvaluationStage =
   | 'SKIPPED_LEAVER';
 
 export type CalibrationRole = 'LEAD' | 'ASSISTANT';
-export type EvaluationSeasonFlowStatus = 'DRAFT' | 'ACTIVE' | 'CLOSED';
+export type EvaluationSeasonFlowStatus =
+  | 'DRAFT'
+  | 'SELF_EVAL'
+  | 'MANAGER_EVAL'
+  | 'GRADE_CONFIRM'
+  | 'RESULT_PUBLISHED'
+  | 'INTERVIEW'
+  | 'CLOSED';
 
 export type EvaluationSeasonFlow = {
   seasonId: string;
@@ -66,14 +73,21 @@ export type EvaluationFlowResponse = {
   finalScoreSnapshot?: number | null;
   confirmedBy?: string | null;
   confirmedAt?: string | null;
+  objectionStatus?: 'NONE' | 'REQUESTED' | 'REVIEWING' | 'RESOLVED' | string | null;
+  objectionMessage?: string | null;
+  objectionResolution?: string | null;
+  objectionRequestedAt?: string | null;
+  objectionResolvedAt?: string | null;
   createdAt?: string;
   updatedAt?: string;
 };
 
 export type SelfGoalAnswer = {
   goalId: string;
+  criteriaId?: string;
   grade: Grade;
   comment?: string;
+  evidenceUrl?: string;
 };
 
 export type SelfAnswersPayload = {

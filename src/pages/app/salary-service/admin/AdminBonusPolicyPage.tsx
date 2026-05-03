@@ -360,7 +360,7 @@ export function AdminBonusPolicyPage() {
         okText={editing ? '수정' : '등록'}
         cancelText="취소"
         title={editing ? '보너스 정책 수정' : '보너스 정책 등록'}
-        destroyOnClose
+        destroyOnHidden
         width={1120}
         styles={{ body: { paddingTop: 12 } }}
       >

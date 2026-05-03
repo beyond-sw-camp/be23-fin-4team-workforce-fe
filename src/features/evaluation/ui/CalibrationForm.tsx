@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { App, Card, Input, Radio, Space, Tag } from 'antd';
+import { LinkOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { evaluationRedesignApi } from '../api/evaluationRedesignApi';
 import type { EvaluationFlowResponse, GoalSnapshot } from '../model/workflowTypes';
@@ -14,10 +15,22 @@ const GRADES: Grade[] = ['S', 'A', 'B', 'C'];
 const SECTION_CARD =
   'tw-rounded-2xl tw-border tw-border-slate-200/90 tw-shadow-sm tw-shadow-slate-900/5';
 
+type SelfAnswerInfo = {
+  grade?: Grade;
+  evidenceUrl?: string;
+  comment?: string;
+};
+
 type Props = {
   response: EvaluationFlowResponse;
   currentUserId: string;
 };
+
+function reviewerRoleLabel(role?: string | null) {
+  if (role === 'LEAD') return '최종 검토자';
+  if (role === 'ASSISTANT') return '추가 검토자';
+  return '평가자';
+}
 
 export function CalibrationForm({ response, currentUserId }: Props) {
   const { message } = App.useApp();
@@ -97,13 +110,13 @@ export function CalibrationForm({ response, currentUserId }: Props) {
                 (isLead ? 'tw-text-amber-600' : 'tw-text-slate-500')
               }
             >
-              CALIBRATION · {role}
+              등급 검토 · {reviewerRoleLabel(role)}
             </div>
             <div className="tw-mt-0.5 tw-text-[18px] tw-font-bold tw-text-[#1e3a5f]">등급 조정</div>
             <div className="tw-mt-1 tw-text-xs tw-text-slate-500">
               {isLead
-                ? 'Lead는 개인 목표별 최종 등급을 정리하고, Assistant는 제안 등급과 코멘트를 남깁니다. 기준 문구는 상위 조직 목표의 평가 기준을 참고합니다.'
-                : '제안 등급과 코멘트를 남기면 Lead가 최종 확정 시 참고합니다.'}
+                ? '최종 검토자는 개인 목표별 최종 등급을 정리하고, 평가자는 제안 등급과 코멘트를 남깁니다. 기준 문구는 상위 조직 목표의 평가 기준을 참고합니다.'
+                : '제안 등급과 코멘트를 남기면 최종 검토자가 최종 확정 시 참고합니다.'}
             </div>
           </div>
           <div className="tw-shrink-0 tw-text-right">
@@ -120,7 +133,8 @@ export function CalibrationForm({ response, currentUserId }: Props) {
       {snapshot.goals.map((goal) => {
         const baseGrade = previewBase[goal.goalId];
         const gScore = gradeScore(baseGrade);
-        const selfGrade = selfAnswers[goal.goalId];
+        const selfAnswer = selfAnswers[goal.goalId];
+        const selfGrade = selfAnswer?.grade;
         const otherGrades = calibrations
           .filter((cal) => cal.evaluatorId !== currentUserId)
           .map((cal) => ({ role: cal.role, grade: cal.suggestedGrades?.[goal.goalId] }))
@@ -181,11 +195,33 @@ export function CalibrationForm({ response, currentUserId }: Props) {
                       : '!tw-m-0 !tw-rounded-full !tw-bg-slate-100 !tw-px-2.5 !tw-text-[11px] !tw-font-medium !tw-text-slate-600'
                   }
                 >
-                  {og.role} {og.grade}
+                  {reviewerRoleLabel(og.role)} {og.grade}
                 </Tag>
               ))}
               {otherGrades.length === 0 && <span className="tw-text-xs tw-text-slate-400">아직 없음</span>}
             </div>
+
+            {(selfAnswer?.comment || selfAnswer?.evidenceUrl) && (
+              <div className="tw-mb-3 tw-rounded-xl tw-border tw-border-emerald-100 tw-bg-emerald-50/50 tw-p-3">
+                <div className="tw-mb-1 tw-text-[11px] tw-font-semibold tw-uppercase tw-tracking-wide tw-text-emerald-700">
+                  자기평가 근거
+                </div>
+                {selfAnswer.comment ? (
+                  <div className="tw-mb-2 tw-text-sm tw-leading-6 tw-text-slate-700">{selfAnswer.comment}</div>
+                ) : null}
+                {selfAnswer.evidenceUrl ? (
+                  <a
+                    href={selfAnswer.evidenceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="tw-inline-flex tw-items-center tw-gap-1 tw-text-xs tw-font-semibold tw-text-blue-600"
+                  >
+                    <LinkOutlined />
+                    첨부 증적 열기
+                  </a>
+                ) : null}
+              </div>
+            )}
 
             <div className="tw-flex tw-flex-col tw-gap-2 tw-rounded-xl tw-border tw-border-slate-200 tw-bg-slate-50 tw-p-3">
               <div className="tw-flex tw-items-center tw-gap-3">
@@ -238,7 +274,7 @@ export function CalibrationForm({ response, currentUserId }: Props) {
           <div className="tw-flex tw-flex-col tw-gap-3 sm:tw-flex-row sm:tw-items-center sm:tw-justify-between">
             {isLead && (
               <span className="tw-text-xs tw-text-slate-500">
-                Lead의 최종 확정은 별도 [최종 확정] 단계에서 진행됩니다.
+                최종 검토자의 최종 확정은 별도 [최종 확정] 단계에서 진행됩니다.
               </span>
             )}
             <Space>
@@ -256,14 +292,20 @@ export function CalibrationForm({ response, currentUserId }: Props) {
   );
 }
 
-function parseSelfAnswers(json?: string | null): Record<string, Grade> {
+function parseSelfAnswers(json?: string | null): Record<string, SelfAnswerInfo> {
   if (!json) return {};
   try {
     const parsed = JSON.parse(json);
-    const m: Record<string, Grade> = {};
+    const m: Record<string, SelfAnswerInfo> = {};
     for (const it of parsed.items ?? []) {
       const key = it.goalId ?? it.criteriaId;
-      if (key) m[key] = it.grade;
+      if (key) {
+        m[key] = {
+          grade: it.grade,
+          evidenceUrl: it.evidenceUrl,
+          comment: it.comment,
+        };
+      }
     }
     return m;
   } catch {

@@ -201,7 +201,7 @@ export function GroupParticipantsDrawer({
         zIndex={10_100}
         width={420}
         centered
-        destroyOnClose
+        destroyOnHidden
       >
         {canInvite ? (
           <div className="tw-mb-3 tw-flex tw-justify-end">
@@ -282,7 +282,7 @@ export function GroupParticipantsDrawer({
         confirmLoading={addMembersMutation.isPending}
         zIndex={10_200}
         width={560}
-        destroyOnClose
+        destroyOnHidden
       >
         <div className="tw-flex tw-flex-col tw-gap-3">
           <Input
