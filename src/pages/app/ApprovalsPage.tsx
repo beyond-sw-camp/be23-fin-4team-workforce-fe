@@ -209,6 +209,30 @@ type PreActionConfig = {
 };
 
 const SCHEDULE_SELECTION_PREFILL_STORAGE_KEY = 'wf-approval-prefill-schedule-selection';
+const CHATBOT_ACTION_PREFILL_STORAGE_KEY = 'wf-approval-prefill-chatbot-action';
+
+/** 쿼리값이 `prefill=%22true%22`처럼 따옴표가 포함된 문자열일 때 정규화 */
+function normalizeUrlSearchToken(v: unknown): string {
+  if (v === true) return 'true';
+  if (v === false) return 'false';
+  if (v == null) return '';
+  let s = String(v).trim();
+  if (s.length >= 2) {
+    const a = s[0];
+    const b = s[s.length - 1];
+    if ((a === '"' && b === '"') || (a === "'" && b === "'")) {
+      s = s.slice(1, -1).trim();
+    }
+  }
+  return s;
+}
+
+function isTruthyPrefillParam(v: unknown): boolean {
+  if (v === true) return true;
+  if (v === false) return false;
+  const s = normalizeUrlSearchToken(v).toLowerCase();
+  return s === 'true' || s === '1' || s === 'yes';
+}
 
 function readStr(content: Record<string, unknown>, key: string): string {
   const v = content[key];
@@ -515,12 +539,12 @@ function buildApprovalEmbedUrl(pathname: string, search: Record<string, string |
 }
 
 /** 작성 허브「전체」모달 iframe — 카드별로 열리는 문서함 구역 */
-type ComposeHomeEmbedPanel = 'my-all' | 'viewers' | 'department' | 'official' | 'draft' | 'absence';
+type ComposeHomeEmbedPanel = 'my-all' | 'viewers' | 'department' | 'official' | 'draft' | 'absence' | 'compose-prefill';
 type ApprovalNotificationModal = 'pending' | 'my-all' | 'viewers' | 'official' | 'draft';
 
 function composeHomeEmbedPanelUrl(
   panel: ComposeHomeEmbedPanel,
-  opts?: { composeDraftId?: string },
+  opts?: { composeDraftId?: string; prefillDocumentId?: string },
 ): string {
   switch (panel) {
     case 'my-all':
@@ -542,6 +566,14 @@ function composeHomeEmbedPanelUrl(
       return buildApprovalEmbedUrl('/app/approvals', { tab: 'my', box: 'per-draft' });
     case 'absence':
       return buildApprovalEmbedUrl('/app/approvals/absence-proxy', {});
+    case 'compose-prefill':
+      return buildApprovalEmbedUrl('/app/approvals', {
+        tab: 'compose',
+        sideNav: APPROVAL_COMPOSE_WORKBENCH_SIDE_NAV,
+        docId: opts?.prefillDocumentId,
+        documentId: opts?.prefillDocumentId,
+        prefill: 'true',
+      });
     default:
       return buildApprovalEmbedUrl('/app/approvals', { tab: 'my', box: 'per-all' });
   }
@@ -1369,6 +1401,8 @@ export function ApprovalsPage() {
         embed?: string;
         composeDraftId?: string;
         docId?: string;
+        documentId?: string;
+        prefill?: string | boolean;
         approvalModal?: string;
         approvalOpenAt?: string;
         approvalRequestId?: string;
@@ -1391,7 +1425,7 @@ export function ApprovalsPage() {
   const [composeApprovalInfoModalOpen, setComposeApprovalInfoModalOpen] = useState(false);
   const [composePreviewOpen, setComposePreviewOpen] = useState(false);
   const [composeHomeMoreModal, setComposeHomeMoreModal] = useState<
-    | { kind: 'iframe'; panel: ComposeHomeEmbedPanel; composeDraftId?: string }
+    | { kind: 'iframe'; panel: ComposeHomeEmbedPanel; composeDraftId?: string; prefillDocumentId?: string }
     | { kind: 'pending-inbox'; title: string }
     | null
   >(null);
@@ -1432,6 +1466,8 @@ export function ApprovalsPage() {
   const composeDraftHydratingRef = useRef(false);
   /** 허브 모달 iframe에서 `composeDraftId`로 자동 이어쓰기 시 중복 호출 방지 */
   const embedComposeDraftBootRef = useRef<string | null>(null);
+  /** 챗봇 prefill URL(documentId/prefill) 자동 부팅 중복 방지 */
+  const chatbotPrefillBootRef = useRef<string | null>(null);
   /** 회의록 `ai_transcribe` + attachAudio 일 때 임시저장/제출 직후 첨부 업로드용 */
   const composeMeetingAudioBlobRef = useRef<Blob | null>(null);
   const [form] = Form.useForm();
@@ -2328,7 +2364,13 @@ export function ApprovalsPage() {
     [initializeComposeForDocument],
   );
 
-  const embedDocId = typeof routeSearch.docId === 'string' ? routeSearch.docId.trim() : '';
+  const embedDocId = normalizeUrlSearchToken(routeSearch.docId);
+  const chatbotPrefillFlag = isTruthyPrefillParam(routeSearch.prefill);
+  const chatbotPrefillDocId = normalizeUrlSearchToken(
+    typeof routeSearch.documentId === 'string' && routeSearch.documentId.trim()
+      ? routeSearch.documentId
+      : routeSearch.docId,
+  );
   const composeDraftIdFromUrl =
     typeof routeSearch.composeDraftId === 'string' ? routeSearch.composeDraftId.trim() : '';
 
@@ -2367,6 +2409,30 @@ export function ApprovalsPage() {
   ]);
 
   useEffect(() => {
+    /** 허브가 아닐 때(sideNav=workbench 등)에도 챗봇 prefill 모달을 띄워야 하므로 onComposeHub 제외 */
+    if (tab !== 'compose' || isEmbedComposeModal || !chatbotPrefillFlag || !chatbotPrefillDocId) {
+      chatbotPrefillBootRef.current = null;
+      return;
+    }
+    if (!activeDocuments.length) return;
+    if (chatbotPrefillBootRef.current === chatbotPrefillDocId) return;
+    const doc = activeDocuments.find((d) => d.documentId === chatbotPrefillDocId);
+    if (!doc) return;
+    chatbotPrefillBootRef.current = chatbotPrefillDocId;
+    setComposeHomeMoreModal({
+      kind: 'iframe',
+      panel: 'compose-prefill',
+      prefillDocumentId: chatbotPrefillDocId,
+    });
+  }, [
+    activeDocuments,
+    chatbotPrefillDocId,
+    chatbotPrefillFlag,
+    isEmbedComposeModal,
+    tab,
+  ]);
+
+  useEffect(() => {
     if (tab !== 'compose' || composePhase !== 'fill') return;
     if (!selectedDocument || selectedDocument.documentName !== '출퇴근시간 변경 신청서') return;
     const raw = sessionStorage.getItem(SCHEDULE_SELECTION_PREFILL_STORAGE_KEY);
@@ -2394,6 +2460,31 @@ export function ApprovalsPage() {
       sessionStorage.removeItem(SCHEDULE_SELECTION_PREFILL_STORAGE_KEY);
     }
   }, [composePhase, form, message, selectedDocument, tab]);
+
+  useEffect(() => {
+    if (tab !== 'compose' || composePhase !== 'fill') return;
+    const raw = sessionStorage.getItem(CHATBOT_ACTION_PREFILL_STORAGE_KEY);
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw) as {
+        documentId?: string;
+        content?: Record<string, unknown>;
+      };
+      if (!parsed.documentId || parsed.documentId !== selectedDocumentId) return;
+      if (!parsed.content || typeof parsed.content !== 'object' || Array.isArray(parsed.content)) return;
+      const current = (form.getFieldValue('content') ?? {}) as Record<string, unknown>;
+      form.setFieldsValue({
+        content: {
+          ...current,
+          ...parsed.content,
+        },
+      });
+      message.info('챗봇 제안값이 결재 양식에 자동 입력되었습니다.');
+      sessionStorage.removeItem(CHATBOT_ACTION_PREFILL_STORAGE_KEY);
+    } catch {
+      sessionStorage.removeItem(CHATBOT_ACTION_PREFILL_STORAGE_KEY);
+    }
+  }, [composePhase, form, message, selectedDocumentId, tab]);
 
   const toggleBookmark = useCallback((requestId: string) => {
     setBookmarkedRequestIds((prev) => {
@@ -4377,48 +4468,6 @@ export function ApprovalsPage() {
           </Card>
         </div>
 
-        <Modal
-          title={composeHomeMoreModal?.kind === 'pending-inbox' ? composeHomeMoreModal.title : null}
-          open={composeHomeMoreModal != null}
-          onCancel={() => setComposeHomeMoreModal(null)}
-          footer={null}
-          width={1120}
-          destroyOnHidden
-        style={{ top: 48 }}
-          styles={{
-            content: {
-              height: 820,
-              maxHeight: '90vh',
-              resize: 'both',
-              display: 'flex',
-              flexDirection: 'column',
-              padding: 0,
-              overflow: 'auto',
-            },
-            header: { flexShrink: 0, marginBottom: 0, padding: '12px 16px' },
-            body: { flex: 1, minHeight: 0, padding: 0, overflow: 'hidden' },
-          }}
-        >
-          {composeHomeMoreModal?.kind === 'pending-inbox' ? (
-            <PendingApprovalInboxModalContent
-              myMemberId={authMemberId}
-              myMemberPositionId={drafterProfile?.memberPositionId?.trim()}
-              onOpenDetail={(requestId) => setSelectedRequestId(requestId)}
-              onStartApprove={(approvalId) => setApprovalAction({ approvalId, mode: 'approve' })}
-              onStartReject={(approvalId) => setApprovalAction({ approvalId, mode: 'reject' })}
-            />
-          ) : composeHomeMoreModal?.kind === 'iframe' ? (
-            <iframe
-              key={`${composeHomeMoreModal.panel}-${composeHomeMoreModal.composeDraftId ?? ''}`}
-              title="전자결재 문서함"
-              src={composeHomeEmbedPanelUrl(composeHomeMoreModal.panel, {
-                composeDraftId: composeHomeMoreModal.composeDraftId,
-              })}
-              className="tw-h-full tw-min-h-0 tw-w-full tw-border-0"
-            />
-          ) : null}
-        </Modal>
-
         <ApprovalFormSelectModal
           open={composeFormSelectModalOpen}
           onCancel={() => {
@@ -4517,6 +4566,52 @@ export function ApprovalsPage() {
           : 'tw-flex tw-flex-col tw-gap-4',
       )}
     >
+      {/* 허브 대시보드 밖(예: sideNav=workbench)에서도 동일 모달이 필요 — 챗봇 prefill 등 */}
+      {!isEmbedComposeModal ? (
+        <Modal
+          title={composeHomeMoreModal?.kind === 'pending-inbox' ? composeHomeMoreModal.title : null}
+          open={composeHomeMoreModal != null}
+          onCancel={() => setComposeHomeMoreModal(null)}
+          footer={null}
+          width={1120}
+          destroyOnHidden
+          style={{ top: 48 }}
+          styles={{
+            content: {
+              height: 820,
+              maxHeight: '90vh',
+              resize: 'both',
+              display: 'flex',
+              flexDirection: 'column',
+              padding: 0,
+              overflow: 'auto',
+            },
+            header: { flexShrink: 0, marginBottom: 0, padding: '12px 16px' },
+            body: { flex: 1, minHeight: 0, padding: 0, overflow: 'hidden' },
+          }}
+        >
+          {composeHomeMoreModal?.kind === 'pending-inbox' ? (
+            <PendingApprovalInboxModalContent
+              myMemberId={authMemberId}
+              myMemberPositionId={drafterProfile?.memberPositionId?.trim()}
+              onOpenDetail={(requestId) => setSelectedRequestId(requestId)}
+              onStartApprove={(approvalId) => setApprovalAction({ approvalId, mode: 'approve' })}
+              onStartReject={(approvalId) => setApprovalAction({ approvalId, mode: 'reject' })}
+            />
+          ) : composeHomeMoreModal?.kind === 'iframe' ? (
+            <iframe
+              key={`${composeHomeMoreModal.panel}-${composeHomeMoreModal.composeDraftId ?? ''}-${composeHomeMoreModal.prefillDocumentId ?? ''}`}
+              title="전자결재 문서함"
+              src={composeHomeEmbedPanelUrl(composeHomeMoreModal.panel, {
+                composeDraftId: composeHomeMoreModal.composeDraftId,
+                prefillDocumentId: composeHomeMoreModal.prefillDocumentId,
+              })}
+              className="tw-h-full tw-min-h-0 tw-w-full tw-border-0"
+            />
+          ) : null}
+        </Modal>
+      ) : null}
+
       {!isEmbedComposeModal ? (
         <div className="tw-flex tw-items-center tw-justify-between tw-gap-3">
           <div className="tw-flex tw-min-w-0 tw-items-start tw-gap-2">

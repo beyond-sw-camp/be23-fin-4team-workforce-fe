@@ -308,6 +308,10 @@ const approvalsSearchSchema = z.object({
   compose: z.string().optional(),
   sideNav: z.string().optional(),
   docId: z.string().optional(),
+  /** 챗봇 액션 리다이렉트 호환 파라미터 (`docId`와 동일 의미) */
+  documentId: z.string().optional(),
+  /** 챗봇 prefill 자동 시작 플래그 */
+  prefill: z.union([z.string(), z.boolean()]).optional(),
   box: z.string().optional(),
   /** 전자결재 알림 라우팅: 작성 허브에서 전체보기 모달 자동 오픈 키 */
   approvalModal: z.string().optional(),
