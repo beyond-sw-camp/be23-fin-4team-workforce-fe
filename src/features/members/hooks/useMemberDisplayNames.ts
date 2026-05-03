@@ -14,7 +14,7 @@ function labelFromMember(m: Member): string {
 
 /**
  * 목표/승인/활동 등에 노출되는 member UUID → 사원 표시명 매핑.
- * 목록 API로 1차 캐시 후, 누락 ID만 상세 조회합니다.
+ * 더미 데이터에 남아 있는 과거 UUID가 있을 수 있으므로 상세 API를 반복 호출하지 않고 목록 기반으로만 표시합니다.
  */
 export function useMemberDisplayNames(memberIds: readonly string[]) {
   const sortedUnique = useMemo(
@@ -28,21 +28,10 @@ export function useMemberDisplayNames(memberIds: readonly string[]) {
     staleTime: 5 * 60_000,
     queryFn: async (): Promise<Map<string, string>> => {
       const map = new Map<string, string>();
-      const listRes = await membersApi.list({ page: 1, pageSize: 500 });
+      const listRes = await membersApi.list({ page: 1, pageSize: 2000 });
       for (const m of listRes.items) {
         map.set(m.id, labelFromMember(m));
       }
-      const missing = sortedUnique.filter((id) => !map.has(id));
-      await Promise.all(
-        missing.map(async (id) => {
-          try {
-            const d = await membersApi.detail(id);
-            if (d) map.set(id, labelFromMember(d));
-          } catch {
-            /* 단건 없으면 스킵 */
-          }
-        }),
-      );
       return map;
     },
   });

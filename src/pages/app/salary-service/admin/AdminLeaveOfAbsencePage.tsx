@@ -280,7 +280,7 @@ export function AdminLeaveOfAbsencePage() {
         okText="조기 복직 처리"
         cancelText="취소"
         title="조기 복직 처리"
-        destroyOnClose
+        destroyOnHidden
       >
         {target && (
           <Space direction="vertical" className="tw-w-full" size={12}>

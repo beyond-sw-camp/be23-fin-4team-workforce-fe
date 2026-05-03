@@ -20,7 +20,6 @@ export type NotificationType =
   | 'GOAL_BUNDLE_APPROVED'
   | 'GOAL_BUNDLE_REJECTED'
   | 'GOAL_BUNDLE_WITHDRAWN'
-  | 'GOAL_BUNDLE_DELEGATED'
   | 'SALARY_PUBLISHED'
   | 'GOAL_EVALUATED'
   | 'EVALUATION_REMINDER'
@@ -69,7 +68,6 @@ const NOTIFICATION_TYPE_KO: Record<string, string> = {
   GOAL_BUNDLE_APPROVED: '목표 승인 완료',
   GOAL_BUNDLE_REJECTED: '목표 승인 반려',
   GOAL_BUNDLE_WITHDRAWN: '목표 승인 회수',
-  GOAL_BUNDLE_DELEGATED: '목표 승인 위임',
   SALARY_PUBLISHED: '급여 명세서 발행',
   GOAL_EVALUATED: '목표 평가 완료',
   EVALUATION_REMINDER: '평가 미제출 안내',
@@ -93,7 +91,6 @@ const GOAL_BUNDLE_TARGET_TYPE_KO: Record<string, string> = {
   GOAL_BUNDLE_APPROVED: '목표 승인 완료',
   GOAL_BUNDLE_REJECTED: '목표 승인 반려',
   GOAL_BUNDLE_WITHDRAWN: '목표 승인 회수',
-  GOAL_BUNDLE_DELEGATED: '목표 승인 위임',
 };
 
 function normalizeYesNo(v: unknown): 'YES' | 'NO' {

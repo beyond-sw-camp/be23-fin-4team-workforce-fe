@@ -13,7 +13,6 @@ export type GoalApprovalBundle = {
   status: BundleApprovalStatus;
   decision: GoalApprovalDecision;
   approverId: string;
-  delegateApproverId?: string | null;
   decidedAt?: string | null;
   commentText?: string | null;
   rejectionReason?: string | null;
@@ -31,4 +30,3 @@ export type SubmitCyclePayload = {
 };
 export type ApprovePayload = { comment?: string };
 export type RejectPayload = { reason: string; affectedGoalIds?: string[] };
-export type DelegatePayload = { delegateApproverId: string };

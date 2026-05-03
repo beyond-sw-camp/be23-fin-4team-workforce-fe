@@ -478,7 +478,7 @@ function CreateModal({
       confirmLoading={m.isPending}
       okText="등록"
       cancelText="취소"
-      destroyOnClose
+      destroyOnHidden
       width={600}
     >
       <Form<CreateFormValues>
@@ -771,7 +771,7 @@ function BulkCreateModal({
       confirmLoading={m.isPending}
       okText="등록"
       cancelText="취소"
-      destroyOnClose
+      destroyOnHidden
       width={900}
     >
       <Form<BulkFormValues>
@@ -1028,7 +1028,7 @@ function EditModal({
       confirmLoading={m.isPending}
       okText="저장"
       cancelText="취소"
-      destroyOnClose
+      destroyOnHidden
       width={520}
     >
       {target && (
@@ -1120,7 +1120,7 @@ function DecisionModal({
       okText={isApprove ? '승인' : '반려'}
       okButtonProps={{ danger: !isApprove }}
       cancelText="취소"
-      destroyOnClose
+      destroyOnHidden
     >
       <div className="tw-mb-3">
         <Typography.Text type="secondary" className="tw-text-xs">

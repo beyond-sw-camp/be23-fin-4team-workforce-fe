@@ -723,7 +723,7 @@ export function AdminCompanyLeaveTypesPage() {
         confirmLoading={grantMut.isPending}
         okText="부여"
         cancelText="취소"
-        destroyOnClose
+        destroyOnHidden
         width={520}
       >
         <Typography.Paragraph type="secondary" className="!tw-text-xs !tw-mb-3">
@@ -880,7 +880,7 @@ export function AdminCompanyLeaveTypesPage() {
         okText={editing ? '수정' : '등록'}
         cancelText="취소"
         title={editing ? '휴가 종류 수정' : '휴가 종류 추가'}
-        destroyOnClose
+        destroyOnHidden
         width={560}
       >
         <Form<FormValues> form={form} layout="vertical" onFinish={onSubmit}>

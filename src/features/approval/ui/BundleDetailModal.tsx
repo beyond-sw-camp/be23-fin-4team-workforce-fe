@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react';
-import { App, Alert, Card, Checkbox, Input, Modal, Space, Tag, Typography } from 'antd';
+import { App, Alert, Checkbox, Input, Space, Tag, Typography } from 'antd';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemberDisplayNames } from '@/features/members/hooks/useMemberDisplayNames';
 import { approvalApi } from '../api/approvalApi';
 import type { GoalApprovalBundle } from '../model/types';
 import { goalApi } from '@/features/goals/api/goalApi';
 import { GoalCard } from '@/features/goals/ui/GoalCard';
-import { AppButton } from '@/shared/ui/AppButton';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 
 const { TextArea } = Input;
 const { Text } = Typography;
@@ -21,9 +21,8 @@ type Props = {
 export function BundleDetailModal({ open, bundle, onClose, currentUserId }: Props) {
   const { message, modal } = App.useApp();
   const queryClient = useQueryClient();
-  const [mode, setMode] = useState<'view' | 'reject' | 'delegate'>('view');
+  const [mode, setMode] = useState<'view' | 'reject'>('view');
   const [reason, setReason] = useState('');
-  const [delegateId, setDelegateId] = useState('');
   const [affected, setAffected] = useState<string[]>([]);
 
   const { data: goals = [] } = useQuery({
@@ -37,14 +36,13 @@ export function BundleDetailModal({ open, bundle, onClose, currentUserId }: Prop
 
   const memberIds = useMemo(() => {
     if (!bundle) return [];
-    return [bundle.requestedBy, bundle.approverId, bundle.delegateApproverId].filter(Boolean) as string[];
+    return [bundle.requestedBy, bundle.approverId].filter(Boolean) as string[];
   }, [bundle]);
   const { labelFor } = useMemberDisplayNames(memberIds);
 
   const reset = () => {
     setMode('view');
     setReason('');
-    setDelegateId('');
     setAffected([]);
   };
 
@@ -81,22 +79,12 @@ export function BundleDetailModal({ open, bundle, onClose, currentUserId }: Prop
     onError: (e: any) => message.error(e?.response?.data?.message ?? '반려 실패'),
   });
 
-  const delegateMut = useMutation({
-    mutationFn: () =>
-      approvalApi.delegate(bundle!.bundleId, { delegateApproverId: delegateId }),
-    onSuccess: () => {
-      message.success('위임되었습니다.');
-      invalidate();
-      close();
-    },
-    onError: (e: any) => message.error(e?.response?.data?.message ?? '위임 실패'),
-  });
-
   if (!bundle) return null;
 
-  const isApprover =
-    bundle.approverId === currentUserId || bundle.delegateApproverId === currentUserId;
+  const isApprover = bundle.approverId === currentUserId;
   const isPending = bundle.status === 'PENDING';
+  const canDecide = mode === 'view' && isApprover && isPending;
+  const isRejectMode = mode === 'reject';
 
   const STATUS_COLOR: Record<string, string> = {
     PENDING: 'gold',
@@ -111,57 +99,81 @@ export function BundleDetailModal({ open, bundle, onClose, currentUserId }: Prop
     WITHDRAWN: '회수',
   };
 
+  const modalTitle = (
+    <div className="tw-flex tw-min-w-0 tw-flex-wrap tw-items-center tw-gap-2">
+      <Tag
+        bordered={false}
+        className="!tw-m-0 !tw-rounded-full !tw-bg-slate-100 !tw-px-2.5 !tw-text-[11px] !tw-font-medium !tw-text-slate-700"
+      >
+        {bundle.cycleKey}
+      </Tag>
+      <Text strong className="!tw-text-[16px] !tw-text-slate-900">
+        승인 요청
+      </Text>
+      <Tag
+        color={STATUS_COLOR[bundle.status]}
+        className="!tw-m-0 !tw-rounded-full !tw-px-2.5 !tw-text-[11px] !tw-font-semibold"
+      >
+        {STATUS_LABEL[bundle.status]}
+      </Tag>
+      {bundle.revision > 1 && (
+        <Tag
+          bordered={false}
+          className="!tw-m-0 !tw-rounded-full !tw-bg-amber-50 !tw-px-2.5 !tw-text-[11px] !tw-font-medium !tw-text-amber-700"
+        >
+          r{bundle.revision}
+        </Tag>
+      )}
+    </div>
+  );
+
+  const confirmApproval = () => {
+    modal.confirm({
+      title: '일괄 승인',
+      content: `${bundle.goalIds.length}개 목표를 모두 ACTIVE 로 전환합니다.`,
+      onOk: () => approveMut.mutate(),
+    });
+  };
+
   return (
-    <Modal
+    <AppDoubleActionModal
       open={open}
-      onCancel={close}
-      title={
-        <div className="tw-flex tw-items-center tw-gap-2">
-          <Tag
-            bordered={false}
-            className="!tw-m-0 !tw-rounded-full !tw-bg-slate-100 !tw-px-2.5 !tw-text-[11px] !tw-font-medium !tw-text-slate-700"
-          >
-            {bundle.cycleKey}
-          </Tag>
-          <Text strong className="!tw-text-[16px] !tw-text-slate-900">
-            승인 요청
-          </Text>
-          <Tag
-            color={STATUS_COLOR[bundle.status]}
-            className="!tw-m-0 !tw-rounded-full !tw-px-2.5 !tw-text-[11px] !tw-font-semibold"
-          >
-            {STATUS_LABEL[bundle.status]}
-          </Tag>
-          {bundle.revision > 1 && (
-            <Tag
-              bordered={false}
-              className="!tw-m-0 !tw-rounded-full !tw-bg-amber-50 !tw-px-2.5 !tw-text-[11px] !tw-font-medium !tw-text-amber-700"
-            >
-              r{bundle.revision}
-            </Tag>
-          )}
-        </div>
-      }
+      onClose={close}
+      title={modalTitle}
       width={760}
       destroyOnHidden
-      footer={null}
-      classNames={{
-        content: '!tw-p-0',
-        header: 'tw-sticky tw-top-0 tw-z-10 tw-m-0 tw-border-b tw-border-slate-200 tw-bg-white tw-px-5 tw-py-4',
-        body: 'wf-scrollbar-modal !tw-px-5 !tw-py-5',
+      cancelText={isRejectMode ? '취소' : canDecide ? '반려' : '닫기'}
+      confirmText={isRejectMode ? '반려 확정' : canDecide ? '승인' : '닫기'}
+      hideCancel={!canDecide && !isRejectMode}
+      cancelDanger={canDecide}
+      confirmDanger={isRejectMode}
+      confirmDisabled={isRejectMode && !reason.trim()}
+      confirmLoading={isRejectMode ? rejectMut.isPending : approveMut.isPending}
+      cancelAction={() => {
+        if (isRejectMode) {
+          setMode('view');
+          return;
+        }
+        if (canDecide) {
+          setMode('reject');
+          return;
+        }
+        close();
       }}
-      styles={{
-        content: { padding: 0 },
-        header: { marginBottom: 0, padding: '16px 20px' },
-        body: { maxHeight: '70vh', overflowY: 'auto' },
+      onConfirm={() => {
+        if (isRejectMode) {
+          rejectMut.mutate();
+          return;
+        }
+        if (canDecide) {
+          confirmApproval();
+          return;
+        }
+        close();
       }}
     >
-      <div className="tw-space-y-4">
-        {/* 메타 정보 카드 */}
-        <Card
-          className="tw-rounded-2xl tw-border tw-border-slate-200/90 tw-bg-slate-50/50"
-          styles={{ body: { padding: 16 } }}
-        >
+      <div className="tw-space-y-4 tw-px-5 tw-py-5">
+        <div className="tw-rounded-2xl tw-border tw-border-slate-200/90 tw-bg-slate-50/60 tw-p-4">
           <div className="tw-grid tw-grid-cols-2 tw-gap-x-6 tw-gap-y-3">
             <Cell label="가중치 합">
               <span className="tw-text-lg tw-font-bold tw-text-emerald-600">
@@ -181,18 +193,10 @@ export function BundleDetailModal({ open, bundle, onClose, currentUserId }: Prop
             <Cell label="승인자">
               <span className="tw-text-sm tw-text-slate-700">
                 {labelFor(bundle.approverId)}
-                {bundle.delegateApproverId && (
-                  <Tag
-                    bordered={false}
-                    className="!tw-ml-2 !tw-rounded-full !tw-bg-purple-50 !tw-px-2 !tw-text-[10px] !tw-font-medium !tw-text-purple-700"
-                  >
-                    위임 → {labelFor(bundle.delegateApproverId)}
-                  </Tag>
-                )}
               </span>
             </Cell>
           </div>
-        </Card>
+        </div>
 
         {bundle.status === 'REJECTED' && bundle.rejectionReason && (
           <Alert
@@ -239,44 +243,8 @@ export function BundleDetailModal({ open, bundle, onClose, currentUserId }: Prop
             ))}
           </Space>
         </div>
-
-        {/* 액션 영역 */}
-        {mode === 'view' && isApprover && isPending && (
-          <Card
-            className="tw-rounded-2xl tw-border tw-border-indigo-200 tw-bg-indigo-50/40"
-            styles={{ body: { padding: 16 } }}
-          >
-            <div className="tw-flex tw-flex-col sm:tw-flex-row sm:tw-items-center sm:tw-justify-between tw-gap-3">
-              <div className="tw-text-sm tw-text-slate-700">결정해주세요.</div>
-              <Space>
-                <AppButton
-                  variant="primary"
-                  onClick={() =>
-                    modal.confirm({
-                      title: '일괄 승인',
-                      content: `${bundle.goalIds.length}개 목표를 모두 ACTIVE 로 전환합니다.`,
-                      onOk: () => approveMut.mutate(),
-                    })
-                  }
-                >
-                  승인
-                </AppButton>
-                <AppButton variant="danger" onClick={() => setMode('reject')}>
-                  반려
-                </AppButton>
-                <AppButton variant="secondary" onClick={() => setMode('delegate')}>
-                  위임
-                </AppButton>
-              </Space>
-            </div>
-          </Card>
-        )}
-
         {mode === 'reject' && (
-          <Card
-            className="tw-rounded-2xl tw-border tw-border-rose-200 tw-bg-rose-50/40"
-            styles={{ body: { padding: 16 } }}
-          >
+          <div className="tw-rounded-2xl tw-border tw-border-rose-200 tw-bg-rose-50/40 tw-p-4">
             <div className="tw-text-[12px] tw-font-semibold tw-uppercase tw-tracking-wide tw-text-rose-600 tw-mb-2">
               REJECT
             </div>
@@ -291,58 +259,13 @@ export function BundleDetailModal({ open, bundle, onClose, currentUserId }: Prop
               placeholder="반려 사유 (필수)"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              className="tw-mb-3"
+              autoFocus
             />
-            <Space>
-              <AppButton
-                variant="danger"
-                disabled={!reason.trim()}
-                loading={rejectMut.isPending}
-                onClick={() => rejectMut.mutate()}
-              >
-                반려 확정
-              </AppButton>
-              <AppButton variant="secondary" onClick={() => setMode('view')}>
-                취소
-              </AppButton>
-            </Space>
-          </Card>
+          </div>
         )}
 
-        {mode === 'delegate' && (
-          <Card
-            className="tw-rounded-2xl tw-border tw-border-purple-200 tw-bg-purple-50/40"
-            styles={{ body: { padding: 16 } }}
-          >
-            <div className="tw-text-[12px] tw-font-semibold tw-uppercase tw-tracking-wide tw-text-purple-600 tw-mb-2">
-              DELEGATE
-            </div>
-            <div className="tw-text-xs tw-text-slate-600 tw-mb-2">
-              위임 받은 사람의 큐로 이 요청이 이동합니다.
-            </div>
-            <Input
-              placeholder="위임 받을 승인자 UUID"
-              value={delegateId}
-              onChange={(e) => setDelegateId(e.target.value)}
-              className="tw-mb-3"
-            />
-            <Space>
-              <AppButton
-                variant="primary"
-                disabled={!delegateId.trim()}
-                loading={delegateMut.isPending}
-                onClick={() => delegateMut.mutate()}
-              >
-                위임 확정
-              </AppButton>
-              <AppButton variant="secondary" onClick={() => setMode('view')}>
-                취소
-              </AppButton>
-            </Space>
-          </Card>
-        )}
       </div>
-    </Modal>
+    </AppDoubleActionModal>
   );
 }
 

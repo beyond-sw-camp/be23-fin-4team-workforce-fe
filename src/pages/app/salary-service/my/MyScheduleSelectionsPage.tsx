@@ -698,7 +698,7 @@ export function MyScheduleSelectionsPage() {
         okText="전자결재로 이동"
         cancelText="취소"
         title="스케줄 변경 신청"
-        destroyOnClose
+        destroyOnHidden
         confirmLoading={createM.isPending}
       >
         <Form<FormValues>

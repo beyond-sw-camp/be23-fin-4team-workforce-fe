@@ -2,7 +2,14 @@ import type { KpiCycle } from '@/features/goals/model/types';
 
 // ── Enums ──
 export type SeasonType = 'ANNUAL' | 'HALF_YEAR' | 'QUARTER';
-export type SeasonStatus = 'DRAFT' | 'ACTIVE' | 'CLOSED';
+export type SeasonStatus =
+  | 'DRAFT'
+  | 'SELF_EVAL'
+  | 'MANAGER_EVAL'
+  | 'GRADE_CONFIRM'
+  | 'RESULT_PUBLISHED'
+  | 'INTERVIEW'
+  | 'CLOSED';
 export type EvalType = 'SELF' | 'DOWNWARD' | 'UPWARD' | 'PEER';
 export type EvaluationStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'SUBMITTED';
 export type GradeType = 'ABSOLUTE' | 'RELATIVE';

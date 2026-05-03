@@ -454,19 +454,38 @@ export const evaluationApi = {
     return mapSeason(unwrapApiResponse<any>(res.data));
   },
 
+  async deleteSeason(seasonId: string): Promise<void> {
+    await httpClient.delete(`/evaluation/seasons/${seasonId}`);
+  },
+
   async startSeason(seasonId: string): Promise<EvaluationSeason> {
-    const res = await httpClient.post(`/evaluation/seasons/${seasonId}/activate`);
+    const res = await httpClient.post(`/evaluation/seasons/${seasonId}/open-self-eval`);
     return mapSeason(unwrapApiResponse<any>(res.data));
   },
 
-  async closeSeason(seasonId: string, opts?: {publishResults?: boolean}): Promise<EvaluationSeason> {
-    const qs = opts?.publishResults ? '?publishResults=true' : '';
-    const res = await httpClient.post(`/evaluation/seasons/${seasonId}/close${qs}`);
+  async openManagerEval(seasonId: string): Promise<EvaluationSeason> {
+    const res = await httpClient.post(`/evaluation/seasons/${seasonId}/open-manager-eval`);
     return mapSeason(unwrapApiResponse<any>(res.data));
   },
 
-  async publishResults(seasonId: string): Promise<void> {
-    await httpClient.post(`/evaluation/seasons/${seasonId}/publish`);
+  async openGradeConfirm(seasonId: string): Promise<EvaluationSeason> {
+    const res = await httpClient.post(`/evaluation/seasons/${seasonId}/open-grade-confirm`);
+    return mapSeason(unwrapApiResponse<any>(res.data));
+  },
+
+  async openInterview(seasonId: string): Promise<EvaluationSeason> {
+    const res = await httpClient.post(`/evaluation/seasons/${seasonId}/open-interview`);
+    return mapSeason(unwrapApiResponse<any>(res.data));
+  },
+
+  async closeSeason(seasonId: string): Promise<EvaluationSeason> {
+    const res = await httpClient.post(`/evaluation/seasons/${seasonId}/close`);
+    return mapSeason(unwrapApiResponse<any>(res.data));
+  },
+
+  async publishResults(seasonId: string): Promise<EvaluationSeason> {
+    const res = await httpClient.post(`/evaluation/seasons/${seasonId}/publish-results`);
+    return mapSeason(unwrapApiResponse<any>(res.data));
   },
 
   // ── Groups ──

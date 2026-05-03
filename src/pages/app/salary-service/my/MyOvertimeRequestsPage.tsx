@@ -387,7 +387,7 @@ export function MyOvertimeRequestsPage() {
         okText="신청 (결재 발의)"
         cancelText="취소"
         title="초과근무 신청"
-        destroyOnClose
+        destroyOnHidden
         width={620}
       >
         <Typography.Paragraph type="secondary" className="!tw-text-xs">

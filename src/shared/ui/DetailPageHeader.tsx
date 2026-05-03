@@ -1,33 +1,27 @@
-import { LeftOutlined, ShareAltOutlined } from '@ant-design/icons';
+﻿import { LeftOutlined, ShareAltOutlined } from '@ant-design/icons';
 import { Button, message } from 'antd';
 import type { ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
 import { useCallback } from 'react';
 
 export type DetailPageHeaderProps = {
-  /** 목록 등 상위 화면 경로 */
   backTo?: string;
   backLabel?: string;
   onBackClick?: () => void;
   hideBack?: boolean;
-  /** 메인 제목 */
   title?: string;
-  /** 제목 아래 보조 문구(선택) */
   subtitle?: ReactNode;
-  /** 공유 버튼 노출 여부(권한·환경 등에 따라 상위에서 제어) */
   showShare?: boolean;
-  /** Web Share / 복사에 사용할 제목 */
   shareTitle?: string;
-  /** 공유 시 부가 설명(선택) */
   shareText?: string;
 };
 
 export function DetailPageHeader({
   backTo = '/app/members',
-  backLabel = '구성원 목록',
+  backLabel = '목록',
   onBackClick,
   hideBack = false,
-  title = '구성원 상세 정보',
+  title = '상세 정보',
   subtitle,
   showShare = true,
   shareTitle,
@@ -40,15 +34,10 @@ export function DetailPageHeader({
 
     if (navigator.share) {
       try {
-        await navigator.share({
-          title: t,
-          ...(text ? { text } : {}),
-          url,
-        });
+        await navigator.share({ title: t, ...(text ? { text } : {}), url });
         return;
       } catch (e) {
-        const err = e as { name?: string };
-        if (err?.name === 'AbortError') return;
+        if ((e as { name?: string })?.name === 'AbortError') return;
       }
     }
 
@@ -92,14 +81,14 @@ export function DetailPageHeader({
             type="default"
             icon={<ShareAltOutlined className="tw-text-slate-600" />}
             onClick={() => void handleShare()}
-            className="tw-shrink-0 !tw-h-10 !tw-w-10 !tw-min-h-10 !tw-min-w-10 !tw-rounded-xl !tw-border !tw-border-slate-200 !tw-bg-white !tw-text-slate-600 !tw-shadow-sm !tw-transition-all !tw-duration-200 hover:!tw-border-slate-300 hover:!tw-bg-slate-50 hover:!tw-text-slate-900 active:!tw-scale-95"
-            aria-label="이 페이지 공유"
+            className="tw-shrink-0 !tw-h-10 !tw-w-10 !tw-min-h-10 !tw-min-w-10 !tw-rounded-xl !tw-border !tw-border-slate-200 !tw-bg-white !tw-text-slate-600 !tw-shadow-sm hover:!tw-border-slate-300 hover:!tw-bg-slate-50"
+            aria-label="페이지 공유"
             title="공유"
           />
         ) : null}
       </div>
 
-      {subtitle ? <div className="tw-mt-2 tw-max-w-2xl">{subtitle}</div> : null}
+      {subtitle ? <div className="tw-mt-2 tw-max-w-2xl tw-text-sm tw-leading-relaxed tw-text-slate-600">{subtitle}</div> : null}
     </header>
   );
 }

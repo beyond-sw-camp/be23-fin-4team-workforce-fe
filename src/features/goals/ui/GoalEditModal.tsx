@@ -1,5 +1,5 @@
 ﻿import { useEffect, useMemo, useState } from 'react';
-import { App, DatePicker, Form, Input, InputNumber, Radio, Select, Switch, Typography } from 'antd';
+import { App, Button, DatePicker, Form, Input, InputNumber, Radio, Select, Space, Switch, Typography } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/features/auth/useAuth';
@@ -13,7 +13,7 @@ import {
   toCyclePeriod,
   type CycleFormSegment,
 } from '../lib/cyclePeriod';
-import type { Goal, GoalCreatePayload, GoalOwnerType, GoalVisibility, KpiCycle } from '../model/types';
+import type { Goal, GoalCreatePayload, GoalOwnerType, KpiCycle } from '../model/types';
 import { OrganizationPickerInput } from './OrganizationPickerInput';
 
 const { TextArea } = Input;
@@ -53,7 +53,6 @@ type FormShape = {
   cycleSegment?: CycleFormSegment;
   manualPeriodEnabled?: boolean;
   manualCycleRange?: [Dayjs, Dayjs];
-  visibility: GoalVisibility;
   weightPct: number;
   gradeS?: string;
   gradeA?: string;
@@ -77,6 +76,7 @@ export function GoalEditModal({
   const [selectedOwnerMemberLabel, setSelectedOwnerMemberLabel] = useState('');
   const isEdit = !!goal;
   const ownerType = Form.useWatch('ownerType', form) ?? defaultOwnerType ?? 'MEMBER';
+  const selectedOwnerId = Form.useWatch('ownerId', form);
   const selectedCycle = Form.useWatch('cycle', form);
   const selectedObjectiveId = Form.useWatch('alignedOrgGoalId', form);
   const isObjective = ownerType === 'ORGANIZATION';
@@ -128,7 +128,6 @@ export function GoalEditModal({
         cycleSegment: cycleSegmentFrom(goal.cycle, goal.cycleStartDate),
         manualPeriodEnabled: false,
         manualCycleRange: [dayjs(goal.cycleStartDate), dayjs(goal.cycleEndDate)],
-        visibility: goal.visibility,
         weightPct: goal.weightPct,
         gradeS: goal.gradeS ?? '',
         gradeA: goal.gradeA ?? '',
@@ -148,7 +147,6 @@ export function GoalEditModal({
       cycleYear: dayjs().year(),
       cycleSegment: 'Q1',
       manualPeriodEnabled: false,
-      visibility: 'TEAM',
       weightPct: 0,
       gradeS: '',
       gradeA: '',
@@ -205,7 +203,6 @@ export function GoalEditModal({
             ownerId: values.ownerId,
             title: values.title,
             description: values.description,
-            visibility: values.visibility,
             gradeS: values.gradeS,
             gradeA: values.gradeA,
             gradeB: values.gradeB,
@@ -215,7 +212,6 @@ export function GoalEditModal({
             title: values.title,
             description: values.description,
             weightPct: values.weightPct,
-            visibility: values.visibility,
             alignedOrgGoalId: values.alignedOrgGoalId || null,
           };
       const updated = await goalApi.updateGoal(goal.goalId, payload);
@@ -258,7 +254,6 @@ export function GoalEditModal({
       description: values.description,
       cycle: values.cycle,
       ...period,
-      visibility: values.visibility,
       weightPct: values.ownerType === 'ORGANIZATION' ? 0 : values.weightPct,
       gradeS: values.ownerType === 'ORGANIZATION' ? values.gradeS : undefined,
       gradeA: values.ownerType === 'ORGANIZATION' ? values.gradeA : undefined,
@@ -278,6 +273,7 @@ export function GoalEditModal({
       cancelText="취소"
       width={760}
       destroyOnHidden={false}
+      forceRender
       confirmLoading={createMut.isPending || updateMut.isPending}
     >
       <div className="tw-space-y-5 tw-px-5 tw-py-4">
@@ -313,24 +309,23 @@ export function GoalEditModal({
                       <Form.Item name="ownerId" rules={[{ required: true }]} noStyle>
                         <Input type="hidden" />
                       </Form.Item>
-                      <Input
-                        readOnly
-                        disabled={isEdit}
-                        placeholder="개인 목표를 소유할 구성원을 선택하세요."
-                        value={ownerId ? selectedOwnerMemberLabel || '선택된 구성원' : ''}
-                        addonAfter={
-                          isEdit ? null : (
-                            <a
-                              onClick={(event) => {
-                                event.preventDefault();
-                                setMemberPickerOpen(true);
-                              }}
-                            >
-                              구성원 선택
-                            </a>
-                          )
-                        }
-                      />
+                      {isEdit ? (
+                        <Input
+                          readOnly
+                          disabled
+                          placeholder="개인 목표를 소유할 구성원을 선택하세요."
+                          value={ownerId ? selectedOwnerMemberLabel || '선택된 구성원' : ''}
+                        />
+                      ) : (
+                        <Space.Compact className="tw-w-full">
+                          <Input
+                            readOnly
+                            placeholder="개인 목표를 소유할 구성원을 선택하세요."
+                            value={ownerId ? selectedOwnerMemberLabel || '선택된 구성원' : ''}
+                          />
+                          <Button onClick={() => setMemberPickerOpen(true)}>구성원 선택</Button>
+                        </Space.Compact>
+                      )}
                     </>
                   </Form.Item>
                 );
@@ -370,10 +365,10 @@ export function GoalEditModal({
             <TextArea rows={3} placeholder="목표의 배경과 기대 결과를 적어 주세요." />
           </Form.Item>
 
-          <SectionHeader title={isObjective ? '사이클 / 공개 범위' : '사이클 / 가중치 / 공개 범위'} className="tw-mt-2" />
+          <SectionHeader title={isObjective ? '목표 기간' : '목표 기간 / 가중치'} className="tw-mt-2" />
 
           <div className={isObjective ? 'tw-grid tw-grid-cols-3 tw-gap-3' : 'tw-grid tw-grid-cols-4 tw-gap-3'}>
-            <Form.Item label="사이클" name="cycle" rules={[{ required: true }]}>
+            <Form.Item label="기간 유형" name="cycle" rules={[{ required: true }]}>
               <Select
                 disabled={isEdit || (!isObjective && !krSetupReady) || isKrCycleLocked}
                 onChange={(nextCycle) => {
@@ -426,23 +421,12 @@ export function GoalEditModal({
               }}
             </Form.Item>
 
-            <Form.Item label="공개 범위" name="visibility" rules={[{ required: true }]}>
-              <Select
-                disabled={!isObjective && !krSetupReady}
-                options={[
-                  { value: 'COMPANY', label: '전사' },
-                  { value: 'TEAM', label: '팀' },
-                  { value: 'PRIVATE', label: '비공개' },
-                ]}
-              />
-            </Form.Item>
-
             {!isObjective && (
               <Form.Item
                 label="가중치(%)"
                 name="weightPct"
                 rules={[{ required: true, type: 'number', min: 0, max: 100 }]}
-                tooltip="같은 사이클의 개인 목표 가중치 합이 100%여야 승인 요청이 가능합니다."
+                tooltip="같은 목표 기간의 개인 목표 가중치 합이 100%여야 승인 요청이 가능합니다."
               >
                 <InputNumber min={0} max={100} style={{ width: '100%' }} disabled={!krSetupReady} />
               </Form.Item>
@@ -465,12 +449,12 @@ export function GoalEditModal({
                     <div className="tw-rounded-xl tw-border tw-border-slate-200 tw-bg-slate-50 tw-p-3 tw-text-sm tw-text-slate-600">
                       자동 계산 기간:{' '}
                       <span className="tw-font-semibold">
-                        {period ? `${period.cycleStartDate} ~ ${period.cycleEndDate}` : '사이클 정보를 먼저 선택해 주세요.'}
+                        {period ? `${period.cycleStartDate} ~ ${period.cycleEndDate}` : '목표 기간을 먼저 선택해 주세요.'}
                       </span>
                     </div>
                   ) : (
                     <Form.Item
-                      label="사이클 기간"
+                      label="목표 기간"
                       name="manualCycleRange"
                       rules={[{ required: true, message: '기간을 입력해 주세요.' }]}
                       style={{ marginBottom: 0 }}
@@ -484,7 +468,7 @@ export function GoalEditModal({
           </Form.Item>
           {!isObjective && !krSetupReady && (
             <div className="tw-rounded-xl tw-border tw-border-slate-200 tw-bg-slate-50 tw-p-3 tw-text-xs tw-text-slate-500">
-              상위 조직 목표를 선택하면 사이클, 기간, 가중치, 공개 범위를 입력할 수 있어요.
+              상위 조직 목표를 선택하면 목표 기간, 가중치, 공개 범위를 입력할 수 있어요.
             </div>
           )}
 
@@ -522,7 +506,7 @@ export function GoalEditModal({
 
       <SingleMemberOrgChartSelectModal
         open={memberPickerOpen}
-        selectedMemberId={form.getFieldValue('ownerId')}
+        selectedMemberId={selectedOwnerId}
         onClose={() => setMemberPickerOpen(false)}
         onSelect={(member) => {
           form.setFieldValue('ownerId', member.memberId);

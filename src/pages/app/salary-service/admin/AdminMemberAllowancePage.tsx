@@ -460,7 +460,7 @@ export function AdminMemberAllowancePage() {
         confirmLoading={autoGrantMut.isPending}
         okText="부여"
         cancelText="취소"
-        destroyOnClose
+        destroyOnHidden
         width={560}
       >
         <Form

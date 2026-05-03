@@ -11,6 +11,7 @@ import type {
   GoalSummaryCard,
   UpdateDesignPayload,
   UpdateGroupPayload,
+  UpdateSeasonPayload,
 } from '../model/types';
 import type {
   CalibrationUpsertPayload,
@@ -41,7 +42,10 @@ function pickNum(o: any, ...keys: string[]): number | null {
 function safeParseSnapshot(json?: string | null): GoalSnapshot | null {
   if (!json) return null;
   try {
-    return JSON.parse(json) as GoalSnapshot;
+    const parsed = JSON.parse(json);
+    if (Array.isArray(parsed)) return { goals: parsed } as GoalSnapshot;
+    if (Array.isArray(parsed?.goals)) return parsed as GoalSnapshot;
+    return null;
   } catch {
     return null;
   }
@@ -77,6 +81,11 @@ function mapResponse(r: any): EvaluationFlowResponse {
     finalScoreSnapshot: pickNum(r, 'finalScoreSnapshot'),
     confirmedBy: r.confirmedBy ?? null,
     confirmedAt: r.confirmedAt ?? null,
+    objectionStatus: r.objectionStatus ?? null,
+    objectionMessage: r.objectionMessage ?? null,
+    objectionResolution: r.objectionResolution ?? null,
+    objectionRequestedAt: r.objectionRequestedAt ?? null,
+    objectionResolvedAt: r.objectionResolvedAt ?? null,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   };
@@ -137,7 +146,19 @@ export const evaluationRedesignApi = {
   },
 
   async activateSeason(seasonId: string): Promise<void> {
-    await httpClient.post(`/evaluation/seasons/${seasonId}/activate`);
+    await httpClient.post(`/evaluation/seasons/${seasonId}/open-self-eval`);
+  },
+
+  async openManagerEval(seasonId: string): Promise<void> {
+    await httpClient.post(`/evaluation/seasons/${seasonId}/open-manager-eval`);
+  },
+
+  async openGradeConfirm(seasonId: string): Promise<void> {
+    await httpClient.post(`/evaluation/seasons/${seasonId}/open-grade-confirm`);
+  },
+
+  async openInterview(seasonId: string): Promise<void> {
+    await httpClient.post(`/evaluation/seasons/${seasonId}/open-interview`);
   },
 
   async closeSeason(seasonId: string): Promise<void> {
@@ -145,7 +166,7 @@ export const evaluationRedesignApi = {
   },
 
   async publishSeason(seasonId: string): Promise<void> {
-    await httpClient.post(`/evaluation/seasons/${seasonId}/publish`);
+    await httpClient.post(`/evaluation/seasons/${seasonId}/publish-results`);
   },
 
   async listMySelf(): Promise<EvaluationFlowResponse[]> {
@@ -205,8 +226,22 @@ export const evaluationRedesignApi = {
     return evaluationApi.createSeason(body);
   },
 
+  async updateSeason(seasonId: string, body: UpdateSeasonPayload) {
+    return evaluationApi.updateSeason(seasonId, body);
+  },
+
+  async deleteSeason(seasonId: string) {
+    return evaluationApi.deleteSeason(seasonId);
+  },
+
   async listGroups(seasonId: string): Promise<EvaluationGroup[]> {
     return evaluationApi.listGroups(seasonId);
+  },
+
+  async listSeasonResponses(seasonId: string): Promise<EvaluationFlowResponse[]> {
+    const res = await httpClient.get(`/evaluation/seasons/${seasonId}/responses`);
+    const raw = unwrapApiResponse<unknown>(res.data);
+    return normalizeArray<unknown>(raw, ['items', 'data', 'list']).map(mapResponse);
   },
 
   async createGroup(seasonId: string, body: CreateGroupPayload): Promise<EvaluationGroup> {
@@ -372,6 +407,13 @@ export const evaluationRedesignApi = {
   async requestObjection(responseId: string, message: string): Promise<EvaluationFlowResponse> {
     const res = await httpClient.post(`/evaluation/responses/${responseId}/objection`, { message });
     return mapResponse(unwrapApiResponse<unknown>(res.data));
+  },
+
+  async downloadMySeasonReport(seasonId: string): Promise<Blob> {
+    const res = await httpClient.get(`/evaluation/seasons/${seasonId}/reports/me.pdf`, {
+      responseType: 'blob',
+    });
+    return res.data as Blob;
   },
 
   async reviewObjection(responseId: string): Promise<EvaluationFlowResponse> {

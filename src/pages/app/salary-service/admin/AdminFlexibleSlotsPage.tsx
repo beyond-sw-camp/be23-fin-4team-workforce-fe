@@ -354,7 +354,7 @@ export function AdminFlexibleSlotsPage() {
         okText={editing ? '수정' : '등록'}
         cancelText="취소"
         width={480}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form<FormValues>
           form={form}

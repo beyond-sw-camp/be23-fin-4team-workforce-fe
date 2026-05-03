@@ -416,7 +416,7 @@ export function AdminWorkSchedulesPage() {
         okText={editing ? '수정' : '등록'}
         cancelText="취소"
         title={editing ? '스케줄 수정' : '스케줄 추가'}
-        destroyOnClose
+        destroyOnHidden
         width={560}
       >
         <ScheduleForm

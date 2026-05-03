@@ -59,7 +59,7 @@ export function LeaveDesignateModal({
       confirmLoading={confirmLoading}
       onCancel={onCancel}
       onOk={submit}
-      destroyOnClose
+      destroyOnHidden
       width={560}
     >
       {target ? (
