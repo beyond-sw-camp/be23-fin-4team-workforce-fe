@@ -1,6 +1,7 @@
 // /app/leave/my-promotion 직원 본인이 받은 연차 사용 촉진 통보 목록
 // 회신은 사용계획 날짜 입력 회사 면책 기록만 잔여 차감 없음
 import { useMemo, useState } from 'react';
+import { Link, useNavigate } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
@@ -13,8 +14,10 @@ import {
   Tag,
   Typography,
 } from 'antd';
+import { ArrowLeftOutlined, SendOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
+import { approvalApi } from '@/features/approvals/api/approvalApi';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import type {
   LeavePromotionMy,
@@ -39,9 +42,11 @@ function formatDateTime(iso?: string | null) {
   return d.isValid() ? d.format('YYYY-MM-DD HH:mm') : iso;
 }
 
-function statusTag(status: PromotionLogStatusCode) {
+function statusTag(status: PromotionLogStatusCode, stage?: PromotionStageCode) {
   if (status === 'ACKNOWLEDGED') return <Tag color="green">회신 완료</Tag>;
-  if (status === 'DESIGNATED') return <Tag color="red">강제 지정됨</Tag>;
+  if (status === 'DESIGNATED') return <Tag color="red">회사 자동 지정</Tag>;
+  // 2차 + SENT 는 자동 지정 처리 직전/실패 케이스. 1차는 회신 필요.
+  if (stage === 'SECOND') return <Tag color="volcano">자동 지정 대기</Tag>;
   return <Tag color="orange">회신 필요</Tag>;
 }
 
@@ -60,12 +65,54 @@ type HistoryRow = {
 export function MyLeavePromotionPage() {
   const { message } = App.useApp();
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [target, setTarget] = useState<LeavePromotionMy | null>(null);
 
   const listQ = useQuery({
     queryKey: QK,
     queryFn: () => attendanceApi.leavePromotion.listMy(),
   });
+
+  // 전자결재 휴가신청서 양식 deep link
+  const approvalDocsQ = useQuery({
+    queryKey: ['approval', 'documents', 'active'],
+    queryFn: () => approvalApi.listActiveDocuments(),
+  });
+  const leaveRequestDocId = useMemo(() => {
+    const docs = approvalDocsQ.data ?? [];
+    const exact = docs.find((d) => d.documentName.trim() === '휴가 신청서');
+    if (exact) return exact.documentId;
+    const fuzzy = docs.find(
+      (d) => d.documentName.includes('휴가') && d.documentName.includes('신청'),
+    );
+    return fuzzy?.documentId;
+  }, [approvalDocsQ.data]);
+  const handleNewLeaveRequest = () => {
+    if (leaveRequestDocId) {
+      void navigate({
+        to: '/app/approvals',
+        search: { tab: 'compose', docId: leaveRequestDocId },
+      });
+      return;
+    }
+    if (approvalDocsQ.isLoading) {
+      message.info('결재 양식을 불러오는 중입니다 잠시 후 다시 시도해 주세요');
+      return;
+    }
+    message.warning('휴가 신청서 양식이 등록되지 않았습니다 전자결재에서 직접 선택해 주세요');
+    void navigate({ to: '/app/approvals', search: {} });
+  };
+
+  // 같은 만료일에 2차 통보가 이미 있는지 체크 (1차 회신 버튼 비활성화 조건)
+  const expirationsWithSecond = useMemo(() => {
+    const set = new Set<string>();
+    (listQ.data ?? []).forEach((r) => {
+      if (r.stage === 'SECOND' && r.balanceExpirationDate) {
+        set.add(r.balanceExpirationDate);
+      }
+    });
+    return set;
+  }, [listQ.data]);
 
   const respondM = useMutation({
     mutationFn: ({ id, dates }: { id: string; dates: string[] }) =>
@@ -136,7 +183,7 @@ export function MyLeavePromotionPage() {
         key: 'status',
         width: 110,
         align: 'center',
-        render: (s: PromotionLogStatusCode) => statusTag(s),
+        render: (_: PromotionLogStatusCode, r) => statusTag(r.status, r.stage),
       },
       {
         title: '회신 시각',
@@ -202,7 +249,7 @@ export function MyLeavePromotionPage() {
         dataIndex: 'status',
         key: 'status',
         width: 120,
-        render: (s: PromotionLogStatusCode) => statusTag(s),
+        render: (_: PromotionLogStatusCode, r) => statusTag(r.status, r.stage),
       },
       {
         title: '잔여 연차',
@@ -234,43 +281,84 @@ export function MyLeavePromotionPage() {
         render: (d: string | null) => formatDateTime(d),
       },
       {
-        title: '액션',
+        title: '진행',
         key: 'actions',
-        width: 120,
-        render: (_, r) =>
-          r.status === 'SENT' ? (
-            <Button type="primary" size="small" onClick={() => setTarget(r)}>
-              회신하기
-            </Button>
-          ) : (
-            <Typography.Text type="secondary" className="tw-text-xs">
-              {r.status === 'ACKNOWLEDGED' ? '회신 완료' : '강제 지정'}
-            </Typography.Text>
-          ),
+        width: 160,
+        render: (_, r) => {
+          // 1차 + SENT 만 회신 가능. 단, 같은 만료일에 2차가 이미 발송되었다면 회신 기간 종료
+          if (r.status === 'SENT' && r.stage === 'FIRST') {
+            const supersededBySecond = r.balanceExpirationDate
+              ? expirationsWithSecond.has(r.balanceExpirationDate)
+              : false;
+            if (supersededBySecond) {
+              return (
+                <Typography.Text type="secondary" className="!tw-text-xs">
+                  회신 기간 종료 (2차 발송)
+                </Typography.Text>
+              );
+            }
+            return (
+              <Button type="primary" size="small" onClick={() => setTarget(r)}>
+                회신하기
+              </Button>
+            );
+          }
+          if (r.status === 'ACKNOWLEDGED') {
+            return <Typography.Text type="secondary" className="!tw-text-xs">회신 완료</Typography.Text>;
+          }
+          if (r.status === 'DESIGNATED') {
+            return <Typography.Text type="secondary" className="!tw-text-xs">회사 자동 지정 완료</Typography.Text>;
+          }
+          // 2차 + SENT (자동 지정 진행 중/실패)
+          return <Typography.Text type="secondary" className="!tw-text-xs">자동 지정 처리중</Typography.Text>;
+        },
       },
     ],
-    [],
+    [expirationsWithSecond],
   );
 
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
-      <div>
-        <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
-         휴가 계획 회신
-        </Typography.Title>
-        <Typography.Paragraph
-          type="secondary"
-          className="!tw-mb-0 !tw-mt-1 !tw-text-sm"
-        >
-          회사가 보낸 연차 사용 촉진 통보 목록입니다 회신은 사용 계획 확인용이며 실제 휴가 사용일과 무관합니다
-        </Typography.Paragraph>
+      <div className="tw-flex tw-flex-wrap tw-items-start tw-justify-between tw-gap-3">
+        <div>
+          <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
+            휴가 계획 회신
+          </Typography.Title>
+          <Typography.Paragraph
+            type="secondary"
+            className="!tw-mb-0 !tw-mt-1 !tw-text-sm"
+          >
+            회사가 보낸 연차 사용 촉진 통보 목록입니다 회신은 사용 계획 확인용이며 실제 휴가 사용일과 무관합니다
+          </Typography.Paragraph>
+        </div>
+        <Space size="small" wrap>
+          <Link to="/app/leave">
+            <Button icon={<ArrowLeftOutlined />}>휴가 계획 관리</Button>
+          </Link>
+          <Button
+            type="primary"
+            icon={<SendOutlined />}
+            onClick={handleNewLeaveRequest}
+            loading={approvalDocsQ.isLoading}
+          >
+            휴가 신청
+          </Button>
+        </Space>
       </div>
 
       <Alert
         type="info"
         showIcon
         message="안내"
-        description="회신 후 입력한 날짜에 휴가를 안 쓰셔도 무방합니다 실제 휴가는 평소처럼 별도 신청해주세요 회신을 끝까지 안 하시면 회사가 강제로 연차일을 지정할 수 있습니다 (노무수령 거부)"
+        description={
+          <span style={{ whiteSpace: 'pre-line' }}>
+            {[
+              '1차 통보에 사용 계획을 회신하면 회사 촉진 의무가 완료됩니다.',
+              '회신 후 그 날짜에 실제로 안 써도 무방하며, 실제 휴가는 별도 신청해주세요.',
+              '1차 회신 없이 2차 시점이 되면 근로기준법 61조에 따라 회사가 만료일 직전 평일을 자동으로 지정합니다 (노무수령 거부).',
+            ].join('\n')}
+          </span>
+        }
       />
 
       <Card className="tw-border-slate-200/80 tw-shadow-sm" title="받은 통보">

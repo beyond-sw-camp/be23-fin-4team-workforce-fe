@@ -2,6 +2,8 @@ import {
   CalendarOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
+  DollarOutlined,
+  TeamOutlined,
   UserOutlined,
   VideoCameraOutlined,
 } from '@ant-design/icons';
@@ -9,16 +11,20 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Avatar, Button, Card, List, Progress, Spin, Tabs, Tag, Typography } from 'antd';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
-import { useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
 import type { Me } from '@/features/auth/types';
 import { calendarApi } from '@/features/calendar/api/calendarApi';
 import { DASHBOARD_WIDGET_LABELS, type DashboardWidgetId } from '@/features/dashboard/dashboardWidgetsModel';
 import { evaluationRedesignApi } from '@/features/evaluation/api/evaluationRedesignApi';
+import type { EvaluationSeasonFlow } from '@/features/evaluation/model/workflowTypes';
 import { goalApi } from '@/features/goals/api/goalApi';
-import type { Goal } from '@/features/goals/model/types';
+import type { Goal, KpiCycle } from '@/features/goals/model/types';
 import { meetingApi } from '@/features/meetings/api/meetingApi';
 import { memberApi } from '@/features/member/api/memberApi';
+import { useMemberDisplayNames } from '@/features/members/hooks/useMemberDisplayNames';
+import { salaryApi } from '@/features/salary-service/api/salaryApi';
+import type { Salary } from '@/features/salary-service/types';
 import { notificationApi, type NotificationItem } from '@/features/notification/api/notificationApi';
 import {
   buildApprovalNotificationNavigate,
@@ -50,7 +56,7 @@ const TXT = {
   publishedResult: '\uACF5\uAC1C \uACB0\uACFC',
   evalSeason: '\uD3C9\uAC00 \uC2DC\uC98C',
   selfEvalRequired: '\uC790\uAE30\uD3C9\uAC00 \uC791\uC131\uC774 \uD544\uC694\uD569\uB2C8\uB2E4.',
-  evaluatorRequired: 'Lead/Assistant\uB85C \uAC80\uD1A0\uD560 \uD3C9\uAC00\uC785\uB2C8\uB2E4.',
+  evaluatorRequired: 'Lead/평가자\uB85C \uAC80\uD1A0\uD560 \uD3C9\uAC00\uC785\uB2C8\uB2E4.',
   required: '\uC791\uC131 \uD544\uC694',
   review: '\uAC80\uD1A0',
   noEvalTasks: '\uC9C0\uAE08 \uBC14\uB85C \uCC98\uB9AC\uD560 \uD3C9\uAC00\uB294 \uC5C6\uC2B5\uB2C8\uB2E4.',
@@ -177,6 +183,71 @@ function goalStatusLabel(status: Goal['status']): string {
   }
 }
 
+function cycleTypeLabel(cycle: KpiCycle | string | undefined): string {
+  if (cycle === 'YEARLY') return '연간';
+  if (cycle === 'HALF_YEARLY') return '반기';
+  if (cycle === 'QUARTERLY') return '분기';
+  return '목표 기간';
+}
+
+function formatGoalCycle(goal?: Pick<Goal, 'cycle' | 'cycleStartDate' | 'cycleEndDate' | 'cycleKey'> | null): string {
+  if (!goal) return '목표 기간 없음';
+  const start = dayjs(goal.cycleStartDate);
+  const end = dayjs(goal.cycleEndDate);
+  const year = start.isValid() ? start.year() : '';
+  let segment = '';
+  if (goal.cycle === 'HALF_YEARLY') segment = start.month() < 6 ? '상반기' : '하반기';
+  if (goal.cycle === 'QUARTERLY') segment = `${Math.floor(start.month() / 3) + 1}분기`;
+  if (goal.cycle === 'YEARLY') segment = '연간';
+  return [year, segment].filter(Boolean).join(' ') || goal.cycleKey || '목표 기간';
+}
+
+function cycleDistanceFromToday(startDate?: string, endDate?: string): number {
+  const today = dayjs().startOf('day');
+  const start = dayjs(startDate).startOf('day');
+  const end = dayjs(endDate).startOf('day');
+  if (start.isValid() && end.isValid() && !today.isBefore(start) && !today.isAfter(end)) return 0;
+  if (start.isValid() && today.isBefore(start)) return start.diff(today, 'day');
+  if (end.isValid()) return Math.abs(today.diff(end, 'day')) + 10_000;
+  return Number.MAX_SAFE_INTEGER;
+}
+
+function pickDashboardGoalCycle(goals: Goal[]): string | null {
+  const cycleGroups = new Map<string, Goal[]>();
+  goals.forEach((goal) => {
+    const key = `${goal.cycleStartDate}|${goal.cycleEndDate}|${goal.cycleKey}`;
+    const rows = cycleGroups.get(key) ?? [];
+    rows.push(goal);
+    cycleGroups.set(key, rows);
+  });
+  return [...cycleGroups.entries()]
+    .map(([key, rows]) => ({
+      key,
+      distance: cycleDistanceFromToday(rows[0]?.cycleStartDate, rows[0]?.cycleEndDate),
+      activeCount: rows.filter((goal) => goal.status === 'ACTIVE').length,
+      start: rows[0]?.cycleStartDate ?? '',
+    }))
+    .sort((a, b) => a.distance - b.distance || b.activeCount - a.activeCount || dayjs(b.start).valueOf() - dayjs(a.start).valueOf())[0]?.key ?? null;
+}
+
+function seasonStatusLabel(status?: EvaluationSeasonFlow['status'] | null): string {
+  if (status === 'DRAFT') return '준비 중';
+  if (status === 'SELF_EVAL') return '자기평가';
+  if (status === 'MANAGER_EVAL') return '상사평가';
+  if (status === 'GRADE_CONFIRM') return '등급 확정';
+  if (status === 'RESULT_PUBLISHED') return '결과 공개';
+  if (status === 'INTERVIEW') return '면담 진행';
+  if (status === 'CLOSED') return '종료';
+  return '시즌 미연결';
+}
+
+function meetingState(meeting: { scheduledAt: string; completedAt?: string }) {
+  if (meeting.completedAt) return { label: '완료', color: 'green' as const };
+  if (dayjs(meeting.scheduledAt).isBefore(dayjs())) return { label: '지연', color: 'orange' as const };
+  if (dayjs(meeting.scheduledAt).isBefore(dayjs().add(7, 'day'))) return { label: '7일 내', color: 'blue' as const };
+  return { label: '예정', color: 'default' as const };
+}
+
 function isApprovalNotification(type: string): boolean {
   return String(type ?? '').toUpperCase().startsWith('APPROVAL_');
 }
@@ -244,38 +315,89 @@ export function DashboardPerformanceGoalsBlock() {
     queryFn: () => goalApi.listMyObjectives(),
     staleTime: 60_000,
   });
+  const seasonsQ = useQuery({
+    queryKey: ['dashboard', 'performance', 'seasons'],
+    queryFn: () => evaluationRedesignApi.listSeasons(),
+    staleTime: 60_000,
+  });
 
   const goals = myGoalsQ.data ?? [];
   const objectives = objectivesQ.data ?? [];
-  const activeGoals = goals.filter((goal) => goal.status === 'ACTIVE');
-  const pendingGoals = goals.filter((goal) => goal.status === 'PENDING');
-  const draftGoals = goals.filter((goal) => goal.status === 'DRAFT');
-  const weightTotal = goals
+  const selectedCycleKey = pickDashboardGoalCycle(goals);
+  const cycleGoals = selectedCycleKey
+    ? goals.filter((goal) => `${goal.cycleStartDate}|${goal.cycleEndDate}|${goal.cycleKey}` === selectedCycleKey)
+    : goals;
+  const cycleAnchor = cycleGoals[0] ?? null;
+  const activeGoals = cycleGoals.filter((goal) => goal.status === 'ACTIVE');
+  const pendingGoals = cycleGoals.filter((goal) => goal.status === 'PENDING');
+  const draftGoals = cycleGoals.filter((goal) => goal.status === 'DRAFT');
+  const approvedGoals = cycleGoals.filter((goal) => goal.goalApprovalStatus === 'APPROVED' || goal.status === 'ACTIVE' || goal.status === 'COMPLETED');
+  const weightTotal = cycleGoals
     .filter((goal) => goal.status !== 'CANCELLED' && goal.status !== 'SKIPPED')
     .reduce((sum, goal) => sum + Number(goal.weightPct ?? 0), 0);
-  const topGoals = [...activeGoals, ...pendingGoals, ...draftGoals].slice(0, 3);
+  const cycleObjectives = objectives.filter((objective) => !cycleAnchor || objective.cycleStartDate === cycleAnchor.cycleStartDate);
+  const linkedSeason = (seasonsQ.data ?? [])
+    .filter((season) => cycleAnchor && season.targetCycleStart === cycleAnchor.cycleStartDate)
+    .sort((a, b) => cycleDistanceFromToday(a.startDate, a.endDate) - cycleDistanceFromToday(b.startDate, b.endDate))[0];
+  const readiness =
+    cycleGoals.length === 0
+      ? { label: '목표 없음', color: 'default' as const, help: '해당 기간에 개인 목표가 없습니다.' }
+      : weightTotal !== 100
+        ? { label: '가중치 확인', color: 'orange' as const, help: `가중치 합이 ${weightTotal}%입니다.` }
+        : pendingGoals.length > 0
+          ? { label: '승인 대기', color: 'gold' as const, help: '승인 완료 후 평가 대상이 됩니다.' }
+          : draftGoals.length > 0
+            ? { label: '승인 요청 필요', color: 'orange' as const, help: '초안 목표를 승인 요청해야 합니다.' }
+            : approvedGoals.length === cycleGoals.length
+              ? { label: '평가 준비 완료', color: 'green' as const, help: '승인 완료 목표가 평가 대상입니다.' }
+              : { label: '진행 중', color: 'blue' as const, help: '목표 상태를 확인하세요.' };
+  const topGoals = [...draftGoals, ...pendingGoals, ...activeGoals, ...approvedGoals]
+    .filter((goal, index, rows) => rows.findIndex((item) => item.goalId === goal.goalId) === index)
+    .slice(0, 3);
 
   return cardShell(
     DASHBOARD_WIDGET_LABELS.performanceGoals,
     <Link to="/app/performance" search={{ view: 'my-objective' }} className="tw-text-xs tw-font-medium tw-text-blue-600">
       {TXT.goalView}
     </Link>,
-    <Spin spinning={myGoalsQ.isLoading || objectivesQ.isLoading}>
+    <Spin spinning={myGoalsQ.isLoading || objectivesQ.isLoading || seasonsQ.isLoading}>
       <div className="tw-space-y-4">
+        <div className="tw-rounded-2xl tw-border tw-border-slate-100 tw-bg-slate-50/80 tw-p-3">
+          <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2">
+            <div>
+              <div className="tw-text-sm tw-font-semibold tw-text-slate-900">{formatGoalCycle(cycleAnchor)}</div>
+              <div className="tw-mt-0.5 tw-text-[11px] tw-text-slate-500">
+                {cycleAnchor
+                  ? `${cycleTypeLabel(cycleAnchor.cycle)} · ${dayjs(cycleAnchor.cycleStartDate).format('YYYY.MM.DD')} ~ ${dayjs(cycleAnchor.cycleEndDate).format('YYYY.MM.DD')}`
+                  : '가장 가까운 목표 기간을 자동으로 보여줍니다.'}
+              </div>
+            </div>
+            <Tag color={readiness.color} className="!tw-m-0 !tw-rounded-full">{readiness.label}</Tag>
+          </div>
+          <div className="tw-mt-2 tw-text-xs tw-text-slate-600">{readiness.help}</div>
+        </div>
         <div className="tw-grid tw-grid-cols-3 tw-gap-2">
-          {compactStat(TXT.active, activeGoals.length, 'blue')}
-          {compactStat(TXT.approvalPending, pendingGoals.length, pendingGoals.length > 0 ? 'amber' : 'slate')}
-          {compactStat(TXT.orgGoal, objectives.length, 'green')}
+          {compactStat('승인 완료', approvedGoals.length, approvedGoals.length > 0 ? 'green' : 'slate')}
+          {compactStat('승인 대기', pendingGoals.length, pendingGoals.length > 0 ? 'amber' : 'slate')}
+          {compactStat('조직 목표', cycleObjectives.length, 'blue')}
         </div>
         <div>
           <div className="tw-mb-1 tw-flex tw-justify-between tw-text-xs tw-text-slate-600">
-            <span>{TXT.personalGoalWeight}</span>
+            <span>개인 목표 가중치 합</span>
             <span className="tw-font-medium tw-text-slate-900">{weightTotal}% / 100%</span>
           </div>
           <Progress percent={Math.min(100, weightTotal)} showInfo={false} strokeColor={weightTotal === 100 ? '#059669' : '#2563EB'} trailColor="#e2e8f0" size="small" />
         </div>
+        <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2 tw-text-xs">
+          <Tag className="!tw-m-0">{linkedSeason ? seasonStatusLabel(linkedSeason.status) : '평가 시즌 없음'}</Tag>
+          <span className="tw-text-slate-500">
+            {linkedSeason ? linkedSeason.name : '이 목표 기간에 연결된 평가 시즌이 아직 없습니다.'}
+          </span>
+        </div>
         {topGoals.length === 0 ? (
-          <div className="tw-rounded-xl tw-bg-slate-50 tw-p-4 tw-text-center tw-text-xs tw-text-slate-500">{TXT.noGoals}</div>
+          <div className="tw-rounded-xl tw-bg-slate-50 tw-p-4 tw-text-center tw-text-xs tw-text-slate-500">
+            선택된 목표 기간에 표시할 개인 목표가 없습니다.
+          </div>
         ) : (
           <List
             size="small"
@@ -287,7 +409,7 @@ export function DashboardPerformanceGoalsBlock() {
                   <div className="tw-mt-0.5 tw-flex tw-items-center tw-gap-1.5 tw-text-xs tw-text-slate-500">
                     <span>{goal.weightPct}%</span>
                     <span>·</span>
-                    <span>{goal.objectiveTitle ?? TXT.noParentGoal}</span>
+                    <span className="tw-truncate">{goal.objectiveTitle ?? TXT.noParentGoal}</span>
                   </div>
                 </div>
                 <Tag className="!tw-m-0">{goalStatusLabel(goal.status)}</Tag>
@@ -325,7 +447,7 @@ export function DashboardEvaluationTasksBlock() {
 
   return cardShell(
     DASHBOARD_WIDGET_LABELS.evaluationTasks,
-    <Link to="/app/evaluations" search={{ view: selfPending.length > 0 || evaluatorTasks.length > 0 ? 'self' : 'results' }} className="tw-text-xs tw-font-medium tw-text-blue-600">
+    <Link to="/app/evaluations" className="tw-text-xs tw-font-medium tw-text-blue-600">
       {TXT.evalView}
     </Link>,
     <Spin spinning={selfQ.isLoading || evaluatorQ.isLoading || receivedQ.isLoading}>
@@ -375,24 +497,51 @@ export function DashboardFeedbackMeetingsBlock() {
     queryFn: () => meetingApi.listMyMeetingsAsManager(),
     staleTime: 60_000,
   });
+  const seasonsQ = useQuery({
+    queryKey: ['dashboard', 'meetings', 'seasons'],
+    queryFn: () => evaluationRedesignApi.listSeasons(),
+    staleTime: 60_000,
+  });
 
   const meetings = [...(memberQ.data ?? []), ...(managerQ.data ?? [])];
   const uniqueMeetings = Array.from(new Map(meetings.map((meeting) => [meeting.meetingRecordId, meeting])).values());
+  const partnerIds = uniqueMeetings.flatMap((meeting) => [meeting.memberId, meeting.managerId]);
+  const { labelFor } = useMemberDisplayNames(partnerIds);
+  const seasonById = new Map((seasonsQ.data ?? []).map((season) => [season.seasonId, season]));
   const feedbackMeetings = uniqueMeetings
     .filter((meeting) => !!meeting.relatedSeasonId)
     .sort((a, b) => dayjs(a.scheduledAt).valueOf() - dayjs(b.scheduledAt).valueOf());
   const pendingMeetings = feedbackMeetings.filter((meeting) => !meeting.completedAt);
-  const nextMeetings = pendingMeetings.slice(0, 3);
+  const overdueMeetings = pendingMeetings.filter((meeting) => dayjs(meeting.scheduledAt).isBefore(dayjs()));
+  const upcomingMeetings = pendingMeetings.filter((meeting) => !dayjs(meeting.scheduledAt).isBefore(dayjs()));
+  const nextMeetings = [...overdueMeetings, ...upcomingMeetings].slice(0, 3);
+  const primarySeason = nextMeetings[0]?.relatedSeasonId ? seasonById.get(nextMeetings[0].relatedSeasonId) : null;
 
   return cardShell(
     DASHBOARD_WIDGET_LABELS.feedbackMeetings,
     <Link to="/app/meetings" className="tw-text-xs tw-font-medium tw-text-blue-600">{TXT.meetingView}</Link>,
-    <Spin spinning={memberQ.isLoading || managerQ.isLoading}>
+    <Spin spinning={memberQ.isLoading || managerQ.isLoading || seasonsQ.isLoading}>
       <div className="tw-space-y-4">
-        <div className="tw-grid tw-grid-cols-3 tw-gap-2">
-          {compactStat(TXT.scheduled, pendingMeetings.length, pendingMeetings.length > 0 ? 'blue' : 'slate')}
-          {compactStat(TXT.done, feedbackMeetings.length - pendingMeetings.length, 'green')}
-          {compactStat(TXT.total, feedbackMeetings.length, 'slate')}
+        <div className="tw-rounded-2xl tw-border tw-border-slate-100 tw-bg-slate-50/80 tw-p-3">
+          <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2">
+            <div>
+              <div className="tw-text-sm tw-font-semibold tw-text-slate-900">
+                {primarySeason?.name ?? '피드백 면담'}
+              </div>
+              <div className="tw-mt-0.5 tw-text-[11px] tw-text-slate-500">
+                {primarySeason
+                  ? `${seasonStatusLabel(primarySeason.status)} · ${dayjs(primarySeason.startDate).format('YYYY.MM.DD')} ~ ${dayjs(primarySeason.endDate).format('YYYY.MM.DD')}`
+                  : '평가 결과 공개 후 자동 생성된 면담을 기준으로 보여줍니다.'}
+              </div>
+            </div>
+            <Tag color={overdueMeetings.length > 0 ? 'orange' : pendingMeetings.length > 0 ? 'blue' : 'green'} className="!tw-m-0 !tw-rounded-full">
+              {overdueMeetings.length > 0 ? `지연 ${overdueMeetings.length}` : pendingMeetings.length > 0 ? '예정 있음' : '대기 없음'}
+            </Tag>
+          </div>
+        </div>
+        <div className="tw-grid tw-grid-cols-2 tw-gap-2">
+          {compactStat('지연', overdueMeetings.length, overdueMeetings.length > 0 ? 'amber' : 'slate')}
+          {compactStat(TXT.scheduled, upcomingMeetings.length, upcomingMeetings.length > 0 ? 'blue' : 'slate')}
         </div>
         {nextMeetings.length === 0 ? (
           <div className="tw-rounded-xl tw-bg-slate-50 tw-p-4 tw-text-center tw-text-xs tw-text-slate-500">{TXT.noFeedbackMeetings}</div>
@@ -400,20 +549,36 @@ export function DashboardFeedbackMeetingsBlock() {
           <List
             size="small"
             dataSource={nextMeetings}
-            renderItem={(meeting) => (
-              <List.Item className="!tw-px-0 !tw-py-2">
-                <div className="tw-flex tw-min-w-0 tw-flex-1 tw-items-start tw-gap-2">
-                  <VideoCameraOutlined className="tw-mt-0.5 tw-text-blue-600" />
-                  <div className="tw-min-w-0">
-                    <div className="tw-truncate tw-text-sm tw-font-medium tw-text-slate-800">{TXT.feedbackMeeting}</div>
-                    <div className="tw-mt-0.5 tw-text-xs tw-text-slate-500">{dayjs(meeting.scheduledAt).format('YYYY.MM.DD (ddd) HH:mm')}</div>
+            renderItem={(meeting) => {
+              const state = meetingState(meeting);
+              const season = meeting.relatedSeasonId ? seasonById.get(meeting.relatedSeasonId) : null;
+              const isManagerSide = managerQ.data?.some((item) => item.meetingRecordId === meeting.meetingRecordId);
+              const partnerId = isManagerSide ? meeting.memberId : meeting.managerId;
+              return (
+                <List.Item className="!tw-px-0 !tw-py-2">
+                  <div className="tw-flex tw-min-w-0 tw-flex-1 tw-items-start tw-gap-2">
+                    <VideoCameraOutlined className="tw-mt-0.5 tw-text-blue-600" />
+                    <div className="tw-min-w-0">
+                      <div className="tw-flex tw-min-w-0 tw-flex-wrap tw-items-center tw-gap-1.5">
+                        <span className="tw-truncate tw-text-sm tw-font-medium tw-text-slate-800">
+                          {season?.name ?? TXT.feedbackMeeting}
+                        </span>
+                        <Tag color={state.color} className="!tw-m-0 !tw-rounded-full !tw-text-[10px]">{state.label}</Tag>
+                      </div>
+                      <div className="tw-mt-0.5 tw-text-xs tw-text-slate-500">
+                        {dayjs(meeting.scheduledAt).format('YYYY.MM.DD (ddd) HH:mm')} · {isManagerSide ? '대상자' : '상사'} {labelFor(partnerId)}
+                      </div>
+                      <div className="tw-mt-0.5 tw-text-[11px] tw-text-slate-400">
+                        {season ? seasonStatusLabel(season.status) : '시즌 정보 없음'}
+                      </div>
+                    </div>
                   </div>
-                </div>
-                <Link to="/app/meetings/$meetingId" params={{ meetingId: meeting.meetingRecordId }} className="tw-shrink-0 tw-text-xs tw-font-medium tw-text-blue-600">
-                  {TXT.detail}
-                </Link>
-              </List.Item>
-            )}
+                  <Link to="/app/meetings/$meetingId" params={{ meetingId: meeting.meetingRecordId }} className="tw-shrink-0 tw-text-xs tw-font-medium tw-text-blue-600">
+                    {TXT.detail}
+                  </Link>
+                </List.Item>
+              );
+            }}
           />
         )}
       </div>
@@ -779,6 +944,110 @@ export function DashboardNotificationsBlock() {
   );
 }
 
+/**
+ * 시스템 관리자만 의미 있는 위젯 — 회사 Salary 목록에서 활성·기본급 0원인 행 = 급여 미등록 신규 입사자.
+ * 클릭 시 [직원 급여 관리] 의 신규 입사자 필터가 켜진 화면으로 이동.
+ */
+function DashboardPayrollNewHiresBlock({ user }: { user: Me | null }) {
+  const isAdmin = Boolean(user?.isSystemAdmin);
+  // 권한 없는 사용자는 query 자체를 발사하지 않는다 (백엔드 403 이슈 + 무의미한 0명 표시 방지).
+  const salariesQ = useQuery({
+    queryKey: ['salary', 'salaries'],
+    queryFn: () => salaryApi.salary.listByCompany(),
+    enabled: isAdmin,
+    staleTime: 60_000,
+  });
+  // 임시 Salary 시그니처 — SalaryTab 의 isProvisionalSalary 와 동일 기준.
+  // - 연봉제 자동 행: baseSalary === 0 && step == null
+  // - 호봉제 자동 행: step === 1 (호봉표 1호봉 가격이 baseSalary 에 자동 적용되므로 baseSalary 만으로는 식별 불가)
+  const newHires = useMemo(() => {
+    const today = dayjs().startOf('day');
+    const list = salariesQ.data ?? [];
+    return list.filter((s) => {
+      if (!s.effectiveFrom) return false;
+      const startedOk = !dayjs(s.effectiveFrom).startOf('day').isAfter(today);
+      const notEnded = !s.effectiveTo || !dayjs(s.effectiveTo).startOf('day').isBefore(today);
+      const isActive = startedOk && notEnded;
+      if (!isActive) return false;
+      const isAutoYearly = (s.baseSalary ?? 0) === 0 && s.step == null;
+      const isAutoStep = s.step === 1;
+      return isAutoYearly || isAutoStep;
+    });
+  }, [salariesQ.data]);
+
+  if (!isAdmin) {
+    // 비관리자에게는 위젯 자체를 비워둔다 (껍데기만 남기면 혼란).
+    return null;
+  }
+
+  return cardShell(
+    DASHBOARD_WIDGET_LABELS.payrollNewHires,
+    <Link
+      to="/app/payroll/admin"
+      search={{ tab: 'register' }}
+      className="tw-text-[13px] tw-font-medium tw-text-[#2563EB]"
+    >
+      바로 등록 →
+    </Link>,
+    salariesQ.isLoading ? (
+      <div className="tw-flex tw-justify-center tw-py-6">
+        <Spin />
+      </div>
+    ) : newHires.length === 0 ? (
+      <div className="tw-py-2 tw-text-sm tw-text-slate-500">
+        급여 미등록 신규 입사자가 없습니다.
+      </div>
+    ) : (
+      <div>
+        <div className="tw-flex tw-items-baseline tw-gap-2">
+          <DollarOutlined className="tw-text-amber-500" />
+          <span className="tw-text-2xl tw-font-bold tw-text-slate-900">{newHires.length}</span>
+          <span className="tw-text-sm tw-text-slate-500">명 — 기본급 등록 필요</span>
+        </div>
+        <List<Salary>
+          size="small"
+          className="tw-mt-2"
+          dataSource={newHires.slice(0, 5)}
+          renderItem={(s) => (
+            <List.Item
+              actions={[
+                s.memberId ? (
+                  <Link
+                    key="register"
+                    to="/app/payroll/admin"
+                    search={{ tab: 'register', createForMemberId: s.memberId }}
+                    className="tw-text-xs tw-font-medium tw-text-[#2563EB]"
+                  >
+                    등록
+                  </Link>
+                ) : null,
+              ].filter(Boolean)}
+            >
+              <List.Item.Meta
+                title={
+                  <span className="tw-text-sm tw-font-medium tw-text-slate-800">
+                    {s.name ?? '—'}
+                  </span>
+                }
+                description={
+                  <span className="tw-text-xs tw-text-slate-500">
+                    {[s.organizationName, s.sabun].filter(Boolean).join(' · ') || '—'}
+                  </span>
+                }
+              />
+            </List.Item>
+          )}
+        />
+        {newHires.length > 5 ? (
+          <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-xs">
+            외 {newHires.length - 5}명 — [바로 등록] 에서 전체 보기
+          </Typography.Paragraph>
+        ) : null}
+      </div>
+    ),
+  );
+}
+
 export function renderDashboardWidget(id: DashboardWidgetId, user: Me | null): ReactNode {
   switch (id) {
     case 'profile':
@@ -799,6 +1068,8 @@ export function renderDashboardWidget(id: DashboardWidgetId, user: Me | null): R
       return <DashboardLeaveBlock key={id} />;
     case 'notifications':
       return <DashboardNotificationsBlock key={id} />;
+    case 'payrollNewHires':
+      return <DashboardPayrollNewHiresBlock key={id} user={user} />;
     default:
       return null;
   }

@@ -1,4 +1,4 @@
-﻿import {
+import {
     ApartmentOutlined,
     AuditOutlined,
     BankOutlined,
@@ -239,6 +239,7 @@ function buildAppShellMenuItems(
     hrGroupExtraChildren?: NonNullable<MenuProps['items']>,
     leavePromotionEnabled = false,
     showSalaryNegotiationSubmenu = false,
+    talentHubChildren?: NonNullable<MenuProps['items']>,
 ): NonNullable<MenuProps['items']> {
     const items: NonNullable<MenuProps['items']> = [];
     let hubInserted = false;
@@ -256,12 +257,14 @@ function buildAppShellMenuItems(
                     icon: <ProjectOutlined className="tw-text-lg"/>,
                     label: APP_MENU_TALENT_HUB_LABEL,
                     title: APP_MENU_TALENT_HUB_LABEL,
-                    children: TALENT_HUB_PATHS.map((p) => ({
-                        key: p,
-                        icon: APP_MENU_ICONS[p],
-                        label: APP_MENU_LABEL[p],
-                        title: APP_MENU_LABEL[p],
-                    })),
+                    children: talentHubChildren && talentHubChildren.length > 0
+                        ? talentHubChildren
+                        : TALENT_HUB_PATHS.map((p) => ({
+                            key: p,
+                            icon: APP_MENU_ICONS[p],
+                            label: APP_MENU_LABEL[p],
+                            title: APP_MENU_LABEL[p],
+                        })),
                 });
             }
             continue;
@@ -314,12 +317,6 @@ function buildAppShellMenuItems(
                             icon: APP_MENU_ICONS['/app/attendance/schedules/my'],
                             label: APP_MENU_LABEL['/app/attendance/schedules/my'],
                             title: APP_MENU_LABEL['/app/attendance/schedules/my'],
-                        },
-                        {
-                            key: '/app/attendance/monthly',
-                            icon: <CalendarOutlined className="tw-text-lg"/>,
-                            label: APP_MENU_LABEL['/app/attendance/monthly'],
-                            title: APP_MENU_LABEL['/app/attendance/monthly'],
                         },
                         {
                             key: '/app/leave',
@@ -395,6 +392,7 @@ function buildAppShellMenuItems(
                             label: APP_MENU_LABEL['/app/leave/policies'],
                             title: APP_MENU_LABEL['/app/leave/policies'],
                         },
+                        // 연차 촉진 알림 현황은 인사 관리 그룹으로 이동됨 (운영 모니터링 성격)
                     );
                 }
                 if (leaveChildren.length === 0) {
@@ -484,14 +482,8 @@ function buildAppShellMenuItems(
                                           {
                                               key: '/app/payroll/admin',
                                               icon: <DollarOutlined className="tw-text-lg"/>,
-                                              label: '월 급여대장',
-                                              title: '월 급여대장',
-                                          },
-                                          {
-                                              key: '/app/payroll/admin/allowances',
-                                              icon: <DollarOutlined className="tw-text-lg"/>,
-                                              label: APP_MENU_LABEL['/app/payroll/admin/allowances'] ?? '수당 관리',
-                                              title: APP_MENU_LABEL['/app/payroll/admin/allowances'] ?? '수당 관리',
+                                              label: '급여 정산',
+                                              title: '급여 정산',
                                           },
                                           {
                                               key: '/app/salary/negotiations',
@@ -508,12 +500,6 @@ function buildAppShellMenuItems(
                                       icon: <DollarOutlined className="tw-text-lg"/>,
                                       label: APP_MENU_LABEL['/app/payroll/admin'],
                                       title: APP_MENU_LABEL['/app/payroll/admin'],
-                                  },
-                                  {
-                                      key: '/app/payroll/admin/allowances',
-                                      icon: <DollarOutlined className="tw-text-lg"/>,
-                                      label: APP_MENU_LABEL['/app/payroll/admin/allowances'] ?? '수당 관리',
-                                      title: APP_MENU_LABEL['/app/payroll/admin/allowances'] ?? '수당 관리',
                                   },
                               ]),
                         {
@@ -633,7 +619,10 @@ function useAppShellSiderMenuItems(currentPathname: string): {
         staleTime: 300_000,
     });
 
-    /** 연차 촉진 메뉴 노출용. 급여 서비스 503 등일 때는 빈 배열로 삼켜 사이드바 전체가 깨지지 않게 함 */
+    const shouldQuerySalaryMenuData =
+        status === 'authenticated' && currentPathname.startsWith('/app/salary-service');
+
+    /** 연차 촉진 메뉴 노출용. 급여 서비스 화면에서만 조회해 다른 업무 화면의 콘솔 소음을 막음 */
     const {data: leavePoliciesForMenu} = useQuery({
         queryKey: ['salary', 'leave-policies'],
         queryFn: async () => {
@@ -643,7 +632,7 @@ function useAppShellSiderMenuItems(currentPathname: string): {
                 return [];
             }
         },
-        enabled: status === 'authenticated',
+        enabled: shouldQuerySalaryMenuData,
         retry: false,
         staleTime: 60_000,
     });
@@ -651,7 +640,7 @@ function useAppShellSiderMenuItems(currentPathname: string): {
     const {data: salaryPoliciesForMenu} = useQuery({
         queryKey: ['salary', 'salary-policies'],
         queryFn: () => salaryApi.salaryPolicy.list(),
-        enabled: status === 'authenticated' && isAdmin,
+        enabled: shouldQuerySalaryMenuData && isAdmin,
         staleTime: 60_000,
     });
     // `/leave-policies` 503(Service Unavailable) 회피를 위해 근태 서비스 호출 비활성화. 아래 useQuery 복원 시 leavePromotionEnabled를 policies 기반으로 되돌리기
@@ -672,6 +661,71 @@ function useAppShellSiderMenuItems(currentPathname: string): {
             isAdmin ||
             canAccessMemberDirectory(hasPermission) ||
             canAccessMemberDirectoryFromPermissionStrings(user?.permissions);
+        const canManageGoals =
+            isAdmin ||
+            hasPermission({resource: 'GOAL', action: 'CREATE', scope: 'team'}) ||
+            hasPermission({resource: 'GOAL', action: 'CREATE', scope: 'company'}) ||
+            hasPermission({resource: 'GOAL', action: 'UPDATE', scope: 'team'}) ||
+            hasPermission({resource: 'GOAL', action: 'UPDATE', scope: 'company'});
+        const canManageEvaluation =
+            canManageGoals && (
+            hasPermission(PERM.EVALUATION_CREATE) ||
+            hasPermission(PERM.EVALUATION_UPDATE) ||
+            hasPermission(PERM.EVALUATION_READ)
+            );
+        const canViewCompanyGoals =
+            isAdmin ||
+            hasPermission({resource: 'GOAL', action: 'READ', scope: 'company'});
+        const talentHubChildren: NonNullable<MenuProps['items']> = [
+            {
+                key: encodeWfNavKey({to: '/app/performance', search: {view: 'my'}}),
+                icon: <LineChartOutlined className="tw-text-lg"/>,
+                label: '내 목표',
+                title: '내 목표',
+            },
+            ...(canManageGoals
+                ? [
+                    {
+                        key: encodeWfNavKey({to: '/app/performance', search: {view: 'org'}}),
+                        icon: <TeamOutlined className="tw-text-lg"/>,
+                        label: '조직 목표 관리',
+                        title: '조직 목표 관리',
+                    },
+                ]
+                : []),
+            ...(canViewCompanyGoals
+                ? [
+                    {
+                        key: encodeWfNavKey({to: '/app/performance', search: {view: 'company'}}),
+                        icon: <GlobalOutlined className="tw-text-lg"/>,
+                        label: '전사 목표 현황',
+                        title: '전사 목표 현황',
+                    },
+                ]
+                : []),
+            {
+                key: '/app/evaluations',
+                icon: <FormOutlined className="tw-text-lg"/>,
+                label: '내 평가',
+                title: '내 평가',
+            },
+            {
+                key: '/app/meetings',
+                icon: <VideoCameraOutlined className="tw-text-lg"/>,
+                label: '면담',
+                title: '면담',
+            },
+            ...(canManageEvaluation
+                ? [
+                    {
+                        key: encodeWfNavKey({to: '/app/evaluations', search: {view: 'overview'}}),
+                        icon: <CalendarOutlined className="tw-text-lg"/>,
+                        label: '평가 운영 관리',
+                        title: '평가 운영 관리',
+                    },
+                ]
+                : []),
+        ];
         const contractSendMenuItem = {
             key: '/app/contracts/send' as const,
             icon: APP_MENU_ICONS['/app/contracts/send'],
@@ -696,6 +750,13 @@ function useAppShellSiderMenuItems(currentPathname: string): {
                               label: APP_MENU_LABEL['/app/leave/absence'],
                               title: APP_MENU_LABEL['/app/leave/absence'],
                           },
+                          // 연차 촉진 알림 현황 - 운영 모니터링 메뉴 (인사 관리 그룹)
+                          {
+                              key: '/app/leave/promotion-no-response',
+                              icon: <BellOutlined className="tw-text-lg"/>,
+                              label: APP_MENU_LABEL['/app/leave/promotion-no-response'],
+                              title: APP_MENU_LABEL['/app/leave/promotion-no-response'],
+                          },
                       ]
                     : []),
             ];
@@ -713,6 +774,7 @@ function useAppShellSiderMenuItems(currentPathname: string): {
             hrGroupExtraChildren,
             leavePromotionEnabled,
             showSalaryNegotiationSubmenu,
+            talentHubChildren,
         );
 
         const esgMenuItem =
@@ -758,6 +820,7 @@ function useAppShellSiderMenuItems(currentPathname: string): {
         showApprovalFormSettings,
         leavePoliciesForMenu,
         salaryPoliciesForMenu,
+        hasPermission,
     ]);
 }
 
@@ -1499,11 +1562,25 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
 function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknown>): string[] {
     if (/^\/app\/members\/[^/]+$/.test(pathname)) return ['/app/members'];
     if (/^\/app\/meetings\/[^/]+$/.test(pathname)) return ['/app/meetings'];
-    if (/^\/app\/performance\//.test(pathname)) return ['/app/performance'];
+    if (pathname === '/app/performance') {
+        const view = typeof search.view === 'string' ? search.view : 'my';
+        if (view === 'org') return [encodeWfNavKey({to: '/app/performance', search: {view: 'org'}})];
+        if (view === 'company') return [encodeWfNavKey({to: '/app/performance', search: {view: 'company'}})];
+        return [encodeWfNavKey({to: '/app/performance', search: {view: 'my'}})];
+    }
+    if (/^\/app\/performance\//.test(pathname)) return [encodeWfNavKey({to: '/app/performance', search: {view: 'my'}})];
+    if (/^\/app\/evaluations\/seasons\//.test(pathname)) {
+        return [encodeWfNavKey({to: '/app/evaluations', search: {view: 'overview'}})];
+    }
+    if (pathname === '/app/evaluations') {
+        const view = typeof search.view === 'string' ? search.view : '';
+        if (view === 'overview') return [encodeWfNavKey({to: '/app/evaluations', search: {view: 'overview'}})];
+        return ['/app/evaluations'];
+    }
     if (/^\/app\/evaluation-flow(\/|$)/.test(pathname)) return ['/app/evaluations'];
     if (/^\/app\/my-evaluation-result-v2(\/|$)/.test(pathname)) return ['/app/evaluations'];
     if (/^\/app\/evaluation-admin(\/|$)/.test(pathname)) return ['/app/evaluations'];
-    if (pathname === '/app/attendance/monthly') return ['/app/attendance/monthly'];
+    if (pathname === '/app/attendance/monthly') return ['/app/attendance'];
     if (pathname === '/app/attendance/schedules/my') return ['/app/attendance/schedules/my'];
     if (pathname === '/app/attendance/overtime') return ['/app/attendance/overtime'];
     // 월간·근무시간 등 근무 하위를 근무 그룹에 매칭 (직접 URL 진입 시에도 해당 메뉴 선택)
@@ -1524,7 +1601,7 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
     if (pathname === '/app/leave/types') return ['/app/leave/types'];
     // 사이드바 노출 제거 — 부모 메뉴 /app/leave 로 하이라이트
     if (pathname === '/app/leave/my-promotion') return ['/app/leave'];
-    if (pathname === '/app/leave/promotion-no-response') return ['/app/leave/policies'];
+    if (pathname === '/app/leave/promotion-no-response') return ['/app/leave/promotion-no-response'];
     if (pathname === '/app/leave') return ['/app/leave'];
     if (pathname === '/app/salary/unused-leave') return ['/app/payroll/admin'];
     if (pathname === '/app/salary/settings') return ['/app/salary/settings'];
@@ -1538,7 +1615,8 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
     if (pathname === '/app/payroll/annual') return ['/app/payroll/annual'];
     if (pathname === '/app/income') return ['/app/income'];
     if (pathname === '/app/payroll/tax-summary') return ['/app/payroll/tax-summary'];
-    if (pathname === '/app/payroll/admin/allowances') return ['/app/payroll/admin/allowances'];
+    // 수당 관리는 월 급여대장의 탭으로 통합 — 사이드바는 월 급여대장 메뉴를 활성화
+    if (pathname === '/app/payroll/admin/allowances') return ['/app/payroll/admin'];
     if (pathname.startsWith('/app/payroll/admin')) return ['/app/payroll/admin'];
     if (pathname === '/app/payroll' || /^\/app\/payroll\/[^/]+$/.test(pathname)) return ['/app/payroll'];
     if (pathname.startsWith('/app/approvals')) {
@@ -1580,6 +1658,10 @@ function menuOpenKeysForPath(
         keys.push(ORG_HR_GROUP_KEY);
     }
     if (pathname === '/app/leave/absence') {
+        keys.push(ORG_HR_GROUP_KEY);
+    }
+    // 연차 촉진 알림 현황은 인사 관리 그룹으로 이동됨
+    if (pathname === '/app/leave/promotion-no-response') {
         keys.push(ORG_HR_GROUP_KEY);
     }
     if (

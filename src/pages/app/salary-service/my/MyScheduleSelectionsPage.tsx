@@ -1,12 +1,11 @@
 /** /app/attendance/schedules/my - 개인 근무 스케줄 (사원) */
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
   App,
   Button,
-  Calendar,
   Card,
   DatePicker,
   Form,
@@ -20,6 +19,7 @@ import {
   Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import { ClockCircleOutlined, CoffeeOutlined, WarningOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { approvalApi } from '@/features/approvals/api/approvalApi';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
@@ -27,7 +27,6 @@ import type { DailyAttendance, FlexibleTimeSlot, MemberScheduleSelection, WorkSc
 
 type FormValues = {
   targetYearMonth: dayjs.Dayjs;
-  workScheduleId: string;
   slotId: string;
   requestReason?: string;
 };
@@ -47,6 +46,254 @@ function toHours(minutes?: number | null) {
   return `${(minutes / 60).toFixed(1)}h`;
 }
 
+function toHm(minutes?: number | null) {
+  if (minutes == null) return '-';
+  const safe = Math.max(0, Math.floor(minutes));
+  const h = Math.floor(safe / 60);
+  const m = safe % 60;
+  return `${h}h ${m}m`;
+}
+
+function trimSeconds(time?: string | null) {
+  if (!time) return '-';
+  return time.length >= 5 ? time.slice(0, 5) : time;
+}
+
+/**
+ * 주간 행 테이블 — 첫 화면 이미지의 레이아웃과 동일.
+ * 행 그룹: 5~6주, 각 주마다 4개 sub-row (일자/점심시간/근태/초과근무).
+ * 컬럼: 주 | 구분 | 일~토 (7) | 합계 | 1주 근로시간
+ * 주·1주 근로시간 컬럼은 rowSpan=4 로 그룹 헤더 역할.
+ */
+function ScheduleWeeklyTable({
+  calendarMonth,
+  dailyMap,
+  scheduleMap,
+  fallbackTime,
+  fallbackBreakRange,
+  holidaySet,
+  holidayNameMap,
+}: {
+  calendarMonth: dayjs.Dayjs;
+  dailyMap: Map<string, DailyAttendance>;
+  scheduleMap: Map<string, WorkSchedule>;
+  fallbackTime: string;
+  /** 표시용 점심 시작/종료 시각 — FLEXIBLE 직원이 이번 달 선택한 값 (HH:mm:ss 문자열). null 이면 표시 안함. */
+  fallbackBreakRange: { start: string; end: string } | null;
+  holidaySet: Set<string>;
+  holidayNameMap: Map<string, string>;
+}) {
+  type DayCell = {
+    date: dayjs.Dayjs;
+    iso: string;
+    inMonth: boolean;
+    isWeekend: boolean; // 일/토
+    holidayName?: string;
+    daily?: DailyAttendance;
+    schedule?: WorkSchedule | null;
+    timeRange: string; // "08:00~17:00" or "-"
+  };
+
+  // 5~6주 × 7일 행렬 구성
+  const weeks = useMemo(() => {
+    const start = calendarMonth.startOf('month').startOf('week'); // Sunday
+    const end = calendarMonth.endOf('month').endOf('week');
+    const result: DayCell[][] = [];
+    let cursor = start;
+    while (cursor.isBefore(end) || cursor.isSame(end, 'day')) {
+      const week: DayCell[] = [];
+      for (let d = 0; d < 7; d += 1) {
+        const date = cursor.add(d, 'day');
+        const iso = date.format('YYYY-MM-DD');
+        const daily = dailyMap.get(iso);
+        const schedule = daily?.workScheduleId ? scheduleMap.get(daily.workScheduleId) : null;
+        const timeRange = schedule?.startTime && schedule?.endTime
+          ? `${trimSeconds(schedule.startTime)}~${trimSeconds(schedule.endTime)}`
+          : fallbackTime;
+        const isHoliday = date.day() === 0 || date.day() === 6 || holidaySet.has(iso);
+        week.push({
+          date,
+          iso,
+          inMonth: date.month() === calendarMonth.month(),
+          isWeekend: isHoliday,
+          holidayName: holidayNameMap.get(iso),
+          daily,
+          schedule,
+          timeRange,
+        });
+      }
+      result.push(week);
+      cursor = cursor.add(7, 'day');
+    }
+    return result;
+  }, [calendarMonth, dailyMap, scheduleMap, fallbackTime, holidaySet, holidayNameMap]);
+
+  /** 근태 행에 표시할 라벨 매핑 */
+  const attendanceLabel = (cell: DayCell): string => {
+    const status = cell.daily?.status;
+    if (status === 'LEAVE') return '연차휴가';
+    if (status === 'HALF') return '반차';
+    if (status === 'ABSENT') return '결근';
+    return '';
+  };
+
+  /** 초과근무 텍스트: "17:30~18:15 연장근무(0.75H)" */
+  const overtimeText = (cell: DayCell): string => {
+    const ot = cell.daily?.overtimeMinutes ?? 0;
+    if (ot <= 0) return '';
+    const h = ot / 60;
+    return `연장근무 ${h.toFixed(2)}H`;
+  };
+
+  /** 한 주의 합계 — 근무 분, 초과 분, 근태 일수. 휴게시간 차감 개념 제거됨. */
+  const weekSummary = (week: DayCell[]) => {
+    let workedMin = 0;
+    let overtimeMin = 0;
+    let leaveDays = 0;
+    let workdayCount = 0; // 평일+업무가 있는 날
+    for (const cell of week) {
+      if (cell.daily?.workedMinutes != null) workedMin += cell.daily.workedMinutes;
+      if (cell.daily?.overtimeMinutes != null) overtimeMin += cell.daily.overtimeMinutes;
+      if (cell.daily?.status === 'LEAVE' || cell.daily?.status === 'HALF') leaveDays += 1;
+      if (!cell.isWeekend) workdayCount += 1;
+    }
+    // 표준: 평일 × 8시간 = 주 40H (휴게시간 차감 없음)
+    const standardHours = workdayCount * 8;
+    return { workedMin, overtimeMin, leaveDays, standardHours };
+  };
+
+  /** 한 주의 1주 근로시간 (표준 + 초과) */
+  const weekTotalText = (week: DayCell[]) => {
+    const s = weekSummary(week);
+    const total = s.standardHours + s.overtimeMin / 60;
+    return `${total.toFixed(2)}H`;
+  };
+
+  /** 점심시간 텍스트 (HH:mm~HH:mm).
+   *  - FIXED: 해당 일자의 WorkSchedule.breakStart/End
+   *  - FLEXIBLE / 미지정: 직원이 이번 달 선택한 fallbackBreakRange
+   *  - 휴일/주말 또는 미지정이면 빈 칸. */
+  const breakText = (cell: DayCell): string => {
+    if (cell.isWeekend) return '';
+    const fromScheduleStart = cell.schedule?.breakStart;
+    const fromScheduleEnd = cell.schedule?.breakEnd;
+    const start = fromScheduleStart ?? fallbackBreakRange?.start ?? null;
+    const end = fromScheduleEnd ?? fallbackBreakRange?.end ?? null;
+    if (!start || !end) return '';
+    return `${trimSeconds(start)}~${trimSeconds(end)}`;
+  };
+
+  const cellBase = 'tw-border tw-border-slate-200 tw-px-2 tw-py-1.5 tw-text-xs tw-text-center tw-align-middle';
+  const headerBase = 'tw-bg-slate-50 tw-font-semibold tw-text-slate-700';
+
+  return (
+    <div className="tw-overflow-x-auto">
+      <table className="tw-w-full tw-border-collapse tw-text-xs tw-table-fixed">
+        <colgroup>
+          <col style={{ width: 40 }} />
+          <col style={{ width: 80 }} />
+          <col />
+          <col />
+          <col />
+          <col />
+          <col />
+          <col />
+          <col />
+          <col style={{ width: 70 }} />
+          <col style={{ width: 90 }} />
+        </colgroup>
+        <thead>
+          <tr>
+            <th className={`${cellBase} ${headerBase}`}>주</th>
+            <th className={`${cellBase} ${headerBase}`}>구분</th>
+            <th className={`${cellBase} ${headerBase} !tw-text-rose-600`}>일</th>
+            <th className={`${cellBase} ${headerBase}`}>월</th>
+            <th className={`${cellBase} ${headerBase}`}>화</th>
+            <th className={`${cellBase} ${headerBase}`}>수</th>
+            <th className={`${cellBase} ${headerBase}`}>목</th>
+            <th className={`${cellBase} ${headerBase}`}>금</th>
+            <th className={`${cellBase} ${headerBase} !tw-text-rose-600`}>토</th>
+            <th className={`${cellBase} ${headerBase}`}>합계</th>
+            <th className={`${cellBase} ${headerBase}`}>1주 근로시간</th>
+          </tr>
+        </thead>
+        <tbody>
+          {weeks.map((week, wIdx) => {
+            const summary = weekSummary(week);
+            return (
+              <Fragment key={`week-${wIdx}`}>
+                {/* 일자 행 */}
+                <tr>
+                  <td rowSpan={4} className={`${cellBase} ${headerBase}`}>{wIdx + 1}주</td>
+                  <td className={`${cellBase} ${headerBase}`}>일</td>
+                  {week.map((cell) => (
+                    <td
+                      key={`${wIdx}-d-${cell.iso}`}
+                      className={`${cellBase} ${
+                        !cell.inMonth ? 'tw-text-slate-300' :
+                        cell.isWeekend ? 'tw-text-rose-600 tw-font-semibold' :
+                        'tw-text-slate-700'
+                      }`}
+                    >
+                      <div>{String(cell.date.date()).padStart(2, '0')}</div>
+                      {cell.holidayName ? (
+                        <div className="tw-mt-0.5 tw-text-[10px] tw-font-medium tw-text-rose-500 tw-leading-tight">
+                          {cell.holidayName}
+                        </div>
+                      ) : null}
+                    </td>
+                  ))}
+                  <td className={cellBase}></td>
+                  <td rowSpan={4} className={`${cellBase} tw-text-base tw-font-semibold tw-text-blue-600`}>
+                    {weekTotalText(week)}
+                  </td>
+                </tr>
+
+                {/* 점심시간 행 */}
+                <tr>
+                  <td className={`${cellBase} ${headerBase}`}>점심</td>
+                  {week.map((cell) => (
+                    <td key={`${wIdx}-b-${cell.iso}`} className={`${cellBase} tw-text-slate-500`}>
+                      {breakText(cell)}
+                    </td>
+                  ))}
+                  <td className={cellBase}></td>
+                </tr>
+
+                {/* 근태 행 */}
+                <tr>
+                  <td className={`${cellBase} ${headerBase}`}>근태</td>
+                  {week.map((cell) => (
+                    <td key={`${wIdx}-a-${cell.iso}`} className={cellBase}>
+                      {attendanceLabel(cell)}
+                    </td>
+                  ))}
+                  <td className={cellBase}>
+                    {summary.leaveDays > 0 ? `${summary.leaveDays}일` : '0H'}
+                  </td>
+                </tr>
+
+                {/* 초과근무 행 */}
+                <tr>
+                  <td className={`${cellBase} ${headerBase}`}>초과근무</td>
+                  {week.map((cell) => (
+                    <td key={`${wIdx}-o-${cell.iso}`} className={cellBase}>
+                      {overtimeText(cell)}
+                    </td>
+                  ))}
+                  <td className={`${cellBase} tw-font-semibold tw-text-blue-600`}>
+                    {summary.overtimeMin > 0 ? `${(summary.overtimeMin / 60).toFixed(2)}H` : '0H'}
+                  </td>
+                </tr>
+              </Fragment>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function MyScheduleSelectionsPage() {
   const { message } = App.useApp();
   const navigate = useNavigate();
@@ -57,12 +304,15 @@ export function MyScheduleSelectionsPage() {
   const yearMonth = calendarMonth.format('YYYY-MM');
   const monthFrom = calendarMonth.startOf('month').format('YYYY-MM-DD');
   const monthTo = calendarMonth.endOf('month').format('YYYY-MM-DD');
-  const selectedScheduleId = Form.useWatch('workScheduleId', form);
 
   const schedulesQ = useQuery({
     queryKey: ['salary', 'work-schedules'],
     queryFn: () => attendanceApi.workSchedule.list(),
   });
+  const activeFlexibleScheduleId = useMemo(
+    () => (schedulesQ.data ?? []).find((s: WorkSchedule) => s.workType === 'FLEXIBLE')?.workScheduleId,
+    [schedulesQ.data],
+  );
   const docsQ = useQuery({
     queryKey: ['approval', 'documents', 'active'],
     queryFn: () => approvalApi.listActiveDocuments(),
@@ -71,10 +321,14 @@ export function MyScheduleSelectionsPage() {
     queryKey: ['salary', 'attendance', 'my', 'monthly-calendar', monthFrom, monthTo],
     queryFn: () => attendanceApi.attendance.getMyMonthly({ from: monthFrom, to: monthTo, page: 0, size: 31 }),
   });
+  const holidaysQ = useQuery({
+    queryKey: ['salary', 'company-holidays'],
+    queryFn: () => attendanceApi.companyHoliday.list(),
+  });
   const slotsQ = useQuery({
-    queryKey: ['salary', 'flexible-slots', selectedScheduleId],
-    queryFn: () => attendanceApi.flexibleSlot.listByWorkSchedule(selectedScheduleId),
-    enabled: Boolean(selectedScheduleId),
+    queryKey: ['salary', 'flexible-slots', 'active-form', activeFlexibleScheduleId],
+    queryFn: () => attendanceApi.flexibleSlot.listByWorkSchedule(activeFlexibleScheduleId!),
+    enabled: Boolean(activeFlexibleScheduleId),
   });
   const currentQ = useQuery({
     queryKey: ['salary', 'schedule-selection', 'my', 'current', yearMonth],
@@ -85,13 +339,6 @@ export function MyScheduleSelectionsPage() {
     queryFn: () => attendanceApi.scheduleSelection.getMyHistory(yearMonth),
   });
 
-  const scheduleOptions = useMemo(
-    () =>
-      (schedulesQ.data ?? [])
-        .filter((s: WorkSchedule) => s.workType === 'FLEXIBLE')
-        .map((s) => ({ value: s.workScheduleId!, label: s.scheduleName ?? s.workScheduleId! })),
-    [schedulesQ.data],
-  );
   const slotOptions = useMemo(
     () =>
       (slotsQ.data ?? [])
@@ -108,12 +355,17 @@ export function MyScheduleSelectionsPage() {
   );
 
   const createM = useMutation({
-    mutationFn: (v: FormValues) =>
-      attendanceApi.scheduleSelection.createMy({
+    mutationFn: (v: FormValues) => {
+      // 슬롯에 박힌 점심시간을 그대로 신청에 사용 (직원은 슬롯만 고르면 됨).
+      const slot = (slotsQ.data ?? []).find((s) => s.slotId === v.slotId);
+      return attendanceApi.scheduleSelection.createMy({
         targetYearMonth: v.targetYearMonth.format('YYYY-MM'),
         slotId: v.slotId,
+        breakStart: slot?.breakStart ?? null,
+        breakEnd: slot?.breakEnd ?? null,
         requestReason: v.requestReason?.trim() || null,
-      }),
+      });
+    },
     onSuccess: () => {
       message.success('스케줄 변경 신청이 등록되었습니다.');
       void qc.invalidateQueries({ queryKey: ['salary', 'schedule-selection', 'my'] });
@@ -138,10 +390,6 @@ export function MyScheduleSelectionsPage() {
     [historyQ.data],
   );
   const latestAppliedSelection = approvedOrAuto[0] ?? currentQ.data ?? null;
-  const latestSlotLabel = latestAppliedSelection?.slotLabel
-    ?? slotMap.get(latestAppliedSelection?.slotId ?? '')
-    ?? latestAppliedSelection?.slotId
-    ?? '-';
 
   const scheduleMap = useMemo(
     () =>
@@ -172,11 +420,29 @@ export function MyScheduleSelectionsPage() {
     () => new Map((activeFlexibleSlotsQ.data ?? []).map((s) => [s.slotId ?? '', s])),
     [activeFlexibleSlotsQ.data],
   );
+  const defaultFlexibleSlot = useMemo(
+    () => (activeFlexibleSlotsQ.data ?? []).find((s) => Boolean(s.isDefault) && s.delYn !== 'Y'),
+    [activeFlexibleSlotsQ.data],
+  );
+  const defaultSlotTime = useMemo(() => {
+    if (!defaultFlexibleSlot) return '-';
+    if (defaultFlexibleSlot.startTime && defaultFlexibleSlot.endTime) {
+      return `${trimSeconds(defaultFlexibleSlot.startTime)}~${trimSeconds(defaultFlexibleSlot.endTime)}`;
+    }
+    return '-';
+  }, [defaultFlexibleSlot]);
+  const latestSlotLabel = useMemo(() => {
+    const slot = allSlotsMap.get(latestAppliedSelection?.slotId ?? '');
+    if (slot?.startTime && slot?.endTime) {
+      return `${trimSeconds(slot.startTime)}~${trimSeconds(slot.endTime)}`;
+    }
+    return '-';
+  }, [allSlotsMap, latestAppliedSelection?.slotId]);
 
   const banner = useMemo(() => {
     if (!activeFlexibleSchedule) return null;
     const today = dayjs();
-    const deadlineDay = activeFlexibleSchedule.selectionDeadlineDay ?? 25;
+    const deadlineDay = (activeFlexibleSchedule as WorkSchedule & { selectionDeadlineDay?: number }).selectionDeadlineDay ?? 25;
     const thisMonthDeadline = today.date(deadlineDay);
     const isBeforeDeadline = !today.isAfter(thisMonthDeadline, 'day');
 
@@ -194,12 +460,12 @@ export function MyScheduleSelectionsPage() {
       );
 
     const formatSlotInfo = (selection: MemberScheduleSelection | undefined) => {
-      if (!selection) return '-';
+      if (!selection) return defaultSlotTime;
       const slot = allSlotsMap.get(selection.slotId ?? '');
-      const label = slot?.slotLabel ?? selection.slotLabel ?? '-';
-      const time =
-        slot?.startTime && slot?.endTime ? ` (${slot.startTime}~${slot.endTime})` : '';
-      return `${label}${time}`;
+      if (slot?.startTime && slot?.endTime) {
+        return `${trimSeconds(slot.startTime)}~${trimSeconds(slot.endTime)}`;
+      }
+      return '-';
     };
 
     if (isBeforeDeadline) {
@@ -240,7 +506,7 @@ export function MyScheduleSelectionsPage() {
       message: `${currentMonthLabel} 근무 시간대 — ${formatSlotInfo(currentSel)} 적용 중`,
       description: `다음 달(${nextMonthLabel}) 근무 시간대는 ${nextDeadline.format('M월 D일')}까지 신청 가능합니다 (D-${dDay})`,
     };
-  }, [activeFlexibleSchedule, historyQ.data, allSlotsMap]);
+  }, [activeFlexibleSchedule, historyQ.data, allSlotsMap, defaultSlotTime]);
   const dailyMap = useMemo(() => {
     const map = new Map<string, DailyAttendance>();
     for (const row of monthlyQ.data?.content ?? []) {
@@ -248,6 +514,24 @@ export function MyScheduleSelectionsPage() {
     }
     return map;
   }, [monthlyQ.data]);
+  const holidaySet = useMemo(() => {
+    const set = new Set<string>();
+    for (const h of holidaysQ.data ?? []) {
+      if (h.holidayDate) set.add(h.holidayDate);
+    }
+    return set;
+  }, [holidaysQ.data]);
+  const holidayNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const h of holidaysQ.data ?? []) {
+      if (h.holidayDate && h.holidayName) {
+        map.set(h.holidayDate, h.holidayName);
+      }
+    }
+    return map;
+  }, [holidaysQ.data]);
+  // weeklySummaries / totalWorkedMinutes / totalOvertimeMinutes —
+  // 주간 행 테이블이 자체적으로 계산하므로 제거됨.
 
   const scheduleChangeDocId = useMemo(() => {
     const docs = docsQ.data ?? [];
@@ -257,10 +541,22 @@ export function MyScheduleSelectionsPage() {
     return fuzzy?.documentId;
   }, [docsQ.data]);
 
+  // 직접 모달 폐기 - [스케줄 변경 신청] 버튼은 바로 결재 모달로 이동, 대상월은 다음달로 강제 prefill
   const openApply = () => {
-    form.resetFields();
-    form.setFieldsValue({ targetYearMonth: calendarMonth, workScheduleId: selectedScheduleId, slotId: undefined, requestReason: '' });
-    setOpenApplyModal(true);
+    if (!scheduleChangeDocId) {
+      message.error('출퇴근시간 변경 신청서 양식을 찾을 수 없습니다. 전자결재 양식 설정을 확인해 주세요.');
+      return;
+    }
+    const nextMonth = dayjs().add(1, 'month').format('YYYY-MM');
+    void navigate({
+      to: '/app/approvals',
+      search: {
+        tab: 'compose',
+        docId: scheduleChangeDocId,
+        autoCompose: '1',
+        schYearMonth: nextMonth,
+      },
+    });
   };
 
   const submitToApprovals = (v: FormValues) => {
@@ -268,18 +564,21 @@ export function MyScheduleSelectionsPage() {
       message.error('출퇴근시간 변경 신청서 양식을 찾을 수 없습니다. 전자결재 양식 설정을 확인해 주세요.');
       return;
     }
-    sessionStorage.setItem(
-      SCHEDULE_SELECTION_PREFILL_STORAGE_KEY,
-      JSON.stringify({
-        targetYearMonth: v.targetYearMonth.format('YYYY-MM'),
-        slotId: v.slotId,
-        requestReason: v.requestReason?.trim() || null,
-      }),
-    );
+    // iframe 자동 모달에선 부모 sessionStorage 접근 불가 - URL params 로 prefill 데이터 전달
+    const slot = (slotsQ.data ?? []).find((s) => s.slotId === v.slotId);
     setOpenApplyModal(false);
     void navigate({
       to: '/app/approvals',
-      search: { tab: 'compose', docId: scheduleChangeDocId },
+      search: {
+        tab: 'compose',
+        docId: scheduleChangeDocId,
+        autoCompose: '1',
+        schYearMonth: v.targetYearMonth.format('YYYY-MM'),
+        schSlotId: v.slotId,
+        ...(slot?.breakStart ? { schBreakStart: slot.breakStart.slice(0, 5) } : {}),
+        ...(slot?.breakEnd ? { schBreakEnd: slot.breakEnd.slice(0, 5) } : {}),
+        ...(v.requestReason?.trim() ? { schReason: v.requestReason.trim() } : {}),
+      },
     });
   };
 
@@ -313,17 +612,14 @@ export function MyScheduleSelectionsPage() {
             월별 달력으로 스케줄과 근무 현황을 확인하고, 스케줄 변경 신청을 전자결재로 바로 연동합니다.
           </Typography.Paragraph>
         </div>
+        {/* 우측 month picker 제거 - 다음달 스케줄만 신청 가능하므로 사용자가 월 변경할 필요 없음 */}
+        {/* 스케줄 변경 신청 버튼은 회사가 유연근무(FLEXIBLE) 운영 중일 때만 노출 */}
         <Space>
-          <DatePicker
-            picker="month"
-            value={calendarMonth}
-            format="YYYY-MM"
-            allowClear={false}
-            onChange={(v) => v && setCalendarMonth(v.startOf('month'))}
-          />
-          <Button type="primary" onClick={openApply}>
-            스케줄 변경 신청
-          </Button>
+          {activeFlexibleSchedule ? (
+            <Button type="primary" onClick={openApply}>
+              스케줄 변경 신청
+            </Button>
+          ) : null}
         </Space>
       </div>
 
@@ -337,77 +633,51 @@ export function MyScheduleSelectionsPage() {
       )}
 
       <Card title="개인 근무 스케줄" className="tw-border-slate-200/80 tw-shadow-sm" loading={monthlyQ.isLoading}>
-        <Calendar
-          value={calendarMonth}
-          mode="month"
-          fullscreen={false}
-          headerRender={({ value, onChange }) => (
-            <div className="tw-mb-3 tw-flex tw-items-center tw-justify-center tw-gap-3">
-              <Button
-                size="small"
-                onClick={() => onChange(value.clone().subtract(1, 'month').startOf('month'))}
-              >
-                이전
-              </Button>
-              <Typography.Text className="tw-text-lg tw-font-semibold tw-text-slate-800">
-                {value.format('YYYY년 M월')}
-              </Typography.Text>
-              <Button
-                size="small"
-                onClick={() => onChange(value.clone().add(1, 'month').startOf('month'))}
-              >
-                다음
-              </Button>
-            </div>
-          )}
-          onPanelChange={(d, m) => {
-            if (m === 'month') setCalendarMonth(d.startOf('month'));
-          }}
-          dateFullCellRender={(date) => {
-            const iso = date.format('YYYY-MM-DD');
-            const inMonth = date.month() === calendarMonth.month();
-            const daily = dailyMap.get(iso);
-            const schedule = daily?.workScheduleId ? scheduleMap.get(daily.workScheduleId) : null;
-            const scheduleText = schedule
-              ? `${schedule.scheduleName ?? '근무'} (${schedule.startTime ?? '-'} ~ ${schedule.endTime ?? '-'})`
-              : latestSlotLabel !== '-'
-                ? latestSlotLabel
-                : '스케줄 정보 없음';
-            return (
-              <div
-                className={`tw-h-full tw-min-h-[102px] tw-rounded tw-border tw-p-2 ${
-                  inMonth ? 'tw-border-slate-200 tw-bg-white' : 'tw-border-slate-100 tw-bg-slate-50'
-                }`}
-              >
-                <div className={`tw-mb-1 tw-text-xs tw-font-semibold ${inMonth ? 'tw-text-slate-700' : 'tw-text-slate-400'}`}>
-                  {date.date()}
-                </div>
-                <div className="tw-line-clamp-2 tw-text-[11px] tw-text-emerald-700">{scheduleText}</div>
-                <div className="tw-mt-1 tw-text-[11px] tw-text-slate-600">
-                  상태: {STATUS_KO[daily?.status ?? ''] ?? daily?.status ?? '-'}
-                </div>
-                <div className="tw-text-[11px] tw-text-slate-500">
-                  근무: {toHours(daily?.workedMinutes)}
-                </div>
-                <div className="tw-text-[11px] tw-text-slate-500">
-                  연장: {toHours(daily?.overtimeMinutes)}
-                </div>
-              </div>
-            );
-          }}
-        />
-      </Card>
+        {/* 월 이동 */}
+        <div className="tw-mb-3 tw-flex tw-items-center tw-justify-center tw-gap-3">
+          <Button
+            size="small"
+            onClick={() => setCalendarMonth(calendarMonth.subtract(1, 'month').startOf('month'))}
+          >
+            이전
+          </Button>
+          <Typography.Text className="tw-text-lg tw-font-semibold tw-text-slate-800">
+            {calendarMonth.format('YYYY년 M월')}
+          </Typography.Text>
+          <Button
+            size="small"
+            onClick={() => setCalendarMonth(calendarMonth.add(1, 'month').startOf('month'))}
+          >
+            다음
+          </Button>
+        </div>
 
-      <Card title="현재 적용 슬롯" className="tw-border-slate-200/80 tw-shadow-sm" loading={currentQ.isLoading}>
-        {latestAppliedSelection ? (
-          <Space size={24}>
-            <Typography.Text>대상월: {latestAppliedSelection.targetYearMonth ?? '-'}</Typography.Text>
-            <Typography.Text>스케줄: {latestSlotLabel}</Typography.Text>
-            <Typography.Text>상태: <Tag>{STATUS_KO[latestAppliedSelection.approvalStatus ?? ''] ?? (latestAppliedSelection.approvalStatus ?? '-')}</Tag></Typography.Text>
-          </Space>
-        ) : (
-          <Typography.Text type="secondary">현재 적용 스케줄이 없습니다.</Typography.Text>
-        )}
+        {/* 주간 행 테이블 — 5주 × 7일 × (일자/점심/근태/초과근무) + 합계 + 1주 근로시간 */}
+        <ScheduleWeeklyTable
+          calendarMonth={calendarMonth}
+          dailyMap={dailyMap}
+          scheduleMap={scheduleMap}
+          fallbackTime={latestSlotLabel !== '-' ? latestSlotLabel : defaultSlotTime}
+          fallbackBreakRange={(() => {
+            // 우선순위: 신청에 박힌 점심 → 신청 슬롯의 점심 → 기본 슬롯의 점심.
+            // 신규 직원처럼 신청 이력이 없어도 기본 슬롯의 점심이 자동으로 적용된다.
+            const fromSelection =
+              latestAppliedSelection?.breakStart && latestAppliedSelection?.breakEnd
+                ? { start: latestAppliedSelection.breakStart, end: latestAppliedSelection.breakEnd }
+                : null;
+            if (fromSelection) return fromSelection;
+            const fromSelectedSlot = allSlotsMap.get(latestAppliedSelection?.slotId ?? '');
+            if (fromSelectedSlot?.breakStart && fromSelectedSlot?.breakEnd) {
+              return { start: fromSelectedSlot.breakStart, end: fromSelectedSlot.breakEnd };
+            }
+            if (defaultFlexibleSlot?.breakStart && defaultFlexibleSlot?.breakEnd) {
+              return { start: defaultFlexibleSlot.breakStart, end: defaultFlexibleSlot.breakEnd };
+            }
+            return null;
+          })()}
+          holidaySet={holidaySet}
+          holidayNameMap={holidayNameMap}
+        />
       </Card>
 
       <Card title="변경 신청 이력" className="tw-border-slate-200/80 tw-shadow-sm" loading={historyQ.isLoading}>
@@ -428,23 +698,77 @@ export function MyScheduleSelectionsPage() {
         okText="전자결재로 이동"
         cancelText="취소"
         title="스케줄 변경 신청"
-        destroyOnClose
+        destroyOnHidden
         confirmLoading={createM.isPending}
       >
         <Form<FormValues>
           form={form}
           layout="vertical"
-          initialValues={{ targetYearMonth: calendarMonth }}
+          initialValues={{
+            targetYearMonth: calendarMonth,
+          }}
           onFinish={submitToApprovals}
         >
           <Form.Item name="targetYearMonth" label="대상월" rules={[{ required: true }]}>
             <DatePicker picker="month" format="YYYY-MM" className="tw-w-full" />
           </Form.Item>
-          <Form.Item name="workScheduleId" label="기준 스케줄" rules={[{ required: true }]}>
-            <Select options={scheduleOptions} loading={schedulesQ.isLoading} />
-          </Form.Item>
-          <Form.Item name="slotId" label="신청 슬롯" rules={[{ required: true }]}>
+          <Form.Item
+            name="slotId"
+            label="변경 신청 스케줄"
+            rules={[{ required: true }]}
+          >
             <Select options={slotOptions} loading={slotsQ.isLoading} />
+          </Form.Item>
+          <Form.Item
+            shouldUpdate={(prev, next) => prev.slotId !== next.slotId}
+            noStyle
+          >
+            {() => {
+              const slotId = form.getFieldValue('slotId') as string | undefined;
+              if (!slotId) {
+                return (
+                  <div className="tw-mt-1 tw-mb-4 tw-rounded-md tw-border tw-border-dashed tw-border-slate-300 tw-bg-slate-50/50 tw-px-3 tw-py-2 tw-text-xs tw-text-slate-500">
+                    슬롯을 선택하면 회사가 미리 정한 <b>출퇴근/점심시간</b> 이 자동으로 적용됩니다.
+                  </div>
+                );
+              }
+              const slot = (slotsQ.data ?? []).find((s) => s.slotId === slotId);
+              if (!slot) return null;
+              const hasWork = slot.startTime && slot.endTime;
+              const hasLunch = slot.breakStart && slot.breakEnd;
+              return (
+                <div className="tw-mt-1 tw-mb-4 tw-rounded-lg tw-border tw-border-blue-200 tw-bg-blue-50/40 tw-p-3">
+                  <div className="tw-grid tw-grid-cols-2 tw-gap-3">
+                    {/* 출퇴근 */}
+                    <div className="tw-flex tw-items-center tw-gap-2 tw-rounded-md tw-bg-white tw-px-3 tw-py-2 tw-shadow-sm">
+                      <ClockCircleOutlined className="!tw-text-blue-500 tw-text-base" />
+                      <div className="tw-flex tw-flex-col tw-leading-tight">
+                        <span className="tw-text-[11px] tw-text-slate-500">출퇴근</span>
+                        <span className="tw-text-sm tw-font-semibold tw-text-slate-800">
+                          {hasWork ? `${slot.startTime!.slice(0, 5)} ~ ${slot.endTime!.slice(0, 5)}` : '미설정'}
+                        </span>
+                      </div>
+                    </div>
+                    {/* 점심 */}
+                    <div className="tw-flex tw-items-center tw-gap-2 tw-rounded-md tw-bg-white tw-px-3 tw-py-2 tw-shadow-sm">
+                      <CoffeeOutlined className="!tw-text-amber-500 tw-text-base" />
+                      <div className="tw-flex tw-flex-col tw-leading-tight">
+                        <span className="tw-text-[11px] tw-text-slate-500">점심</span>
+                        <span className="tw-text-sm tw-font-semibold tw-text-slate-800">
+                          {hasLunch ? `${slot.breakStart!.slice(0, 5)} ~ ${slot.breakEnd!.slice(0, 5)}` : '미설정'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  {(!hasWork || !hasLunch) && (
+                    <div className="tw-mt-2 tw-flex tw-items-center tw-gap-1 tw-text-xs tw-text-amber-600">
+                      <WarningOutlined />
+                      <span>일부 시간이 미설정 - 관리자에게 슬롯 보완을 요청하세요.</span>
+                    </div>
+                  )}
+                </div>
+              );
+            }}
           </Form.Item>
           <Form.Item name="requestReason" label="신청 사유" rules={[{ required: true, message: '사유를 입력하세요.' }]}>
             <Input.TextArea rows={3} maxLength={300} showCount />

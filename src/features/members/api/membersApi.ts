@@ -38,7 +38,18 @@ function mapRawToMember(raw: unknown): Member | null {
   const u = statusRaw.toUpperCase();
   const status: Member['status'] =
     u === 'DORMANT' ? 'DORMANT' : u === 'LEAVE' ? 'LEAVE' : 'ACTIVE';
-  return { id, name, email, department, ...(sabun ? { sabun } : {}), status };
+  const jobTitleName = strField(r, 'jobTitleName', 'job_title_name') || undefined;
+  const jobGradeName = strField(r, 'jobGradeName', 'job_grade_name') || undefined;
+  return {
+    id,
+    name,
+    email,
+    department,
+    ...(sabun ? { sabun } : {}),
+    ...(jobTitleName ? { jobTitleName } : {}),
+    ...(jobGradeName ? { jobGradeName } : {}),
+    status,
+  };
 }
 
 function normalizeListPayload(
@@ -101,7 +112,28 @@ function mapRowToMember(row: unknown): Member {
   const statusRaw = r.status ?? r.memberStatus;
   const status: Member['status'] =
     statusRaw === 'ACTIVE' || statusRaw === 'DORMANT' || statusRaw === 'LEAVE' ? statusRaw : 'ACTIVE';
-  return { id, name, email, department, ...(sabun ? { sabun } : {}), status };
+  const jobTitleName =
+    typeof r.jobTitleName === 'string' && r.jobTitleName.trim()
+      ? r.jobTitleName.trim()
+      : typeof r.job_title_name === 'string' && r.job_title_name.trim()
+        ? r.job_title_name.trim()
+        : undefined;
+  const jobGradeName =
+    typeof r.jobGradeName === 'string' && r.jobGradeName.trim()
+      ? r.jobGradeName.trim()
+      : typeof r.job_grade_name === 'string' && r.job_grade_name.trim()
+        ? r.job_grade_name.trim()
+        : undefined;
+  return {
+    id,
+    name,
+    email,
+    department,
+    ...(sabun ? { sabun } : {}),
+    ...(jobTitleName ? { jobTitleName } : {}),
+    ...(jobGradeName ? { jobGradeName } : {}),
+    status,
+  };
 }
 
 export const membersApi = {

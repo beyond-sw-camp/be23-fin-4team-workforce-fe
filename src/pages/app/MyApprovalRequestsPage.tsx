@@ -65,7 +65,7 @@ export function MyApprovalRequestsPage() {
   );
 
   return (
-    <div className="tw-mx-auto tw-max-w-6xl tw-space-y-4">
+    <div className="tw-mx-auto tw-max-w-[1400px] tw-w-full tw-space-y-4">
       <div>
         <Typography.Title level={4} className="!tw-mb-1">
           내 기안 문서함

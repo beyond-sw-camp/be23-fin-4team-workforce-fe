@@ -174,8 +174,12 @@ export default function MeetingsPage() {
               key: 'action',
               width: 120,
               render: (_: unknown, record: MeetingRecord) => (
-                <Link to="/app/meetings/$meetingId" params={{ meetingId: record.meetingRecordId }}>
-                  <a className="tw-font-medium tw-text-[#1e3a5f]">상세 보기</a>
+                <Link
+                  to="/app/meetings/$meetingId"
+                  params={{ meetingId: record.meetingRecordId }}
+                  className="tw-font-medium tw-text-[#1e3a5f]"
+                >
+                  상세 보기
                 </Link>
               ),
             },

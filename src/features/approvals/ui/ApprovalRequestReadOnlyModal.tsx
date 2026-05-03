@@ -43,6 +43,7 @@ import {
   parseFormSchema,
   shouldHideApprovalFormFieldInSelectModalPreview,
 } from '@/features/approvals/lib/approvalFormSchema';
+
 import {
   ApprovalFormPaperFieldRow,
   ApprovalFormPaperLayout,
@@ -349,6 +350,33 @@ export function ApprovalRequestReadOnlyModal({
     },
   });
 
+  // 일반 결재 취소 (DRAFT/WAIT/PENDING 상태에서 기안자가 직접 취소)
+  // 공문 발송 취소는 별도 흐름이라 분리. 두 mutation 다 같은 API 호출하지만 UX 메시지/대상 상태 다름
+  const [requestCancelOpen, setRequestCancelOpen] = useState(false);
+  const [requestCancelReason, setRequestCancelReason] = useState('');
+  const cancelRequestM = useMutation({
+    mutationFn: (reason: string) => approvalRequestApi.cancelRequest(requestId!, reason),
+    onSuccess: async (detail) => {
+      message.success('결재 요청을 취소했습니다.');
+      qc.setQueryData(['approval-user', 'request-detail', requestId], detail);
+      setRequestCancelOpen(false);
+      setRequestCancelReason('');
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['approval-user', 'my-requests'] }),
+        qc.invalidateQueries({ queryKey: ['approval-user', 'received-requests'] }),
+        qc.invalidateQueries({ queryKey: ['approval-search'] }),
+      ]);
+      onClose();
+    },
+    onError: (e: unknown) => {
+      const msg =
+        e && typeof e === 'object' && 'message' in e && typeof (e as { message: unknown }).message === 'string'
+          ? (e as { message: string }).message
+          : '취소 처리에 실패했습니다.';
+      message.error(msg);
+    },
+  });
+
   useEffect(() => {
     if (!open) {
       setOfficialCancelOpen(false);
@@ -626,6 +654,15 @@ export function ApprovalRequestReadOnlyModal({
     [selectedRequestDetail, authMemberId],
   );
 
+  // 결재 취소 가능 여부 - 본인 기안 + 상태 DRAFT/WAIT/PENDING
+  const canCancelRequest = useMemo(() => {
+    if (!selectedRequestDetail || !authMemberId.trim()) return false;
+    const drafter = selectedRequestDetail.memberId?.trim() ?? '';
+    if (!drafter || drafter !== authMemberId.trim()) return false;
+    const st = String(selectedRequestDetail.requestStatus).toUpperCase();
+    return st === 'DRAFT' || st === 'WAIT' || st === 'PENDING';
+  }, [selectedRequestDetail, authMemberId]);
+
   const attachmentColumns: ColumnsType<ApprovalAttachment> = useMemo(
     () => [
       {
@@ -687,7 +724,20 @@ export function ApprovalRequestReadOnlyModal({
       title={title}
       open={open}
       onCancel={onClose}
-      footer={null}
+      footer={
+        canCancelRequest ? (
+          <Space>
+            <Button onClick={onClose}>닫기</Button>
+            <Button
+              danger
+              loading={cancelRequestM.isPending}
+              onClick={() => setRequestCancelOpen(true)}
+            >
+              결재 취소
+            </Button>
+          </Space>
+        ) : null
+      }
       width={920}
       style={{ top: 48 }}
       styles={{
@@ -1037,6 +1087,40 @@ export function ApprovalRequestReadOnlyModal({
         rows={4}
         value={officialCancelReason}
         onChange={(e) => setOfficialCancelReason(e.target.value)}
+        placeholder="취소 사유를 입력하세요."
+        maxLength={2000}
+        showCount
+      />
+    </Modal>
+
+    {/* 일반 결재 취소 모달 - DRAFT/WAIT/PENDING 상태에서 기안자가 직접 취소 */}
+    <Modal
+      title="결재 요청 취소"
+      open={requestCancelOpen}
+      onCancel={() => {
+        setRequestCancelOpen(false);
+        setRequestCancelReason('');
+      }}
+      okText="취소 확정"
+      cancelText="닫기"
+      okButtonProps={{ danger: true }}
+      confirmLoading={cancelRequestM.isPending}
+      destroyOnHidden
+      onOk={async () => {
+        if (!requestCancelReason.trim()) {
+          message.warning('취소 사유를 입력해 주세요.');
+          throw new Error('validation');
+        }
+        await cancelRequestM.mutateAsync(requestCancelReason.trim());
+      }}
+    >
+      <Typography.Paragraph type="secondary" className="!tw-mb-2 !tw-text-sm">
+        진행 중인 결재 요청을 취소합니다. 결재선과 참조자에게 취소 사유가 함께 안내됩니다.
+      </Typography.Paragraph>
+      <Input.TextArea
+        rows={4}
+        value={requestCancelReason}
+        onChange={(e) => setRequestCancelReason(e.target.value)}
         placeholder="취소 사유를 입력하세요."
         maxLength={2000}
         showCount

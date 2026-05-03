@@ -681,7 +681,7 @@ export function AiRecordingModal({ open, onClose }: AiRecordingModalProps) {
       footer={null}
       centered
       width={1100}
-      destroyOnClose={false}
+      destroyOnHidden={false}
       styles={{ body: { maxHeight: '76vh', overflowY: 'auto' } }}
     >
       {tab === 'list' ? listBody : tab === 'create' ? createBody : detailBody}

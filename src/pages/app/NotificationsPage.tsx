@@ -200,9 +200,10 @@ export function NotificationsPage() {
     if (item.isRead !== 'YES') {
       await markAsRead.mutateAsync(item.notificationId);
     }
-
+    // 연차 사용 촉진 통보 알림은 휴가 계획 관리 페이지로 딥링크
+    // (/app/leave/my-promotion 은 폐지되고 /app/leave 에 통합됨)
     if (isLeavePromotionNotification(item.notificationType)) {
-      await navigate({ to: '/app/leave/my-promotion' });
+      await navigate({ to: '/app/leave' });
       return;
     }
 

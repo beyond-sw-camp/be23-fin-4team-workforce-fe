@@ -275,7 +275,7 @@ export function MyWorkTripsPage() {
         okText={editing ? '수정' : '등록'}
         cancelText="취소"
         title={editing ? '출장/외근 수정' : '출장/외근 등록'}
-        destroyOnClose
+        destroyOnHidden
         width={520}
       >
         <Form<FormValues>

@@ -16,6 +16,7 @@ type Props = {
 export function ConfirmModal({ open, onClose, response, leadCalibration }: Props) {
   const { message, modal } = App.useApp();
   const queryClient = useQueryClient();
+  const snapshotGoals = response.goalSnapshot?.goals ?? [];
 
   const finalScore = useMemo(
     () => calcFinalScore(response.goalSnapshot, leadCalibration?.finalGrades ?? {}),
@@ -39,9 +40,9 @@ export function ConfirmModal({ open, onClose, response, leadCalibration }: Props
 
   const finalGrades = leadCalibration?.finalGrades ?? {};
   const allFilled = useMemo(() => {
-    if (!response.goalSnapshot) return false;
-    return response.goalSnapshot.goals.every((goal) => Boolean(finalGrades[goal.goalId]));
-  }, [response.goalSnapshot, finalGrades]);
+    if (snapshotGoals.length === 0) return false;
+    return snapshotGoals.every((goal) => Boolean(finalGrades[goal.goalId]));
+  }, [snapshotGoals, finalGrades]);
 
   const handleConfirm = () => {
     modal.confirm({
@@ -99,7 +100,7 @@ export function ConfirmModal({ open, onClose, response, leadCalibration }: Props
         <div className="tw-rounded-xl tw-bg-slate-50 tw-p-3 tw-text-xs tw-text-slate-500">
           <Space size={6}>
             <span className="tw-font-semibold tw-text-slate-700">참고</span>
-            <span>Lead는 KR별 최종 등급만 확정하면 됩니다. 총괄 등급은 별도로 수동 선택하지 않습니다.</span>
+            <span>최종 검토자는 목표별 최종 등급만 확정하면 됩니다. 총괄 등급은 평가 기준에 따라 자동 계산됩니다.</span>
           </Space>
         </div>
       </div>

@@ -242,13 +242,27 @@ export function MyProfileEditPage() {
             급여 계좌
           </Typography.Text>
           <Typography.Paragraph type="secondary" className="!tw-mb-3 !tw-text-xs">
-            은행·계좌번호는 본인 조회 시에만 노출됩니다. 다른 직원이 내 프로필을 볼 때는 표시되지 않습니다.
+            매월 급여 이체에 사용되는 계좌입니다. 본인만 조회·수정할 수 있고 다른 직원에게는 노출되지 않습니다.
+            예금주는 본인 이름으로 자동 처리되며, 본인 명의 계좌만 등록해 주세요. 미등록 시 정산 화면에 누락 직원으로 표시됩니다.
           </Typography.Paragraph>
-          <Form.Item name="bank" label="은행 (bank)">
-            <Input placeholder="은행명" />
+          <Form.Item
+            name="bank"
+            label="은행"
+            rules={[{ max: 30, message: '30자 이내로 입력해 주세요.' }]}
+          >
+            <Input placeholder="예: 신한은행, KB국민은행" maxLength={30} />
           </Form.Item>
-          <Form.Item name="bankAccount" label="계좌번호 (bankAccount)">
-            <Input placeholder="계좌번호" />
+          <Form.Item
+            name="bankAccount"
+            label="계좌번호"
+            rules={[
+              {
+                pattern: /^[0-9-]*$/,
+                message: '계좌번호는 숫자와 - 만 입력해 주세요.',
+              },
+            ]}
+          >
+            <Input placeholder="예: 110-123-456789" maxLength={30} />
           </Form.Item>
 
           <Form.Item>

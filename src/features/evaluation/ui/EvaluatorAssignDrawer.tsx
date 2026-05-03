@@ -60,7 +60,7 @@ export function EvaluatorAssignDrawer({state, onClose, seasonId, labelFor, evalT
     const effectiveEvalTypes = useMemo<EvalType[]>(() => {
         const ORDER: EvalType[] = ['SELF', 'DOWNWARD', 'UPWARD', 'PEER'];
         const base = evalTypes && evalTypes.length > 0 ? [...evalTypes] : [...ORDER];
-        // 시즌 활성화 시 Lead는 DOWNWARD로 고정 — 그룹 유형에 없어도 상급자 행을 넣을 수 있게 합니다.
+        // 시즌 활성화 시 최종 검토자는 DOWNWARD로 고정 — 그룹 유형에 없어도 상급자 행을 넣을 수 있게 합니다.
         if (!base.includes('DOWNWARD')) {
             const selfIdx = base.indexOf('SELF');
             const insertAt = selfIdx >= 0 ? selfIdx + 1 : 0;
@@ -257,7 +257,7 @@ export function EvaluatorAssignDrawer({state, onClose, seasonId, labelFor, evalT
                     그룹 유형: {effectiveEvalTypes.map((t) => evalTypeLabel(t)).join(' · ')}
                 </Text>
                 <Text type="secondary" className="tw-block tw-text-xs">
-                    시즌 활성화·캘리브레이션의 최종 책임(Lead) 평가자는 각 대상마다 <Text strong>DOWNWARD(상급자)</Text> 매핑으로 확정됩니다.
+                    평가를 시작하려면 각 대상자마다 최종 검토자인 <Text strong>상급자 평가자</Text>가 지정되어 있어야 합니다.
                 </Text>
             </div>
             {/* 안내 배너 + 자동 지정 (전체 지정 모드에서만 노출) */}

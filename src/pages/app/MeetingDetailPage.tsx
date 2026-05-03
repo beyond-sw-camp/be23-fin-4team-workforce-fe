@@ -41,8 +41,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from '@tanstack/react-router';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
+import { useAuth } from '@/features/auth/useAuth';
 import { meetingApi } from '@/features/meetings/api/meetingApi';
-import type { CompleteMeetingPayload, MeetingAction, Reaction, TlRating } from '@/features/meetings/model/types';
+import type { CompleteMeetingPayload, MeetingAction, Reaction, RepeatCycle, TlRating } from '@/features/meetings/model/types';
 import { useMemberDisplayNames } from '@/features/members/hooks/useMemberDisplayNames';
 import { MemberRemoteSelect } from '@/features/members/ui/MemberRemoteSelect';
 import { DetailPageHeader } from '@/shared/ui/DetailPageHeader';
@@ -85,10 +86,13 @@ const actionStatusLabel: Record<ActionStatus, string> = {
 
 export default function MeetingDetailPage() {
   const { meetingId } = useParams({ strict: false }) as { meetingId: string };
+  const { user } = useAuth();
   const qc = useQueryClient();
   const [completeForm] = Form.useForm();
   const [actionForm] = Form.useForm();
+  const [editForm] = Form.useForm();
   const [showActionForm, setShowActionForm] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [managerReaction, setManagerReaction] = useState<Reaction | undefined>();
 
   const meetingQ = useQuery({
@@ -123,12 +127,24 @@ export default function MeetingDetailPage() {
     onError: () => message.error('면담 완료 처리에 실패했습니다.'),
   });
 
+  const updateMut = useMutation({
+    mutationFn: (body: { scheduledAt?: string; agenda?: string; repeatCycle?: RepeatCycle }) =>
+      meetingApi.updateMeeting(meetingId, body),
+    onSuccess: () => {
+      message.success('면담 정보를 수정했습니다.');
+      setEditOpen(false);
+      qc.invalidateQueries({ queryKey: ['meetings'] });
+    },
+    onError: (error: any) => message.error(error?.response?.data?.message ?? '면담 정보 수정에 실패했습니다.'),
+  });
+
   const memberReactionMut = useMutation({
     mutationFn: (reaction: Reaction) => meetingApi.recordMemberReaction(meetingId, { memberReaction: reaction }),
     onSuccess: () => {
       message.success('구성원 반응을 저장했습니다.');
       qc.invalidateQueries({ queryKey: ['meetings', meetingId] });
     },
+    onError: (error: any) => message.error(error?.response?.data?.message ?? '구성원 반응 저장에 실패했습니다.'),
   });
 
   const createActionMut = useMutation({
@@ -139,6 +155,7 @@ export default function MeetingDetailPage() {
       setShowActionForm(false);
       qc.invalidateQueries({ queryKey: ['meetings', meetingId, 'actions'] });
     },
+    onError: (error: any) => message.error(error?.response?.data?.message ?? '후속 액션 추가에 실패했습니다.'),
   });
 
   const completeActionMut = useMutation({
@@ -147,6 +164,7 @@ export default function MeetingDetailPage() {
       message.success('후속 액션을 완료 처리했습니다.');
       qc.invalidateQueries({ queryKey: ['meetings', meetingId, 'actions'] });
     },
+    onError: (error: any) => message.error(error?.response?.data?.message ?? '후속 액션 완료 처리에 실패했습니다.'),
   });
 
   const rateActionMut = useMutation({
@@ -156,6 +174,7 @@ export default function MeetingDetailPage() {
       message.success('후속 액션 평가를 저장했습니다.');
       qc.invalidateQueries({ queryKey: ['meetings', meetingId, 'actions'] });
     },
+    onError: (error: any) => message.error(error?.response?.data?.message ?? '후속 액션 평가 저장에 실패했습니다.'),
   });
 
   if (meetingQ.isLoading) {
@@ -179,6 +198,17 @@ export default function MeetingDetailPage() {
   const isOverdue = !isCompleted && dayjs(meeting.scheduledAt).isBefore(dayjs());
   const actions = actionsQ.data ?? [];
   const actionsDone = actions.filter((action) => action.status === 'COMPLETED').length;
+  const currentUserId = user?.id ?? '';
+  const isManager = meeting.managerId === currentUserId;
+  const isMember = meeting.memberId === currentUserId;
+
+  const openEdit = () => {
+    editForm.setFieldsValue({
+      scheduledAt: dayjs(meeting.scheduledAt),
+      agenda: meeting.agenda,
+    });
+    setEditOpen(true);
+  };
 
   return (
     <div className="tw-mx-auto tw-max-w-[900px] tw-p-6">
@@ -218,8 +248,8 @@ export default function MeetingDetailPage() {
               </div>
             </div>
             {meeting.relatedEvaluationResponseId && (
-              <Link to="/app/evaluations" search={{ view: 'results' }}>
-                <a className="tw-font-medium tw-text-[#1e3a5f]">평가 결과 보기</a>
+              <Link to="/app/evaluations" className="tw-font-medium tw-text-[#1e3a5f]">
+                평가 결과 보기
               </Link>
             )}
           </div>
@@ -227,6 +257,14 @@ export default function MeetingDetailPage() {
       )}
 
       <Card className="tw-mb-5">
+        <div className="tw-mb-4 tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-3">
+          <Typography.Text strong>면담 정보</Typography.Text>
+          {isManager && !isCompleted ? (
+            <Button size="small" onClick={openEdit}>
+              일정·아젠다 수정
+            </Button>
+          ) : null}
+        </div>
         <Descriptions column={{ xs: 1, sm: 2 }} size="small" styles={{ label: { fontWeight: 500 } }}>
           <Descriptions.Item label="구성원">
             <Space><UserOutlined /><Typography.Text>{labelFor(meeting.memberId)}</Typography.Text></Space>
@@ -242,7 +280,7 @@ export default function MeetingDetailPage() {
         </Descriptions>
       </Card>
 
-      {!isCompleted && (
+      {!isCompleted && isManager && (
         <Card title="면담 완료 처리" className="tw-mb-5">
           <Form
             form={completeForm}
@@ -271,6 +309,15 @@ export default function MeetingDetailPage() {
         </Card>
       )}
 
+      {!isCompleted && isMember ? (
+        <Card className="tw-mb-5 tw-rounded-2xl tw-border tw-border-slate-200/90 tw-bg-slate-50/60">
+          <div className="tw-text-sm tw-font-semibold tw-text-slate-900">면담 예정</div>
+          <div className="tw-mt-1 tw-text-sm tw-text-slate-500">
+            면담 완료 처리는 상사가 진행합니다. 완료 후에는 이 화면에서 면담 기록과 후속 액션을 확인할 수 있습니다.
+          </div>
+        </Card>
+      ) : null}
+
       {isCompleted && (
         <>
           <Card title="면담 기록" className="tw-mb-5">
@@ -290,8 +337,18 @@ export default function MeetingDetailPage() {
           )}
 
           <Card title="구성원 반응" className="tw-mb-5" size="small">
-            <Typography.Text className="tw-mr-3">면담이 어땠는지 남겨 주세요.</Typography.Text>
-            <ReactionPicker value={meeting.memberReaction} onChange={(value) => memberReactionMut.mutate(value)} disabled={memberReactionMut.isPending} />
+            {isMember ? (
+              <>
+                <Typography.Text className="tw-mr-3">면담이 어땠는지 남겨 주세요.</Typography.Text>
+                <ReactionPicker value={meeting.memberReaction} onChange={(value) => memberReactionMut.mutate(value)} disabled={memberReactionMut.isPending} />
+              </>
+            ) : (
+              <Typography.Text type="secondary">
+                {meeting.memberReaction
+                  ? reactionConfig.find((item) => item.value === meeting.memberReaction)?.label ?? meeting.memberReaction
+                  : '구성원 반응이 아직 등록되지 않았습니다.'}
+              </Typography.Text>
+            )}
           </Card>
         </>
       )}
@@ -306,9 +363,11 @@ export default function MeetingDetailPage() {
           </Space>
         }
         extra={
+          isManager ? (
           <Button type="dashed" size="small" icon={<PlusOutlined />} onClick={() => setShowActionForm(true)}>
             액션 추가
           </Button>
+          ) : null
         }
       >
         {actions.length > 0 && (
@@ -324,7 +383,7 @@ export default function MeetingDetailPage() {
               <List.Item
                 key={action.meetingActionId}
                 actions={[
-                  action.status !== 'COMPLETED' && (
+                  action.status !== 'COMPLETED' && action.assigneeId === currentUserId && (
                     <Button
                       key="complete"
                       size="small"
@@ -359,7 +418,7 @@ export default function MeetingDetailPage() {
                     </Space>
                   }
                 />
-                {action.status === 'COMPLETED' && (
+                {action.status === 'COMPLETED' && isManager && (
                   <div className="tw-ml-4">
                     <TlRatingPicker value={action.tlRating} onChange={(value) => rateActionMut.mutate({ actionId: action.meetingActionId, tlRating: value })} />
                   </div>
@@ -406,6 +465,35 @@ export default function MeetingDetailPage() {
           </>
         )}
       </Card>
+
+      <Modal
+        open={editOpen}
+        title="면담 정보 수정"
+        onCancel={() => setEditOpen(false)}
+        onOk={() => editForm.submit()}
+        okText="저장"
+        cancelText="취소"
+        confirmLoading={updateMut.isPending}
+        destroyOnHidden
+      >
+        <Form
+          form={editForm}
+          layout="vertical"
+          onFinish={(values) => {
+            updateMut.mutate({
+              scheduledAt: values.scheduledAt ? values.scheduledAt.toISOString() : undefined,
+              agenda: values.agenda,
+            });
+          }}
+        >
+          <Form.Item name="scheduledAt" label="일정" rules={[{ required: true, message: '면담 일정을 선택해 주세요.' }]}>
+            <DatePicker showTime={{ format: 'HH:mm' }} format="YYYY-MM-DD HH:mm" className="tw-w-full" />
+          </Form.Item>
+          <Form.Item name="agenda" label="아젠다">
+            <Input.TextArea rows={3} placeholder="면담에서 다룰 내용을 적어 주세요." />
+          </Form.Item>
+        </Form>
+      </Modal>
 
       {isCompleted ? <Form form={completeForm} preserve={false} className="tw-hidden" aria-hidden /> : null}
       {!showActionForm ? <Form form={actionForm} preserve={false} className="tw-hidden" aria-hidden /> : null}

@@ -6,7 +6,6 @@ import type {
   SubmitCyclePayload,
   ApprovePayload,
   RejectPayload,
-  DelegatePayload,
 } from '../model/types';
 
 function pickStr(o: any, ...keys: string[]): string {
@@ -35,7 +34,6 @@ function mapBundle(b: any): GoalApprovalBundle {
     status: pickStr(b, 'status') as GoalApprovalBundle['status'],
     decision: pickStr(b, 'decision') as GoalApprovalBundle['decision'],
     approverId: pickStr(b, 'approverId'),
-    delegateApproverId: b.delegateApproverId ?? null,
     decidedAt: b.decidedAt ?? null,
     commentText: b.commentText ?? null,
     rejectionReason: b.rejectionReason ?? null,
@@ -63,10 +61,6 @@ export const approvalApi = {
   },
   async withdraw(bundleId: string): Promise<GoalApprovalBundle> {
     const res = await httpClient.post(`/goal/approval-bundles/${bundleId}/withdraw`);
-    return mapBundle(unwrapApiResponse<unknown>(res.data));
-  },
-  async delegate(bundleId: string, payload: DelegatePayload): Promise<GoalApprovalBundle> {
-    const res = await httpClient.post(`/goal/approval-bundles/${bundleId}/delegate`, payload);
     return mapBundle(unwrapApiResponse<unknown>(res.data));
   },
   async get(bundleId: string): Promise<GoalApprovalBundle> {

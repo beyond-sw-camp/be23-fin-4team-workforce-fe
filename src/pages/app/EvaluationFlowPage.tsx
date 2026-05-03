@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { App, Card, Result, Tag, Typography } from 'antd';
+import { App, Card, Result, Select, Tag, Typography } from 'antd';
 import {
-  CheckCircleFilled,
-  CheckCircleOutlined,
   EditOutlined,
   FileSearchOutlined,
   FlagOutlined,
@@ -10,15 +8,16 @@ import {
   TrophyFilled,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
 import dayjs from 'dayjs';
 import { useAuth } from '@/features/auth/useAuth';
 import { evaluationRedesignApi } from '@/features/evaluation/api/evaluationRedesignApi';
+import { pickDefaultSeasonFilter } from '@/features/evaluation/lib/defaultSeasonFilter';
 import { CalibrationForm } from '@/features/evaluation/ui/CalibrationForm';
 import { ConfirmModal } from '@/features/evaluation/ui/ConfirmModal';
 import { EvaluationResultCard } from '@/features/evaluation/ui/EvaluationResultCard';
 import { SelfEvaluationForm } from '@/features/evaluation/ui/SelfEvaluationForm';
 import type { EvaluationFlowResponse } from '@/features/evaluation/model/workflowTypes';
+import { useMemberDisplayNames } from '@/features/members/hooks/useMemberDisplayNames';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppEmptyIllustrated } from '@/shared/ui/AppEmptyIllustrated';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
@@ -28,35 +27,23 @@ const SECTION_CARD = 'tw-rounded-2xl tw-border tw-border-slate-200/90 tw-shadow-
 
 type EvaluationFlowPageProps = {
   embedded?: boolean;
+  externalSeasonFilter?: string;
+  hideSeasonFilter?: boolean;
 };
 
 type Stage = EvaluationFlowResponse['stage'];
 type FlowListItem = EvaluationFlowResponse & { listOrigin: 'self' | 'evaluator' };
-type StepKey = 'self' | 'calibration' | 'confirmed' | 'published';
-type FlowSectionKey = 'self-pending' | 'waiting' | 'evaluator' | 'confirmed';
 
 const STAGE_LABEL: Record<Stage, string> = {
   SELF_PENDING: '자기평가 입력',
   SELF_SUBMITTED: '자기평가 제출 완료',
-  PEER_OPEN: '다면 의견 수집',
-  UPWARD_OPEN: '다면 의견 수집',
-  DOWNWARD_OPEN: '다면 의견 수집',
-  CALIBRATION_OPEN: '리드 검토 중',
-  CALIBRATION_LOCKED: '최종 확정 대기',
-  CONFIRMED: '확정 완료',
+  PEER_OPEN: '상사평가 진행',
+  UPWARD_OPEN: '상사평가 진행',
+  DOWNWARD_OPEN: '상사평가 진행',
+  CALIBRATION_OPEN: '등급 확정 중',
+  CALIBRATION_LOCKED: '결과 공개 대기',
+  CONFIRMED: '등급 확정 완료',
   SKIPPED_LEAVER: '평가 제외',
-};
-
-const STAGE_DESCRIPTION: Record<Stage, string> = {
-  SELF_PENDING: '지금 바로 작성해야 하는 자기평가입니다.',
-  SELF_SUBMITTED: '자기평가를 제출했고, 이제 검토 결과를 기다리는 단계입니다.',
-  PEER_OPEN: '다면 의견 수집 중입니다. 평가자 응답이 모이면 Lead가 최종 검토합니다.',
-  UPWARD_OPEN: '다면 의견 수집 중입니다. 평가자 응답이 모이면 Lead가 최종 검토합니다.',
-  DOWNWARD_OPEN: '다면 의견 수집 중입니다. 평가자 응답이 모이면 Lead가 최종 검토합니다.',
-  CALIBRATION_OPEN: 'Lead와 Assistant가 KR별 등급을 조정하는 단계입니다.',
-  CALIBRATION_LOCKED: 'Lead가 최종 확정을 준비하고 있습니다.',
-  CONFIRMED: '최종 확정은 끝났고, 결과 공개를 기다리는 상태일 수 있습니다.',
-  SKIPPED_LEAVER: '퇴사 또는 운영 처리로 평가 대상에서 제외되었습니다.',
 };
 
 const STAGE_TAG_COLOR: Record<Stage, string> = {
@@ -71,14 +58,7 @@ const STAGE_TAG_COLOR: Record<Stage, string> = {
   SKIPPED_LEAVER: 'default',
 };
 
-const STEPPER_STEPS = [
-  { key: 'self', label: '자기평가', icon: EditOutlined },
-  { key: 'calibration', label: '검토/조정', icon: FileSearchOutlined },
-  { key: 'confirmed', label: '확정', icon: CheckCircleOutlined },
-  { key: 'published', label: '결과 공개', icon: TrophyFilled },
-] as const;
-
-export default function EvaluationFlowPage({ embedded = false }: EvaluationFlowPageProps) {
+export default function EvaluationFlowPage({ embedded = false, externalSeasonFilter, hideSeasonFilter = false }: EvaluationFlowPageProps) {
   const { user } = useAuth();
   const currentUserId = user?.id ?? '';
   const { data: mySelf = [], isLoading: loadingSelf } = useQuery({
@@ -91,6 +71,8 @@ export default function EvaluationFlowPage({ embedded = false }: EvaluationFlowP
   });
 
   const [activeId, setActiveId] = useState<string>();
+  const [seasonFilter, setSeasonFilter] = useState('ALL');
+  const [seasonFilterTouched, setSeasonFilterTouched] = useState(false);
   const isLoading = loadingSelf || loadingEvaluator;
 
   const grouped = useMemo(() => {
@@ -112,7 +94,7 @@ export default function EvaluationFlowPage({ embedded = false }: EvaluationFlowP
       .map((item) => ({ ...item, listOrigin: 'self' as const }));
 
     const confirmed = mySelf
-      .filter((item) => item.stage === 'CONFIRMED' && !item.resultsPublishedAt)
+      .filter((item) => item.stage === 'CONFIRMED')
       .map((item) => ({ ...item, listOrigin: 'self' as const }));
 
     const evaluator = myEvaluator.map((item) => ({ ...item, listOrigin: 'evaluator' as const }));
@@ -123,31 +105,69 @@ export default function EvaluationFlowPage({ embedded = false }: EvaluationFlowP
       if (!deduped.has(item.responseId)) deduped.set(item.responseId, item);
     }
 
+    const all = [...deduped.values()].sort((a, b) => {
+      const priorityDiff = responsePriority(a) - responsePriority(b);
+      if (priorityDiff !== 0) return priorityDiff;
+      const aDate = a.createdAt ?? '';
+      const bDate = b.createdAt ?? '';
+      return bDate.localeCompare(aDate);
+    });
+
     return {
       selfPending,
       waiting,
       evaluator,
       confirmed,
-      all: [...deduped.values()].sort((a, b) => {
-        const aDate = a.createdAt ?? '';
-        const bDate = b.createdAt ?? '';
-        return bDate.localeCompare(aDate);
-      }),
+      all,
       evaluatorIds,
     };
   }, [myEvaluator, mySelf]);
 
+  const seasonOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    grouped.all.forEach((item) => {
+      const key = item.seasonId ?? 'UNKNOWN';
+      if (!map.has(key)) map.set(key, item.seasonName ?? '평가 기간 미지정');
+    });
+    return Array.from(map.entries()).map(([value, label]) => ({ value, label }));
+  }, [grouped.all]);
+
+  const effectiveSeasonFilter = externalSeasonFilter ?? seasonFilter;
+  const displayMemberIds = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          grouped.all
+            .flatMap((item) => [item.targetMemberId, item.evaluatorId])
+            .filter(Boolean),
+        ),
+      ),
+    [grouped.all],
+  );
+  const { labelFor } = useMemberDisplayNames(displayMemberIds);
+
+  const visibleItems = useMemo(() => {
+    if (effectiveSeasonFilter === 'ALL') return grouped.all;
+    return grouped.all.filter((item) => (item.seasonId ?? 'UNKNOWN') === effectiveSeasonFilter);
+  }, [effectiveSeasonFilter, grouped.all]);
+
   useEffect(() => {
-    const firstResponse = grouped.all[0];
+    if (externalSeasonFilter || seasonFilterTouched || grouped.all.length === 0) return;
+    const nextFilter = pickDefaultSeasonFilter(grouped.all);
+    setSeasonFilter(nextFilter);
+  }, [externalSeasonFilter, grouped.all, seasonFilterTouched]);
+
+  useEffect(() => {
+    const firstResponse = visibleItems[0];
     if (!firstResponse) return;
-    if (!activeId || !grouped.all.some((item) => item.responseId === activeId)) {
+    if (!activeId || !visibleItems.some((item) => item.responseId === activeId)) {
       setActiveId(firstResponse.responseId);
     }
-  }, [activeId, grouped.all]);
+  }, [activeId, visibleItems]);
 
   const active = useMemo(
-    () => grouped.all.find((response) => response.responseId === activeId) ?? grouped.all[0] ?? null,
-    [activeId, grouped.all],
+    () => visibleItems.find((response) => response.responseId === activeId) ?? visibleItems[0] ?? null,
+    [activeId, visibleItems],
   );
 
   return (
@@ -156,7 +176,7 @@ export default function EvaluationFlowPage({ embedded = false }: EvaluationFlowP
         <AppWorkspacePageTitle
           eyebrow="EVALUATION FLOW"
           title="평가 진행"
-          subtitle="자기평가 작성, 제출 후 대기, 평가자 참여를 구분해서 보여줍니다."
+          subtitle="자기평가와 상사평가 작성 대상을 구분해서 보여줍니다."
         />
       )}
 
@@ -166,144 +186,126 @@ export default function EvaluationFlowPage({ embedded = false }: EvaluationFlowP
         </Card>
       ) : grouped.all.length === 0 ? (
         <Card className={SECTION_CARD} styles={{ body: { padding: 48 } }}>
-          <AppEmptyIllustrated description="지금 진행 중인 평가가 없습니다. 시즌이 열리면 여기에서 바로 확인할 수 있습니다." />
+          <AppEmptyIllustrated description="지금 진행 중인 평가가 없습니다. 평가가 열리면 여기에서 바로 확인할 수 있습니다." />
         </Card>
       ) : (
-        <div className="tw-grid tw-grid-cols-1 tw-gap-4 lg:tw-grid-cols-[320px_1fr]">
+        <div className="tw-grid tw-grid-cols-1 tw-gap-4 lg:tw-grid-cols-[340px_1fr]">
           <div className="tw-space-y-4">
-            <FlowSummaryCard grouped={grouped} />
-            <FlowSection
-              title="지금 작성할 자기평가"
-              subtitle="본인이 바로 입력하고 제출해야 하는 평가"
-              emptyText="지금 바로 작성해야 할 자기평가는 없습니다."
-              sectionKey="self-pending"
-              responses={grouped.selfPending}
-              activeId={active?.responseId}
-              onSelect={setActiveId}
-            />
-            <FlowSection
-              title="제출 후 검토 대기"
-              subtitle="자기평가 제출은 끝났고 결과를 기다리는 상태"
-              emptyText="제출 후 검토 중인 내 평가는 없습니다."
-              sectionKey="waiting"
-              responses={grouped.waiting}
-              activeId={active?.responseId}
-              onSelect={setActiveId}
-            />
-            <FlowSection
-              title="내가 평가자로 참여 중"
-              subtitle="Lead 또는 Assistant 역할로 처리할 응답"
-              emptyText="현재 평가자로 참여 중인 응답이 없습니다."
-              sectionKey="evaluator"
-              responses={grouped.evaluator}
-              activeId={active?.responseId}
-              onSelect={setActiveId}
-            />
-            <FlowSection
-              title="확정 완료 · 공개 대기"
-              subtitle="최종 확정은 끝났지만 아직 결과가 공개되지 않은 응답"
-              emptyText="확정 후 공개를 기다리는 응답이 없습니다."
-              sectionKey="confirmed"
-              responses={grouped.confirmed}
-              activeId={active?.responseId}
-              onSelect={setActiveId}
-            />
+            {!hideSeasonFilter ? (
+              <FlowFilterCard
+                seasonFilter={seasonFilter}
+                seasonOptions={seasonOptions}
+                onSeasonChange={(value) => {
+                  setSeasonFilterTouched(true);
+                  setSeasonFilter(value);
+                  setActiveId(undefined);
+                }}
+              />
+            ) : null}
+            <FlowListCard responses={visibleItems} activeId={active?.responseId} onSelect={setActiveId} labelFor={labelFor} />
           </div>
 
-          {active ? <ResponsePanel response={active} currentUserId={currentUserId} /> : null}
+          {active ? <ResponsePanel response={active} currentUserId={currentUserId} labelFor={labelFor} /> : null}
         </div>
       )}
     </div>
   );
 }
 
-function FlowSummaryCard({
-  grouped,
+function FlowFilterCard({
+  seasonFilter,
+  seasonOptions,
+  onSeasonChange,
 }: {
-  grouped: {
-    selfPending: FlowListItem[];
-    waiting: FlowListItem[];
-    evaluator: FlowListItem[];
-    confirmed: FlowListItem[];
-  };
+  seasonFilter: string;
+  seasonOptions: Array<{ value: string; label: string }>;
+  onSeasonChange: (value: string) => void;
 }) {
   return (
     <Card className={SECTION_CARD} styles={{ body: { padding: 18 } }}>
-      <div className="tw-grid tw-grid-cols-2 tw-gap-3">
-        <SummaryMetric label="작성 필요" value={grouped.selfPending.length} accent="gold" />
-        <SummaryMetric label="검토 대기" value={grouped.waiting.length} accent="blue" />
-        <SummaryMetric label="평가자 역할" value={grouped.evaluator.length} accent="purple" />
-        <SummaryMetric label="확정 대기" value={grouped.confirmed.length} accent="green" />
+      <div>
+        <div className="tw-mb-2 tw-text-sm tw-font-semibold tw-text-slate-900">평가 기간</div>
+        <Select
+          value={seasonFilter}
+          onChange={onSeasonChange}
+          className="tw-w-full"
+          options={[{ value: 'ALL', label: '전체 평가 기간' }, ...seasonOptions]}
+        />
       </div>
     </Card>
   );
 }
 
-function SummaryMetric({
-  label,
-  value,
-  accent,
-}: {
-  label: string;
-  value: number;
-  accent: 'gold' | 'blue' | 'purple' | 'green';
-}) {
-  const tone =
-    accent === 'gold'
-      ? 'tw-bg-amber-50 tw-text-amber-700'
-      : accent === 'blue'
-        ? 'tw-bg-blue-50 tw-text-blue-700'
-        : accent === 'purple'
-          ? 'tw-bg-purple-50 tw-text-purple-700'
-          : 'tw-bg-emerald-50 tw-text-emerald-700';
-  return (
-    <div className="tw-rounded-xl tw-border tw-border-slate-200 tw-bg-white tw-p-3">
-      <div className="tw-text-[11px] tw-font-semibold tw-uppercase tw-tracking-wide tw-text-slate-400">
-        {label}
-      </div>
-      <div className={`tw-mt-2 tw-inline-flex tw-rounded-full tw-px-3 tw-py-1 tw-text-sm tw-font-bold ${tone}`}>
-        {value}건
-      </div>
-    </div>
-  );
-}
-
-function FlowSection({
-  title,
-  subtitle,
-  emptyText,
-  sectionKey,
+function FlowListCard({
   responses,
   activeId,
   onSelect,
+  labelFor,
 }: {
-  title: string;
-  subtitle: string;
-  emptyText: string;
-  sectionKey: FlowSectionKey;
   responses: FlowListItem[];
   activeId?: string;
   onSelect: (id: string) => void;
+  labelFor: (id: string) => string;
 }) {
+  const groups = [
+    {
+      key: 'todo',
+      title: '작성 필요',
+      items: responses.filter((item) => item.listOrigin === 'self' && item.stage === 'SELF_PENDING'),
+    },
+    {
+      key: 'history',
+      title: '제출한 자기평가',
+      items: responses.filter(
+        (item) =>
+          item.listOrigin === 'self' &&
+          (item.stage === 'SELF_SUBMITTED' ||
+            item.stage === 'PEER_OPEN' ||
+            item.stage === 'UPWARD_OPEN' ||
+            item.stage === 'DOWNWARD_OPEN' ||
+            item.stage === 'CALIBRATION_OPEN' ||
+            item.stage === 'CALIBRATION_LOCKED' ||
+            item.stage === 'CONFIRMED'),
+      ),
+    },
+    {
+      key: 'evaluator',
+      title: '상사평가',
+      items: responses.filter((item) => item.listOrigin === 'evaluator'),
+    },
+  ].filter((group) => group.items.length > 0);
+
   return (
     <Card className={SECTION_CARD} styles={{ body: { padding: 12 } }}>
       <div className="tw-mb-3 tw-px-2">
         <Title level={5} className="!tw-m-0 !tw-text-[15px] !tw-font-semibold !tw-text-slate-900">
-          {title}
+          평가 목록
         </Title>
-        <Text className="!tw-mt-1 !tw-block !tw-text-[12px] !tw-text-slate-500">{subtitle}</Text>
       </div>
       {responses.length === 0 ? (
-        <div className="tw-rounded-xl tw-bg-slate-50 tw-px-3 tw-py-4 tw-text-sm tw-text-slate-400">{emptyText}</div>
+        <div className="tw-rounded-xl tw-bg-slate-50 tw-px-3 tw-py-4 tw-text-sm tw-text-slate-400">선택한 평가 기간에 표시할 평가가 없습니다.</div>
       ) : (
-        <div className="tw-flex tw-flex-col tw-gap-2">
-          {responses.map((response) => (
-            <SectionItem
-              key={`${sectionKey}-${response.responseId}`}
-              response={response}
-              active={response.responseId === activeId}
-              onClick={() => onSelect(response.responseId)}
-            />
+        <div className="tw-flex tw-flex-col tw-gap-4">
+          {groups.map((group) => (
+            <div key={group.key}>
+              <div className="tw-mb-2 tw-flex tw-items-end tw-justify-between tw-gap-2 tw-px-1">
+                <div className="tw-text-[12px] tw-font-bold tw-text-slate-800">{group.title}</div>
+                <Tag bordered={false} className="!tw-m-0 !tw-rounded-full !tw-bg-slate-100 !tw-text-[10px] !tw-font-semibold !tw-text-slate-500">
+                  {group.items.length}건
+                </Tag>
+              </div>
+              <div className="tw-flex tw-flex-col tw-gap-2">
+                {group.items.map((response) => (
+                  <SectionItem
+                    key={response.responseId}
+                    response={response}
+                    active={response.responseId === activeId}
+                    onClick={() => onSelect(response.responseId)}
+                    labelFor={labelFor}
+                  />
+                ))}
+              </div>
+            </div>
           ))}
         </div>
       )}
@@ -315,12 +317,16 @@ function SectionItem({
   response,
   active,
   onClick,
+  labelFor,
 }: {
   response: FlowListItem;
   active: boolean;
   onClick: () => void;
+  labelFor: (id: string) => string;
 }) {
   const Icon = stepIcon(response.stage);
+  const title = responseTitle(response, labelFor);
+  const subtitle = responseSubtitle(response);
   return (
     <button
       type="button"
@@ -333,9 +339,10 @@ function SectionItem({
       <div className="tw-mb-1 tw-flex tw-items-center tw-gap-2">
         <Icon className={active ? 'tw-text-[#1e3a5f]' : 'tw-text-slate-400'} />
         <Text className={'tw-truncate tw-text-[13px] tw-font-semibold ' + (active ? '!tw-text-slate-900' : '!tw-text-slate-700')}>
-          {buildResponseLabel(response)}
+          {title}
         </Text>
       </div>
+      {subtitle ? <div className="tw-mb-2 tw-truncate tw-text-[11px] tw-text-slate-400">{subtitle}</div> : null}
       <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
         <Tag
           color={STAGE_TAG_COLOR[response.stage]}
@@ -349,7 +356,7 @@ function SectionItem({
             bordered={false}
             className="!tw-m-0 !tw-rounded-full !tw-bg-purple-50 !tw-px-2 !tw-py-0 !tw-text-[10px] !tw-font-semibold !tw-text-purple-700"
           >
-            평가자 역할
+            상사평가
           </Tag>
         )}
       </div>
@@ -357,51 +364,44 @@ function SectionItem({
   );
 }
 
-function ResponsePanel({ response, currentUserId }: { response: FlowListItem; currentUserId: string }) {
-  const step = currentStep(response.stage, response.resultsPublishedAt);
-  const isSelfOwner = response.targetMemberId === currentUserId;
-  const roleLabel = response.listOrigin === 'evaluator' ? 'Lead / Assistant 역할 응답' : '내 자기평가 응답';
+function ResponsePanel({
+  response,
+  currentUserId,
+  labelFor,
+}: {
+  response: FlowListItem;
+  currentUserId: string;
+  labelFor: (id: string) => string;
+}) {
+  const roleLabel = response.listOrigin === 'evaluator' ? '상사평가 응답' : '내 자기평가 응답';
+  const showHeader = response.listOrigin === 'evaluator';
 
   return (
     <div className="tw-space-y-4">
-      <FlowStateBanner response={response} currentUserId={currentUserId} />
-
-      <Card className={SECTION_CARD} styles={{ body: { padding: 24 } }}>
-        <div className="tw-mb-5 tw-flex tw-items-start tw-justify-between tw-gap-4">
-          <div className="tw-min-w-0">
-            <div className="tw-mb-1.5 tw-flex tw-items-center tw-gap-2">
-              <FlagOutlined className="tw-text-slate-400" />
-              <Text className="!tw-text-[12px] !tw-font-semibold !tw-uppercase !tw-tracking-wide !tw-text-slate-400">
-                {roleLabel}
-              </Text>
-            </div>
-            <Text strong className="tw-mb-1 tw-block tw-text-[20px] tw-text-slate-900">
-              {buildResponseLabel(response)}
-            </Text>
-            <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
-              <Tag
-                color={STAGE_TAG_COLOR[response.stage]}
-                bordered={false}
-                className="!tw-m-0 !tw-rounded-full !tw-px-2.5 !tw-py-0.5 !tw-text-[11px] !tw-font-semibold"
-              >
-                {STAGE_LABEL[response.stage]}
-              </Tag>
-              <Text className="tw-text-xs tw-text-slate-500">{STAGE_DESCRIPTION[response.stage]}</Text>
-            </div>
-          </div>
-        </div>
-        <Stepper currentStep={step} />
-      </Card>
-
-      {response.stage === 'CONFIRMED' && response.resultsPublishedAt && isSelfOwner && (
+      {showHeader && (
         <Card className={SECTION_CARD} styles={{ body: { padding: 16 } }}>
-          <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-3">
-            <div className="tw-text-sm tw-text-slate-600">
-              결과가 공개되었습니다. 상세 결과와 피드백 면담 일정은 결과 화면에서 확인할 수 있습니다.
+          <div className="tw-flex tw-items-start tw-justify-between tw-gap-4">
+            <div className="tw-min-w-0">
+              <div className="tw-mb-1 tw-flex tw-items-center tw-gap-2">
+                <FlagOutlined className="tw-text-slate-400" />
+                <Text className="!tw-text-[12px] !tw-font-semibold !tw-text-slate-400">{roleLabel}</Text>
+              </div>
+              <Text strong className="tw-block tw-text-[18px] tw-text-slate-900">
+                {responseTitle(response, labelFor)}
+              </Text>
+              <div className="tw-mt-3 tw-grid tw-grid-cols-1 tw-gap-2 sm:tw-grid-cols-3">
+                <InfoPill label="평가 대상" value={labelFor(response.targetMemberId)} />
+                <InfoPill label="평가 기간" value={response.seasonName ?? '평가 기간 미지정'} />
+                <InfoPill label="상사평가자" value={labelFor(response.evaluatorId)} />
+              </div>
             </div>
-            <Link to="/app/evaluations" search={{ view: 'results' }}>
-              <AppButton variant="secondary">결과 화면으로 이동</AppButton>
-            </Link>
+            <Tag
+              color={STAGE_TAG_COLOR[response.stage]}
+              bordered={false}
+              className="!tw-m-0 !tw-rounded-full !tw-px-2.5 !tw-py-0.5 !tw-text-[11px] !tw-font-semibold"
+            >
+              {STAGE_LABEL[response.stage]}
+            </Tag>
           </div>
         </Card>
       )}
@@ -411,80 +411,12 @@ function ResponsePanel({ response, currentUserId }: { response: FlowListItem; cu
   );
 }
 
-function FlowStateBanner({
-  response,
-  currentUserId,
-}: {
-  response: FlowListItem;
-  currentUserId: string;
-}) {
-  const isSelfOwner = response.targetMemberId === currentUserId;
-
-  if (response.stage === 'SELF_PENDING' && isSelfOwner) {
-    return (
-      <BannerCard tone="gold" title="지금 해야 할 일">
-        이 평가는 아직 작성 전입니다. KR별로 등급을 선택하고 제출하면 다음 단계로 넘어갑니다.
-      </BannerCard>
-    );
-  }
-
-  if (
-    isSelfOwner &&
-    (response.stage === 'SELF_SUBMITTED' ||
-      response.stage === 'PEER_OPEN' ||
-      response.stage === 'UPWARD_OPEN' ||
-      response.stage === 'DOWNWARD_OPEN' ||
-      response.stage === 'CALIBRATION_OPEN' ||
-      response.stage === 'CALIBRATION_LOCKED')
-  ) {
-    return (
-      <BannerCard tone="blue" title="제출 완료 · 검토 진행 중">
-        자기평가는 끝났습니다. 이제 Lead와 평가자 검토가 진행되며, 결과가 확정되고 공개되면 결과 탭에서 확인할 수 있습니다.
-      </BannerCard>
-    );
-  }
-
-  if (response.listOrigin === 'evaluator') {
-    return (
-      <BannerCard tone="purple" title="평가자 역할">
-        이 응답은 내가 평가자로 참여 중인 건입니다. 제안 등급 또는 최종 등급 입력이 필요한지 아래에서 확인하면 됩니다.
-      </BannerCard>
-    );
-  }
-
-  if (response.stage === 'CONFIRMED' && !response.resultsPublishedAt) {
-    return (
-      <BannerCard tone="green" title="최종 확정 완료 · 공개 대기">
-        최종 확정은 끝났지만 아직 시즌 결과 공개 전입니다. 공식 공개 전에는 결과 탭에 나타나지 않습니다.
-      </BannerCard>
-    );
-  }
-
-  return null;
-}
-
-function BannerCard({
-  tone,
-  title,
-  children,
-}: {
-  tone: 'gold' | 'blue' | 'purple' | 'green';
-  title: string;
-  children: React.ReactNode;
-}) {
-  const className =
-    tone === 'gold'
-      ? 'tw-border-amber-200 tw-bg-amber-50/50'
-      : tone === 'blue'
-        ? 'tw-border-blue-200 tw-bg-blue-50/50'
-        : tone === 'purple'
-          ? 'tw-border-purple-200 tw-bg-purple-50/50'
-          : 'tw-border-emerald-200 tw-bg-emerald-50/50';
+function InfoPill({ label, value }: { label: string; value: string }) {
   return (
-    <Card className={`tw-rounded-2xl ${className}`} styles={{ body: { padding: 16 } }}>
-      <div className="tw-text-sm tw-font-semibold tw-text-slate-900">{title}</div>
-      <div className="tw-mt-1 tw-text-sm tw-text-slate-600">{children}</div>
-    </Card>
+    <div className="tw-rounded-xl tw-bg-slate-50 tw-px-3 tw-py-2">
+      <div className="tw-text-[10px] tw-font-semibold tw-text-slate-400">{label}</div>
+      <div className="tw-mt-0.5 tw-truncate tw-text-xs tw-font-semibold tw-text-slate-800">{value}</div>
+    </div>
   );
 }
 
@@ -517,10 +449,16 @@ function ResponseRouter({ response, currentUserId }: { response: FlowListItem; c
     stage === 'CALIBRATION_OPEN' ||
     stage === 'CALIBRATION_LOCKED'
   ) {
+    if (response.targetMemberId === currentUserId && response.listOrigin === 'self') {
+      return <SelfEvaluationForm response={response} />;
+    }
     return <CalibrationStage response={response} currentUserId={currentUserId} />;
   }
 
   if (stage === 'CONFIRMED') {
+    if (response.targetMemberId === currentUserId && response.listOrigin === 'self') {
+      return <SelfEvaluationForm response={response} />;
+    }
     return <ConfirmedStage response={response} currentUserId={currentUserId} />;
   }
 
@@ -543,26 +481,18 @@ function CalibrationStage({ response, currentUserId }: { response: FlowListItem;
 
   return (
     <div className="tw-flex tw-flex-col tw-gap-4">
-      <RoleHintCard isLead={isLead} />
-      {isLead && (
-        <Card className="tw-rounded-2xl tw-border tw-border-slate-200/90 tw-bg-slate-50/60" styles={{ body: { padding: 16 } }}>
-          <div className="tw-text-sm tw-text-slate-700">
-            Lead는 KR별 최종 등급만 정리하면 됩니다. 전체 등급과 최종 점수는 확정 시 평가 설계 정책에 따라 자동 계산됩니다.
-          </div>
-        </Card>
-      )}
       <CalibrationForm response={response} currentUserId={currentUserId} />
       {isLead && (
         <Card className="tw-rounded-2xl tw-border tw-border-amber-200 tw-bg-amber-50/40" styles={{ body: { padding: 16 } }}>
           <div className="tw-flex tw-flex-col tw-gap-3 sm:tw-flex-row sm:tw-items-center sm:tw-justify-between">
             <div>
-              <div className="tw-text-sm tw-font-semibold tw-text-slate-900">최종 확정 권한</div>
+              <div className="tw-text-sm tw-font-semibold tw-text-slate-900">등급 확정 권한</div>
               <div className="tw-mt-0.5 tw-text-xs tw-text-slate-500">
-                모든 KR의 final grade를 채운 뒤 최종 확정 단계로 넘길 수 있습니다.
+                모든 목표의 최종 등급을 채운 뒤 등급 확정 단계로 넘길 수 있습니다.
               </div>
             </div>
             <AppButton variant="primary" onClick={() => setConfirmOpen(true)}>
-              최종 확정
+              등급 확정
             </AppButton>
           </div>
         </Card>
@@ -603,7 +533,7 @@ function ConfirmedStage({ response, currentUserId }: { response: FlowListItem; c
       {!isPublished && (
         <Card className="tw-rounded-2xl tw-border tw-border-blue-200 tw-bg-blue-50/40" styles={{ body: { padding: 16 } }}>
           <div className="tw-text-sm tw-text-slate-700">
-            <strong>확정은 끝났지만 아직 공개 전입니다.</strong> 시즌 결과 공개 전까지는 최종 결과가 구성원에게 노출되지 않습니다.
+            <strong>확정은 끝났지만 아직 공개 전입니다.</strong> 평가 결과 공개 전까지는 최종 결과가 구성원에게 노출되지 않습니다.
           </div>
         </Card>
       )}
@@ -616,101 +546,15 @@ function ConfirmedStage({ response, currentUserId }: { response: FlowListItem; c
       {isLead && !isPublished && (
         <Card className="tw-rounded-2xl tw-border tw-border-slate-200/90" styles={{ body: { padding: 16 } }}>
           <div className="tw-flex tw-items-center tw-justify-between tw-gap-3">
-            <span className="tw-text-xs tw-text-slate-500">시즌 공개 전까지는 확정을 되돌릴 수 있습니다.</span>
+            <span className="tw-text-xs tw-text-slate-500">결과 공개 전까지는 확정을 되돌릴 수 있습니다.</span>
             <AppButton variant="danger" loading={unconfirmMut.isPending} onClick={() => unconfirmMut.mutate()}>
-              확정 되돌리기
+              등급 확정 되돌리기
             </AppButton>
           </div>
         </Card>
       )}
     </div>
   );
-}
-
-function RoleHintCard({ isLead }: { isLead: boolean }) {
-  return (
-    <Card
-      className={
-        isLead
-          ? 'tw-rounded-2xl tw-border tw-border-amber-200 tw-bg-amber-50/40'
-          : 'tw-rounded-2xl tw-border tw-border-slate-200/90 tw-bg-slate-50/50'
-      }
-      styles={{ body: { padding: 16 } }}
-    >
-      <div className="tw-text-sm tw-text-slate-700">
-        {isLead
-          ? 'Lead는 자기평가와 Assistant 의견을 참고해 KR별 최종 등급을 정리합니다.'
-          : 'Assistant는 제안 등급과 코멘트를 남기고, 최종 확정은 Lead가 진행합니다.'}
-      </div>
-    </Card>
-  );
-}
-
-function Stepper({ currentStep }: { currentStep: StepKey }) {
-  const stepIndex = STEPPER_STEPS.findIndex((step) => step.key === currentStep);
-  return (
-    <div className="tw-flex tw-items-center tw-gap-1 sm:tw-gap-2">
-      {STEPPER_STEPS.map((step, index) => {
-        const Icon = step.icon;
-        const reached = index <= stepIndex;
-        const isCurrent = index === stepIndex;
-        return (
-          <div key={step.key} className="tw-flex tw-flex-1 tw-items-center">
-            <div className="tw-flex tw-min-w-0 tw-flex-1 tw-flex-col tw-items-center tw-gap-1.5">
-              <div
-                className={
-                  'tw-flex tw-h-9 tw-w-9 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-full ' +
-                  (isCurrent
-                    ? 'tw-bg-[#1e3a5f] tw-text-white tw-shadow-lg tw-shadow-slate-900/20'
-                    : reached
-                      ? 'tw-bg-emerald-100 tw-text-emerald-600'
-                      : 'tw-bg-slate-100 tw-text-slate-400')
-                }
-              >
-                {reached && !isCurrent ? <CheckCircleFilled /> : <Icon />}
-              </div>
-              <Text
-                className={
-                  'tw-truncate tw-text-[11px] tw-font-medium ' +
-                  (isCurrent
-                    ? '!tw-font-semibold !tw-text-[#1e3a5f]'
-                    : reached
-                      ? '!tw-text-slate-700'
-                      : '!tw-text-slate-400')
-                }
-              >
-                {step.label}
-              </Text>
-            </div>
-            {index < STEPPER_STEPS.length - 1 && (
-              <div
-                className={
-                  'tw-mx-1 tw-h-[2px] tw-flex-1 tw-rounded-full ' +
-                  (index < stepIndex ? 'tw-bg-emerald-300' : 'tw-bg-slate-200')
-                }
-              />
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function currentStep(stage: Stage, resultsPublishedAt?: string | null): StepKey {
-  if (stage === 'SKIPPED_LEAVER' || stage === 'SELF_PENDING') return 'self';
-  if (
-    stage === 'SELF_SUBMITTED' ||
-    stage === 'PEER_OPEN' ||
-    stage === 'UPWARD_OPEN' ||
-    stage === 'DOWNWARD_OPEN' ||
-    stage === 'CALIBRATION_OPEN' ||
-    stage === 'CALIBRATION_LOCKED'
-  ) {
-    return 'calibration';
-  }
-  if (stage === 'CONFIRMED') return resultsPublishedAt ? 'published' : 'confirmed';
-  return 'self';
 }
 
 function stepIcon(stage: Stage) {
@@ -726,5 +570,34 @@ function buildResponseLabel(response: FlowListItem) {
     : response.createdAt
       ? `${dayjs(response.createdAt).format('YYYY-MM')} 평가`
       : `평가 #${response.responseId.slice(0, 6)}`;
-  return response.listOrigin === 'evaluator' ? `${base} · 평가자 참여` : base;
+  return response.listOrigin === 'evaluator' ? `${base} · 상사평가` : base;
+}
+
+function responseTitle(response: FlowListItem, labelFor: (id: string) => string) {
+  if (response.listOrigin === 'evaluator') return `${labelFor(response.targetMemberId)} 상사평가`;
+  return buildResponseLabel(response);
+}
+
+function responseSubtitle(response: FlowListItem) {
+  if (response.listOrigin === 'evaluator') {
+    return response.seasonName ?? '평가 기간 미지정';
+  }
+  return null;
+}
+
+function responsePriority(response: FlowListItem) {
+  if (response.listOrigin === 'self' && response.stage === 'SELF_PENDING') return 0;
+  if (response.listOrigin === 'evaluator') return 1;
+  if (
+    response.stage === 'SELF_SUBMITTED' ||
+    response.stage === 'PEER_OPEN' ||
+    response.stage === 'UPWARD_OPEN' ||
+    response.stage === 'DOWNWARD_OPEN' ||
+    response.stage === 'CALIBRATION_OPEN' ||
+    response.stage === 'CALIBRATION_LOCKED'
+  ) {
+    return 2;
+  }
+  if (response.stage === 'CONFIRMED') return 3;
+  return 4;
 }

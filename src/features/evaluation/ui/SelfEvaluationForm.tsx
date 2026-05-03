@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
-import { App, Card, Input, Radio, Space, Tag } from 'antd';
+import { useEffect, useMemo, useState } from 'react';
+import { App, Button, Card, Input, Radio, Space, Tag, Upload } from 'antd';
+import { LinkOutlined, UploadOutlined } from '@ant-design/icons';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { evaluationRedesignApi } from '../api/evaluationRedesignApi';
 import type {
@@ -10,6 +11,7 @@ import type {
 } from '../model/workflowTypes';
 import type { Grade } from '@/features/goals/model/types';
 import { calcFinalScore, gradeScore } from '../lib/scoreCalculator';
+import { memberChatApi } from '@/features/member-chat/api/memberChatApi';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppEmptyIllustrated } from '@/shared/ui/AppEmptyIllustrated';
 
@@ -36,10 +38,13 @@ export function SelfEvaluationForm({ response, onSubmitted }: Props) {
   const queryClient = useQueryClient();
   const snapshot: GoalSnapshot | null = response.goalSnapshot ?? null;
 
-  const initial = parseInitialAnswers(response.answersJson);
+  const initial = useMemo(() => parseInitialAnswers(response.answersJson, snapshot), [response.answersJson, snapshot]);
   const [grades, setGrades] = useState<Record<string, Grade>>(initial.gradeMap);
   const [comments, setComments] = useState<Record<string, string>>(initial.commentMap);
+  const [evidenceUrls, setEvidenceUrls] = useState<Record<string, string>>(initial.evidenceUrlMap);
   const [overallComment, setOverallComment] = useState<string>(initial.overallComment);
+  const [uploadingGoalId, setUploadingGoalId] = useState<string | null>(null);
+  const editable = response.stage === 'SELF_PENDING';
 
   const allAnswered = useMemo(() => {
     if (!snapshot) return false;
@@ -48,16 +53,47 @@ export function SelfEvaluationForm({ response, onSubmitted }: Props) {
   }, [snapshot, grades]);
 
   const previewScore = useMemo(() => calcFinalScore(snapshot, grades), [snapshot, grades]);
+  const scoreLabel = editable ? '예상 점수' : '자기평가 점수';
+
+  useEffect(() => {
+    setGrades(initial.gradeMap);
+    setComments(initial.commentMap);
+    setEvidenceUrls(initial.evidenceUrlMap);
+    setOverallComment(initial.overallComment);
+  }, [initial]);
 
   const buildPayload = (): SelfAnswersPayload => {
     const items: SelfGoalAnswer[] = [];
     if (snapshot) {
       for (const g of snapshot.goals) {
         const grade = grades[g.goalId];
-        if (grade) items.push({ goalId: g.goalId, grade, comment: comments[g.goalId] });
+        if (grade) {
+          const evidenceUrl = evidenceUrls[g.goalId]?.trim();
+          items.push({
+            goalId: g.goalId,
+            criteriaId: g.goalId,
+            grade,
+            comment: comments[g.goalId],
+            evidenceUrl: evidenceUrl || undefined,
+          });
+        }
       }
     }
     return { items, overallComment };
+  };
+
+  const uploadEvidence = async (goalId: string, file: File) => {
+    setUploadingGoalId(goalId);
+    try {
+      const uploaded = await memberChatApi.uploadFile(file);
+      const url = uploaded.url?.trim() || memberChatApi.buildDownloadUrl(uploaded.key);
+      setEvidenceUrls((prev) => ({ ...prev, [goalId]: url }));
+      message.success('증적 파일을 첨부했습니다.');
+    } catch (e: any) {
+      message.error(e?.response?.data?.message ?? '증적 업로드에 실패했어요.');
+    } finally {
+      setUploadingGoalId(null);
+    }
   };
 
   const saveMut = useMutation({
@@ -81,33 +117,23 @@ export function SelfEvaluationForm({ response, onSubmitted }: Props) {
     onError: (e: any) => message.error(e?.response?.data?.message ?? '제출에 실패했어요.'),
   });
 
-  const editable = response.stage === 'SELF_PENDING';
-
   if (!snapshot) {
     return <AppEmptyIllustrated description="평가 대상 개인 목표 스냅샷이 없어요." />;
   }
 
   return (
-    <div className="tw-flex tw-flex-col tw-gap-5">
+    <div className="tw-flex tw-flex-col tw-gap-4">
       <Card
-        className="tw-rounded-2xl tw-border tw-border-indigo-200 tw-bg-indigo-50/40"
-        styles={{ body: { padding: 20 } }}
+        className={SECTION_CARD}
+        styles={{ body: { padding: 16 } }}
       >
         <div className="tw-flex tw-items-center tw-justify-between tw-gap-4">
-          <div>
-            <div className="tw-text-[11px] tw-font-semibold tw-uppercase tw-tracking-wide tw-text-indigo-500">
-              SELF EVALUATION
-            </div>
-            <div className="tw-mt-0.5 tw-text-[18px] tw-font-bold tw-text-[#1e3a5f]">자기평가 입력</div>
-            <div className="tw-mt-1 tw-text-xs tw-text-slate-500">
-              개인 목표별 등급만 선택하면 되고, 기준 문구는 상위 조직 목표의 평가 기준을 참고하면 돼요.
-            </div>
+          <div className="tw-min-w-0">
+            <div className="tw-text-[18px] tw-font-bold tw-text-slate-900">{editable ? '자기평가 작성' : '제출한 자기평가'}</div>
+            {!editable && <div className="tw-mt-1 tw-text-xs tw-text-slate-500">제출 후에는 수정할 수 없고 내용만 확인할 수 있습니다.</div>}
           </div>
-          <div className="tw-shrink-0 tw-text-right">
-            <div className="tw-text-[10px] tw-font-semibold tw-uppercase tw-tracking-wide tw-text-slate-400">
-              예상 최종 점수
-            </div>
-            <div className="tw-text-[36px] tw-font-bold tw-leading-none tw-text-[#1e3a5f]">{previewScore}</div>
+          <div className="tw-shrink-0 tw-rounded-full tw-bg-slate-100 tw-px-3 tw-py-1 tw-text-xs tw-font-semibold tw-text-slate-600">
+            {scoreLabel} {previewScore}
           </div>
         </div>
       </Card>
@@ -124,7 +150,7 @@ export function SelfEvaluationForm({ response, onSubmitted }: Props) {
               <div className="tw-flex tw-items-center tw-justify-between tw-gap-2">
                 <span className="tw-text-[15px] tw-font-semibold tw-text-slate-900">{goal.title}</span>
                 <Space size={6}>
-                  <Tag bordered={false} className="!tw-m-0 !tw-rounded-full !tw-bg-slate-100 !tw-px-2.5 !tw-text-[11px] !tw-font-medium k!tw-text-slate-700">
+                  <Tag bordered={false} className="!tw-m-0 !tw-rounded-full !tw-bg-slate-100 !tw-px-2.5 !tw-text-[11px] !tw-font-medium !tw-text-slate-700">
                     가중치 {goal.weightPct}%
                   </Tag>
                   <Tag bordered={false} className="!tw-m-0 !tw-rounded-full !tw-bg-blue-50 !tw-px-2.5 !tw-text-[11px] !tw-font-bold !tw-text-blue-700">
@@ -183,6 +209,44 @@ export function SelfEvaluationForm({ response, onSubmitted }: Props) {
               disabled={!editable}
               size="small"
             />
+
+            <div className="tw-mt-3 tw-rounded-xl tw-border tw-border-slate-200 tw-bg-slate-50 tw-p-3">
+              <div className="tw-mb-2 tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2">
+                <span className="tw-text-xs tw-font-semibold tw-text-slate-700">증적 첨부</span>
+                <Upload
+                  showUploadList={false}
+                  disabled={!editable || uploadingGoalId === goal.goalId}
+                  beforeUpload={(file) => {
+                    void uploadEvidence(goal.goalId, file as File);
+                    return Upload.LIST_IGNORE;
+                  }}
+                >
+                  <Button size="small" icon={<UploadOutlined />} loading={uploadingGoalId === goal.goalId} disabled={!editable}>
+                    파일 업로드
+                  </Button>
+                </Upload>
+              </div>
+              <Input
+                prefix={<LinkOutlined className="tw-text-slate-400" />}
+                placeholder="증적 URL을 붙여넣거나 파일을 업로드하세요."
+                value={evidenceUrls[goal.goalId] ?? ''}
+                onChange={(e) => setEvidenceUrls((p) => ({ ...p, [goal.goalId]: e.target.value }))}
+                disabled={!editable}
+                size="small"
+              />
+              {evidenceUrls[goal.goalId] ? (
+                <a
+                  href={evidenceUrls[goal.goalId]}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="tw-mt-2 tw-inline-flex tw-text-xs tw-font-medium tw-text-blue-600"
+                >
+                  첨부 증적 열기
+                </a>
+              ) : (
+                <div className="tw-mt-2 tw-text-xs tw-text-slate-400">PDF, 문서, 이미지 등 성과 근거를 첨부할 수 있습니다.</div>
+              )}
+            </div>
           </Card>
         );
       })}
@@ -197,7 +261,7 @@ export function SelfEvaluationForm({ response, onSubmitted }: Props) {
           value={overallComment}
           onChange={(e) => setOverallComment(e.target.value)}
           disabled={!editable}
-          placeholder="이번 사이클 전반에 대한 의견을 남겨 주세요. (선택)"
+          placeholder="이번 목표 기간 전반에 대한 의견을 남겨 주세요. (선택)"
         />
       </Card>
 
@@ -229,24 +293,37 @@ export function SelfEvaluationForm({ response, onSubmitted }: Props) {
   );
 }
 
-function parseInitialAnswers(answersJson?: string | null) {
+function parseInitialAnswers(answersJson?: string | null, snapshot?: GoalSnapshot | null) {
   const empty = {
     gradeMap: {} as Record<string, Grade>,
     commentMap: {} as Record<string, string>,
+    evidenceUrlMap: {} as Record<string, string>,
     overallComment: '',
   };
   if (!answersJson) return empty;
   try {
     const parsed = JSON.parse(answersJson);
+    const items = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsed.items)
+        ? parsed.items
+        : Array.isArray(parsed.answers)
+          ? parsed.answers
+          : [];
     const gradeMap: Record<string, Grade> = {};
     const commentMap: Record<string, string> = {};
-    for (const it of parsed.items ?? []) {
-      const key = it.goalId ?? it.criteriaId;
+    const evidenceUrlMap: Record<string, string> = {};
+    for (const [index, it] of items.entries()) {
+      const key = it.goalId ?? it.criteriaId ?? it.id ?? snapshot?.goals?.[index]?.goalId;
       if (!key) continue;
-      gradeMap[key] = it.grade;
-      if (it.comment) commentMap[key] = it.comment;
+      const grade = it.grade ?? it.selectedGrade;
+      if (grade) gradeMap[key] = grade;
+      const comment = it.comment ?? it.description;
+      if (comment) commentMap[key] = comment;
+      const evidenceUrl = it.evidenceUrl ?? it.evidenceURL;
+      if (evidenceUrl) evidenceUrlMap[key] = evidenceUrl;
     }
-    return { gradeMap, commentMap, overallComment: parsed.overallComment ?? '' };
+    return { gradeMap, commentMap, evidenceUrlMap, overallComment: parsed.overallComment ?? '' };
   } catch {
     return empty;
   }
