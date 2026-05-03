@@ -240,6 +240,16 @@ const LEAVE_OF_ABSENCE_TYPE_MAP: Record<string, string> = {
   '군복무': 'MILITARY',
 };
 
+/** 휴직 종류별 유급 여부 - 종류 자체에 함의되어 있어 따로 입력받지 않고 자동 도출 */
+const LEAVE_OF_ABSENCE_PAID_MAP: Record<string, 'Y' | 'N'> = {
+  MATERNITY: 'Y',   // 출산휴가 - 유급 (근로기준법 74조)
+  PATERNAL: 'N',    // 육아휴직 - 회사 무급, 고용보험 별도 급여
+  SICK: 'N',        // 장기병가 - 보수적 기본값 (회사별 정책 따라 가산 가능)
+  UNPAID: 'N',      // 무급휴직
+  STUDY: 'N',       // 학업휴직
+  MILITARY: 'N',    // 군복무
+};
+
 /** HH:mm 두 개의 분 차이, 자정 넘어가면 다음날로 보정 */
 function minutesBetweenTimes(start: string, end: string): number {
   const [shRaw, smRaw] = start.split(':').map((v) => Number(v));
@@ -386,10 +396,11 @@ const PRE_ACTION_CONFIGS: PreActionConfig[] = [
       const type = LEAVE_OF_ABSENCE_TYPE_MAP[typeKo];
       const startDate = readStr(content, 'startDate');
       const endDate = readStr(content, 'endDate');
-      const isPaidYn = readStr(content, 'isPaidYn');
-      if (!type || !startDate || !endDate || !isPaidYn) {
-        throw new Error('휴직 종류·기간·유급 여부는 필수입니다.');
+      if (!type || !startDate || !endDate) {
+        throw new Error('휴직 종류·기간은 필수입니다.');
       }
+      // 유급 여부는 휴직 종류로부터 자동 도출 (사용자 입력 불필요)
+      const isPaidYn = LEAVE_OF_ABSENCE_PAID_MAP[type] ?? 'N';
       const r = await attendanceApi.leaveOfAbsence.submit({
         type,
         startDate,
