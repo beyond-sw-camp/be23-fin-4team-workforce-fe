@@ -32,6 +32,8 @@ export type ApprovalSearchItem = {
   requestStatus: ApprovalSearchStatus | string;
   requestType: ApprovalSearchRequestType | string;
   createdAt: string;
+  /** form 내용 JSON 문자열. 표에서 핵심 날짜(휴가일·연장일 등) 추출용. */
+  contentJson?: string;
 };
 
 export type ApprovalSearchPage = {
@@ -60,6 +62,24 @@ type DepartmentRawItem = {
 function asText(value: unknown): string {
   if (typeof value === 'string') return value.trim();
   if (typeof value === 'number') return String(value);
+  return '';
+}
+
+/** Java LocalDateTime 직렬화는 환경에 따라 string ("2026-04-30T08:39:00") 또는
+ *  array ([2026,4,30,8,39,0,0]) 로 올 수 있어 둘 다 처리한다. */
+function asDateText(value: unknown): string {
+  if (typeof value === 'string') return value.trim();
+  if (Array.isArray(value) && value.length >= 3 && value.every((n) => typeof n === 'number')) {
+    const arr = value as number[];
+    const y = arr[0] ?? 1970;
+    const mo = arr[1] ?? 1;
+    const d = arr[2] ?? 1;
+    const h = arr[3] ?? 0;
+    const mi = arr[4] ?? 0;
+    const s = arr[5] ?? 0;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${y}-${pad(mo)}-${pad(d)}T${pad(h)}:${pad(mi)}:${pad(s)}`;
+  }
   return '';
 }
 
@@ -125,6 +145,7 @@ function toDepartmentSearchItem(row: DepartmentRawItem): ApprovalSearchItem {
     requestStatus: row.requestStatus ?? '',
     requestType: row.requestType ?? '',
     createdAt: row.createdAt ?? '',
+    contentJson: row.contentJson ?? '',
   };
 }
 
@@ -141,7 +162,16 @@ function normalizeSearchItem(raw: unknown): ApprovalSearchItem | null {
     documentName: asText(o.documentName ?? o.document_name),
     requestStatus: asText(o.requestStatus ?? o.request_status),
     requestType: asText(o.requestType ?? o.request_type),
-    createdAt: asText(o.createdAt ?? o.created_at),
+    // 작성일 - LocalDateTime 이 배열 또는 문자열로 올 수 있어 asDateText 사용
+    createdAt: asDateText(
+      o.createdAt
+      ?? o.created_at
+      ?? o.requestedAt
+      ?? o.requested_at
+      ?? o.submittedAt
+      ?? o.submitted_at,
+    ),
+    contentJson: asText(o.contentJson ?? o.content_json ?? o.content),
   };
 }
 

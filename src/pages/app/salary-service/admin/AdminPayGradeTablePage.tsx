@@ -376,7 +376,7 @@ function BulkCreateModal({ open, onCancel, onSubmit, submitting, form }: BulkCre
       okText="등록"
       cancelText="취소"
       title="호봉표 일괄 등록"
-      destroyOnClose
+      destroyOnHidden
       width={600}
       afterOpenChange={(o) => {
         if (o) refreshPreview();

@@ -3,13 +3,8 @@ import { normalizeArray } from '@/shared/api/normalize';
 import { unwrapApiResponse } from '@/shared/api/response';
 import type {
   Goal,
-  GoalAggregate,
   GoalCreatePayload,
-  GoalProgressUpdate,
-  GoalProgressUpdatePayload,
-  GoalSeasonReadiness,
-  GoalSeasonReadinessIssue,
-  GoalStatus,
+  GoalCycle,
   GoalUpdatePayload,
   ListCompanyGoalsParams,
   ListMyGoalsParams,
@@ -29,28 +24,9 @@ function pickNum(o: any, ...keys: string[]): number {
   return 0;
 }
 
-function pickNullableNum(o: any, ...keys: string[]): number | null {
-  for (const k of keys) if (o?.[k] != null) return Number(o[k]);
-  return null;
-}
-
 function pickArr(o: any, ...keys: string[]): any[] {
   for (const k of keys) if (Array.isArray(o?.[k])) return o[k];
   return [];
-}
-
-function fromApiVisibility(v: string): Goal['visibility'] {
-  const x = String(v ?? '').toUpperCase();
-  if (x === 'COMPANY') return 'COMPANY';
-  if (x === 'TEAM') return 'TEAM';
-  return 'PRIVATE';
-}
-
-function toApiVisibility(v: string): 'COMPANY' | 'TEAM' | 'PRIVATE' {
-  const x = String(v ?? '').toUpperCase();
-  if (x === 'COMPANY') return 'COMPANY';
-  if (x === 'TEAM') return 'TEAM';
-  return 'PRIVATE';
 }
 
 function mapGoalFromApi(g: any): Goal {
@@ -75,7 +51,6 @@ function mapGoalFromApi(g: any): Goal {
     cycleKey,
     startDate: cycleStartDate,
     endDate: pickStr(g, 'cycleEndDate', 'cycle_end_date', 'endDate'),
-    visibility: fromApiVisibility(pickStr(g, 'visibility')),
     weightPct: pickNum(g, 'weightPct', 'weight_pct'),
     status: pickStr(g, 'status') as Goal['status'],
     goalApprovalStatus: pickStr(g, 'goalApprovalStatus', 'approvalStatus') as Goal['goalApprovalStatus'],
@@ -93,51 +68,17 @@ function mapGoalFromApi(g: any): Goal {
     objectiveGradeA: pickStr(g, 'objectiveGradeA') || undefined,
     objectiveGradeB: pickStr(g, 'objectiveGradeB') || undefined,
     objectiveGradeC: pickStr(g, 'objectiveGradeC') || undefined,
-    actualValue: pickNullableNum(g, 'actualValue', 'actual_value'),
-    achievementPct: pickNullableNum(g, 'achievementPct', 'achievement_pct'),
-    rolledAchievementPct: pickNullableNum(g, 'rolledAchievementPct', 'rolled_achievement_pct'),
-    healthStatus: g.healthStatus ?? g.health_status ?? null,
     createdAt: g.createdAt,
     updatedAt: g.updatedAt,
   };
 }
 
-function mapGoalProgressUpdateFromApi(raw: any): GoalProgressUpdate {
+function mapGoalCycleFromApi(c: any): GoalCycle {
   return {
-    updateId: raw?.updateId != null ? String(raw.updateId) : null,
-    goalId: String(raw?.goalId ?? ''),
-    value: raw?.value != null ? Number(raw.value) : null,
-    status: raw?.status ?? null,
-    note: raw?.note ?? null,
-    createdBy: raw?.createdBy != null ? String(raw.createdBy) : null,
-    createdAt: raw?.createdAt ?? null,
-  };
-}
-
-function mapReadinessIssues(raw: unknown): GoalSeasonReadinessIssue[] {
-  return Array.isArray(raw)
-    ? raw.map((item: any) => ({
-        memberId: String(item?.memberId ?? ''),
-        reason: String(item?.reason ?? ''),
-        weightSum: item?.weightSum != null ? Number(item.weightSum) : null,
-        goalCount: item?.goalCount != null ? Number(item.goalCount) : null,
-      }))
-    : [];
-}
-
-function mapGoalSeasonReadinessFromApi(raw: any, seasonId: string): GoalSeasonReadiness {
-  return {
-    seasonId: String(raw?.seasonId ?? seasonId),
-    ready: Boolean(raw?.ready),
-    targetMemberCount: Number(raw?.targetMemberCount ?? 0),
-    activeGoalCount: Number(raw?.activeGoalCount ?? 0),
-    blockerCount: Number(raw?.blockerCount ?? 0),
-    warningCount: Number(raw?.warningCount ?? 0),
-    missingGoals: mapReadinessIssues(raw?.missingGoals),
-    weightIssues: mapReadinessIssues(raw?.weightIssues),
-    pendingBundles: mapReadinessIssues(raw?.pendingBundles),
-    missingProgressUpdates: mapReadinessIssues(raw?.missingProgressUpdates),
-    missingLeads: mapReadinessIssues(raw?.missingLeads),
+    cycle: pickStr(c, 'cycle') as GoalCycle['cycle'],
+    cycleStartDate: pickStr(c, 'cycleStartDate', 'cycle_start_date'),
+    cycleEndDate: pickStr(c, 'cycleEndDate', 'cycle_end_date'),
+    organizationGoalCount: pickNum(c, 'organizationGoalCount', 'organization_goal_count'),
   };
 }
 
@@ -154,6 +95,12 @@ export const goalApi = {
     return normalizeArray<unknown>(raw, ['items', 'data', 'goals', 'list', 'results']).map(mapGoalFromApi);
   },
 
+  async listOrganizationGoalCycles(): Promise<GoalCycle[]> {
+    const res = await httpClient.get('/goal/organization-cycles');
+    const raw = unwrapApiResponse<unknown>(res.data);
+    return normalizeArray<unknown>(raw, ['items', 'data', 'cycles', 'list', 'results']).map(mapGoalCycleFromApi);
+  },
+
   async listOrgGoals(params: ListOrgGoalsParams): Promise<Goal[]> {
     const res = await httpClient.get('/goal/organization', { params });
     const raw = unwrapApiResponse<unknown>(res.data);
@@ -166,30 +113,18 @@ export const goalApi = {
     return normalizeArray<unknown>(raw, ['items', 'data', 'goals', 'list', 'results']).map(mapGoalFromApi);
   },
 
-  async listAvailableObjectives(params?: ListObjectiveParams): Promise<Goal[]> {
-    const res = await httpClient.get('/goal/objectives/available', { params });
-    const raw = unwrapApiResponse<unknown>(res.data);
-    return normalizeArray<unknown>(raw, ['items', 'data', 'goals', 'list', 'results']).map(mapGoalFromApi);
-  },
-
   async getGoal(goalId: string): Promise<Goal> {
     const res = await httpClient.get(`/goal/${goalId}`);
     return mapGoalFromApi(unwrapApiResponse<unknown>(res.data));
   },
 
   async createGoal(payload: GoalCreatePayload): Promise<Goal> {
-    const res = await httpClient.post('/goal', {
-      ...payload,
-      visibility: toApiVisibility(payload.visibility),
-    });
+    const res = await httpClient.post('/goal', payload);
     return mapGoalFromApi(unwrapApiResponse<unknown>(res.data));
   },
 
   async updateGoal(goalId: string, payload: GoalUpdatePayload): Promise<Goal> {
-    const res = await httpClient.patch(`/goal/${goalId}`, {
-      ...payload,
-      visibility: payload.visibility ? toApiVisibility(payload.visibility) : undefined,
-    });
+    const res = await httpClient.patch(`/goal/${goalId}`, payload);
     return mapGoalFromApi(unwrapApiResponse<unknown>(res.data));
   },
 
@@ -197,55 +132,10 @@ export const goalApi = {
     await httpClient.delete(`/goal/${goalId}`);
   },
 
-  async getAggregate(orgGoalId: string): Promise<GoalAggregate> {
-    const res = await httpClient.get(`/goal/${orgGoalId}/aggregate`);
-    const raw = unwrapApiResponse<any>(res.data);
-    const byStatus = (raw?.childCountByStatus ?? {}) as Record<string, number>;
-    const normByStatus: Record<GoalStatus, number> = {
-      DRAFT: byStatus.DRAFT ?? 0,
-      PENDING: byStatus.PENDING ?? 0,
-      ACTIVE: byStatus.ACTIVE ?? 0,
-      COMPLETED: byStatus.COMPLETED ?? 0,
-      CANCELLED: byStatus.CANCELLED ?? 0,
-      SKIPPED: byStatus.SKIPPED ?? 0,
-    };
-    return {
-      orgGoalId: String(raw?.orgGoalId ?? orgGoalId),
-      childCount: Number(raw?.childCount ?? 0),
-      confirmedCount: Number(raw?.confirmedCount ?? 0),
-      weightedAvgScore: raw?.weightedAvgScore != null ? Number(raw.weightedAvgScore) : null,
-      simpleAvgScore: raw?.simpleAvgScore != null ? Number(raw.simpleAvgScore) : null,
-      childGoalIds: Array.isArray(raw?.childGoalIds) ? raw.childGoalIds.map(String) : [],
-      childCountByStatus: normByStatus,
-    };
-  },
-
   async listOrgObjectives(params: ListOrgObjectivesParams): Promise<Goal[]> {
     const res = await httpClient.get('/goal/objectives/organization', { params });
     const raw = unwrapApiResponse<unknown>(res.data);
     return normalizeArray<unknown>(raw, ['items', 'data', 'goals', 'list', 'results']).map(mapGoalFromApi);
-  },
-
-  async listObjectiveChildren(goalId: string): Promise<Goal[]> {
-    const res = await httpClient.get(`/goal/${goalId}/children`);
-    const raw = unwrapApiResponse<unknown>(res.data);
-    return normalizeArray<unknown>(raw, ['items', 'data', 'goals', 'list', 'results']).map(mapGoalFromApi);
-  },
-
-  async addProgressUpdate(goalId: string, payload: GoalProgressUpdatePayload): Promise<GoalProgressUpdate> {
-    const res = await httpClient.post(`/goal/${goalId}/updates`, payload);
-    return mapGoalProgressUpdateFromApi(unwrapApiResponse<unknown>(res.data));
-  },
-
-  async listProgressUpdates(goalId: string): Promise<GoalProgressUpdate[]> {
-    const res = await httpClient.get(`/goal/${goalId}/updates`);
-    const raw = unwrapApiResponse<unknown>(res.data);
-    return normalizeArray<unknown>(raw, ['items', 'data', 'updates', 'list', 'results']).map(mapGoalProgressUpdateFromApi);
-  },
-
-  async getSeasonReadiness(seasonId: string): Promise<GoalSeasonReadiness> {
-    const res = await httpClient.get(`/goal/seasons/${seasonId}/readiness`);
-    return mapGoalSeasonReadinessFromApi(unwrapApiResponse<unknown>(res.data), seasonId);
   },
 
   async listGoalApprovalBundles(): Promise<any[]> {

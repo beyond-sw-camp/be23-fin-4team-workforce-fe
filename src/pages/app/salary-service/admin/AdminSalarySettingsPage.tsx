@@ -150,8 +150,9 @@ type SalaryFormValues = {
   effectiveRange: [dayjs.Dayjs, dayjs.Dayjs | null];
   /** 부양가족수 0~11, 기본 1=본인만, 소득세 간이세액표 룩업용 */
   dependentCount?: number;
-  /** 등록 시 함께 부여할 개인 차등 수당 — 등록 모드에만 사용 */
-  allowances?: { salaryItemTemplateId?: string; amount?: number }[];
+  /** 등록 시 함께 부여할 부가 수당 — 항목 select 만 받고 금액은 template.defaultAmount 자동 사용.
+   *  amount 필드는 제출 시 자동 lookup 되므로 form 에는 없음. */
+  allowances?: { salaryItemTemplateId?: string }[];
 };
 
 type BootstrapFormValues = {
@@ -184,13 +185,38 @@ export function SalaryTab() {
     queryKey: ['salary', 'salary-item-templates', 'allowance-options'],
     queryFn: () => salaryApi.salaryItemTemplate.list(),
   });
-  const allowanceTemplateOptions = useMemo(
+  /** 부가 수당 부여 가능 템플릿 — 기본급만 제외한 모든 EARNING 항목.
+   *  회사 공통(Y) 도 노출 — 직원별 다른 금액이 필요할 때 override 용으로 부여 가능.
+   *  defaultAmount 가 미지정인 항목은 dropdown 에서 disabled (먼저 지급 항목(수당) 에서 금액 셋업 필요). */
+  const allowanceTemplates = useMemo(
     () =>
       (tplQ.data ?? [])
-        .filter((t) => t.itemType === 'EARNING')
-        .map((t) => ({ value: t.salaryItemTemplateId!, label: t.itemName ?? '' })),
+        .filter((t) => t.itemType === 'EARNING' && t.itemName !== '기본급'),
     [tplQ.data],
   );
+  const allowanceTemplateOptions = useMemo(
+    () =>
+      allowanceTemplates.map((t) => {
+        const hasAmount = t.defaultAmount != null;
+        const scope = t.applyToAllYn === 'Y' ? '회사 공통' : '개인 차등';
+        return {
+          value: t.salaryItemTemplateId!,
+          label: hasAmount
+            ? `${t.itemName ?? ''} · ${t.defaultAmount!.toLocaleString('ko-KR')}원 (${scope})`
+            : `${t.itemName ?? ''} · 금액 미지정 (지급 항목 메뉴에서 먼저 셋업)`,
+          disabled: !hasAmount,
+        };
+      }),
+    [allowanceTemplates],
+  );
+  /** 템플릿 ID → defaultAmount 빠른 조회용 (제출 시 amount 자동 채움) */
+  const tplDefaultAmountMap = useMemo(() => {
+    const m = new Map<string, number | null>();
+    allowanceTemplates.forEach((t) => {
+      if (t.salaryItemTemplateId) m.set(t.salaryItemTemplateId, t.defaultAmount ?? null);
+    });
+    return m;
+  }, [allowanceTemplates]);
 
   /** 회사에 활성 급여 정책이 1개만 있으면 자동 선택 (사용자가 매번 고를 필요 없음).
    *  활성 = effectiveFrom <= 오늘 && (effectiveTo == null || effectiveTo >= 오늘) */
@@ -253,10 +279,16 @@ export function SalaryTab() {
         effectiveTo: v.effectiveRange[1]?.format('YYYY-MM-DD') ?? null,
         dependentCount: v.dependentCount ?? 1,
       });
-      // 2) 부가 수당 함께 등록 — autoGrant (AUTO 상태로 즉시 활성)
-      const validAllowances = (v.allowances ?? []).filter(
-        (a) => a.salaryItemTemplateId && a.amount != null && a.amount > 0,
-      );
+      // 2) 부가 수당 함께 등록 — 항목 select 만 받고 금액은 template.defaultAmount 자동 사용.
+      //    defaultAmount 가 null 인 항목은 dropdown 에서 disabled 라 여기 도달하지 않음.
+      const validAllowances = (v.allowances ?? [])
+        .map((a) => ({
+          salaryItemTemplateId: a.salaryItemTemplateId,
+          amount: a.salaryItemTemplateId
+            ? tplDefaultAmountMap.get(a.salaryItemTemplateId) ?? null
+            : null,
+        }))
+        .filter((a) => a.salaryItemTemplateId && a.amount != null && a.amount > 0);
       const grantResults = await Promise.allSettled(
         validAllowances.map((a) =>
           salaryApi.memberAllowanceAdmin.autoGrant({
@@ -554,6 +586,8 @@ export function SalaryTab() {
               const base = payGradeStepMap.get(all.step);
               if (base != null) form.setFieldsValue({ baseSalary: base });
             }
+            // 부가 수당 — 금액은 제출 시 template.defaultAmount 가 자동 사용되므로
+            // 별도 onValuesChange 처리 불필요.
           }}
         >
           {!editing && (
@@ -709,7 +743,7 @@ export function SalaryTab() {
             <InputNumber min={0} max={11} style={{ width: '100%' }} />
           </Form.Item>
           <Form.Item
-            label="적용 기간 (새 effectiveFrom)"
+            label="적용 기간"
             name="effectiveRange"
             rules={[{ required: true, message: '적용 시작일을 선택하세요.' }]}
             extra="시작일은 신규 적용일, 종료일은 비워두면 진행중. 기존 이력과 같은 시작일은 거부됩니다."
@@ -736,34 +770,15 @@ export function SalaryTab() {
                           {...restField}
                           name={[name, 'salaryItemTemplateId']}
                           rules={[{ required: true, message: '수당 항목 선택' }]}
-                          className="!tw-mb-0"
-                          style={{ minWidth: 220 }}
+                          className="!tw-mb-0 tw-w-full"
+                          style={{ flex: 1, minWidth: 320 }}
                         >
                           <Select
-                            placeholder="수당 항목"
+                            placeholder="수당 항목 선택"
                             options={allowanceTemplateOptions}
                             loading={tplQ.isLoading}
                             showSearch
                             optionFilterProp="label"
-                          />
-                        </Form.Item>
-                        <Form.Item
-                          {...restField}
-                          name={[name, 'amount']}
-                          rules={[
-                            { required: true, message: '금액 입력' },
-                            { type: 'number', min: 1, message: '0원보다 커야 합니다.' },
-                          ]}
-                          className="!tw-mb-0"
-                          style={{ minWidth: 180 }}
-                        >
-                          <InputNumber
-                            min={0}
-                            step={10000}
-                            style={{ width: '100%' }}
-                            placeholder="금액 (원)"
-                            formatter={(v) => (v ? `${Number(v).toLocaleString('ko-KR')}` : '')}
-                            parser={(v) => Number(String(v ?? '').replace(/[^\d]/g, '')) as 0 | number}
                           />
                         </Form.Item>
                         <Button type="link" danger onClick={() => remove(name)}>
@@ -779,10 +794,13 @@ export function SalaryTab() {
                     >
                       + 수당 추가
                     </Button>
-                    {allowanceTemplateOptions.length === 0 && (
+                    {allowanceTemplateOptions.length === 0 ? (
                       <Typography.Text type="secondary" className="!tw-text-xs">
-                        등록 가능한 수당 항목이 없습니다. [급여 정책 → 급여 항목] 에서 EARNING
-                        항목을 먼저 만들어주세요.
+                        등록 가능한 수당 항목이 없습니다. [지급 항목(수당)] 탭에서 항목을 먼저 만들어주세요.
+                      </Typography.Text>
+                    ) : (
+                      <Typography.Text type="secondary" className="!tw-text-xs">
+                        금액은 [지급 항목(수당)] 에 셋업한 회사 기본 금액이 자동 적용됩니다. 금액 미지정 항목은 비활성화 — 먼저 메뉴에서 금액을 셋업해주세요.
                       </Typography.Text>
                     )}
                   </Space>
@@ -805,7 +823,6 @@ export function SalaryTab() {
         destroyOnHidden
         width={520}
       >
-        <div className="tw-px-5 tw-py-4">
         <Alert
           type="warning"
           showIcon
@@ -824,7 +841,6 @@ export function SalaryTab() {
           <Form.Item label="직급명" name="jobGradeName"><Input maxLength={40} /></Form.Item>
           <Form.Item label="직책명" name="jobTitleName"><Input maxLength={40} /></Form.Item>
         </Form>
-        </div>
       </AppDoubleActionModal>
     </>
   );
@@ -1188,7 +1204,17 @@ function TaxRateTab() {
         </Space>
       </div>
       <Table<TaxRate> rowKey={(r) => r.taxRateId ?? Math.random().toString()} loading={listQ.isLoading} dataSource={listQ.data ?? []} columns={cols} pagination={{ pageSize: 20 }} locale={{ emptyText: '등록된 세율이 없습니다.' }} />
-      <AppDoubleActionModal open={open} onClose={() => { setOpen(false); setEditing(null); form.resetFields(); }} onConfirm={() => form.submit()} confirmLoading={createM.isPending || updateM.isPending} confirmText={editing ? '수정' : '등록'} cancelText="취소" title={editing ? '세율 수정' : '세율 등록'} destroyOnHidden width={520}>
+      <AppDoubleActionModal
+        open={open}
+        onClose={() => { setOpen(false); setEditing(null); form.resetFields(); }}
+        onConfirm={() => form.submit()}
+        confirmLoading={createM.isPending || updateM.isPending}
+        confirmText={editing ? '수정' : '등록'}
+        cancelText="취소"
+        title={editing ? '세율 수정' : '세율 등록'}
+        destroyOnHidden
+        width={520}
+      >
         <div className="tw-px-5 tw-py-4">
         <Form<TaxFormValues> form={form} layout="vertical" onFinish={(v) => editing?.taxRateId ? updateM.mutate({ id: editing.taxRateId, v }) : createM.mutate(v)}>
           <Form.Item label="세금 유형" name="taxType" rules={[{ required: true }]}><Select options={taxTypeOpts} /></Form.Item>
@@ -1263,8 +1289,10 @@ type TemplateFormValues = {
   isTaxableYn: 'Y' | 'N';
   // 통상임금 포함 여부 가산수당 시급 환산 base
   isOrdinaryWageYn: 'Y' | 'N';
-  // 회사 기본 지급 금액 (수당 산식 v1) — 부가 수당 부여 시 자동 채워짐
+  // 회사 기본 지급 금액 (수당 산식 v1) — applyToAll=Y 면 전 직원 자동 합산
   defaultAmount?: number | null;
+  // 회사 공통(Y) / 개인 차등(N)
+  applyToAllYn: 'Y' | 'N';
 };
 
 function SalaryItemTemplateTab() {
@@ -1338,7 +1366,19 @@ function SalaryItemTemplateTab() {
       },
     },
     {
-      // 회사 기본 지급 금액 (수당 산식 v1) — 부가 수당 부여 시 자동 채워짐
+      // 적용 범위 — 회사 공통(Y) / 개인 차등(N).
+      // 회사 공통이면 PayrollService 가 default_amount 를 모든 직원에게 자동 합산.
+      title: '적용 범위',
+      dataIndex: 'applyToAllYn',
+      key: 'applyToAllYn',
+      width: 120,
+      render: (v: string | null | undefined) =>
+        v === 'Y'
+          ? <Tag color="cyan">회사 공통</Tag>
+          : <Tag>개인 차등</Tag>,
+    },
+    {
+      // 회사 기본 지급 금액 (수당 산식 v1) — applyToAll=Y 면 전 직원 자동 합산
       title: '기본 지급 금액',
       dataIndex: 'defaultAmount',
       key: 'defaultAmount',
@@ -1390,6 +1430,7 @@ function SalaryItemTemplateTab() {
               isTaxableYn: (r.isTaxableYn as 'Y' | 'N') ?? 'Y',
               isOrdinaryWageYn: (r.isOrdinaryWageYn as 'Y' | 'N') ?? 'N',
               defaultAmount: r.defaultAmount ?? null,
+              applyToAllYn: (r.applyToAllYn as 'Y' | 'N') ?? 'N',
             });
           }}>수정</Button>
           {r.isSystemDefault ? (
@@ -1406,11 +1447,12 @@ function SalaryItemTemplateTab() {
     },
   ], [deleteM, form]);
 
-  /** 표시는 displayOrder 오름차순 유지, 컬럼은 숨김 */
+  /** 표시는 displayOrder 오름차순 유지.
+   *  기본급은 모든 직원이 받는 Salary.baseSalary 로 처리되므로 수당 목록에서는 숨김 (DB 행 자체는 유지). */
   const sortedItems = useMemo(
     () =>
       (listQ.data ?? [])
-        .filter((t) => t.delYn !== 'Y')
+        .filter((t) => t.delYn !== 'Y' && t.itemName !== '기본급')
         .slice()
         .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0)),
     [listQ.data],
@@ -1429,7 +1471,7 @@ function SalaryItemTemplateTab() {
           >
             <Button loading={initDefaultsM.isPending}>기본 항목 불러오기</Button>
           </Popconfirm>
-          <Button type="primary" onClick={() => { setEditing(null); form.resetFields(); form.setFieldsValue({ itemType: 'EARNING', displayOrder: 0, isTaxableYn: 'Y', isOrdinaryWageYn: 'N' }); setOpen(true); }}>항목 등록</Button>
+          <Button type="primary" onClick={() => { setEditing(null); form.resetFields(); form.setFieldsValue({ itemType: 'EARNING', displayOrder: 0, isTaxableYn: 'Y', isOrdinaryWageYn: 'N', applyToAllYn: 'N' }); setOpen(true); }}>항목(수당) 등록</Button>
         </Space>
       </div>
       <Table<SalaryItemTemplate>
@@ -1445,54 +1487,70 @@ function SalaryItemTemplateTab() {
       <AppDoubleActionModal open={open} onClose={() => { setOpen(false); setEditing(null); form.resetFields(); }} onConfirm={() => form.submit()} confirmLoading={createM.isPending || updateM.isPending} confirmText={editing ? '수정' : '등록'} cancelText="취소" title={editing ? (editing.isSystemDefault ? '시스템 기본 항목 수정' : '항목 수정') : '항목 등록'} destroyOnHidden width={480}>
         <div className="tw-px-5 tw-py-4">
         <Form<TemplateFormValues> form={form} layout="vertical" onFinish={(v) => editing?.salaryItemTemplateId ? updateM.mutate({ id: editing.salaryItemTemplateId, v }) : createM.mutate(v)}>
-          <Form.Item label="항목명" name="itemName" rules={[{ required: true }]}>
-            <Input maxLength={40} placeholder="예: 기본급, 소득세" />
+          <Form.Item label="수당명" name="itemName" rules={[{ required: true }]}>
+            <Input maxLength={40} placeholder="예: 직책수당, 식대" />
           </Form.Item>
-          <Form.Item label="유형" name="itemType" rules={[{ required: true }]}>
-            <Select
-              disabled={!!editing?.isSystemDefault}
-              options={[{ value: 'EARNING', label: '지급 (EARNING)' }, { value: 'DEDUCTION', label: '공제 (DEDUCTION)' }]}
-            />
+          {/* 유형은 항상 EARNING 으로 자동 — 공제(세금/4대보험) 는 [세금·4대보험] 메뉴에서 별도 관리 */}
+          <Form.Item name="itemType" hidden initialValue="EARNING">
+            <Input />
           </Form.Item>
           <Form.Item label="표시 순서" name="displayOrder" rules={[{ required: true }]}>
             <InputNumber min={0} style={{ width: '100%' }} />
           </Form.Item>
-          <Form.Item label="과세 여부" name="isTaxableYn" rules={[{ required: true }]}>
+          <Form.Item
+            label="과세 여부"
+            name="isTaxableYn"
+            rules={[{ required: true }]}
+            extra="과세 = 소득세·4대보험 계산에 포함. 비과세 = 식대·자가운전·보육수당 등 세법상 비과세 한도 적용."
+          >
             <Select
               disabled={!!editing?.isSystemDefault}
               options={[{ value: 'Y', label: '과세' }, { value: 'N', label: '비과세' }]}
             />
           </Form.Item>
           <Form.Item
-            label="통상임금 포함 여부"
+            label="통상임금 포함"
             name="isOrdinaryWageYn"
             rules={[{ required: true }]}
-            extra="Y면 시급 환산 기준에 합산되어 연장/야간/휴일수당 base 가 됩니다. 정기·일률·고정 지급 항목 (직책수당 자격수당) 만 Y. 변동성 수당 (성과급 비정기상여) 및 비과세 실비 (식대 자가운전) 는 N."
+            extra="포함하면 연장·야간·휴일수당 시급 환산 기준에 합산됩니다. 매달 같은 금액으로 받는 정기 수당(직책수당·자격수당)만 포함하세요."
           >
             <Select
               options={[
-                { value: 'N', label: 'N — 통상임금 제외 (변동성 / 실비)' },
-                { value: 'Y', label: 'Y — 통상임금 포함 (정기 / 일률 / 고정)' },
+                { value: 'N', label: '제외 (성과급·식대·자가운전 등 변동·실비)' },
+                { value: 'Y', label: '포함 (직책수당·자격수당 등 매월 고정)' },
               ]}
             />
           </Form.Item>
           <Form.Item
-            label="기본 지급 금액 (원)"
+            label="적용 범위"
+            name="applyToAllYn"
+            rules={[{ required: true }]}
+            extra="회사 공통: 정한 금액이 모든 직원에게 자동 합산 (식대·자가운전·보육수당 등). 개인 차등: 직원별로 [수당 관리] 에서 부여한 사람만 적용 (직책수당·자녀수당 등)."
+          >
+            <Select
+              options={[
+                { value: 'N', label: '개인 차등 (직원별로 부여)' },
+                { value: 'Y', label: '회사 공통 (전 직원 자동 적용)' },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item
+            label="수당 금액 (월, 원)"
             name="defaultAmount"
-            extra="회사가 정한 기본 금액. 부가 수당 부여 시 이 값이 자동으로 채워집니다. 비워두면 직원별 부여 시 admin 이 직접 입력해야 합니다."
+            extra="회사 공통이면 모든 직원에게 매달 이 금액이 자동으로 합산됩니다. 개인 차등이면 부여 시 기본값으로 사용되며 직원별 다른 금액으로 변경할 수 있습니다. 비워두면 자동 적용·자동 채움이 없습니다."
           >
             <InputNumber
               min={0}
               step={10000}
               style={{ width: '100%' }}
-              placeholder="예: 100000 (비우면 자동 채움 안 함)"
+              placeholder="예: 200000"
               formatter={(v) => (v ? `${Number(v).toLocaleString('ko-KR')}` : '')}
               parser={(v) => Number(String(v ?? '').replace(/[^\d]/g, '')) as 0 | number}
             />
           </Form.Item>
           {editing?.isSystemDefault && (
             <Typography.Paragraph type="secondary" className="!tw-mb-0 tw-text-xs">
-              시스템 기본 항목은 이름과 표시 순서만 수정됩니다. 유형·과세 여부는 변경되지 않습니다.
+              시스템 기본 항목은 이름·표시 순서만 수정됩니다. 과세 여부는 변경할 수 없습니다.
             </Typography.Paragraph>
           )}
         </Form>
@@ -1794,7 +1852,7 @@ export function AdminSalarySettingsPage() {
         ? [{ key: 'pay-grade-table', label: '호봉표 관리', children: <AdminPayGradeTablePage embedded /> }]
         : []),
       { key: 'tax', label: '세율', children: <TaxRateTab /> },
-      { key: 'template', label: '지급 항목', children: <SalaryItemTemplateTab /> },
+      { key: 'template', label: '지급 항목(수당)', children: <SalaryItemTemplateTab /> },
       { key: 'simplified-tax', label: '간이세액표', children: <SimplifiedTaxTableTab /> },
     ],
     [hasPayGradePolicy],

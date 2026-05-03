@@ -15,11 +15,14 @@ import {
   Space,
   Table,
   Tag,
+  Tooltip,
   Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
+import { membersApi } from '@/features/members/api/membersApi';
+import type { Member } from '@/features/members/model/types';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import type {
   LeaveOfAbsence,
@@ -72,16 +75,36 @@ export function AdminLeaveOfAbsencePage() {
     queryFn: () => attendanceApi.leaveOfAbsence.listByStatus(ACTIVE_STATUS),
   });
 
-  // 구성원 UUID 부분문자열 + 사유 부분문자열 필터
+  // 직원 이름/부서/직책/직급 매핑용 회사 멤버 목록 5분 캐시
+  const membersQ = useQuery({
+    queryKey: ['members', 'list', 'leave-of-absence-name-map'],
+    queryFn: () => membersApi.list({ page: 1, pageSize: 1000 }),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const memberMap = useMemo(() => {
+    const map = new Map<string, Member>();
+    membersQ.data?.items.forEach((m) => map.set(m.id, m));
+    return map;
+  }, [membersQ.data]);
+
+  // 직원명·사유 부분문자열 필터 (검색어가 UUID 일 수도 있어 폴백 포함)
   const filteredList = useMemo(() => {
     const q = memberSearch.trim().toLowerCase();
     const rows = listQ.data ?? [];
     if (!q) return rows;
-    return rows.filter((r) =>
-      (r.memberId ?? '').toLowerCase().includes(q) ||
-      (r.reason ?? '').toLowerCase().includes(q),
-    );
-  }, [listQ.data, memberSearch]);
+    return rows.filter((r) => {
+      const m = r.memberId ? memberMap.get(r.memberId) : undefined;
+      return (
+        (r.memberId ?? '').toLowerCase().includes(q) ||
+        (r.reason ?? '').toLowerCase().includes(q) ||
+        (m?.name ?? '').toLowerCase().includes(q) ||
+        (m?.department ?? '').toLowerCase().includes(q) ||
+        (m?.jobTitleName ?? '').toLowerCase().includes(q) ||
+        (m?.jobGradeName ?? '').toLowerCase().includes(q)
+      );
+    });
+  }, [listQ.data, memberSearch, memberMap]);
 
   const endM = useMutation({
     mutationFn: (input: { id: string; actualEndDate: string }) =>
@@ -101,10 +124,28 @@ export function AdminLeaveOfAbsencePage() {
         title: '직원',
         dataIndex: 'memberId',
         key: 'memberId',
-        width: 260,
-        render: (v: string) => (
-          <Typography.Text className="tw-font-mono tw-text-xs">{v ?? '—'}</Typography.Text>
-        ),
+        width: 280,
+        render: (v: string) => {
+          const m = v ? memberMap.get(v) : undefined;
+          if (!m) {
+            // 멤버 매핑이 아직 안 된 경우 UUID 의 일부만 노출
+            return (
+              <Tooltip title={v ?? '—'}>
+                <Typography.Text type="secondary" className="tw-text-xs">
+                  {v ? `${v.slice(0, 8)}…` : '—'}
+                </Typography.Text>
+              </Tooltip>
+            );
+          }
+          return (
+            <div className="tw-flex tw-flex-col">
+              <span className="tw-text-sm tw-font-medium tw-text-slate-800">{m.name}</span>
+              <span className="tw-text-xs tw-text-slate-500">
+                {[m.department, m.jobTitleName, m.jobGradeName].filter(Boolean).join(' · ') || '—'}
+              </span>
+            </div>
+          );
+        },
       },
       {
         title: '종류',
@@ -155,14 +196,6 @@ export function AdminLeaveOfAbsencePage() {
         ),
       },
       {
-        title: '결재 ID',
-        dataIndex: 'approvalRequestId',
-        key: 'approvalRequestId',
-        width: 200,
-        render: (v: string | null) =>
-          v ? <Typography.Text className="tw-font-mono tw-text-xs">{v}</Typography.Text> : '—',
-      },
-      {
         title: '작업',
         key: 'actions',
         width: 140,
@@ -182,7 +215,7 @@ export function AdminLeaveOfAbsencePage() {
         },
       },
     ],
-    [endForm],
+    [endForm, memberMap],
   );
 
   const onEndSubmit = (v: EndFormValues) => {
@@ -200,7 +233,7 @@ export function AdminLeaveOfAbsencePage() {
           휴직 관리
         </Typography.Title>
         <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-sm">
-          신청/결재는 전자결재에서 처리됩니다. 여기서는 상태 조회와 조기 복직 처리만 수행합니다.
+          휴직 상태 조회와 조기 복직 처리만 수행 가능합니다.
         </Typography.Paragraph>
       </div>
 
@@ -213,7 +246,7 @@ export function AdminLeaveOfAbsencePage() {
             </Typography.Text>
           </Space>
           <Input.Search
-            placeholder="구성원 UUID 또는 사유로 필터"
+            placeholder="이름·부서·직책·직급·사유로 필터"
             value={memberSearch}
             onChange={(e) => setMemberSearch(e.target.value)}
             allowClear
@@ -223,7 +256,7 @@ export function AdminLeaveOfAbsencePage() {
 
         <Table<LeaveOfAbsence>
           rowKey={(r) => r.leaveOfAbsenceId ?? `${r.memberId}-${r.startDate}`}
-          loading={listQ.isLoading}
+          loading={listQ.isLoading || membersQ.isLoading}
           dataSource={filteredList}
           columns={columns}
           pagination={{ pageSize: 20 }}
@@ -254,7 +287,29 @@ export function AdminLeaveOfAbsencePage() {
           <Space direction="vertical" className="tw-w-full" size={12}>
             <Typography.Text>
               <Typography.Text type="secondary">직원</Typography.Text>{' '}
-              <Typography.Text className="tw-font-mono tw-text-xs">{target.memberId}</Typography.Text>
+              {(() => {
+                const m = target.memberId ? memberMap.get(target.memberId) : undefined;
+                if (!m) {
+                  return (
+                    <Typography.Text className="tw-font-mono tw-text-xs">
+                      {target.memberId ?? '—'}
+                    </Typography.Text>
+                  );
+                }
+                const meta = [m.department, m.jobTitleName, m.jobGradeName]
+                  .filter(Boolean)
+                  .join(' · ');
+                return (
+                  <Typography.Text>
+                    {m.name}
+                    {meta ? (
+                      <Typography.Text type="secondary" className="tw-ml-1 tw-text-xs">
+                        ({meta})
+                      </Typography.Text>
+                    ) : null}
+                  </Typography.Text>
+                );
+              })()}
             </Typography.Text>
             <Typography.Text>
               <Typography.Text type="secondary">원 기간</Typography.Text>{' '}

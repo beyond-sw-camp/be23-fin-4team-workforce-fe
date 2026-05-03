@@ -1,6 +1,6 @@
 // /app/payroll/tax-summary 4대보험 + 원천세 월별 집계 화면
-// 직원 부담 정확값 회사 부담 산재 추정값 표시 안내문 명시
-import { useState } from 'react';
+// 직원 부담은 실제 공제값, 회사 부담·산재는 요율 기반 추정값 (참고용)
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Alert,
@@ -8,6 +8,7 @@ import {
   Button,
   Card,
   DatePicker,
+  Empty,
   Space,
   Statistic,
   Table,
@@ -72,6 +73,12 @@ export function AdminPayrollTaxSummaryPage() {
   };
 
   const data: TaxSummary | undefined = summaryQ.data;
+  const isEmpty = useMemo(() => {
+    if (!data) return true;
+    return (data.memberCount ?? 0) === 0;
+  }, [data]);
+  const isCurrentMonth = month.isSame(dayjs(), 'month');
+  const isLastMonth = month.isSame(dayjs().subtract(1, 'month'), 'month');
 
   const insuranceRows: InsuranceRow[] = data
     ? [
@@ -90,6 +97,8 @@ export function AdminPayrollTaxSummaryPage() {
       ]
     : [];
 
+  const numericCellStyle = { fontVariantNumeric: 'tabular-nums' as const };
+
   const insuranceColumns: ColumnsType<InsuranceRow> = [
     { title: '항목', dataIndex: 'label', key: 'label', width: 140 },
     {
@@ -97,6 +106,7 @@ export function AdminPayrollTaxSummaryPage() {
       dataIndex: 'employee',
       key: 'employee',
       align: 'right',
+      onCell: () => ({ style: numericCellStyle }),
       render: (n: number) => `${formatKrw(n)} 원`,
     },
     {
@@ -104,6 +114,7 @@ export function AdminPayrollTaxSummaryPage() {
       dataIndex: 'employer',
       key: 'employer',
       align: 'right',
+      onCell: () => ({ style: numericCellStyle }),
       render: (n: number) => (
         <Typography.Text type="secondary">{formatKrw(n)} 원</Typography.Text>
       ),
@@ -112,6 +123,7 @@ export function AdminPayrollTaxSummaryPage() {
       title: '소계',
       key: 'subTotal',
       align: 'right',
+      onCell: () => ({ style: numericCellStyle }),
       render: (_, r) => `${formatKrw(r.employee + r.employer)} 원`,
     },
   ];
@@ -123,6 +135,7 @@ export function AdminPayrollTaxSummaryPage() {
       dataIndex: 'amount',
       key: 'amount',
       align: 'right',
+      onCell: () => ({ style: numericCellStyle }),
       render: (n: number) => `${formatKrw(n)} 원`,
     },
   ];
@@ -132,28 +145,45 @@ export function AdminPayrollTaxSummaryPage() {
       <div className="tw-flex tw-flex-wrap tw-items-end tw-justify-between tw-gap-3">
         <div>
           <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
-            세금 / 4대보험 집계
+            세금 · 4대보험 집계
           </Typography.Title>
           <Typography.Paragraph
             type="secondary"
             className="!tw-mb-0 !tw-mt-1 !tw-text-sm"
           >
-            월별 4대보험과 원천세 집계입니다 직원 부담은 실제 공제값 회사 부담은 요율 기반 추정값입니다
+            선택한 월의 4대보험·원천세 집계입니다. 직원 부담은 실제 공제값, 회사 부담은 요율 기반 추정값입니다.
           </Typography.Paragraph>
         </div>
-        <Space wrap>
+        <Space wrap size={8}>
+          <Button
+            size="small"
+            type={isLastMonth ? 'primary' : 'default'}
+            onClick={() => setMonth(dayjs().subtract(1, 'month'))}
+          >
+            지난달
+          </Button>
+          <Button
+            size="small"
+            type={isCurrentMonth ? 'primary' : 'default'}
+            onClick={() => setMonth(dayjs())}
+          >
+            이번달
+          </Button>
           <DatePicker
             picker="month"
             value={month}
             onChange={(d) => d && setMonth(d)}
             allowClear={false}
+            disabledDate={(d) => d.isAfter(dayjs(), 'month')}
           />
           <Button
+            type="primary"
             icon={<DownloadOutlined />}
             onClick={handleExport}
             loading={exporting}
+            disabled={isEmpty}
           >
-            엑셀 다운로드
+            신고용 엑셀
           </Button>
         </Space>
       </div>
@@ -161,124 +191,134 @@ export function AdminPayrollTaxSummaryPage() {
       <Alert
         type="warning"
         showIcon
-        message="참고용 데이터"
-        description="회사 부담분과 산재보험은 보수월액 상한 업종별 차등을 단순 비율로 추정한 값입니다 정확한 신고 금액은 4대사회보험 정보연계센터 또는 회계 시스템 기준을 사용해주세요"
+        message="참고용 집계 — 실제 신고는 외부 시스템 기준"
+        description="회사 부담·산재보험은 단순 비율로 추정한 값입니다. 신고 금액은 4대사회보험 정보연계센터 또는 회계 시스템 기준을 사용해 주세요."
       />
 
       {summaryQ.isError ? (
-        <Alert
-          type="error"
-          showIcon
-          message="집계 데이터를 불러오지 못했습니다"
-        />
+        <Alert type="error" showIcon message="집계 데이터를 불러오지 못했습니다." />
       ) : null}
 
-      {/* 합계 카드 */}
-      <div className="tw-grid tw-grid-cols-2 md:tw-grid-cols-4 tw-gap-3">
-        <Card size="small" loading={summaryQ.isLoading} className="tw-border-slate-200/80 tw-shadow-sm">
-          <Statistic
-            title="대상 직원"
-            value={data?.memberCount ?? 0}
-            suffix="명"
-            valueStyle={{ fontSize: 22 }}
+      {!summaryQ.isLoading && !summaryQ.isError && isEmpty ? (
+        <Card className="tw-border-slate-200/80 tw-shadow-sm">
+          <Empty
+            description={
+              <span className="tw-text-sm tw-text-slate-500">
+                {month.format('YYYY년 M월')}에 확정된 급여 데이터가 없습니다. 급여 정산 후 다시 확인해 주세요.
+              </span>
+            }
           />
         </Card>
-        <Card size="small" loading={summaryQ.isLoading} className="tw-border-slate-200/80 tw-shadow-sm">
-          <Statistic
-            title="4대보험 직원 부담 합계"
-            value={data?.fourInsuranceTotal ?? 0}
-            formatter={(v) => formatKrw(Number(v))}
-            suffix="원"
-            valueStyle={{ fontSize: 20, color: '#dc2626' }}
-          />
-        </Card>
-        <Card size="small" loading={summaryQ.isLoading} className="tw-border-slate-200/80 tw-shadow-sm">
-          <Statistic
-            title="4대보험 회사 부담 합계 (추정)"
-            value={data?.fourInsuranceEmployerTotal ?? 0}
-            formatter={(v) => formatKrw(Number(v))}
-            suffix="원"
-            valueStyle={{ fontSize: 20, color: '#6b7280' }}
-          />
-        </Card>
-        <Card size="small" loading={summaryQ.isLoading} className="tw-border-slate-200/80 tw-shadow-sm">
-          <Statistic
-            title="원천세 합계"
-            value={data?.withholdingTotal ?? 0}
-            formatter={(v) => formatKrw(Number(v))}
-            suffix="원"
-            valueStyle={{ fontSize: 20, color: '#0c4a6e' }}
-          />
-        </Card>
-      </div>
+      ) : (
+        <>
+          {/* 합계 카드 */}
+          <div className="tw-grid tw-grid-cols-2 md:tw-grid-cols-4 tw-gap-3">
+            <Card size="small" loading={summaryQ.isLoading} className="tw-border-slate-200/80 tw-shadow-sm">
+              <Statistic
+                title="대상 직원"
+                value={data?.memberCount ?? 0}
+                suffix="명"
+                valueStyle={{ fontSize: 22, fontVariantNumeric: 'tabular-nums' }}
+              />
+            </Card>
+            <Card size="small" loading={summaryQ.isLoading} className="tw-border-slate-200/80 tw-shadow-sm">
+              <Statistic
+                title="4대보험 직원 부담 합계"
+                value={data?.fourInsuranceTotal ?? 0}
+                formatter={(v) => formatKrw(Number(v))}
+                suffix="원"
+                valueStyle={{ fontSize: 20, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}
+              />
+            </Card>
+            <Card size="small" loading={summaryQ.isLoading} className="tw-border-slate-200/80 tw-shadow-sm">
+              <Statistic
+                title="4대보험 회사 부담 합계 (추정)"
+                value={data?.fourInsuranceEmployerTotal ?? 0}
+                formatter={(v) => formatKrw(Number(v))}
+                suffix="원"
+                valueStyle={{ fontSize: 20, color: '#64748b', fontVariantNumeric: 'tabular-nums' }}
+              />
+            </Card>
+            <Card size="small" loading={summaryQ.isLoading} className="tw-border-slate-200/80 tw-shadow-sm">
+              <Statistic
+                title="원천세 합계"
+                value={data?.withholdingTotal ?? 0}
+                formatter={(v) => formatKrw(Number(v))}
+                suffix="원"
+                valueStyle={{ fontSize: 20, color: '#0c4a6e', fontVariantNumeric: 'tabular-nums' }}
+              />
+            </Card>
+          </div>
 
-      <Card
-        title="4대보험 산출 내역"
-        size="small"
-        className="tw-border-slate-200/80 tw-shadow-sm"
-      >
-        <Table<InsuranceRow>
-          rowKey="key"
-          loading={summaryQ.isLoading}
-          dataSource={insuranceRows}
-          columns={insuranceColumns}
-          pagination={false}
-          size="small"
-          summary={(rows) => {
-            const empSum = rows.reduce((a, r) => a + r.employee, 0);
-            const erSum = rows.reduce((a, r) => a + r.employer, 0);
-            return (
-              <Table.Summary.Row className="tw-bg-slate-50">
-                <Table.Summary.Cell index={0}>
-                  <Typography.Text strong>합계</Typography.Text>
-                </Table.Summary.Cell>
-                <Table.Summary.Cell index={1} align="right">
-                  <Typography.Text strong>{formatKrw(empSum)} 원</Typography.Text>
-                </Table.Summary.Cell>
-                <Table.Summary.Cell index={2} align="right">
-                  <Typography.Text strong type="secondary">
-                    {formatKrw(erSum)} 원
-                  </Typography.Text>
-                </Table.Summary.Cell>
-                <Table.Summary.Cell index={3} align="right">
-                  <Typography.Text strong>{formatKrw(empSum + erSum)} 원</Typography.Text>
-                </Table.Summary.Cell>
-              </Table.Summary.Row>
-            );
-          }}
-        />
-      </Card>
+          <Card
+            title="4대보험 산출 내역"
+            size="small"
+            className="tw-border-slate-200/80 tw-shadow-sm"
+          >
+            <Table<InsuranceRow>
+              rowKey="key"
+              loading={summaryQ.isLoading}
+              dataSource={insuranceRows}
+              columns={insuranceColumns}
+              pagination={false}
+              size="small"
+              summary={(rows) => {
+                const empSum = rows.reduce((a, r) => a + r.employee, 0);
+                const erSum = rows.reduce((a, r) => a + r.employer, 0);
+                return (
+                  <Table.Summary.Row className="tw-bg-slate-50">
+                    <Table.Summary.Cell index={0}>
+                      <Typography.Text strong>합계</Typography.Text>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={1} align="right">
+                      <Typography.Text strong>{formatKrw(empSum)} 원</Typography.Text>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={2} align="right">
+                      <Typography.Text strong type="secondary">
+                        {formatKrw(erSum)} 원
+                      </Typography.Text>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={3} align="right">
+                      <Typography.Text strong>{formatKrw(empSum + erSum)} 원</Typography.Text>
+                    </Table.Summary.Cell>
+                  </Table.Summary.Row>
+                );
+              }}
+            />
+          </Card>
 
-      <Card
-        title="원천세 징수 내역"
-        size="small"
-        className="tw-border-slate-200/80 tw-shadow-sm"
-      >
-        <Table<WithholdingRow>
-          rowKey="key"
-          loading={summaryQ.isLoading}
-          dataSource={withholdingRows}
-          columns={withholdingColumns}
-          pagination={false}
-          size="small"
-          summary={(rows) => {
-            const sum = rows.reduce((a, r) => a + r.amount, 0);
-            return (
-              <Table.Summary.Row className="tw-bg-slate-50">
-                <Table.Summary.Cell index={0}>
-                  <Typography.Text strong>합계</Typography.Text>
-                </Table.Summary.Cell>
-                <Table.Summary.Cell index={1} align="right">
-                  <Typography.Text strong>{formatKrw(sum)} 원</Typography.Text>
-                </Table.Summary.Cell>
-              </Table.Summary.Row>
-            );
-          }}
-        />
-        <Typography.Paragraph type="secondary" className="!tw-mt-2 !tw-mb-0 !tw-text-xs">
-          국세청 신고 시 사용하는 원천징수 항목입니다 직원 급여에서 공제되어 회사가 대신 납부합니다
-        </Typography.Paragraph>
-      </Card>
+          <Card
+            title="원천세 징수 내역"
+            size="small"
+            className="tw-border-slate-200/80 tw-shadow-sm"
+          >
+            <Table<WithholdingRow>
+              rowKey="key"
+              loading={summaryQ.isLoading}
+              dataSource={withholdingRows}
+              columns={withholdingColumns}
+              pagination={false}
+              size="small"
+              summary={(rows) => {
+                const sum = rows.reduce((a, r) => a + r.amount, 0);
+                return (
+                  <Table.Summary.Row className="tw-bg-slate-50">
+                    <Table.Summary.Cell index={0}>
+                      <Typography.Text strong>합계</Typography.Text>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={1} align="right">
+                      <Typography.Text strong>{formatKrw(sum)} 원</Typography.Text>
+                    </Table.Summary.Cell>
+                  </Table.Summary.Row>
+                );
+              }}
+            />
+            <Typography.Paragraph type="secondary" className="!tw-mt-2 !tw-mb-0 !tw-text-xs">
+              국세청 신고 시 사용하는 원천징수 항목입니다. 직원 급여에서 공제되어 회사가 대신 납부합니다.
+            </Typography.Paragraph>
+          </Card>
+        </>
+      )}
     </Space>
   );
 }

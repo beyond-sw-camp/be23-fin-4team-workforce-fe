@@ -206,7 +206,8 @@ export function AdminAttendanceCorrectionPage() {
         <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-sm">
           직원이 신청한 출퇴근 정정을 검토합니다. <b>승인</b> 시 해당 일자 근태가 즉시 확정 처리되고, <b>반려</b> 시 신청 전 상태로 복구됩니다.
           <br />
-          ※ 정정 검토 중인 행은 02:00 / 14:00 마감 배치가 건드리지 않으니 안전하게 처리하세요.
+          ※ 정정 검토 중인 근태 데이터는 자동 처리(익일 2시와 14시)대상이 아니므로
+            주의해서 처리하세요.
         </Typography.Paragraph>
       </div>
 

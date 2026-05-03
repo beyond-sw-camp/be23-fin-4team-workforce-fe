@@ -46,7 +46,7 @@ export function computeSeasonActivationReadiness(groups: EvaluationGroup[]): { r
     if (missingLead) {
       return {
         ready: false,
-        reason: `그룹 '${g.name}': 모든 평가 대상자에게 Lead 평가자(DOWNWARD)를 지정해야 시즌을 활성화할 수 있습니다.`,
+        reason: `그룹 '${g.name}': 모든 평가 대상자에게 최종 검토자(상급자 평가자)를 지정해야 시즌을 활성화할 수 있습니다.`,
       };
     }
   }

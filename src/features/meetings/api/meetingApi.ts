@@ -36,13 +36,15 @@ function mapMeeting(raw: any): MeetingRecord {
 }
 
 function mapAction(raw: any): MeetingAction {
+  const isCompleted = Boolean(raw.isCompleted ?? raw.completed ?? raw.status === 'COMPLETED');
   return {
     meetingActionId: raw.meetingActionId,
     meetingRecordId: raw.meetingRecordId,
-    content: raw.content,
+    content: raw.content ?? raw.description ?? '',
+    description: raw.description ?? raw.content ?? undefined,
     assigneeId: raw.assigneeId,
     dueDate: raw.dueDate ?? undefined,
-    status: raw.status ?? 'PENDING',
+    status: raw.status ?? (isCompleted ? 'COMPLETED' : 'PENDING'),
     completedAt: raw.completedAt ?? undefined,
     tlRating: raw.tlRating ?? undefined,
     createdAt: raw.createdAt,
@@ -89,6 +91,11 @@ export const meetingApi = {
     return normalizeArray(unwrapApiResponse<unknown>(res.data), mapMeeting);
   },
 
+  async listSeasonMeetings(seasonId: string): Promise<MeetingRecord[]> {
+    const res = await httpClient.get(`/evaluation/seasons/${seasonId}/meetings`);
+    return normalizeArray(unwrapApiResponse<unknown>(res.data), mapMeeting);
+  },
+
   async updateMeeting(meetingRecordId: string, body: UpdateMeetingPayload): Promise<MeetingRecord> {
     const res = await httpClient.patch(`/meeting/record/${meetingRecordId}`, body);
     return mapMeeting(unwrapApiResponse<any>(res.data));
@@ -116,7 +123,11 @@ export const meetingApi = {
   },
 
   async createAction(meetingRecordId: string, body: CreateActionPayload): Promise<MeetingAction> {
-    const res = await httpClient.post(`/meeting/${meetingRecordId}/action`, body);
+    const res = await httpClient.post(`/meeting/${meetingRecordId}/action`, {
+      assigneeId: body.assigneeId,
+      description: body.description ?? body.content,
+      dueDate: body.dueDate,
+    });
     return mapAction(unwrapApiResponse<any>(res.data));
   },
 

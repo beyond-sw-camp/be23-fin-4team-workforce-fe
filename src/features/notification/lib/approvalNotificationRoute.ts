@@ -55,13 +55,15 @@ export function buildApprovalNotificationNavigate(input: BuildApprovalRouteInput
 /** 목표 승인 번들 알림: 성과 승인 상세 라우트로 진입. */
 export function buildGoalBundleNotificationNavigate(input: BuildApprovalRouteInput): NavigateOptions {
   const bundleId = String(input.targetId ?? '').trim();
+  const notificationType = String(input.notificationType ?? input.targetType ?? '').trim().toUpperCase();
+  const view = notificationType.includes('REQUESTED') ? 'org' : 'my';
   if (!bundleId) {
-    return { to: '/app/performance' } as NavigateOptions;
+    return { to: '/app/performance', search: { view } } as NavigateOptions;
   }
   return {
     to: '/app/performance',
     search: {
-      view: 'my-objective',
+      view,
       bundleId,
     },
   } as NavigateOptions;

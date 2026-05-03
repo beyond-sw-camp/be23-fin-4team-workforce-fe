@@ -543,7 +543,7 @@ function RetroactiveModal({
         onClose();
       }}
       footer={null}
-      destroyOnClose
+      destroyOnHidden
     >
       <div className="tw-px-5 tw-py-4">
       <Typography.Paragraph type="secondary" className="!tw-text-xs">

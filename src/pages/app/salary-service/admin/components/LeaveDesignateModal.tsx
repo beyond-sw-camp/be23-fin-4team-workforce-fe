@@ -48,21 +48,23 @@ export function LeaveDesignateModal({
   };
 
   return (
-    <AppDoubleActionModal
+    <Modal
       open={target !== null}
       title="연차 강제 지정 (노무수령 거부)"
-      confirmText="강제 지정"
-      confirmDanger
+      okText="강제 지정"
+      okType="danger"
       cancelText="취소"
-      confirmDisabled={picked.length === 0 || overLimit || reasonInvalid}
+      okButtonProps={{
+        disabled: picked.length === 0 || overLimit || reasonInvalid,
+      }}
       confirmLoading={confirmLoading}
-      onClose={onCancel}
-      onConfirm={submit}
+      onCancel={onCancel}
+      onOk={submit}
       destroyOnHidden
       width={560}
     >
       {target ? (
-        <Space direction="vertical" className="tw-w-full tw-px-5 tw-py-4" size="middle">
+        <Space direction="vertical" className="tw-w-full" size="middle">
           <Alert
             type="warning"
             showIcon
@@ -135,6 +137,6 @@ export function LeaveDesignateModal({
           </div>
         </Space>
       ) : null}
-    </AppDoubleActionModal>
+    </Modal>
   );
 }

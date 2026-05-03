@@ -56,6 +56,7 @@ export type MeetingAction = {
   meetingActionId: string;
   meetingRecordId: string;
   content: string;
+  description?: string;
   assigneeId: string;
   dueDate?: string;
   status: ActionStatus;
@@ -67,6 +68,7 @@ export type MeetingAction = {
 
 export type CreateActionPayload = {
   content: string;
+  description?: string;
   assigneeId: string;
   dueDate?: string;
 };

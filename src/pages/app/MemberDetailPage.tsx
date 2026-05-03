@@ -2,6 +2,7 @@ import {
   BankOutlined,
   CalendarOutlined,
   CarryOutOutlined,
+  DollarOutlined,
   EditOutlined,
   HistoryOutlined,
   IdcardOutlined,
@@ -12,26 +13,28 @@ import {
   TeamOutlined,
   UnlockOutlined,
 } from '@ant-design/icons';
-import { Alert, Avatar, Card, Spin, Table, Tag, Typography } from 'antd';
-import { Link, useParams } from '@tanstack/react-router';
+import { Alert, Avatar, Card, Modal, Spin, Table, Tag, Typography } from 'antd';
+import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ACCOUNT_STATUS_KO,
   EMPLOYMENT_TYPE_KO,
   MEMBER_HISTORY_CHANGE_TYPE_KO,
   MEMBER_STATUS_KO,
 } from '@/app/locale/app-ko';
+import { useAuth } from '@/features/auth/useAuth';
 import { memberApi, type MemberHistoryItem } from '@/features/member/api/memberApi';
+import { salaryApi } from '@/features/salary-service/api/salaryApi';
+import type { Salary } from '@/features/salary-service/types';
 import { DetailPageHeader } from '@/shared/ui/DetailPageHeader';
 import { membersCtaButtonClass } from '@/features/members/ui/membersCtaButtonClass';
 import { PERM } from '@/features/permissions/backend-permissions';
 import { PermissionGuard } from '@/features/permissions/permission-guard';
 import { usePermissions } from '@/features/permissions/usePermissionsHook';
 import { AppButton } from '@/shared/ui/AppButton';
-import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
 import { twMerge } from 'tailwind-merge';
 
 function memberStatusLabel(code: string | undefined): string {
@@ -102,8 +105,10 @@ function SectionBlock({ title, children }: { title: string; children: ReactNode 
 export function MemberDetailPage() {
   const { memberId } = useParams({ strict: false }) as { memberId: string };
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [historyOpen, setHistoryOpen] = useState(false);
   const { hasPermission } = usePermissions();
+  const { user } = useAuth();
 
   const canOpenMemberHistory =
     hasPermission(PERM.MEMBER_READ) ||
@@ -114,6 +119,39 @@ export function MemberDetailPage() {
     queryKey: ['member', 'detail', memberId],
     queryFn: () => memberApi.detail(memberId),
   });
+
+  /** 시스템 관리자에게만 노출되는 급여 요약. AdminPayrollPage 라우트 자체가 시스템 관리자 한정이라 동일 게이트 사용. */
+  const canViewSalary = Boolean(user?.isSystemAdmin);
+  const salaryQuery = useQuery({
+    queryKey: ['salary', 'salaries', 'by-member', memberId],
+    queryFn: () => salaryApi.salary.getByMemberId(memberId),
+    enabled: canViewSalary && Boolean(memberId?.trim()),
+  });
+  /** 활성(현재 적용 중) 급여 1건. 백엔드 isActive 와 동일 룰. */
+  const activeSalary = useMemo<Salary | null>(() => {
+    const today = dayjs().startOf('day');
+    const list = salaryQuery.data ?? [];
+    const active = list.find((s) => {
+      if (!s.effectiveFrom) return false;
+      const startedOk = !dayjs(s.effectiveFrom).startOf('day').isAfter(today);
+      const notEnded = !s.effectiveTo || !dayjs(s.effectiveTo).startOf('day').isBefore(today);
+      return startedOk && notEnded;
+    });
+    return active ?? null;
+  }, [salaryQuery.data]);
+  /** 0원/null 또는 기본 호봉(=1) 인 경우 미등록으로 본다 (백엔드 자동 생성 default). */
+  const isSalaryPending = useMemo(() => {
+    if (!activeSalary) return true;
+    const base = activeSalary.baseSalary;
+    if (base != null && base > 0) return false;
+    return true;
+  }, [activeSalary]);
+  const goToSalaryRegister = () => {
+    void navigate({
+      to: '/app/payroll/admin',
+      search: { tab: 'register', createForMemberId: memberId },
+    });
+  };
 
   const historyQuery = useQuery({
     queryKey: ['member', 'history', memberId],
@@ -223,6 +261,46 @@ export function MemberDetailPage() {
               <SectionBlock title="연락·식별">
                 <ProfileInfoRow icon={<MailOutlined />} label="이메일" value={member.email} valueTitle={member.email} />
               </SectionBlock>
+
+              {canViewSalary ? (
+                <SectionBlock title="급여">
+                  {salaryQuery.isLoading ? (
+                    <div className="tw-py-2">
+                      <Spin size="small" />
+                    </div>
+                  ) : isSalaryPending ? (
+                    <ProfileInfoRow
+                      icon={<DollarOutlined />}
+                      label="기본급"
+                      value={<Tag color="warning">미등록</Tag>}
+                    />
+                  ) : (
+                    <>
+                      {activeSalary?.step != null ? (
+                        <ProfileInfoRow
+                          icon={<RiseOutlined />}
+                          label="호봉"
+                          value={`${activeSalary.step}호봉`}
+                        />
+                      ) : null}
+                      <ProfileInfoRow
+                        icon={<DollarOutlined />}
+                        label="기본급"
+                        value={
+                          activeSalary?.baseSalary != null
+                            ? `${Number(activeSalary.baseSalary).toLocaleString('ko-KR')}원`
+                            : '—'
+                        }
+                      />
+                      <ProfileInfoRow
+                        icon={<CalendarOutlined />}
+                        label="적용 시작"
+                        value={activeSalary?.effectiveFrom ?? '—'}
+                      />
+                    </>
+                  )}
+                </SectionBlock>
+              ) : null}
             </div>
 
             {(canOpenMemberHistory || hasPermission(PERM.MEMBER_UPDATE)) ? (
@@ -293,10 +371,74 @@ export function MemberDetailPage() {
               휴직 또는 복직 처리 시 해당 구성원의 서비스 접속 권한이 즉시 변경됩니다.
             </Typography.Paragraph>
           </Card>
+
+          {canViewSalary ? (
+            <Card
+              className="tw-mt-6 tw-overflow-hidden tw-rounded-2xl tw-border-slate-200 tw-shadow-sm"
+              title={<span className="tw-text-base tw-font-bold tw-text-slate-900">급여 관리</span>}
+              extra={
+                <AppButton
+                  variant="primary"
+                  icon={<DollarOutlined />}
+                  onClick={goToSalaryRegister}
+                >
+                  급여 등록
+                </AppButton>
+              }
+              styles={{ body: { paddingTop: 16 } }}
+            >
+              {salaryQuery.isLoading ? (
+                <div className="tw-py-4 tw-text-center">
+                  <Spin />
+                </div>
+              ) : isSalaryPending ? (
+                <Alert
+                  type="warning"
+                  showIcon
+                  message="기본급이 아직 등록되지 않았습니다."
+                  description="입사 시 자동으로 0원(연봉제) 또는 1호봉(호봉제) 으로 임시 생성되었습니다. [급여 등록] 으로 실제 금액을 등록해 주세요."
+                />
+              ) : (
+                <div className="tw-grid tw-grid-cols-2 md:tw-grid-cols-4 tw-gap-3 tw-text-sm">
+                  <div>
+                    <div className="tw-text-xs tw-text-slate-500">기본급</div>
+                    <div className="tw-mt-1 tw-text-base tw-font-semibold tw-text-slate-900">
+                      {activeSalary?.baseSalary != null
+                        ? `${Number(activeSalary.baseSalary).toLocaleString('ko-KR')}원`
+                        : '—'}
+                    </div>
+                  </div>
+                  {activeSalary?.step != null ? (
+                    <div>
+                      <div className="tw-text-xs tw-text-slate-500">호봉</div>
+                      <div className="tw-mt-1 tw-text-base tw-font-semibold tw-text-slate-900">
+                        {activeSalary.step}호봉
+                      </div>
+                    </div>
+                  ) : null}
+                  <div>
+                    <div className="tw-text-xs tw-text-slate-500">적용 시작</div>
+                    <div className="tw-mt-1 tw-text-base tw-text-slate-900">
+                      {activeSalary?.effectiveFrom ?? '—'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="tw-text-xs tw-text-slate-500">부양가족수</div>
+                    <div className="tw-mt-1 tw-text-base tw-text-slate-900">
+                      {activeSalary?.dependentCount ?? 1}
+                    </div>
+                  </div>
+                </div>
+              )}
+              <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-4 !tw-text-xs">
+                연봉 인상·직급 변경 등 급여 이력을 추가할 때도 [급여 등록] 으로 새 이력을 만듭니다.
+              </Typography.Paragraph>
+            </Card>
+          ) : null}
         </main>
       </div>
 
-      <AppSingleActionModal
+      <Modal
         title={
           <span>
             직원 인사 이력
@@ -306,13 +448,13 @@ export function MemberDetailPage() {
           </span>
         }
         open={historyOpen}
-        onClose={() => setHistoryOpen(false)}
-        onSubmit={() => setHistoryOpen(false)}
-        submitText="닫기"
+        onCancel={() => setHistoryOpen(false)}
+        footer={null}
         width={960}
         destroyOnHidden
+        centered
+        className="[&_.ant-modal-body]:tw-max-h-[min(85vh,800px)] [&_.ant-modal-body]:tw-overflow-y-auto"
       >
-        <div className="tw-max-h-[min(85vh,800px)] tw-overflow-y-auto tw-px-5 tw-py-4">
         <Typography.Paragraph type="secondary" className="!tw-mb-3 !tw-text-xs">
           승진·부서 이동 등 인사 변경 이력입니다. 적용 종료일이 없으면 현재 적용 중인 이력입니다.
         </Typography.Paragraph>
@@ -378,8 +520,7 @@ export function MemberDetailPage() {
             ]}
           />
         )}
-        </div>
-      </AppSingleActionModal>
+      </Modal>
     </div>
   );
 }

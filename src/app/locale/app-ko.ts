@@ -20,7 +20,7 @@ export const APP_MENU_LABEL: Record<string, string> = {
   '/app/income': '소득관리',
   '/app/notifications': '알림',
   '/app/performance': '목표',
-  '/app/evaluations': '평가',
+  '/app/evaluations': '내 평가',
   '/app/meetings': '면담',
   '/app/settings': '설정',
   '/app/ai-documents': 'HR 정책 문서',
@@ -31,17 +31,16 @@ export const APP_MENU_LABEL: Record<string, string> = {
   '/app/attendance/work-time': '내 주간 근무시간',
   '/app/attendance/company': '근태 현황',
   '/app/attendance/corrections': '출퇴근 정정 검토',
-  '/app/attendance/holidays': '휴무일/공휴일 관리',
+  '/app/attendance/holidays': '공휴일 관리',
   '/app/attendance/schedules': '근무스케줄 관리',
   '/app/attendance/overtime-policies': '연장근로 정책',
   '/app/attendance/flexible-slots': '시차 출퇴근 시간대',
   '/app/attendance/overtime-status': '초과근무 현황',
-  '/app/leave/grant': '특별휴가 일괄 부여',
   '/app/leave/policies': '연차 정책 관리',
   '/app/leave/absence': '휴직 관리',
-  '/app/leave/types': '휴가 관리',
+  '/app/leave/types': '휴가 종류 관리',
   '/app/leave/my-promotion': '휴가 계획 회신',
-  '/app/leave/promotion-no-response': '연차 통보 미응답자 관리',
+  '/app/leave/promotion-no-response': '촉진 알림 현황',
   '/app/payroll/admin': '급여 정산 관리',
   '/app/payroll/admin/allowances': '수당 관리',
   '/app/payroll/tax-summary': '세금·4대보험',
@@ -101,10 +100,10 @@ export const APP_MENU_ORG_CHART_LABEL = '전체 조직도';
 export const APP_MENU_ESG_GROUP_LABEL = 'ESG';
 
 /** 근무 묶음 */
-export const APP_MENU_WORK_GROUP_LABEL = '근태';
+export const APP_MENU_WORK_GROUP_LABEL = '근태 관리';
 
 /** 휴가 묶음 */
-export const APP_MENU_LEAVE_GROUP_LABEL = '휴가';
+export const APP_MENU_LEAVE_GROUP_LABEL = '휴무 관리';
 
 /** 상단 헤더 등에 표시하는 현재 화면 제목 */
 export function appHeaderTitleFromPath(
@@ -120,13 +119,12 @@ export function appHeaderTitleFromPath(
   if (pathname === '/app/me/edit') return '내 정보 수정';
   if (pathname === '/app/attendance/monthly') return '개인 월근태근무';
   if (pathname === '/app/attendance/schedules/my') return '개인 근무 스케줄';
-  if (pathname === '/app/attendance/overtime') return '초과근무 관리';
+  if (pathname === '/app/attendance/overtime') return '초과 근무 관리';
   if (pathname === '/app/attendance/work-time') return '내 주간 근무시간';
   if (pathname === '/app/attendance/company') return '근태 현황';
   if (pathname === '/app/attendance/overtime-policies') return '연장근로 정책';
   if (pathname === '/app/attendance/overtime-status') return '초과근무 현황';
   if (pathname === '/app/attendance/flexible-slots') return '시차 출퇴근 시간대';
-  if (pathname === '/app/leave/grant') return '특별휴가 일괄 부여';
   if (pathname === '/app/leave/policies') return '연차 정책 관리';
   if (pathname === '/app/leave/absence') return '휴직 관리';
   if (pathname === '/app/leave/types') return '휴가 종류 관리';
@@ -339,7 +337,7 @@ export const PERFORMANCE_PAGE_KO = {
   activityEmpty: '등록된 활동이 없습니다.',
   activityShowMore: '더보기',
   activityShowLess: '접기',
-  /** 목표 상세 — 자동 집계(⚡) 설명 (OKR 레퍼런스 톤) */
+  /** 목표 상세 — 자동 집계(⚡) 설명 (목표 레퍼런스 톤) */
   autoUpdateTooltip:
     '하위 목표·실적이 반영되면 이 목표의 진행률을 자동으로 다시 계산해요. 직접 %를 바꾸려면 자동 집계를 끄세요.',
   /** 수동 진행 반영 (POST /goal/{id}/updates) */
@@ -374,7 +372,7 @@ export const PERFORMANCE_PAGE_KO = {
 /** 평가(/app/evaluations) 화면 */
 export const EVALUATION_PAGE_KO = {
   /** 허브 상단 영문 아이라인 */
-  workspaceEyebrow: 'Reviews & calibration hub',
+  workspaceEyebrow: '평가 운영',
   // Page
   pageTitle: '평가 관리',
 
@@ -383,38 +381,38 @@ export const EVALUATION_PAGE_KO = {
   tabMyEvaluations: '내 평가',
   tabDesigns: '평가 설계',
   tabProgress: '진행 관리',
-  tabCalibration: '캘리브레이션',
+  tabCalibration: '등급 조정',
   tabAnalytics: '결과 분석',
   tabAnomalies: '오류 감지',
   myEvaluationsEmptyHint:
     '할당된 평가가 없을 때: 시즌이 초안이면 관리자가 시즌을 시작해야 평가 할당이 생깁니다. 이미 진행 중인 시즌이면 그룹에 평가자를 지정한 뒤 저장했는지 확인하세요. (저장 시 할당이 갱신됩니다)',
 
   // Season
-  seasonAdd: '시즌 추가',
-  seasonName: '시즌명',
+  seasonAdd: '평가 기간 추가',
+  seasonName: '평가명',
   seasonType: '유형',
   seasonPeriod: '기간',
-  /** 시즌 생성 — 봉인 키 vs 운영 기간 분리 */
-  seasonOkrPeriod: '봉인할 OKR 회차',
+  /** 시즌 생성 — 평가 기준 설정 키 vs 진행 기간 분리 */
+  seasonOkrPeriod: '평가에 사용할 목표 기간',
   seasonOkrPeriodHint:
-    '활성화 시 이 주기·시작일과 일치하는 ACTIVE 목표만 스냅샷에 봉인됩니다. 목표 작성 화면의 분기·시작일과 같아야 합니다.',
-  seasonOpsPeriod: '평가 운영 기간',
-  seasonOpsPeriodHint: '자기평가·캘리브레이션 등 평가 프로세스의 운영 구간입니다. OKR 회차와 달라도 됩니다.',
+    '평가를 시작하면 이 목표 기간의 승인 완료 목표만 평가 기준으로 사용됩니다.',
+  seasonOpsPeriod: '평가 진행 기간',
+  seasonOpsPeriodHint: '자기평가·등급 조정 등 평가 프로세스의 운영 구간입니다. 목표 기간과 달라도 됩니다.',
   seasonCycleYear: '연도',
-  seasonCycleSegment: '회차',
-  seasonTargetPreview: '봉인 기준 시작일',
+  seasonCycleSegment: '기간',
+  seasonTargetPreview: '평가 기준 시작일',
   seasonStatus: '상태',
   seasonActions: '액션',
   seasonEdit: '편집',
   seasonStart: '시작',
   seasonClose: '종료',
   seasonView: '조회',
-  seasonSelect: '시즌 선택',
-  seasonStartConfirm: '시즌을 시작하시겠습니까?',
-  seasonCloseConfirm: '시즌을 종료하시겠습니까?',
-  seasonCreated: '시즌이 생성되었습니다.',
-  seasonStarted: '시즌이 시작되었습니다.',
-  seasonClosed: '시즌이 종료되었습니다.',
+  seasonSelect: '평가 기간 선택',
+  seasonStartConfirm: '평가를 시작하시겠습니까?',
+  seasonCloseConfirm: '평가를 종료하시겠습니까?',
+  seasonCreated: '평가 기간이 생성되었습니다.',
+  seasonStarted: '평가가 시작되었습니다.',
+  seasonClosed: '평가가 종료되었습니다.',
   seasonResultPublishDate: '결과 공개일',
   seasonTypeAnnual: '연간',
   seasonTypeHalfYear: '반기',
@@ -515,10 +513,10 @@ export const EVALUATION_PAGE_KO = {
   progressLastAccess: '마지막 접속',
   progressLastRemind: '마지막 리마인드',
 
-  // Calibration
-  calibrationTitle: '등급 캘리브레이션',
+  // 등급 검토
+  calibrationTitle: '등급 조정',
   calibrationConfirm: '확정하기',
-  calibrationConfirmed: '캘리브레이션이 확정되었습니다.',
+  calibrationConfirmed: '등급 조정이 확정되었습니다.',
   calibrationBaseline: '기준점 설정',
   calibrationRange: '범위',
   calibrationBaselineValue: '기준값',
@@ -534,7 +532,7 @@ export const EVALUATION_PAGE_KO = {
   calibrationConfirmStatus: '확정 상태',
   calibrationUnconfirmed: '미확정',
   calibrationConfirmModal: '확정 후 수정 불가합니다.',
-  /** 결과 공개 시 백엔드가 자동 등급 확정 — 캘리브레이션 탭 안내 */
+  /** 결과 공개 시 백엔드가 자동 등급 확정 — 등급 조정 탭 안내 */
   calibrationPublishAutoNote:
     '결과 공개 시점에 제출이 모두 완료된 시즌은, 절대평가 구간·상대평가 목표 분포에 따라 등급이 자동 확정됩니다. 공개 전에 미리 같은 기준으로 고정하려면 아래 「확정하기」를 사용하세요. 이미 확정된 시즌은 공개 시 등급 산식을 다시 덮어쓰지 않습니다.',
 

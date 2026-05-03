@@ -7,6 +7,7 @@
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  Alert,
   App,
   Button,
   Card,
@@ -31,6 +32,8 @@ import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import { memberApi } from '@/features/member/api/memberApi';
 import { SalaryTab } from '@/pages/app/salary-service/admin/AdminSalarySettingsPage';
+import { SalaryRegisterTab } from '@/pages/app/salary-service/admin/SalaryRegisterTab';
+import { AdminMemberAllowancePage } from '@/pages/app/salary-service/admin/AdminMemberAllowancePage';
 import type {
   Payroll,
   PayrollAdminListItem,
@@ -128,13 +131,16 @@ export function AdminPayrollPage() {
 
   // 활성 탭을 URL search params 와 동기화 — 상세 화면에서 뒤로가기 시 같은 탭 유지
   const search = useSearch({ strict: false }) as {
-    tab?: 'company' | 'member' | 'salary';
+    tab?: 'company' | 'member' | 'register' | 'salary' | 'allowances';
+    /** 직원 상세/생성 직후 deep-link 로 들어오면 SalaryTab 이 해당 직원으로 prefill 된 등록 모달을 자동으로 띄운다. */
+    createForMemberId?: string;
   };
   const activeTab = search?.tab ?? 'company';
   const setActiveTab = (key: string) => {
     void navigate({
       to: '/app/payroll/admin',
-      search: { tab: key as 'company' | 'member' | 'salary' },
+      // 탭 전환 시 deep-link 파라미터(createForMemberId)는 1회성이라 함께 비운다.
+      search: { tab: key as 'company' | 'member' | 'register' | 'salary' | 'allowances' },
     });
   };
 
@@ -145,6 +151,13 @@ export function AdminPayrollPage() {
   const listQ = useQuery({
     queryKey: ['salary', 'payroll', 'admin-list', ym],
     queryFn: () => salaryApi.payroll.listByCompanyMonth(ym),
+  });
+
+  /* ── 급여대장 사전 검증 — 정산 시작 전 가드 알림에 사용 ── */
+  const precheckQ = useQuery({
+    queryKey: ['salary', 'salaries', 'precheck'],
+    queryFn: () => salaryApi.salary.precheck(),
+    staleTime: 60_000,
   });
 
   const rows = listQ.data ?? [];
@@ -394,7 +407,7 @@ export function AdminPayrollPage() {
           급여 정산 관리
           </Typography.Title>
           <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-sm">
-            매월 배치로 자동 생성된 급여대장을 검증·확정·지급 처리합니다.
+            급여 검증과 지급처리를 하고, 등록, 정산 이력 확인을 합니다.
           </Typography.Paragraph>
         </div>
         <Space wrap size="middle">
@@ -420,14 +433,6 @@ export function AdminPayrollPage() {
         </Space>
       </div>
 
-      {/* KPI 4장 */}
-      <div className="tw-grid tw-grid-cols-2 md:tw-grid-cols-4 tw-gap-3">
-        <Card size="small"><Statistic title="대상 직원" value={kpi.total} suffix="명" /></Card>
-        <Card size="small"><Statistic title="작성중" value={kpi.draft} suffix="명" valueStyle={{ color: '#64748b' }} /></Card>
-        <Card size="small"><Statistic title="확정 대기" value={kpi.confirmed} suffix="명" valueStyle={{ color: '#2563eb' }} /></Card>
-        <Card size="small"><Statistic title="지급 완료" value={kpi.paid} suffix="명" valueStyle={{ color: '#16a34a' }} /></Card>
-      </div>
-
       {/* 탭 */}
       <Tabs
         activeKey={activeTab}
@@ -437,97 +442,168 @@ export function AdminPayrollPage() {
             key: 'company',
             label: '이번달 정산',
             children: (
-              <Card>
-                {/* 필터 + 일괄 액션 */}
-                <Space wrap className="tw-mb-3 tw-w-full tw-justify-between">
-                  <Space wrap>
-                    <Input.Search
-                      placeholder="이름·사번·부서 검색"
-                      value={keyword}
-                      onChange={(e) => setKeyword(e.target.value)}
-                      style={{ width: 240 }}
-                      allowClear
-                    />
-                    <Select
-                      value={statusFilter}
-                      onChange={setStatusFilter}
-                      style={{ width: 130 }}
-                      options={[
-                        { value: 'ALL', label: '상태 전체' },
-                        { value: 'DRAFT', label: '작성중' },
-                        { value: 'CONFIRMED', label: '확정' },
-                        { value: 'PAID', label: '지급완료' },
-                      ]}
-                    />
-                    <Select
-                      value={departmentFilter}
-                      onChange={setDepartmentFilter}
-                      style={{ width: 160 }}
-                      options={[{ value: 'ALL', label: '부서 전체' }, ...departmentOptions]}
-                    />
-                  </Space>
-                  <Space wrap>
-                    <Popconfirm
-                      title={`선택 ${selectedDraftIds.length}건을 일괄 확정할까요?`}
-                      okText="확정"
-                      cancelText="취소"
-                      disabled={selectedDraftIds.length === 0}
-                      onConfirm={() => bulkConfirmM.mutate(selectedDraftIds)}
-                    >
-                      <Button
-                        type="primary"
-                        disabled={selectedDraftIds.length === 0}
-                        loading={bulkConfirmM.isPending}
-                      >
-                        일괄 확정 ({selectedDraftIds.length})
-                      </Button>
-                    </Popconfirm>
-                    <Popconfirm
-                      title={`선택 ${selectedConfirmedIds.length}건을 일괄 지급 처리할까요?`}
-                      okText="지급"
-                      cancelText="취소"
-                      disabled={selectedConfirmedIds.length === 0}
-                      onConfirm={() => bulkPayM.mutate(selectedConfirmedIds)}
-                    >
-                      <Button
-                        disabled={selectedConfirmedIds.length === 0}
-                        loading={bulkPayM.isPending}
-                      >
-                        일괄 지급 ({selectedConfirmedIds.length})
-                      </Button>
-                    </Popconfirm>
-                  </Space>
-                </Space>
+              <Space direction="vertical" className="tw-w-full" size={12}>
+                {/* 정산 가드 — 활성 Salary 미등록 / 계좌 미등록 직원이 있으면 경고 */}
+                {precheckQ.data && (precheckQ.data.missingSalaryCount > 0
+                    || precheckQ.data.missingBankAccountCount > 0) ? (
+                  <Alert
+                    type="warning"
+                    showIcon
+                    message="정산 시작 전 확인 필요"
+                    description={
+                      <div className="tw-text-sm">
+                        {precheckQ.data.missingSalaryCount > 0 ? (
+                          <div>
+                            <b>활성 Salary 미등록 {precheckQ.data.missingSalaryCount}명</b>{' '}
+                            <span className="tw-text-slate-500">
+                              ({precheckQ.data.missingSalary
+                                .slice(0, 5)
+                                .map((m) => m.name ?? m.memberId)
+                                .join(', ')}
+                              {precheckQ.data.missingSalary.length > 5 ? ` 외 ${precheckQ.data.missingSalary.length - 5}명` : ''})
+                            </span>{' '}
+                            —{' '}
+                            <Link
+                              to="/app/payroll/admin"
+                              search={{ tab: 'register' }}
+                              className="tw-font-medium tw-text-[#2563EB]"
+                            >
+                              [급여 등록] 에서 등록 -&gt;
+                            </Link>
+                          </div>
+                        ) : null}
+                        {precheckQ.data.missingBankAccountCount > 0 ? (
+                          <div className="tw-mt-1">
+                            <b>계좌 미등록 {precheckQ.data.missingBankAccountCount}명</b>{' '}
+                            <span className="tw-text-slate-500">
+                              ({precheckQ.data.missingBankAccount
+                                .slice(0, 5)
+                                .map((m) => m.name ?? m.memberId)
+                                .join(', ')}
+                              {precheckQ.data.missingBankAccount.length > 5 ? ` 외 ${precheckQ.data.missingBankAccount.length - 5}명` : ''})
+                            </span>{' '}
+                            — 직원 본인이 마이페이지에서 계좌를 등록해야 이체됩니다.
+                          </div>
+                        ) : null}
+                      </div>
+                    }
+                  />
+                ) : null}
 
-                <Table<PayrollAdminListItem>
-                  rowKey={(r) => r.payrollId}
-                  loading={listQ.isLoading}
-                  dataSource={filtered}
-                  columns={columns}
-                  pagination={{ pageSize: 20, showSizeChanger: true }}
-                  rowSelection={{
-                    selectedRowKeys: selectedKeys,
-                    onChange: setSelectedKeys,
-                  }}
-                  locale={{ emptyText: '해당 월의 급여대장이 없습니다. 우측 상단 [재계산] 버튼으로 생성하세요.' }}
-                  onRow={(r) => ({
-                    onClick: () => navigate({ to: '/app/payroll/admin/$payrollId', params: { payrollId: r.payrollId }, search: { tab: 'company' } }),
-                    style: { cursor: 'pointer' },
-                  })}
-                  size="middle"
-                />
-              </Card>
+                {/* KPI 4장: 이번달 정산 탭 내부 상단 */}
+                <div className="tw-grid tw-grid-cols-2 md:tw-grid-cols-4 tw-gap-3">
+                  <Card size="small"><Statistic title="대상 직원" value={kpi.total} suffix="명" /></Card>
+                  <Card size="small"><Statistic title="작성중" value={kpi.draft} suffix="명" valueStyle={{ color: '#64748b' }} /></Card>
+                  <Card size="small"><Statistic title="확정 대기" value={kpi.confirmed} suffix="명" valueStyle={{ color: '#2563eb' }} /></Card>
+                  <Card size="small"><Statistic title="지급 완료" value={kpi.paid} suffix="명" valueStyle={{ color: '#16a34a' }} /></Card>
+                </div>
+
+                <Card>
+                  {/* 필터 + 일괄 액션 */}
+                  <Space wrap className="tw-mb-3 tw-w-full tw-justify-between">
+                    <Space wrap>
+                      <Input.Search
+                        placeholder="이름·사번·부서 검색"
+                        value={keyword}
+                        onChange={(e) => setKeyword(e.target.value)}
+                        style={{ width: 240 }}
+                        allowClear
+                      />
+                      <Select
+                        value={statusFilter}
+                        onChange={setStatusFilter}
+                        style={{ width: 130 }}
+                        options={[
+                          { value: 'ALL', label: '상태 전체' },
+                          { value: 'DRAFT', label: '작성중' },
+                          { value: 'CONFIRMED', label: '확정' },
+                          { value: 'PAID', label: '지급완료' },
+                        ]}
+                      />
+                      <Select
+                        value={departmentFilter}
+                        onChange={setDepartmentFilter}
+                        style={{ width: 160 }}
+                        options={[{ value: 'ALL', label: '부서 전체' }, ...departmentOptions]}
+                      />
+                    </Space>
+                    <Space wrap>
+                      <Popconfirm
+                        title={`선택 ${selectedDraftIds.length}건을 일괄 확정할까요?`}
+                        okText="확정"
+                        cancelText="취소"
+                        disabled={selectedDraftIds.length === 0}
+                        onConfirm={() => bulkConfirmM.mutate(selectedDraftIds)}
+                      >
+                        <Button
+                          type="primary"
+                          disabled={selectedDraftIds.length === 0}
+                          loading={bulkConfirmM.isPending}
+                        >
+                          일괄 확정 ({selectedDraftIds.length})
+                        </Button>
+                      </Popconfirm>
+                      <Popconfirm
+                        title={`선택 ${selectedConfirmedIds.length}건을 일괄 지급 처리할까요?`}
+                        okText="지급"
+                        cancelText="취소"
+                        disabled={selectedConfirmedIds.length === 0}
+                        onConfirm={() => bulkPayM.mutate(selectedConfirmedIds)}
+                      >
+                        <Button
+                          disabled={selectedConfirmedIds.length === 0}
+                          loading={bulkPayM.isPending}
+                        >
+                          일괄 지급 ({selectedConfirmedIds.length})
+                        </Button>
+                      </Popconfirm>
+                    </Space>
+                  </Space>
+
+                  <Table<PayrollAdminListItem>
+                    rowKey={(r) => r.payrollId}
+                    loading={listQ.isLoading}
+                    dataSource={filtered}
+                    columns={columns}
+                    pagination={{ pageSize: 20, showSizeChanger: true }}
+                    rowSelection={{
+                      selectedRowKeys: selectedKeys,
+                      onChange: setSelectedKeys,
+                    }}
+                    locale={{ emptyText: '해당 월의 급여대장이 없습니다. 우측 상단 [재계산] 버튼으로 생성하세요.' }}
+                    onRow={(r) => ({
+                      onClick: () => navigate({ to: '/app/payroll/admin/$payrollId', params: { payrollId: r.payrollId }, search: { tab: 'company' } }),
+                      style: { cursor: 'pointer' },
+                    })}
+                    size="middle"
+                  />
+                </Card>
+              </Space>
             ),
           },
           {
             key: 'member',
-            label: '정산 이력',
+            label: '월별 정산 결과',
             children: <CompanyHistoryTab />,
           },
           {
+            key: 'register',
+            label: '급여 등록',
+            children: <SalaryRegisterTab createForMemberId={search?.createForMemberId} />,
+          },
+          {
             key: 'salary',
-            label: '직원 급여 관리',
-            children: <SalaryTab />,
+            label: '급여 변동 이력',
+            children: (
+              <SalaryTab
+                createForMemberId={search?.createForMemberId}
+              />
+            ),
+          },
+          {
+            key: 'allowances',
+            label: '수당 관리',
+            children: <AdminMemberAllowancePage />,
           },
         ]}
       />

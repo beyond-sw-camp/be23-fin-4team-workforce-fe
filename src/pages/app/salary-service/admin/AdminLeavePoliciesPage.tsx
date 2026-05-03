@@ -37,6 +37,8 @@ type FormValues = {
   promotion2ndBeforeDays?: number | null;
   isCarryoverYn: boolean;
   carryoverDays?: number | null;
+  /** 이월 동의서 사용 여부 - true 면 직원별 동의 받아야 이월 처리 */
+  isCarryoverConsentYn: boolean;
   isPayoutYn: boolean;
 };
 
@@ -94,6 +96,7 @@ export function AdminLeavePoliciesPage() {
     promotion2ndBeforeDays: v.isPromotionYn ? (v.promotion2ndBeforeDays ?? null) : null,
     isCarryoverYn: toYn(v.isCarryoverYn),
     carryoverDays: v.isCarryoverYn ? (v.carryoverDays ?? null) : null,
+    isCarryoverConsentYn: v.isCarryoverYn ? toYn(v.isCarryoverConsentYn) : 'N',
     isPayoutYn: toYn(v.isPayoutYn),
   });
 
@@ -187,6 +190,7 @@ export function AdminLeavePoliciesPage() {
                   promotion1stBeforeDays: r.promotion1stBeforeDays ?? undefined,
                   promotion2ndBeforeDays: r.promotion2ndBeforeDays ?? undefined,
                   isCarryoverYn: yn(r.isCarryoverYn),
+                  isCarryoverConsentYn: yn(r.isCarryoverConsentYn),
                   carryoverDays: r.carryoverDays ?? undefined,
                   isPayoutYn: yn(r.isPayoutYn),
                 });
@@ -283,7 +287,12 @@ export function AdminLeavePoliciesPage() {
                 extraIntervalYears: 2,
                 maxAnnualDays: 25,
                 isPromotionYn: false,
+                // 신규 정책 등록 시 표준 기본값 - 근로기준법 권고 기준치
+                promotion1stBeforeDays: 180,
+                promotion2ndBeforeDays: 60,
                 isCarryoverYn: false,
+                carryoverDays: 5,
+                isCarryoverConsentYn: false,
                 isPayoutYn: false,
               });
               setOpen(true);
@@ -328,7 +337,14 @@ export function AdminLeavePoliciesPage() {
         cancelText="취소"
         title={editing ? '연차 정책 수정' : '연차 정책 등록'}
         destroyOnHidden
-        width={720}
+        width="min(96vw, 1180px)"
+        styles={{
+          body: {
+            maxHeight: 'calc(100vh - 180px)',
+            overflowY: 'auto',
+            paddingRight: 12,
+          },
+        }}
       >
         <div className="tw-px-5 tw-py-4">
         <PolicyForm form={form} />
@@ -356,6 +372,7 @@ function PolicyForm({ form }: PolicyFormProps) {
   const carryoverDays = Form.useWatch('carryoverDays', form);
   const promo1st = Form.useWatch('promotion1stBeforeDays', form);
   const promo2nd = Form.useWatch('promotion2ndBeforeDays', form);
+  const accrualBaseWatch = Form.useWatch('accrualBase', form);
   // 근속 가산 미리보기
   const extraDays = Form.useWatch('extraDaysPerInterval', form);
   const intervalYears = Form.useWatch('extraIntervalYears', form);
@@ -377,7 +394,15 @@ function PolicyForm({ form }: PolicyFormProps) {
   const isLossRisk = isCarryover === false && isPayout === false;
 
   return (
-    <Form<FormValues> form={form} layout="vertical" requiredMark="optional">
+    <Form<FormValues>
+      form={form}
+      layout="vertical"
+      requiredMark="optional"
+      size="small"
+      className="wf-leave-policy-form"
+    >
+      <div className="tw-flex tw-gap-4 tw-items-start">
+        <div className="tw-flex-1 tw-min-w-0">
       {/* ── ① 발생 ─────────────────────────────────────────── */}
       <SectionHeader index="1" title="발생" desc="연차가 매년 자동으로 부여되는 기준과 일수" />
       <Space className="tw-w-full" size={16} align="start">
@@ -455,7 +480,7 @@ function PolicyForm({ form }: PolicyFormProps) {
         </Space>
       </div>
 
-      <Divider />
+      <Divider className="!tw-my-3" />
 
       {/* ── ② 촉진제도 ─────────────────────────────────────── */}
       <SectionHeader
@@ -463,12 +488,13 @@ function PolicyForm({ form }: PolicyFormProps) {
         title="촉진제도"
         desc="미사용 연차 사용을 사전 안내하는 제도 (근로기준법 61조). 운영 시 미사용 수당 지급 의무 면제 가능"
       />
-      <Form.Item label="촉진제도 사용" name="isPromotionYn" valuePropName="checked">
-        <Switch checkedChildren="ON" unCheckedChildren="OFF" />
-      </Form.Item>
+      <div className="tw-flex tw-flex-wrap tw-items-start tw-gap-4">
+        <Form.Item label="촉진제도 사용" name="isPromotionYn" valuePropName="checked" className="!tw-mb-0">
+          <Switch checkedChildren="ON" unCheckedChildren="OFF" />
+        </Form.Item>
       {isPromotion ? (
-        <>
-          <Space className="tw-w-full" size={16} align="start">
+        <div className="tw-flex-1 tw-min-w-0">
+          <Space className="tw-w-full" size={16} align="start" wrap>
             <Form.Item
               label="1차 통보 시점"
               name="promotion1stBeforeDays"
@@ -478,10 +504,18 @@ function PolicyForm({ form }: PolicyFormProps) {
                   validator: (_, value) => {
                     if (typeof value !== 'number') return Promise.resolve();
                     const second = form.getFieldValue('promotion2ndBeforeDays') as number | undefined;
-                    if (typeof second === 'number' && value <= second) {
-                      return Promise.reject(
-                        new Error('1차는 2차보다 더 일찍 통보해야 합니다 (값이 더 커야 함).'),
-                      );
+                    if (typeof second === 'number') {
+                      if (value <= second) {
+                        return Promise.reject(
+                          new Error('1차는 2차보다 더 일찍 통보해야 합니다 (값이 더 커야 함).'),
+                        );
+                      }
+                      // 근로기준법 61조 - 1차 통보 후 10일 이내 직원 회신 권리 보장
+                      if (value - second < 10) {
+                        return Promise.reject(
+                          new Error('1차와 2차 사이는 최소 10일 이상이어야 합니다 (직원 회신 기간 보장).'),
+                        );
+                      }
                     }
                     return Promise.resolve();
                   },
@@ -512,10 +546,18 @@ function PolicyForm({ form }: PolicyFormProps) {
                       return Promise.reject(new Error('1일 이상이어야 합니다.'));
                     }
                     const first = form.getFieldValue('promotion1stBeforeDays') as number | undefined;
-                    if (typeof first === 'number' && value >= first) {
-                      return Promise.reject(
-                        new Error('2차는 1차 이후여야 합니다 (값이 더 작아야 함).'),
-                      );
+                    if (typeof first === 'number') {
+                      if (value >= first) {
+                        return Promise.reject(
+                          new Error('2차는 1차 이후여야 합니다 (값이 더 작아야 함).'),
+                        );
+                      }
+                      // 근로기준법 61조 - 1차/2차 사이 최소 10일
+                      if (first - value < 10) {
+                        return Promise.reject(
+                          new Error('1차와 2차 사이는 최소 10일 이상이어야 합니다 (직원 회신 기간 보장).'),
+                        );
+                      }
                     }
                     return Promise.resolve();
                   },
@@ -535,7 +577,7 @@ function PolicyForm({ form }: PolicyFormProps) {
           <Alert
             type="info"
             showIcon
-            className="!tw-mb-3"
+            className="!tw-mb-0 !tw-mt-2"
             message="통보 시점 안내"
             description={
               <>
@@ -543,10 +585,11 @@ function PolicyForm({ form }: PolicyFormProps) {
               </>
             }
           />
-        </>
+        </div>
       ) : null}
+      </div>
 
-      <Divider />
+      <Divider className="!tw-my-3" />
 
       {/* ── ③ 이월 ─────────────────────────────────────────── */}
       <SectionHeader
@@ -554,33 +597,45 @@ function PolicyForm({ form }: PolicyFormProps) {
         title="이월"
         desc="회계연도 종료 후 미사용 연차를 다음 해로 넘김. 매년 1/1 자동 처리"
       />
-      <Form.Item label="이월 허용" name="isCarryoverYn" valuePropName="checked">
-        <Switch checkedChildren="ON" unCheckedChildren="OFF" />
-      </Form.Item>
-      {isCarryover ? (
-        <Space className="tw-w-full" size={16} align="start">
-          <Form.Item
-            label="이월 가능 일수 상한"
-            name="carryoverDays"
-            rules={[
-              { required: true, message: '이월 일수를 입력해주세요.' },
-              {
-                validator: (_, value) => {
-                  if (typeof value !== 'number') return Promise.resolve();
-                  if (value <= 0) return Promise.reject(new Error('1일 이상이어야 합니다.'));
-                  return Promise.resolve();
-                },
-              },
-            ]}
-            style={{ width: 220 }}
-            extra="이 일수까지만 다음 해로 넘김"
-          >
-            <InputNumber min={1} addonAfter="일" style={{ width: '100%' }} />
-          </Form.Item>
-        </Space>
-      ) : null}
+      <div className="tw-flex tw-flex-wrap tw-items-start tw-gap-4">
+        <Form.Item label="이월 허용" name="isCarryoverYn" valuePropName="checked" className="!tw-mb-0">
+          <Switch checkedChildren="ON" unCheckedChildren="OFF" />
+        </Form.Item>
+        {isCarryover ? (
+          <div className="tw-flex-1 tw-min-w-0">
+            <Space className="tw-w-full" size={16} align="start" wrap>
+              <Form.Item
+                label="이월 가능 일수 상한"
+                name="carryoverDays"
+                rules={[
+                  { required: true, message: '이월 일수를 입력해주세요.' },
+                  {
+                    validator: (_, value) => {
+                      if (typeof value !== 'number') return Promise.resolve();
+                      if (value <= 0) return Promise.reject(new Error('1일 이상이어야 합니다.'));
+                      return Promise.resolve();
+                    },
+                  },
+                ]}
+                style={{ width: 220 }}
+                extra="이 일수까지만 다음 해로 넘김"
+              >
+                <InputNumber min={1} addonAfter="일" style={{ width: '100%' }} />
+              </Form.Item>
+              <Form.Item
+                label="이월 동의서 사용"
+                name="isCarryoverConsentYn"
+                valuePropName="checked"
+                extra="ON 이면 직원별 동의 받아야 이월 처리"
+              >
+                <Switch checkedChildren="ON" unCheckedChildren="OFF" />
+              </Form.Item>
+            </Space>
+          </div>
+        ) : null}
+      </div>
 
-      <Divider />
+      <Divider className="!tw-my-3" />
 
       {/* ── ④ 미사용 수당 ─────────────────────────────────── */}
       <SectionHeader
@@ -597,30 +652,42 @@ function PolicyForm({ form }: PolicyFormProps) {
         <Switch checkedChildren="ON" unCheckedChildren="OFF" />
       </Form.Item>
 
-      {/* ── 정책 요약 시뮬레이터 ─────────────────────────── */}
-      <Divider />
-      <SectionHeader index="✦" title="정책 요약" desc="현재 설정으로 적용될 시나리오" />
-      <PolicySimulator
-        defaultDays={defaultDays}
-        isPromotion={isPromotion}
-        promo1st={promo1st}
-        promo2nd={promo2nd}
-        isCarryover={isCarryover}
-        carryoverDays={carryoverDays}
-        isPayout={isPayout}
-      />
+        </div>
 
-      {/* ── 위험 조합 경고 ─────────────────────────────────── */}
-      {isLossRisk ? (
-        <Alert
-          className="!tw-mt-3"
-          type="warning"
-          showIcon
-          icon={<WarningOutlined />}
-          message="미사용 연차가 그대로 소멸됩니다"
-          description="이월·수당 모두 OFF 상태입니다. 만료 시점에 직원의 미사용 연차가 보상 없이 사라집니다. 노동법상 권고되지 않으니 촉진제도 운영을 함께 검토해주세요."
-        />
-      ) : null}
+        {/* 우측 sticky 정책 요약 */}
+        <div className="tw-w-[320px] tw-shrink-0 tw-sticky tw-top-0 tw-self-start">
+          <SectionHeader index="✦" title="정책 요약" desc="현재 설정 시나리오" />
+          <PolicySimulator
+            defaultDays={defaultDays}
+            isPromotion={isPromotion}
+            promo1st={promo1st}
+            promo2nd={promo2nd}
+            isCarryover={isCarryover}
+            carryoverDays={carryoverDays}
+            isPayout={isPayout}
+            accrualBase={accrualBaseWatch}
+          />
+          {isLossRisk ? (
+            <Alert
+              className="!tw-mt-3"
+              type="warning"
+              showIcon
+              icon={<WarningOutlined />}
+              message="미사용 연차가 그대로 소멸됩니다"
+              description="이월·수당 모두 OFF 상태입니다. 촉진제도 운영을 함께 검토해주세요."
+            />
+          ) : null}
+        </div>
+      </div>
+      {/* 폼 컴팩트화 - 모든 여백 더 축소 */}
+      <style>{`
+        .wf-leave-policy-form .ant-form-item { margin-bottom: 6px; }
+        .wf-leave-policy-form .ant-form-item-label { padding-bottom: 0; }
+        .wf-leave-policy-form .ant-form-item-label > label { font-size: 12px; height: 22px; }
+        .wf-leave-policy-form .ant-form-item-extra { font-size: 10.5px; line-height: 1.2; margin-top: 1px; color: #94a3b8; }
+        .wf-leave-policy-form .ant-divider { margin: 8px 0 !important; border-color: #e2e8f0; }
+        .wf-leave-policy-form .ant-input-number, .wf-leave-policy-form .ant-select { font-size: 12px; }
+      `}</style>
     </Form>
   );
 }
@@ -628,13 +695,13 @@ function PolicyForm({ form }: PolicyFormProps) {
 /** 섹션 헤더 — 번호 뱃지 + 제목 + 설명 한 줄 */
 function SectionHeader({ index, title, desc }: { index: string; title: string; desc: string }) {
   return (
-    <div className="tw-mb-3 tw-flex tw-items-start tw-gap-3">
-      <span className="tw-mt-0.5 tw-inline-flex tw-h-6 tw-w-6 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-full tw-bg-blue-50 tw-text-xs tw-font-semibold tw-text-blue-700">
+    <div className="tw-mb-1 tw-flex tw-items-center tw-gap-1.5">
+      <span className="tw-inline-flex tw-h-4 tw-w-4 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-full tw-bg-blue-50 tw-text-[9px] tw-font-semibold tw-text-blue-700">
         {index}
       </span>
-      <div className="tw-min-w-0">
-        <div className="tw-text-sm tw-font-semibold tw-text-slate-900">{title}</div>
-        <div className="tw-text-xs tw-text-slate-500">{desc}</div>
+      <div className="tw-min-w-0 tw-flex tw-items-baseline tw-gap-1.5">
+        <div className="tw-text-[13px] tw-font-semibold tw-text-slate-900">{title}</div>
+        <div className="tw-text-[11px] tw-text-slate-500 tw-truncate">{desc}</div>
       </div>
     </div>
   );
@@ -649,6 +716,7 @@ function PolicySimulator({
   isCarryover,
   carryoverDays,
   isPayout,
+  accrualBase,
 }: {
   defaultDays?: number;
   isPromotion?: boolean;
@@ -657,6 +725,7 @@ function PolicySimulator({
   isCarryover?: boolean;
   carryoverDays?: number | null;
   isPayout?: boolean;
+  accrualBase?: AccrualBaseCode;
 }) {
   const days = typeof defaultDays === 'number' ? defaultDays : 0;
   const carry = typeof carryoverDays === 'number' ? carryoverDays : 0;
@@ -685,24 +754,31 @@ function PolicySimulator({
         </div>
       ) : null}
       <div className="tw-mt-2 tw-text-xs tw-text-slate-700">
-        예시 — 직원이 <b>{exampleUnused}일</b> 미사용 시:
-        <ul className="tw-mt-1 tw-mb-0 tw-list-disc tw-pl-5">
-          {carriedOver > 0 ? (
-            <li>
-              <b>{carriedOver}일</b> 다음 해로 이월
-            </li>
-          ) : null}
-          {paidOut > 0 ? (
-            <li>
-              <b>{paidOut}일</b> 1월 급여에 미사용 수당으로 반영
-            </li>
-          ) : null}
-          {lost > 0 ? (
-            <li className="tw-text-rose-600">
-              <b>{lost}일</b> 만료로 소멸 (보상 없음)
-            </li>
-          ) : null}
-        </ul>
+        {(() => {
+          // accrualBase 별로 만료/이월/지급 시점 표현 다르게
+          const isHire = accrualBase === 'HIRE_DATE';
+          const expiryWord = isHire ? '입사 기념일에' : '회계연도 종료 시';
+          const carryWord = isHire ? '다음 1년치 잔고로' : '다음 해로';
+          const payoutWord = isHire ? '입사 기념일 다음 급여' : '1월 급여';
+          return (
+            <>
+              예시 — 직원이 <b>{exampleUnused}일</b> 미사용 시 ({expiryWord}):
+              <ul className="tw-mt-1 tw-mb-0 tw-list-disc tw-pl-5">
+                {carriedOver > 0 && (
+                  <li><b>{carriedOver}일</b> {carryWord} 이월</li>
+                )}
+                {paidOut > 0 && (
+                  <li><b>{paidOut}일</b> {payoutWord}에 미사용 수당으로 반영</li>
+                )}
+                {lost > 0 && (
+                  <li className="tw-text-rose-600">
+                    <b>{lost}일</b> 만료로 소멸 (보상 없음)
+                  </li>
+                )}
+              </ul>
+            </>
+          );
+        })()}
       </div>
     </div>
   );

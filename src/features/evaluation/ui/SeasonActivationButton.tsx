@@ -34,7 +34,7 @@ export function SeasonActivationButton({ seasonId, disabled, disabledTooltip }: 
   const activateMut = useMutation({
     mutationFn: () => evaluationRedesignApi.activateSeason(seasonId),
     onSuccess: () => {
-      message.success('시즌이 활성화되었습니다.');
+      message.success('평가를 시작했습니다.');
       queryClient.invalidateQueries({ queryKey: ['eval-seasons'] });
       queryClient.invalidateQueries({ queryKey: ['season-goal-readiness', seasonId] });
     },
@@ -68,7 +68,7 @@ export function SeasonActivationButton({ seasonId, disabled, disabledTooltip }: 
         return;
       }
 
-      message.error(apiMsg || '시즌 활성화에 실패했습니다.');
+      message.error(apiMsg || '평가 시작에 실패했습니다.');
     },
   });
 
@@ -85,7 +85,7 @@ export function SeasonActivationButton({ seasonId, disabled, disabledTooltip }: 
       loading={activateMut.isPending}
       onClick={() => activateMut.mutate()}
     >
-      시즌 활성화
+      평가 시작
     </AppButton>
   );
 
@@ -99,30 +99,37 @@ export function SeasonActivationButton({ seasonId, disabled, disabledTooltip }: 
         button
       )}
 
-      <AppSingleActionModal
+      <Modal
         open={!!leadBlockMessage}
-        onClose={() => setLeadBlockMessage(null)}
-        onSubmit={() => setLeadBlockMessage(null)}
-        submitText="확인"
-        title="Lead 평가자가 필요합니다"
+        onCancel={() => setLeadBlockMessage(null)}
+        title="최종 검토자가 필요합니다"
         width={520}
         destroyOnHidden
+        footer={
+          <div className="tw-flex tw-justify-end">
+            <AppButton variant="primary" onClick={() => setLeadBlockMessage(null)}>
+              확인
+            </AppButton>
+          </div>
+        }
       >
-        <div className="tw-px-5 tw-py-4">
-          {leadBlockMessage ? <LeadFailureBody message={leadBlockMessage} /> : null}
-        </div>
-      </AppSingleActionModal>
+        {leadBlockMessage ? <LeadFailureBody message={leadBlockMessage} /> : null}
+      </Modal>
 
-      <AppSingleActionModal
+      <Modal
         open={!!blocked}
-        onClose={() => setBlocked(null)}
-        onSubmit={() => setBlocked(null)}
-        submitText="확인"
-        title="시즌 활성화 전 확인이 필요합니다"
+        onCancel={() => setBlocked(null)}
+        title="평가 시작 전 확인이 필요합니다"
         width={700}
         destroyOnHidden
+        footer={
+          <div className="tw-flex tw-justify-end">
+            <AppButton variant="primary" onClick={() => setBlocked(null)}>
+              확인
+            </AppButton>
+          </div>
+        }
       >
-        <div className="tw-px-5 tw-py-4">
         {blocked ? (
           <div className="tw-space-y-4">
             <div className="tw-grid tw-grid-cols-1 tw-gap-3 md:tw-grid-cols-2">
@@ -131,14 +138,14 @@ export function SeasonActivationButton({ seasonId, disabled, disabledTooltip }: 
                 eyebrow="AUTO EXCLUDED"
                 value={excludedCount}
                 label="자동 제외 대상"
-                description="퇴사, 휴직 등 이번 시즌 평가 대상에서 제외되는 구성원입니다."
+                description="퇴사, 휴직 등 이번 평가 대상에서 제외되는 구성원입니다."
               />
               <SummaryCard
                 tone="rose"
                 eyebrow="BLOCKERS"
                 value={blockedCount}
                 label="활성화 차단 대상"
-                description="아래 이슈가 해결되어야 시즌을 활성화할 수 있습니다."
+                description="아래 이슈가 해결되어야 평가를 시작할 수 있습니다."
               />
             </div>
 
@@ -148,8 +155,7 @@ export function SeasonActivationButton({ seasonId, disabled, disabledTooltip }: 
             <MemberSection label="개인 목표 없음" members={blocked.missingGoalsMembers} variant="slate" />
           </div>
         ) : null}
-        </div>
-      </AppSingleActionModal>
+      </Modal>
     </>
   );
 }
@@ -161,8 +167,8 @@ function LeadFailureBody({ message }: { message: string }) {
   return (
     <div className="tw-space-y-3 tw-text-sm tw-text-slate-700">
       <p>
-        시즌을 활성화하려면 최종 평가 책임자인 <strong>Lead 평가자</strong>가 필요합니다. 해당 구성원의
-        DOWNWARD 평가자를 지정한 뒤 다시 활성화해 주세요.
+        평가를 시작하려면 최종 등급을 확정할 <strong>최종 검토자</strong>가 필요합니다. 해당 구성원의
+        상급자 평가자를 지정한 뒤 다시 시작해 주세요.
       </p>
       {memberId ? (
         <div className="tw-rounded-xl tw-border tw-border-amber-100 tw-bg-amber-50 tw-px-3 tw-py-2 tw-text-xs">
@@ -172,10 +178,18 @@ function LeadFailureBody({ message }: { message: string }) {
       ) : null}
       <details className="tw-text-xs tw-text-slate-400">
         <summary className="tw-cursor-pointer">원본 메시지</summary>
-        <pre className="tw-mt-1 tw-whitespace-pre-wrap tw-break-all">{message}</pre>
+        <pre className="tw-mt-1 tw-whitespace-pre-wrap tw-break-all">{toUserFriendlyActivationMessage(message)}</pre>
       </details>
     </div>
   );
+}
+
+function toUserFriendlyActivationMessage(message: string) {
+  return message
+    .replaceAll('Lead evaluator', '최종 검토자')
+    .replaceAll('Lead 평가자', '최종 검토자')
+    .replaceAll('Lead', '최종 검토자')
+    .replaceAll('DOWNWARD', '상급자 평가');
 }
 
 function SummaryCard({

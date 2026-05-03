@@ -203,7 +203,7 @@ export function GroupParticipantsDrawer({
         zIndex={10_100}
         width={420}
         centered
-        destroyOnClose
+        destroyOnHidden
       >
         <div className="tw-px-5 tw-py-4">
         {canInvite ? (

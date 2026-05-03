@@ -85,10 +85,10 @@ export const DESIGN_PRESETS: DesignPreset[] = [
     },
     {
         key: 'okr',
-        label: 'OKR·목표 달성',
+        label: '목표 달성',
         description:
-            'OKR 관점에서 달성·임팩트·회고를 함께 보는 템플릿.',
-        name: 'OKR 리뷰 (정량 우선)',
+            '목표 달성도와 성과 근거를 함께 보는 템플릿.',
+        name: '목표 성과 리뷰',
         sections: [
             {
                 title: 'O·KR 달성 수준',

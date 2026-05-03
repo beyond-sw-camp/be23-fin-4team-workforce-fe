@@ -26,7 +26,7 @@ import type { ColumnsType } from 'antd/es/table';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import dayjs, { type Dayjs } from 'dayjs';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
-import { memberApi } from '@/features/member/api/memberApi';
+import { memberApi, type MemberLookupRow } from '@/features/member/api/memberApi';
 import type {
   NegotiationStatusCode,
   NegotiationTypeCode,
@@ -268,7 +268,7 @@ export function AdminSalaryNegotiationsPage() {
             연봉 협상 관리
           </Typography.Title>
           <Typography.Text type="secondary" className="tw-text-xs">
-            정기/승진/수시 협상 등록 → 제출 → 승인 → 적용 (Salary 새 행 자동 생성).
+            정기/승진/수시 연봉 협상 등록 → 제출 → 승인 → 적용
           </Typography.Text>
         </div>
         <Space wrap>
@@ -394,9 +394,6 @@ function RowActions({
         <>
           <Button size="small" type="primary" onClick={() => onDecide(row, 'approve')}>
             승인
-          </Button>
-          <Button size="small" danger onClick={() => onDecide(row, 'reject')}>
-            반려
           </Button>
         </>
       )}
@@ -574,9 +571,8 @@ type BulkFormValues = {
 type BulkRow = {
   memberId: string;
   memberName: string;
+  currentBaseSalary?: number | null;
   proposedBaseSalary: number;
-  proposedJobGradeName?: string;
-  proposedJobTitleName?: string;
   reason?: string;
 };
 
@@ -592,6 +588,104 @@ function BulkCreateModal({
   const { message } = App.useApp();
   const [form] = Form.useForm<BulkFormValues>();
   const [rows, setRows] = useState<BulkRow[]>([]);
+  const [memberKeyword, setMemberKeyword] = useState('');
+  const debouncedMemberKeyword = useDebouncedValue(memberKeyword, 320);
+  const [memberPage, setMemberPage] = useState(0);
+  const [memberPageSize, setMemberPageSize] = useState(20);
+  const [memberOrgFilter, setMemberOrgFilter] = useState<string>('ALL');
+  const [memberJobFilter, setMemberJobFilter] = useState<string>('ALL');
+  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
+  const [memberCache, setMemberCache] = useState<Record<string, MemberLookupRow>>({});
+  const salaryListQ = useQuery({
+    queryKey: ['salary', 'salaries', 'company'],
+    queryFn: () => salaryApi.salary.listByCompany(),
+    enabled: open,
+    staleTime: 60_000,
+  });
+  const activeBaseSalaryByMemberId = useMemo(() => {
+    const today = dayjs().format('YYYY-MM-DD');
+    const byMember = new Map<string, number>();
+    const rows = [...(salaryListQ.data ?? [])].sort(
+      (a, b) => (b.effectiveFrom ?? '').localeCompare(a.effectiveFrom ?? ''),
+    );
+    for (const row of rows) {
+      const memberId = row.memberId ?? '';
+      const baseSalary = row.baseSalary;
+      if (!memberId || baseSalary == null || byMember.has(memberId)) continue;
+      const started = !row.effectiveFrom || row.effectiveFrom <= today;
+      const notEnded = !row.effectiveTo || row.effectiveTo >= today;
+      if (started && notEnded) byMember.set(memberId, baseSalary);
+    }
+    return byMember;
+  }, [salaryListQ.data]);
+
+  const memberLookupQ = useQuery({
+    queryKey: [
+      'member',
+      'search-page',
+      'negotiations-bulk',
+      debouncedMemberKeyword,
+      memberPage,
+      memberPageSize,
+    ],
+    queryFn: () =>
+      memberApi.searchMembersLookupPage({
+        keyword: debouncedMemberKeyword,
+        page: memberPage,
+        size: memberPageSize,
+      }),
+    enabled: open,
+    retry: 1,
+  });
+
+  useEffect(() => {
+    setMemberPage(0);
+  }, [debouncedMemberKeyword]);
+
+  useEffect(() => {
+    const list = memberLookupQ.data?.content ?? [];
+    if (!list.length) return;
+    setMemberCache((prev) => {
+      const next = { ...prev };
+      list.forEach((m) => {
+        if (m.memberId) next[m.memberId] = m;
+      });
+      return next;
+    });
+  }, [memberLookupQ.data?.content]);
+
+  const memberOrgOptions = useMemo(() => {
+    const values = Array.from(
+      new Set(
+        Object.values(memberCache)
+          .map((m) => (m.organizationName ?? '').trim())
+          .filter(Boolean),
+      ),
+    ).sort((a, b) => a.localeCompare(b, 'ko'));
+    return [{ value: 'ALL', label: '전체 부서' }, ...values.map((v) => ({ value: v, label: v }))];
+  }, [memberCache]);
+
+  const memberJobOptions = useMemo(() => {
+    const values = Array.from(
+      new Set(
+        Object.values(memberCache)
+          .map((m) => (m.jobTitleName ?? '').trim())
+          .filter(Boolean),
+      ),
+    ).sort((a, b) => a.localeCompare(b, 'ko'));
+    return [{ value: 'ALL', label: '전체 직급' }, ...values.map((v) => ({ value: v, label: v }))];
+  }, [memberCache]);
+
+  const memberRows = useMemo(() => memberLookupQ.data?.content ?? [], [memberLookupQ.data?.content]);
+  const filteredMemberRows = useMemo(
+    () =>
+      memberRows.filter((m) => {
+        if (memberOrgFilter !== 'ALL' && (m.organizationName ?? '').trim() !== memberOrgFilter) return false;
+        if (memberJobFilter !== 'ALL' && (m.jobTitleName ?? '').trim() !== memberJobFilter) return false;
+        return true;
+      }),
+    [memberRows, memberOrgFilter, memberJobFilter],
+  );
 
   const m = useMutation({
     mutationFn: (payload: SalaryNegotiationBulkCreatePayload) =>
@@ -600,6 +694,13 @@ function BulkCreateModal({
       message.success(`${res.length}건 일괄 등록되었습니다.`);
       form.resetFields();
       setRows([]);
+      setMemberKeyword('');
+      setMemberPage(0);
+      setMemberPageSize(20);
+      setMemberOrgFilter('ALL');
+      setMemberJobFilter('ALL');
+      setSelectedMemberIds([]);
+      setMemberCache({});
       onSuccess();
     },
     onError: (e: Error) => message.error(e.message || '일괄 등록 실패'),
@@ -613,6 +714,7 @@ function BulkCreateModal({
         {
           memberId: m.memberId,
           memberName: m.name ?? '—',
+          currentBaseSalary: activeBaseSalaryByMemberId.get(m.memberId) ?? null,
           proposedBaseSalary: 0,
         },
       ];
@@ -644,8 +746,8 @@ function BulkCreateModal({
       items: rows.map((r) => ({
         memberId: r.memberId,
         proposedBaseSalary: r.proposedBaseSalary,
-        proposedJobGradeName: r.proposedJobGradeName ?? null,
-        proposedJobTitleName: r.proposedJobTitleName ?? null,
+        proposedJobGradeName: null,
+        proposedJobTitleName: null,
         reason: r.reason ?? null,
       })),
     });
@@ -658,6 +760,13 @@ function BulkCreateModal({
       onClose={() => {
         form.resetFields();
         setRows([]);
+        setMemberKeyword('');
+        setMemberPage(0);
+        setMemberPageSize(20);
+        setMemberOrgFilter('ALL');
+        setMemberJobFilter('ALL');
+        setSelectedMemberIds([]);
+        setMemberCache({});
         onCancel();
       }}
       onConfirm={() => form.submit()}
@@ -711,7 +820,95 @@ function BulkCreateModal({
 
         <div className="tw-mb-3">
           <Typography.Text strong>대상 직원 추가</Typography.Text>
-          <BulkMemberAddField onAdd={addMember} />
+          <div className="tw-mt-2 tw-space-y-2">
+            <Space wrap className="tw-w-full">
+              <Input
+                value={memberKeyword}
+                onChange={(e) => setMemberKeyword(e.target.value)}
+                placeholder="이름·이메일·사번 검색 (비워두면 전체)"
+                style={{ width: 260 }}
+                allowClear
+              />
+              <Select
+                value={memberOrgFilter}
+                onChange={setMemberOrgFilter}
+                options={memberOrgOptions}
+                style={{ width: 180 }}
+              />
+              <Select
+                value={memberJobFilter}
+                onChange={setMemberJobFilter}
+                options={memberJobOptions}
+                style={{ width: 160 }}
+              />
+              <Button
+                onClick={() => {
+                  selectedMemberIds.forEach((id) => {
+                    const target = memberCache[id];
+                    if (!target) return;
+                    addMember({ memberId: target.memberId, name: target.name });
+                  });
+                  setSelectedMemberIds([]);
+                }}
+                disabled={selectedMemberIds.length === 0}
+              >
+                선택 직원 추가 ({selectedMemberIds.length})
+              </Button>
+            </Space>
+
+            <Table<MemberLookupRow>
+              rowKey={(r) => r.memberId}
+              dataSource={filteredMemberRows}
+              loading={memberLookupQ.isLoading || memberLookupQ.isFetching}
+              size="small"
+              pagination={{
+                current: (memberLookupQ.data?.page ?? memberPage) + 1,
+                pageSize: memberLookupQ.data?.size ?? memberPageSize,
+                total: memberLookupQ.data?.totalElements ?? 0,
+                showSizeChanger: true,
+                pageSizeOptions: [10, 20, 30, 50],
+                onChange: (page, size) => {
+                  setMemberPage(page - 1);
+                  setMemberPageSize(size);
+                },
+              }}
+              rowSelection={{
+                selectedRowKeys: selectedMemberIds,
+                onChange: (keys) => setSelectedMemberIds(keys.map((k) => String(k))),
+              }}
+              locale={{ emptyText: '조회된 직원이 없습니다.' }}
+              columns={[
+                {
+                  title: '이름',
+                  dataIndex: 'name',
+                  key: 'name',
+                  width: 130,
+                  render: (v: string | undefined) => v ?? '—',
+                },
+                {
+                  title: '이메일',
+                  dataIndex: 'email',
+                  key: 'email',
+                  width: 220,
+                  render: (v: string | undefined) => v ?? '—',
+                },
+                {
+                  title: '부서',
+                  dataIndex: 'organizationName',
+                  key: 'organizationName',
+                  width: 150,
+                  render: (v: string | undefined) => v ?? '—',
+                },
+                {
+                  title: '직급',
+                  dataIndex: 'jobTitleName',
+                  key: 'jobTitleName',
+                  width: 110,
+                  render: (v: string | undefined) => v ?? '—',
+                },
+              ]}
+            />
+          </div>
         </div>
 
         <Table<BulkRow>
@@ -723,6 +920,14 @@ function BulkCreateModal({
           locale={{ emptyText: '검색해서 직원을 추가하세요.' }}
           columns={[
             { title: '이름', dataIndex: 'memberName', width: 110 },
+            {
+              title: '현재 기본급 (원)',
+              dataIndex: 'currentBaseSalary',
+              width: 180,
+              align: 'right',
+              render: (v: number | null | undefined) =>
+                v == null ? '—' : Number(v).toLocaleString('ko-KR'),
+            },
             {
               title: '제안 기본급 (원)',
               dataIndex: 'proposedBaseSalary',
@@ -736,30 +941,6 @@ function BulkCreateModal({
                   style={{ width: '100%' }}
                   formatter={(x) => (x ? `${Number(x).toLocaleString('ko-KR')}` : '')}
                   parser={(x) => Number((x ?? '').replace(/[^0-9]/g, '')) as 0}
-                />
-              ),
-            },
-            {
-              title: '직급명',
-              dataIndex: 'proposedJobGradeName',
-              width: 110,
-              render: (v: string, _r, idx) => (
-                <Input
-                  value={v}
-                  onChange={(e) => updateRow(idx, { proposedJobGradeName: e.target.value })}
-                  placeholder="선택"
-                />
-              ),
-            },
-            {
-              title: '직책명',
-              dataIndex: 'proposedJobTitleName',
-              width: 110,
-              render: (v: string, _r, idx) => (
-                <Input
-                  value={v}
-                  onChange={(e) => updateRow(idx, { proposedJobTitleName: e.target.value })}
-                  placeholder="선택"
                 />
               ),
             },
@@ -1015,53 +1196,3 @@ function MemberLookupField({ name = 'memberId' }: { name?: string }) {
   );
 }
 
-function BulkMemberAddField({
-  onAdd,
-}: {
-  onAdd: (m: { memberId: string; name?: string }) => void;
-}) {
-  const [searchText, setSearchText] = useState('');
-  const debounced = useDebouncedValue(searchText, 320);
-  const { data: rows = [], isFetching } = useQuery({
-    queryKey: ['member', 'search', 'negotiations-bulk', debounced],
-    queryFn: () => memberApi.searchMembersLookup({ keyword: debounced.trim(), page: 0, size: 30 }),
-    enabled: debounced.trim().length >= 1,
-    retry: 1,
-  });
-  const options = useMemo(
-    () =>
-      rows.map((m) => ({
-        value: m.memberId,
-        label: `${m.name ?? '이름 없음'} · ${m.email ?? '—'}`,
-        name: m.name,
-      })),
-    [rows],
-  );
-  return (
-    <Select
-      showSearch
-      allowClear
-      style={{ width: '100%' }}
-      placeholder="이름·이메일·사번으로 검색해서 추가"
-      filterOption={false}
-      searchValue={searchText}
-      onSearch={setSearchText}
-      onClear={() => setSearchText('')}
-      value={null}
-      notFoundContent={
-        debounced.trim().length < 1
-          ? '한 글자 이상 입력하세요'
-          : isFetching
-            ? '검색 중…'
-            : '검색 결과 없음'
-      }
-      onSelect={(value, option) => {
-        const opt = option as unknown as { value: string; name?: string };
-        onAdd({ memberId: opt.value, name: opt.name });
-        setSearchText('');
-      }}
-      options={options}
-      loading={isFetching}
-    />
-  );
-}

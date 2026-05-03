@@ -613,11 +613,6 @@ export function ApprovalsAdminPage() {
                       <Button icon={<ReloadOutlined />} onClick={() => void refreshAll()}>
                         새로고침
                       </Button>
-                      {canCreate ? (
-                        <Button type="primary" icon={<PlusOutlined />} className={NAVY_BUTTON_CLASS} onClick={handleOpenCreate}>
-                          양식 추가
-                        </Button>
-                      ) : null}
                     </Space>
                   </div>
                   <div className="tw-min-h-0 tw-flex-1 tw-overflow-hidden tw-pr-1">
