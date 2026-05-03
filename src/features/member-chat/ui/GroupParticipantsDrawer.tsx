@@ -1,5 +1,5 @@
 import { RightOutlined, SearchOutlined } from '@ant-design/icons';
-import { Avatar, Empty, Input, List, Modal, Skeleton, Spin, Tag, Tree, Typography, message } from 'antd';
+import { Avatar, Empty, Input, List, Skeleton, Spin, Tag, Tree, Typography, message } from 'antd';
 import type { DataNode } from 'antd/es/tree';
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -12,6 +12,8 @@ import {
   organizationApi,
 } from '@/features/organization/api/organizationApi';
 import { AppButton } from '@/shared/ui/AppButton';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
+import { AppModal } from '@/shared/ui/AppModal';
 
 /**
  * 단체 채팅방 참여자 목록 — 방 제목 클릭 시 뜨는 중앙 팝업(Modal).
@@ -192,7 +194,7 @@ export function GroupParticipantsDrawer({
 
   return (
     <>
-      <Modal
+      <AppModal
         title={roomTitle ? `${roomTitle} · 참여자` : '참여자'}
         open={showParticipantsModal}
         onCancel={onClose}
@@ -203,6 +205,7 @@ export function GroupParticipantsDrawer({
         centered
         destroyOnClose
       >
+        <div className="tw-px-5 tw-py-4">
         {canInvite ? (
           <div className="tw-mb-3 tw-flex tw-justify-end">
             <AppButton size="small" variant="secondary" onClick={() => setInviteOpen(true)}>
@@ -259,17 +262,18 @@ export function GroupParticipantsDrawer({
             />
           </>
         )}
-      </Modal>
-      <Modal
+        </div>
+      </AppModal>
+      <AppDoubleActionModal
         title="참여자 초대"
         open={inviteOpen}
-        onCancel={() => {
+        onClose={() => {
           setInviteOpen(false);
           setInviteKeyword('');
           setCheckedMemberIds([]);
           if (mode === 'invite') onClose();
         }}
-        onOk={() => {
+        onConfirm={() => {
           const memberIds = checkedMemberIds.map((k) => k.replace(/^m:/, ''));
           if (memberIds.length === 0) {
             void message.warning('초대할 구성원을 선택해 주세요.');
@@ -277,13 +281,14 @@ export function GroupParticipantsDrawer({
           }
           void addMembersMutation.mutateAsync(memberIds);
         }}
-        okText="초대"
+        confirmText="초대"
         cancelText="취소"
         confirmLoading={addMembersMutation.isPending}
         zIndex={10_200}
         width={560}
-        destroyOnClose
+        destroyOnHidden
       >
+        <div className="tw-px-5 tw-py-4">
         <div className="tw-flex tw-flex-col tw-gap-3">
           <Input
             allowClear
@@ -324,7 +329,8 @@ export function GroupParticipantsDrawer({
             선택 {checkedMemberIds.length}명 / 초대 가능 {allInviteLeafKeys.length}명
           </Typography.Text>
         </div>
-      </Modal>
+        </div>
+      </AppDoubleActionModal>
     </>
   );
 }

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { App, Alert, Card, Checkbox, Input, Modal, Space, Tag, Typography } from 'antd';
+import { App, Alert, Card, Checkbox, Input, Space, Tag, Typography } from 'antd';
+import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemberDisplayNames } from '@/features/members/hooks/useMemberDisplayNames';
 import { approvalApi } from '../api/approvalApi';
@@ -112,9 +113,11 @@ export function BundleDetailModal({ open, bundle, onClose, currentUserId }: Prop
   };
 
   return (
-    <Modal
+    <AppSingleActionModal
       open={open}
-      onCancel={close}
+      onClose={close}
+      onSubmit={close}
+      submitText="닫기"
       title={
         <div className="tw-flex tw-items-center tw-gap-2">
           <Tag
@@ -144,19 +147,8 @@ export function BundleDetailModal({ open, bundle, onClose, currentUserId }: Prop
       }
       width={760}
       destroyOnHidden
-      footer={null}
-      classNames={{
-        content: '!tw-p-0',
-        header: 'tw-sticky tw-top-0 tw-z-10 tw-m-0 tw-border-b tw-border-slate-200 tw-bg-white tw-px-5 tw-py-4',
-        body: 'wf-scrollbar-modal !tw-px-5 !tw-py-5',
-      }}
-      styles={{
-        content: { padding: 0 },
-        header: { marginBottom: 0, padding: '16px 20px' },
-        body: { maxHeight: '70vh', overflowY: 'auto' },
-      }}
     >
-      <div className="tw-space-y-4">
+      <div className="tw-space-y-4 tw-px-5 tw-py-5">
         {/* 메타 정보 카드 */}
         <Card
           className="tw-rounded-2xl tw-border tw-border-slate-200/90 tw-bg-slate-50/50"
@@ -342,7 +334,7 @@ export function BundleDetailModal({ open, bundle, onClose, currentUserId }: Prop
           </Card>
         )}
       </div>
-    </Modal>
+    </AppSingleActionModal>
   );
 }
 

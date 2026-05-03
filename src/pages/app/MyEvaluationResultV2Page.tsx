@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { App, Card, Empty, Input, Modal, Space, Tag, Typography } from 'antd';
+import { App, Card, Empty, Input, Space, Tag, Typography } from 'antd';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import dayjs from 'dayjs';
@@ -8,6 +8,7 @@ import type { EvaluationFlowResponse } from '@/features/evaluation/model/workflo
 import { EvaluationResultCard } from '@/features/evaluation/ui/EvaluationResultCard';
 import { meetingApi } from '@/features/meetings/api/meetingApi';
 import { AppButton } from '@/shared/ui/AppButton';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppEmptyIllustrated } from '@/shared/ui/AppEmptyIllustrated';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 
@@ -168,16 +169,17 @@ function ObjectionModal({
   if (!target) return null;
 
   return (
-    <Modal
+    <AppDoubleActionModal
       open={open}
-      onCancel={onClose}
-      onOk={() => objectionMut.mutate()}
+      onClose={onClose}
+      onConfirm={() => objectionMut.mutate()}
       title="평가 결과 이의제기"
-      okText="등록"
+      confirmText="등록"
       cancelText="취소"
       confirmLoading={objectionMut.isPending}
-      okButtonProps={{ disabled: !content.trim() }}
+      confirmDisabled={!content.trim()}
     >
+      <div className="tw-px-5 tw-py-4">
       <Card className="tw-mb-3 tw-rounded-xl tw-border tw-border-slate-200/90 tw-bg-slate-50/60" styles={{ body: { padding: 14 } }}>
         <div className="tw-flex tw-items-center tw-gap-3">
           <span className="tw-text-xs tw-text-slate-500">최종 등급</span>
@@ -195,7 +197,8 @@ function ObjectionModal({
         maxLength={5000}
         showCount
       />
-    </Modal>
+      </div>
+    </AppDoubleActionModal>
   );
 }
 

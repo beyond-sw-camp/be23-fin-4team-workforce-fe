@@ -24,6 +24,10 @@ import {
   buildApprovalNotificationNavigate,
   buildGoalBundleNotificationNavigate,
 } from '@/features/notification/lib/approvalNotificationRoute';
+import {
+  buildContractNotificationNavigate,
+  isContractNotificationRoutable,
+} from '@/features/notification/lib/contractNotificationRoute';
 
 dayjs.locale('ko');
 
@@ -188,7 +192,11 @@ function isGoalBundleNotification(type: string, targetType?: string): boolean {
 }
 
 function isRoutableNotification(item: NotificationItem): boolean {
-  return isApprovalNotification(item.notificationType) || isGoalBundleNotification(item.notificationType, item.targetType);
+  return (
+    isApprovalNotification(item.notificationType) ||
+    isGoalBundleNotification(item.notificationType, item.targetType) ||
+    isContractNotificationRoutable(item)
+  );
 }
 
 export function DashboardProfileBlock({ user }: { user: Me | null }) {
@@ -704,6 +712,10 @@ export function DashboardNotificationsBlock() {
     if (!isRoutableNotification(item)) return;
     if (item.isRead !== 'YES') {
       await markNotificationAsRead.mutateAsync(item.notificationId);
+    }
+    if (isContractNotificationRoutable(item)) {
+      await navigate(buildContractNotificationNavigate(item.targetId));
+      return;
     }
     if (isGoalBundleNotification(item.notificationType, item.targetType)) {
       await navigate(

@@ -1,10 +1,11 @@
 /** /app/attendance/flexible-slots - 시차출퇴근 슬롯 관리 (시스템 관리자) */
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Button, Card, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, TimePicker, Typography } from 'antd';
+import { Alert, App, Button, Card, Form, Input, InputNumber, Popconfirm, Select, Space, Table, Tag, TimePicker, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs, { type Dayjs } from 'dayjs';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import type { FlexibleTimeSlot, WorkSchedule } from '@/features/salary-service/types';
 
 type FormValues = {
@@ -293,21 +294,22 @@ export function AdminFlexibleSlotsPage() {
         />
       </Card>
 
-      <Modal
+      <AppDoubleActionModal
         open={open}
         title={editing ? '스케줄 수정' : '스케줄 등록'}
-        onCancel={() => {
+        onClose={() => {
           setOpen(false);
           setEditing(null);
           form.resetFields();
         }}
-        onOk={() => form.submit()}
+        onConfirm={() => form.submit()}
         confirmLoading={createM.isPending || updateM.isPending}
-        okText={editing ? '수정' : '등록'}
+        confirmText={editing ? '수정' : '등록'}
         cancelText="취소"
         width={680}
-        destroyOnClose
+        destroyOnHidden
       >
+        <div className="tw-px-5 tw-py-4">
         <Form<FormValues>
           form={form}
           layout="vertical"
@@ -398,7 +400,8 @@ export function AdminFlexibleSlotsPage() {
             </Form.Item>
           </div>
         </Form>
-      </Modal>
+        </div>
+      </AppDoubleActionModal>
     </Space>
   );
 }

@@ -12,6 +12,7 @@
  *  GET  /salary/admin/allowances/members/{memberId}/active?date=YYYY-MM-DD
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import {
   App,
   Button,
@@ -20,7 +21,6 @@ import {
   Empty,
   Form,
   InputNumber,
-  Modal,
   Select,
   Space,
   Statistic,
@@ -431,17 +431,18 @@ export function AdminMemberAllowancePage() {
       />
 
       {/* 신규 부여 모달 */}
-      <Modal
+      <AppDoubleActionModal
         title="수당 부여"
         open={grantOpen}
-        onCancel={() => setGrantOpen(false)}
-        onOk={onSubmitGrant}
+        onClose={() => setGrantOpen(false)}
+        onConfirm={onSubmitGrant}
         confirmLoading={autoGrantMut.isPending}
-        okText="부여"
+        confirmText="부여"
         cancelText="취소"
-        destroyOnClose
+        destroyOnHidden
         width={560}
       >
+        <div className="tw-px-5 tw-py-4">
         <Form
           form={grantForm}
           layout="vertical"
@@ -504,7 +505,8 @@ export function AdminMemberAllowancePage() {
             승인 후 적용됩니다.
           </Typography.Paragraph>
         </Form>
-      </Modal>
+        </div>
+      </AppDoubleActionModal>
     </Space>
   );
 }

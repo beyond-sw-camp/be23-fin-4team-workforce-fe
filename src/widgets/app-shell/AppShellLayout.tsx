@@ -56,6 +56,10 @@ import {
     buildApprovalNotificationNavigate,
     buildGoalBundleNotificationNavigate,
 } from '@/features/notification/lib/approvalNotificationRoute';
+import {
+    buildContractNotificationNavigate,
+    isContractNotificationRoutable,
+} from '@/features/notification/lib/contractNotificationRoute';
 import {companyApi} from '@/features/organization/api/companyApi';
 import {searchApi} from '@/features/search/api/searchApi';
 import {organizationApi} from '@/features/organization/api/organizationApi';
@@ -1231,8 +1235,12 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
         // 2) notificationType=GOAL_EVALUATED + targetType=GOAL_BUNDLE_*
         return t.startsWith('GOAL_BUNDLE_') || tt.startsWith('GOAL_BUNDLE_');
     };
-    const isRoutableNotification = (type: string, targetType?: string): boolean => {
-        return isApprovalNotification(type) || isGoalBundleNotification(type, targetType);
+    const isRoutableNotification = (item: (typeof notifications)[number]): boolean => {
+        return (
+            isApprovalNotification(item.notificationType) ||
+            isGoalBundleNotification(item.notificationType, item.targetType) ||
+            isContractNotificationRoutable(item)
+        );
     };
     const filteredNotifications = notificationTab === 'unread'
         ? notifications.filter((item) => item.isRead !== 'YES')
@@ -1242,6 +1250,11 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
     const routeApprovalNotification = async (item: (typeof notifications)[number]) => {
         if (item.isRead !== 'YES') {
             await markNotificationAsRead.mutateAsync(item.notificationId);
+        }
+        if (isContractNotificationRoutable(item)) {
+            await navigate(buildContractNotificationNavigate(item.targetId));
+            setNotificationPopoverOpen(false);
+            return;
         }
         if (isGoalBundleNotification(item.notificationType, item.targetType)) {
             await navigate(
@@ -1318,7 +1331,7 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
                 ) : (
                     latestNotifications.map((item) => {
                         const unread = item.isRead !== 'YES';
-                        const routable = isRoutableNotification(item.notificationType, item.targetType);
+                        const routable = isRoutableNotification(item);
                         return (
                             <div
                                 key={item.notificationId}
@@ -1735,9 +1748,8 @@ function AppShellLayout() {
                 <Layout className="tw-flex tw-h-[100dvh] tw-min-h-0 tw-bg-slate-50">
                     <Layout className="tw-flex tw-min-h-0 tw-min-w-0 tw-flex-1 tw-flex-col tw-bg-slate-50">
                         <AppShellHeader hideSearch/>
-                        <Layout.Content
-                            className="wf-scrollbar tw-min-h-0 tw-flex-1 tw-overflow-y-auto tw-bg-transparent tw-p-6">
-                            <Outlet/>
+                        <Layout.Content className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-hidden tw-bg-transparent tw-p-6">
+                            <Outlet />
                         </Layout.Content>
                     </Layout>
                 </Layout>

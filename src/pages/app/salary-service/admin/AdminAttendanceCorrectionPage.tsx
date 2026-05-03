@@ -13,7 +13,6 @@ import {
   Card,
   Empty,
   Input,
-  Modal,
   Popconfirm,
   Space,
   Table,
@@ -23,6 +22,7 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { useMemo, useState } from 'react';
 import { membersApi } from '@/features/members/api/membersApi';
 import type { Member } from '@/features/members/model/types';
@@ -234,11 +234,11 @@ export function AdminAttendanceCorrectionPage() {
       </Card>
 
       {/* 반려 사유 입력 모달 */}
-      <Modal
+      <AppDoubleActionModal
         open={Boolean(rejectTarget)}
         title="정정 신청 반려"
-        onCancel={() => setRejectTarget(null)}
-        onOk={() => {
+        onClose={() => setRejectTarget(null)}
+        onConfirm={() => {
           if (!rejectTarget) return;
           if (!rejectReason.trim()) {
             void message.error('반려 사유를 입력해 주세요.');
@@ -254,11 +254,12 @@ export function AdminAttendanceCorrectionPage() {
             },
           );
         }}
-        okText="반려"
-        okButtonProps={{ danger: true }}
+        confirmText="반려"
+        confirmDanger
         cancelText="취소"
         confirmLoading={rejectMut.isPending}
       >
+        <div className="tw-px-5 tw-py-4">
         <Alert
           type="warning"
           showIcon
@@ -276,7 +277,8 @@ export function AdminAttendanceCorrectionPage() {
           maxLength={200}
           showCount
         />
-      </Modal>
+        </div>
+      </AppDoubleActionModal>
     </div>
   );
 }

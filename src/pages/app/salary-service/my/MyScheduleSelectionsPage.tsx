@@ -11,7 +11,6 @@ import {
   DatePicker,
   Form,
   Input,
-  Modal,
   Popconfirm,
   Select,
   Space,
@@ -21,6 +20,7 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { approvalApi } from '@/features/approvals/api/approvalApi';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import type { DailyAttendance, FlexibleTimeSlot, MemberScheduleSelection, WorkSchedule } from '@/features/salary-service/types';
@@ -421,16 +421,17 @@ export function MyScheduleSelectionsPage() {
         />
       </Card>
 
-      <Modal
+      <AppDoubleActionModal
         open={openApplyModal}
-        onCancel={() => setOpenApplyModal(false)}
-        onOk={() => form.submit()}
-        okText="전자결재로 이동"
+        onClose={() => setOpenApplyModal(false)}
+        onConfirm={() => form.submit()}
+        confirmText="전자결재로 이동"
         cancelText="취소"
         title="스케줄 변경 신청"
-        destroyOnClose
+        destroyOnHidden
         confirmLoading={createM.isPending}
       >
+        <div className="tw-px-5 tw-py-4">
         <Form<FormValues>
           form={form}
           layout="vertical"
@@ -453,7 +454,8 @@ export function MyScheduleSelectionsPage() {
             확인을 누르면 전자결재 작성 화면으로 이동하고, 입력한 값이 출퇴근시간 변경 신청서에 자동 입력됩니다.
           </Typography.Paragraph>
         </Form>
-      </Modal>
+        </div>
+      </AppDoubleActionModal>
     </Space>
   );
 }

@@ -4,11 +4,12 @@
  */
 import { Link, useParams, useSearch } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Button, Card, DatePicker, Descriptions, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Statistic, Table, Tag, Typography } from 'antd';
+import { Alert, App, Button, Card, DatePicker, Descriptions, Form, Input, InputNumber, Popconfirm, Select, Space, Statistic, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useMemo, useState } from 'react';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
+import { AppModal } from '@/shared/ui/AppModal';
 import type { RetroactiveMonthlyDiff, RetroactivePayrollResult, PayrollItem, SalaryItemTemplate } from '@/features/salary-service/types';
 
 const STATUS_KO: Record<string, string> = {
@@ -532,7 +533,7 @@ function RetroactiveModal({
   const fmt = (n: number | null | undefined) => `${(n ?? 0).toLocaleString('ko-KR')}원`;
 
   return (
-    <Modal
+    <AppModal
       open={open}
       title="소급분 자동 재계산"
       width={760}
@@ -544,6 +545,7 @@ function RetroactiveModal({
       footer={null}
       destroyOnClose
     >
+      <div className="tw-px-5 tw-py-4">
       <Typography.Paragraph type="secondary" className="!tw-text-xs">
         통상임금 인상 시 과거 월 가산수당 (연장 / 야간 / 휴일) 을 새 통상임금 기준으로 재계산해
         차액을 RETROACTIVE 명세서로 발행합니다. 발행 후 DRAFT 상태로 생성되며 인사팀이 검토 후
@@ -675,6 +677,7 @@ function RetroactiveModal({
           )}
         </div>
       )}
-    </Modal>
+      </div>
+    </AppModal>
   );
 }

@@ -9,7 +9,6 @@ import {
   DatePicker,
   Form,
   Input,
-  Modal,
   Table,
   Tag,
   TimePicker,
@@ -27,6 +26,7 @@ import type {
   MissingAttendanceSuspect,
 } from '@/features/salary-service/types';
 import { AttendanceStatusTag } from '@/features/salary-service/ui/AttendanceStatusTag';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 
 type CorrectionFormValues = {
   attendanceDate: Dayjs;
@@ -309,16 +309,17 @@ export function MyAttendanceMonthlyPage() {
       </Card>
 
       {/* ─── 정정 신청 모달 ─── */}
-      <Modal
+      <AppDoubleActionModal
         open={correctionOpen}
         title="출퇴근 정정 신청"
-        onCancel={closeCorrectionModal}
-        onOk={() => form.submit()}
-        okText="신청"
+        onClose={closeCorrectionModal}
+        onConfirm={() => form.submit()}
+        confirmText="신청"
         cancelText="취소"
         confirmLoading={correctionMut.isPending}
-        destroyOnClose
+        destroyOnHidden
       >
+        <div className="tw-px-5 tw-py-4">
         <Alert
           type="info"
           showIcon
@@ -403,7 +404,8 @@ export function MyAttendanceMonthlyPage() {
             />
           </Form.Item>
         </Form>
-      </Modal>
+        </div>
+      </AppDoubleActionModal>
     </div>
   );
 }

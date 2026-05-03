@@ -4,15 +4,30 @@ import { unwrapApiResponse } from '@/shared/api/response';
 export const APPROVAL_REQUEST_TYPES = [
   'VACATION',
   'ATTENDANCE',
-  'HR_MOVEMENT',
-  'SALARY',
+  'HR',
+  'BUSINESS_TRIP',
   'GENERAL',
-  'CONTRACT',
-  'CERTIFICATE',
   'OFFICIAL',
 ] as const;
 
 export type ApprovalRequestType = (typeof APPROVAL_REQUEST_TYPES)[number];
+
+/** 구데이터 등 → 표준 `ApprovalRequestType` (폴더·기본값 정규화) */
+const LEGACY_REQUEST_TYPE_TO_CANONICAL: Record<string, ApprovalRequestType> = {
+  HR_MOVEMENT: 'HR',
+  SALARY: 'GENERAL',
+  CONTRACT: 'GENERAL',
+  CERTIFICATE: 'GENERAL',
+};
+
+export function normalizeApprovalRequestType(raw: string | undefined): ApprovalRequestType {
+  const u = String(raw ?? '')
+    .trim()
+    .toUpperCase();
+  if (!u) return 'GENERAL';
+  if ((APPROVAL_REQUEST_TYPES as readonly string[]).includes(u)) return u as ApprovalRequestType;
+  return LEGACY_REQUEST_TYPE_TO_CANONICAL[u] ?? 'GENERAL';
+}
 
 export type ApprovalDocument = {
   documentId: string;

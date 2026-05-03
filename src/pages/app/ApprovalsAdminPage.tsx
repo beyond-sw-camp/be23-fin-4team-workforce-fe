@@ -9,7 +9,6 @@ import {
   Form,
   Input,
   InputNumber,
-  Modal,
   Popconfirm,
   Select,
   Space,
@@ -25,6 +24,10 @@ import {
   type ApprovalDocument,
   type ApprovalRequestType,
 } from '@/features/approvals/api/approvalApi';
+import {
+  APPROVAL_REQUEST_TYPE_LABEL_KO,
+  approvalRequestTypeLabelKo,
+} from '@/features/approvals/lib/approvalRequestTypeKo';
 import {
   ApprovalFormSchemaBuilder,
   defaultSchemaFields,
@@ -43,6 +46,7 @@ import {
 } from '@/features/permissions/member-directory-access';
 import { usePermissions } from '@/features/permissions/usePermissionsHook';
 import { ContractTemplatesAdminPanel } from '@/features/contracts/ui/ContractTemplatesAdminPanel';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 
 type DocForm = {
   documentName: string;
@@ -61,17 +65,6 @@ type PolicyLineDraft = {
 type JobTitleOption = {
   value: string;
   label: string;
-};
-
-const REQUEST_TYPE_LABEL: Record<ApprovalRequestType, string> = {
-  VACATION: '휴가',
-  ATTENDANCE: '근태',
-  HR_MOVEMENT: '부서이동',
-  SALARY: '급여',
-  GENERAL: '일반기안',
-  CONTRACT: '전자계약',
-  CERTIFICATE: '문서발급',
-  OFFICIAL: '공문',
 };
 
 function parseJobTitleOptions(raw: Array<Record<string, unknown>>): JobTitleOption[] {
@@ -96,6 +89,33 @@ function buildSchemaFieldOptions(fields: FormFieldSchema[]) {
     value: f.name,
     label: `${f.label} (${f.name})`,
   }));
+}
+
+/** 캘린더 시작일·종료일 연동: 날짜 입력 타입 필드만 선택 가능 */
+function buildCalendarDateFieldOptions(fields: FormFieldSchema[]) {
+  return buildSchemaFieldOptions(
+    fields.filter((f) => f.type === 'date' || f.type === 'datetime-local'),
+  );
+}
+
+function isCalendarDateFieldType(type: FormFieldSchema['type']): boolean {
+  return type === 'date' || type === 'datetime-local';
+}
+
+/** 스키마에 있는 필드명인데 날짜 타입이 아니면 메시지 반환(타입 변경 등 레거시 선택 방지) */
+function calendarDateFieldTypeError(
+  fields: FormFieldSchema[],
+  fieldName: string | undefined,
+  roleLabel: string,
+): string | null {
+  const v = (fieldName ?? '').trim();
+  if (!v || v === CAL_FIELD_NONE) return null;
+  const f = fields.find((x) => x.name === v);
+  if (!f) return null;
+  if (!isCalendarDateFieldType(f.type)) {
+    return `${roleLabel}은 날짜 또는 날짜·시간 형식 필드만 선택할 수 있습니다.`;
+  }
+  return null;
 }
 
 function withOrphanFieldOption(
@@ -350,6 +370,28 @@ export function ApprovalsAdminPage() {
     [documents, editingDocumentId],
   );
 
+  const createWatchName = Form.useWatch('documentName', form);
+  const createWatchType = Form.useWatch('requestType', form);
+  const createPaperPreviewMeta = useMemo(
+    () => ({
+      documentName: String(createWatchName ?? '').trim() || '—',
+      categoryLabel: createWatchType ? approvalRequestTypeLabelKo(String(createWatchType)) : '—',
+      requestTypeCode: createWatchType ? String(createWatchType) : '—',
+    }),
+    [createWatchName, createWatchType],
+  );
+
+  const editPaperPreviewMeta = useMemo(() => {
+    if (!editingDocument) {
+      return { documentName: '—', categoryLabel: '—', requestTypeCode: '—' };
+    }
+    return {
+      documentName: editingDocument.documentName,
+      categoryLabel: approvalRequestTypeLabelKo(String(editingDocument.requestType)),
+      requestTypeCode: editingDocument.requestType,
+    };
+  }, [editingDocument]);
+
   const handleOpenEdit = (doc: ApprovalDocument) => {
     setEditingDocumentId(doc.documentId);
     const parsed = parseFormSchema(doc.formSchema);
@@ -376,6 +418,16 @@ export function ApprovalsAdminPage() {
       }
       if (!editCalStartField?.trim()) {
         message.warning('캘린더 연동 시 시작일 필드는 필수입니다.');
+        return;
+      }
+      const startErr = calendarDateFieldTypeError(editSchemaFields, editCalStartField, '시작일 필드');
+      if (startErr) {
+        message.warning(startErr);
+        return;
+      }
+      const endErr = calendarDateFieldTypeError(editSchemaFields, editCalEndField, '종료일 필드');
+      if (endErr) {
+        message.warning(endErr);
         return;
       }
     }
@@ -411,6 +463,16 @@ export function ApprovalsAdminPage() {
         message.warning('캘린더 연동 시 시작일 필드는 필수입니다.');
         return;
       }
+      const startErr = calendarDateFieldTypeError(schemaFields, createCalStartField, '시작일 필드');
+      if (startErr) {
+        message.warning(startErr);
+        return;
+      }
+      const endErr = calendarDateFieldTypeError(schemaFields, createCalEndField, '종료일 필드');
+      if (endErr) {
+        message.warning(endErr);
+        return;
+      }
     }
     try {
       const values = await form.validateFields();
@@ -436,17 +498,21 @@ export function ApprovalsAdminPage() {
   };
 
   const createSchemaOptions = useMemo(() => buildSchemaFieldOptions(schemaFields), [schemaFields]);
+  const createDateFieldOptions = useMemo(
+    () => buildCalendarDateFieldOptions(schemaFields),
+    [schemaFields],
+  );
   const createStartOptions = useMemo(
-    () => withOrphanFieldOption(createSchemaOptions, createCalStartField),
-    [createSchemaOptions, createCalStartField],
+    () => withOrphanFieldOption(createDateFieldOptions, createCalStartField),
+    [createDateFieldOptions, createCalStartField],
   );
   const createEndOptions = useMemo(
     () =>
       withOptionalNoneOption(
-        createSchemaOptions,
+        createDateFieldOptions,
         createCalEndField !== CAL_FIELD_NONE ? createCalEndField : undefined,
       ),
-    [createSchemaOptions, createCalEndField],
+    [createDateFieldOptions, createCalEndField],
   );
   const createTitleOptions = useMemo(
     () =>
@@ -458,17 +524,21 @@ export function ApprovalsAdminPage() {
   );
 
   const editSchemaOptions = useMemo(() => buildSchemaFieldOptions(editSchemaFields), [editSchemaFields]);
+  const editDateFieldOptions = useMemo(
+    () => buildCalendarDateFieldOptions(editSchemaFields),
+    [editSchemaFields],
+  );
   const editStartOptions = useMemo(
-    () => withOrphanFieldOption(editSchemaOptions, editCalStartField),
-    [editSchemaOptions, editCalStartField],
+    () => withOrphanFieldOption(editDateFieldOptions, editCalStartField),
+    [editDateFieldOptions, editCalStartField],
   );
   const editEndOptions = useMemo(
     () =>
       withOptionalNoneOption(
-        editSchemaOptions,
+        editDateFieldOptions,
         editCalEndField !== CAL_FIELD_NONE ? editCalEndField : undefined,
       ),
-    [editSchemaOptions, editCalEndField],
+    [editDateFieldOptions, editCalEndField],
   );
   const editTitleOptions = useMemo(
     () =>
@@ -518,20 +588,24 @@ export function ApprovalsAdminPage() {
   };
 
   return (
-    <Space direction="vertical" className="tw-w-full" size={16}>
+    <div className="tw-flex tw-h-full tw-min-h-0 tw-flex-1 tw-w-full tw-flex-col tw-gap-4 tw-overflow-hidden">
       {!canRead ? (
         <Alert type="warning" showIcon message="결재 관리자 화면을 보려면 조회 권한이 필요합니다." />
       ) : (
         <Tabs
           activeKey={activeTab}
           onChange={(key) => setActiveTab(key as 'documents' | 'policy-lines' | 'contract-templates')}
+          className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-hidden [&_.ant-tabs-nav]:tw-mb-0 [&_.ant-tabs-nav]:tw-shrink-0 [&_.ant-tabs-content-holder]:tw-min-h-0 [&_.ant-tabs-content-holder]:tw-flex-1 [&_.ant-tabs-content-holder]:tw-overflow-hidden [&_.ant-tabs-content]:tw-flex tw-min-h-0 tw-flex-1 [&_.ant-tabs-tabpane]:tw-m-0 [&_.ant-tabs-tabpane-active]:tw-flex tw-h-full tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-hidden"
           items={[
             {
               key: 'documents',
               label: '결재 양식 관리',
               children: (
-                <Card className="tw-border-slate-200/80 tw-shadow-sm">
-                  <div className="tw-mb-4 tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-3">
+                <Card
+                  className="tw-flex tw-h-full tw-min-h-0 tw-w-full tw-flex-col tw-overflow-hidden tw-border-slate-200/80 tw-shadow-sm"
+                  styles={{ body: { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' } }}
+                >
+                  <div className="tw-mb-4 tw-flex tw-shrink-0 tw-flex-wrap tw-items-center tw-justify-between tw-gap-3">
                     <Typography.Text type="secondary" className="tw-text-sm">
                       전체 {documents.length}개 / 활성 {activeDocuments.length}개
                     </Typography.Text>
@@ -546,87 +620,91 @@ export function ApprovalsAdminPage() {
                       ) : null}
                     </Space>
                   </div>
-                  <Table
-                    rowKey="documentId"
-                    loading={docsLoading}
-                    dataSource={documents}
-                    pagination={{ pageSize: 5, showSizeChanger: false }}
-                    columns={[
-                      {
-                        title: '양식명',
-                        dataIndex: 'documentName',
-                        key: 'documentName',
-                        render: (name: string, row) => (
-                          <button
-                            type="button"
-                            className="tw-border-0 tw-bg-transparent tw-p-0 tw-font-medium tw-text-[#1e3a5f] hover:tw-underline"
-                            onClick={() => {
-                              setSelectedDocumentId(row.documentId);
-                              setActiveTab('policy-lines');
-                            }}
-                          >
-                            {name}
-                          </button>
-                        ),
-                      },
-                      {
-                        title: '요청 유형',
-                        dataIndex: 'requestType',
-                        key: 'requestType',
-                        width: 160,
-                        render: (type: string) => REQUEST_TYPE_LABEL[type as ApprovalRequestType] ?? type,
-                      },
-                      {
-                        title: '사용 상태',
-                        dataIndex: 'isActiveYn',
-                        key: 'isActiveYn',
-                        width: 140,
-                        render: (value: 'Y' | 'N', row) => (
-                          <Button
-                            size="small"
-                            type={value === 'Y' ? 'primary' : 'default'}
-                            ghost={value === 'Y'}
-                            disabled={!canUpdate}
-                            onClick={() =>
-                              value === 'Y' ? deactivateM.mutate(row.documentId) : activateM.mutate(row.documentId)
-                            }
-                          >
-                            {value === 'Y' ? '활성' : '비활성'}
-                          </Button>
-                        ),
-                      },
-                      {
-                        title: '정책라인',
-                        key: 'actions',
-                        width: 220,
-                        render: (_, row) => (
-                          <Space size="small" wrap>
-                            {canUpdate ? (
-                              <Button
-                                type="link"
-                                size="small"
-                                icon={<FormOutlined />}
-                                onClick={() => handleOpenEdit(row)}
-                              >
-                                양식 수정
-                              </Button>
-                            ) : null}
-                            <Button
-                              type="link"
-                              size="small"
-                              icon={<EyeOutlined />}
+                  <div className="tw-min-h-0 tw-flex-1 tw-overflow-hidden tw-pr-1">
+                    <Table
+                      rowKey="documentId"
+                      sticky
+                      loading={docsLoading}
+                      dataSource={documents}
+                      pagination={false}
+                      scroll={{ y: 520 }}
+                      columns={[
+                        {
+                          title: '양식명',
+                          dataIndex: 'documentName',
+                          key: 'documentName',
+                          render: (name: string, row) => (
+                            <button
+                              type="button"
+                              className="tw-border-0 tw-bg-transparent tw-p-0 tw-font-medium tw-text-[#1e3a5f] hover:tw-underline"
                               onClick={() => {
                                 setSelectedDocumentId(row.documentId);
                                 setActiveTab('policy-lines');
                               }}
                             >
-                              정책라인 확인
+                              {name}
+                            </button>
+                          ),
+                        },
+                        {
+                          title: '요청 유형',
+                          dataIndex: 'requestType',
+                          key: 'requestType',
+                          width: 160,
+                          render: (type: string) => approvalRequestTypeLabelKo(type),
+                        },
+                        {
+                          title: '사용 상태',
+                          dataIndex: 'isActiveYn',
+                          key: 'isActiveYn',
+                          width: 140,
+                          render: (value: 'Y' | 'N', row) => (
+                            <Button
+                              size="small"
+                              type={value === 'Y' ? 'primary' : 'default'}
+                              ghost={value === 'Y'}
+                              disabled={!canUpdate}
+                              onClick={() =>
+                                value === 'Y' ? deactivateM.mutate(row.documentId) : activateM.mutate(row.documentId)
+                              }
+                            >
+                              {value === 'Y' ? '활성' : '비활성'}
                             </Button>
-                          </Space>
-                        ),
-                      },
-                    ]}
-                  />
+                          ),
+                        },
+                        {
+                          title: '정책라인',
+                          key: 'actions',
+                          width: 220,
+                          render: (_, row) => (
+                            <Space size="small" wrap>
+                              {canUpdate ? (
+                                <Button
+                                  type="link"
+                                  size="small"
+                                  icon={<FormOutlined />}
+                                  onClick={() => handleOpenEdit(row)}
+                                >
+                                  양식 수정
+                                </Button>
+                              ) : null}
+                              <Button
+                                type="link"
+                                size="small"
+                                icon={<EyeOutlined />}
+                                onClick={() => {
+                                  setSelectedDocumentId(row.documentId);
+                                  setActiveTab('policy-lines');
+                                }}
+                              >
+                                정책라인 확인
+                              </Button>
+                            </Space>
+                          ),
+                        },
+                      ]}
+                    />
+                  </div>
                 </Card>
               ),
             },
@@ -634,9 +712,12 @@ export function ApprovalsAdminPage() {
               key: 'policy-lines',
               label: '정책라인 관리',
               children: (
-                <Card className="tw-border-slate-200/80 tw-shadow-sm">
-                  <Space direction="vertical" className="tw-w-full" size={12}>
-                    <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
+                <Card
+                  className="tw-flex tw-h-full tw-min-h-0 tw-w-full tw-flex-col tw-overflow-hidden tw-border-slate-200/80 tw-shadow-sm"
+                  styles={{ body: { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' } }}
+                >
+                  <div className="tw-flex tw-min-h-0 tw-w-full tw-flex-1 tw-flex-col tw-gap-3 tw-overflow-hidden">
+                    <div className="tw-flex tw-shrink-0 tw-flex-wrap tw-items-center tw-gap-2">
                       <Typography.Text className="tw-min-w-20">양식 선택</Typography.Text>
                       <Select
                         value={selectedDocumentId || undefined}
@@ -647,15 +728,15 @@ export function ApprovalsAdminPage() {
                         style={{ minWidth: 320 }}
                         options={documents.map((doc) => ({
                           value: doc.documentId,
-                          label: `${doc.documentName} (${REQUEST_TYPE_LABEL[doc.requestType as ApprovalRequestType] ?? doc.requestType})`,
+                          label: `${doc.documentName} (${approvalRequestTypeLabelKo(String(doc.requestType))})`,
                         }))}
                       />
                     </div>
-                    <Typography.Text type="secondary" className="tw-text-sm">
+                    <Typography.Text type="secondary" className="tw-shrink-0 tw-text-sm">
                       관리자는 직책과 결재 순서만 설정합니다. 저장 시 기존 정책라인은 전체 교체됩니다.
                     </Typography.Text>
                     {selectedDocument ? (
-                      <Card size="small" className="tw-bg-slate-50/60">
+                      <Card size="small" className="tw-shrink-0 tw-bg-slate-50/60">
                         <Space wrap size={8}>
                           <Typography.Text strong>선택 양식: {selectedDocument.documentName}</Typography.Text>
                           <Tag color={selectedDocument.isActiveYn === 'Y' ? 'success' : 'default'}>
@@ -664,7 +745,7 @@ export function ApprovalsAdminPage() {
                         </Space>
                       </Card>
                     ) : null}
-                    <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
+                    <div className="tw-flex tw-shrink-0 tw-flex-wrap tw-items-center tw-gap-2">
                       {canCreate ? (
                         <Button icon={<PlusOutlined />} onClick={handleAddPolicyLine}>
                           라인 추가
@@ -698,11 +779,14 @@ export function ApprovalsAdminPage() {
                       ) : null}
                     </div>
 
+                    <div className="tw-min-h-0 tw-flex-1 tw-overflow-hidden">
                     <Table<PolicyLineDraft>
                       rowKey="key"
+                      sticky
                       loading={policyLoading}
                       dataSource={[...policyDrafts].sort((a, b) => a.stepOrder - b.stepOrder)}
-                      pagination={{ pageSize: 5, showSizeChanger: false }}
+                      pagination={false}
+                      scroll={{ y: 420 }}
                       columns={[
                         {
                           title: '순서',
@@ -780,24 +864,29 @@ export function ApprovalsAdminPage() {
                       ]}
                       locale={{ emptyText: selectedDocumentId ? '정책라인이 없습니다.' : '양식을 먼저 선택하세요.' }}
                     />
+                    </div>
 
-                  </Space>
+                  </div>
                 </Card>
               ),
             },
             {
               key: 'contract-templates',
               label: '전자계약 양식 관리',
-              children: <ContractTemplatesAdminPanel showTemplateSection showSendSection={false} />,
+              children: (
+                <div className="tw-min-h-0 tw-flex-1 tw-overflow-y-auto wf-scrollbar">
+                  <ContractTemplatesAdminPanel showTemplateSection showSendSection={false} />
+                </div>
+              ),
             },
           ]}
         />
       )}
 
-      <Modal
+      <AppDoubleActionModal
         title="결재 양식 추가"
         open={createOpen}
-        onCancel={() => {
+        onClose={() => {
           setCreateOpen(false);
           setCreateCalVisible(false);
           setCreateCalDisplayName('');
@@ -805,96 +894,108 @@ export function ApprovalsAdminPage() {
           setCreateCalEndField(CAL_FIELD_NONE);
           setCreateCalTitleField(CAL_FIELD_NONE);
         }}
-        onOk={() => void handleSubmitCreate()}
-        okText="등록"
+        onConfirm={() => void handleSubmitCreate()}
+        confirmText="등록"
         cancelText="취소"
         confirmLoading={createDocumentM.isPending}
         destroyOnHidden
-        width={880}
+        width={1040}
       >
+        <div className="tw-max-h-[min(82vh,920px)] tw-overflow-y-auto tw-pt-3">
         <Form<DocForm> form={form} layout="vertical" className="tw-pt-2">
-          <Form.Item name="documentName" label="양식명" rules={[{ required: true, message: '양식명을 입력해 주세요.' }]}>
-            <Input placeholder="예: 연차신청서" maxLength={100} showCount />
-          </Form.Item>
-          <Form.Item name="requestType" label="요청 유형" rules={[{ required: true, message: '요청 유형을 선택해 주세요.' }]}>
-            <Select
-              options={APPROVAL_REQUEST_TYPES.map((type) => ({
-                value: type,
-                label: `${REQUEST_TYPE_LABEL[type]} (${type})`,
-              }))}
+          <Form.Item label="기안 입력 항목" required>
+            <ApprovalFormSchemaBuilder
+              value={schemaFields}
+              onChange={setSchemaFields}
+              paperPreviewMeta={createPaperPreviewMeta}
+              sidebarTop={
+                <>
+                  <Form.Item name="documentName" label="양식명" rules={[{ required: true, message: '양식명을 입력해 주세요.' }]}>
+                    <Input placeholder="예: 연차신청서" maxLength={100} showCount />
+                  </Form.Item>
+                  <Form.Item name="requestType" label="요청 유형" rules={[{ required: true, message: '요청 유형을 선택해 주세요.' }]}>
+                    <Select
+                      options={APPROVAL_REQUEST_TYPES.map((type) => ({
+                        value: type,
+                        label: APPROVAL_REQUEST_TYPE_LABEL_KO[type],
+                      }))}
+                    />
+                  </Form.Item>
+                </>
+              }
+              belowHelpSlot={
+                <div className="tw-rounded-lg tw-border tw-border-slate-200 tw-bg-slate-50/70 tw-p-3">
+                  <Checkbox checked={createCalVisible} onChange={(e) => setCreateCalVisible(e.target.checked)}>
+                    캘린더에 일정 자동 반영 (최종 승인 시)
+                  </Checkbox>
+                  {createCalVisible ? (
+                    <div className="tw-mt-3 tw-space-y-3">
+                      <div>
+                        <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
+                          캘린더 표시명 <Typography.Text type="danger">*</Typography.Text>
+                        </Typography.Text>
+                        <Input
+                          placeholder="예: 연차, 출장"
+                          maxLength={100}
+                          showCount
+                          value={createCalDisplayName}
+                          onChange={(e) => setCreateCalDisplayName(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
+                          시작일 필드 (contentJson 키) <Typography.Text type="danger">*</Typography.Text>
+                        </Typography.Text>
+                        <Select
+                          className="tw-w-full"
+                          placeholder="필드 선택"
+                          options={createStartOptions}
+                          value={createCalStartField}
+                          onChange={(v) => setCreateCalStartField(v)}
+                          showSearch
+                          optionFilterProp="label"
+                        />
+                      </div>
+                      <div>
+                        <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
+                          종료일 필드 (선택, 없으면 당일)
+                        </Typography.Text>
+                        <Select
+                          className="tw-w-full"
+                          options={createEndOptions}
+                          value={createCalEndField}
+                          onChange={(v) => setCreateCalEndField(v)}
+                          showSearch
+                          optionFilterProp="label"
+                        />
+                      </div>
+                      <div>
+                        <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
+                          부가 제목 필드 (선택)
+                        </Typography.Text>
+                        <Select
+                          className="tw-w-full"
+                          options={createTitleOptions}
+                          value={createCalTitleField}
+                          onChange={(v) => setCreateCalTitleField(v)}
+                          showSearch
+                          optionFilterProp="label"
+                        />
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              }
             />
           </Form.Item>
-          <Form.Item label="기안 입력 항목" required>
-            <ApprovalFormSchemaBuilder value={schemaFields} onChange={setSchemaFields} />
-          </Form.Item>
-          <div className="tw-rounded-lg tw-border tw-border-slate-200 tw-bg-slate-50/70 tw-p-3">
-            <Checkbox checked={createCalVisible} onChange={(e) => setCreateCalVisible(e.target.checked)}>
-              캘린더에 일정 자동 반영 (최종 승인 시)
-            </Checkbox>
-            {createCalVisible ? (
-              <div className="tw-mt-3 tw-space-y-3">
-                <div>
-                  <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
-                    캘린더 표시명 <Typography.Text type="danger">*</Typography.Text>
-                  </Typography.Text>
-                  <Input
-                    placeholder="예: 연차, 출장"
-                    maxLength={100}
-                    showCount
-                    value={createCalDisplayName}
-                    onChange={(e) => setCreateCalDisplayName(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
-                    시작일 필드 (contentJson 키) <Typography.Text type="danger">*</Typography.Text>
-                  </Typography.Text>
-                  <Select
-                    className="tw-w-full"
-                    placeholder="필드 선택"
-                    options={createStartOptions}
-                    value={createCalStartField}
-                    onChange={(v) => setCreateCalStartField(v)}
-                    showSearch
-                    optionFilterProp="label"
-                  />
-                </div>
-                <div>
-                  <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
-                    종료일 필드 (선택, 없으면 당일)
-                  </Typography.Text>
-                  <Select
-                    className="tw-w-full"
-                    options={createEndOptions}
-                    value={createCalEndField}
-                    onChange={(v) => setCreateCalEndField(v)}
-                    showSearch
-                    optionFilterProp="label"
-                  />
-                </div>
-                <div>
-                  <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
-                    부가 제목 필드 (선택)
-                  </Typography.Text>
-                  <Select
-                    className="tw-w-full"
-                    options={createTitleOptions}
-                    value={createCalTitleField}
-                    onChange={(v) => setCreateCalTitleField(v)}
-                    showSearch
-                    optionFilterProp="label"
-                  />
-                </div>
-              </div>
-            ) : null}
-          </div>
         </Form>
-      </Modal>
+        </div>
+      </AppDoubleActionModal>
 
-      <Modal
-        title={editingDocument ? `양식 수정 — ${editingDocument.documentName}` : '양식 수정'}
+      <AppDoubleActionModal
+        title={editingDocument ? `양식 수정 중 — ${editingDocument.documentName}` : '양식 수정 중'}
         open={editOpen}
-        onCancel={() => {
+        onClose={() => {
           setEditOpen(false);
           setEditingDocumentId(null);
           setEditSchemaFields([]);
@@ -904,94 +1005,89 @@ export function ApprovalsAdminPage() {
           setEditCalEndField(CAL_FIELD_NONE);
           setEditCalTitleField(CAL_FIELD_NONE);
         }}
-        onOk={() => void handleSubmitEdit()}
-        okText="저장"
+        onConfirm={() => void handleSubmitEdit()}
+        confirmText="저장"
         cancelText="취소"
         confirmLoading={updateDocumentM.isPending}
         destroyOnHidden
-        width={880}
+        width={1040}
       >
+        <div className="tw-max-h-[min(82vh,920px)] tw-overflow-y-auto tw-pt-3">
         <Form layout="vertical" className="tw-pt-2">
-          <Form.Item label="양식명">
-            <Input readOnly value={editingDocument?.documentName ?? ''} className="!tw-bg-slate-50" />
-          </Form.Item>
-          <Form.Item label="요청 유형">
-            <Input
-              readOnly
-              value={
-                editingDocument
-                  ? `${REQUEST_TYPE_LABEL[editingDocument.requestType as ApprovalRequestType] ?? editingDocument.requestType} (${editingDocument.requestType})`
-                  : ''
+          <Form.Item label="기안 입력 항목" required>
+            <ApprovalFormSchemaBuilder
+              value={editSchemaFields}
+              onChange={setEditSchemaFields}
+              respectFieldLocks
+              paperPreviewMeta={editPaperPreviewMeta}
+              belowHelpSlot={
+                <div className="tw-rounded-lg tw-border tw-border-slate-200 tw-bg-slate-50/70 tw-p-3">
+                  <Checkbox checked={editCalVisible} onChange={(e) => setEditCalVisible(e.target.checked)}>
+                    캘린더에 일정 자동 반영 (최종 승인 시)
+                  </Checkbox>
+                  {editCalVisible ? (
+                    <div className="tw-mt-3 tw-space-y-3">
+                      <div>
+                        <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
+                          캘린더 표시명 <Typography.Text type="danger">*</Typography.Text>
+                        </Typography.Text>
+                        <Input
+                          placeholder="예: 연차, 출장"
+                          maxLength={100}
+                          showCount
+                          value={editCalDisplayName}
+                          onChange={(e) => setEditCalDisplayName(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
+                          시작일 필드 (contentJson 키) <Typography.Text type="danger">*</Typography.Text>
+                        </Typography.Text>
+                        <Select
+                          className="tw-w-full"
+                          placeholder="필드 선택"
+                          options={editStartOptions}
+                          value={editCalStartField}
+                          onChange={(v) => setEditCalStartField(v)}
+                          showSearch
+                          optionFilterProp="label"
+                        />
+                      </div>
+                      <div>
+                        <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
+                          종료일 필드 (선택, 없으면 당일)
+                        </Typography.Text>
+                        <Select
+                          className="tw-w-full"
+                          options={editEndOptions}
+                          value={editCalEndField}
+                          onChange={(v) => setEditCalEndField(v)}
+                          showSearch
+                          optionFilterProp="label"
+                        />
+                      </div>
+                      <div>
+                        <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
+                          부가 제목 필드 (선택)
+                        </Typography.Text>
+                        <Select
+                          className="tw-w-full"
+                          options={editTitleOptions}
+                          value={editCalTitleField}
+                          onChange={(v) => setEditCalTitleField(v)}
+                          showSearch
+                          optionFilterProp="label"
+                        />
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
               }
-              className="!tw-bg-slate-50"
             />
           </Form.Item>
-          <Form.Item label="기안 입력 항목" required>
-            <ApprovalFormSchemaBuilder value={editSchemaFields} onChange={setEditSchemaFields} respectFieldLocks />
-          </Form.Item>
-          <div className="tw-rounded-lg tw-border tw-border-slate-200 tw-bg-slate-50/70 tw-p-3">
-            <Checkbox checked={editCalVisible} onChange={(e) => setEditCalVisible(e.target.checked)}>
-              캘린더에 일정 자동 반영 (최종 승인 시)
-            </Checkbox>
-            {editCalVisible ? (
-              <div className="tw-mt-3 tw-space-y-3">
-                <div>
-                  <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
-                    캘린더 표시명 <Typography.Text type="danger">*</Typography.Text>
-                  </Typography.Text>
-                  <Input
-                    placeholder="예: 연차, 출장"
-                    maxLength={100}
-                    showCount
-                    value={editCalDisplayName}
-                    onChange={(e) => setEditCalDisplayName(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
-                    시작일 필드 (contentJson 키) <Typography.Text type="danger">*</Typography.Text>
-                  </Typography.Text>
-                  <Select
-                    className="tw-w-full"
-                    placeholder="필드 선택"
-                    options={editStartOptions}
-                    value={editCalStartField}
-                    onChange={(v) => setEditCalStartField(v)}
-                    showSearch
-                    optionFilterProp="label"
-                  />
-                </div>
-                <div>
-                  <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
-                    종료일 필드 (선택, 없으면 당일)
-                  </Typography.Text>
-                  <Select
-                    className="tw-w-full"
-                    options={editEndOptions}
-                    value={editCalEndField}
-                    onChange={(v) => setEditCalEndField(v)}
-                    showSearch
-                    optionFilterProp="label"
-                  />
-                </div>
-                <div>
-                  <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
-                    부가 제목 필드 (선택)
-                  </Typography.Text>
-                  <Select
-                    className="tw-w-full"
-                    options={editTitleOptions}
-                    value={editCalTitleField}
-                    onChange={(v) => setEditCalTitleField(v)}
-                    showSearch
-                    optionFilterProp="label"
-                  />
-                </div>
-              </div>
-            ) : null}
-          </div>
         </Form>
-      </Modal>
-    </Space>
+        </div>
+      </AppDoubleActionModal>
+    </div>
   );
 }

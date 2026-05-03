@@ -10,7 +10,6 @@ import {
   Divider,
   Form,
   InputNumber,
-  Modal,
   Popconfirm,
   Select,
   Space,
@@ -23,6 +22,7 @@ import type { FormInstance } from 'antd';
 import { CheckCircleTwoTone, CloseCircleTwoTone, WarningOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import type { AccrualBaseCode, LeavePolicy } from '@/features/salary-service/types';
 
 type FormValues = {
@@ -315,23 +315,25 @@ export function AdminLeavePoliciesPage() {
         />
       </Card>
 
-      <Modal
+      <AppDoubleActionModal
         open={open}
-        onCancel={() => {
+        onClose={() => {
           setOpen(false);
           setEditing(null);
           form.resetFields();
         }}
-        onOk={handlePolicyModalOk}
+        onConfirm={handlePolicyModalOk}
         confirmLoading={createM.isPending || updateM.isPending}
-        okText={editing ? '수정' : '등록'}
+        confirmText={editing ? '수정' : '등록'}
         cancelText="취소"
         title={editing ? '연차 정책 수정' : '연차 정책 등록'}
-        destroyOnClose
+        destroyOnHidden
         width={720}
       >
+        <div className="tw-px-5 tw-py-4">
         <PolicyForm form={form} />
-      </Modal>
+        </div>
+      </AppDoubleActionModal>
     </Space>
   );
 }

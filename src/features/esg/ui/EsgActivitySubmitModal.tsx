@@ -1,6 +1,7 @@
 import { UploadOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Button, Form, Input, Modal, Select, Typography, Upload } from 'antd';
+import { Alert, App, Button, Form, Input, Select, Typography, Upload } from 'antd';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { useEffect, useState } from 'react';
 import { esgApi } from '@/features/esg/api/esgApi';
 import { esgCardLinkButtonClass, esgOutlinedAccentClass, esgPrimaryButtonClass } from '@/features/esg/esgUiTokens';
@@ -75,26 +76,19 @@ export function EsgActivitySubmitModal({ open, onClose, initialSubjectId }: Prop
   return (
     <>
       {!open ? <Form form={form} preserve={false} className="tw-hidden" aria-hidden /> : null}
-      <Modal
+      <AppDoubleActionModal
         title="활동 제출"
         open={open}
-        onCancel={onClose}
+        onClose={onClose}
+        onConfirm={() => void submitM.mutate()}
+        confirmText="제출"
+        cancelText="취소"
+        confirmLoading={submitM.isPending}
+        confirmButtonClassName={esgPrimaryButtonClass}
         width={520}
         destroyOnHidden
-        footer={
-          <div className="tw-flex tw-justify-end tw-gap-2">
-            <Button onClick={onClose}>취소</Button>
-            <Button
-              type="primary"
-              className={esgPrimaryButtonClass}
-              loading={submitM.isPending}
-              onClick={() => void submitM.mutate()}
-            >
-              제출
-            </Button>
-          </div>
-        }
       >
+        <div className="tw-px-5 tw-py-4">
         {subError && (
         <Alert
           type="error"
@@ -168,7 +162,8 @@ export function EsgActivitySubmitModal({ open, onClose, initialSubjectId }: Prop
           </Typography.Paragraph>
         </Form.Item>
         </Form>
-      </Modal>
+        </div>
+      </AppDoubleActionModal>
     </>
   );
 }

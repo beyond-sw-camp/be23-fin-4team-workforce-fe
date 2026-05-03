@@ -27,6 +27,7 @@ import { DownloadOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icon
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { useMemo, useState } from 'react';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import { memberApi } from '@/features/member/api/memberApi';
 import { SalaryTab } from '@/pages/app/salary-service/admin/AdminSalarySettingsPage';
@@ -532,17 +533,18 @@ export function AdminPayrollPage() {
       />
 
       {/* 누락 직원 추가 모달 */}
-      <Modal
+      <AppDoubleActionModal
         open={createOpen}
-        onCancel={() => { setCreateOpen(false); createForm.resetFields(); }}
-        onOk={() => createForm.submit()}
+        onClose={() => { setCreateOpen(false); createForm.resetFields(); }}
+        onConfirm={() => createForm.submit()}
         confirmLoading={createM.isPending}
-        okText="생성"
+        confirmText="생성"
         cancelText="취소"
         title="누락 직원 급여대장 생성"
-        destroyOnClose
+        destroyOnHidden
         width={520}
       >
+        <div className="tw-px-5 tw-py-4">
         <Typography.Paragraph type="secondary" className="!tw-text-xs">
           신규 입사 자동 생성 누락 / 베이스 시기 등 예외 케이스 시 수동으로 1건 생성합니다.
         </Typography.Paragraph>
@@ -556,7 +558,8 @@ export function AdminPayrollPage() {
             <DatePicker className="tw-w-full" format="YYYY-MM-DD" />
           </Form.Item>
         </Form>
-      </Modal>
+        </div>
+      </AppDoubleActionModal>
     </Space>
   );
 }

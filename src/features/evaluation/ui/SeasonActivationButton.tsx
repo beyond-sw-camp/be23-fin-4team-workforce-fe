@@ -1,9 +1,10 @@
-import { App, Card, Modal, Tag, Tooltip } from 'antd';
+import { App, Card, Tag, Tooltip } from 'antd';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useMemberDisplayNames } from '@/features/members/hooks/useMemberDisplayNames';
 import { evaluationRedesignApi } from '../api/evaluationRedesignApi';
 import { AppButton } from '@/shared/ui/AppButton';
+import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
 import { parseApiError } from '@/shared/api/error-parser';
 
 type BlockedPayload = {
@@ -98,37 +99,30 @@ export function SeasonActivationButton({ seasonId, disabled, disabledTooltip }: 
         button
       )}
 
-      <Modal
+      <AppSingleActionModal
         open={!!leadBlockMessage}
-        onCancel={() => setLeadBlockMessage(null)}
+        onClose={() => setLeadBlockMessage(null)}
+        onSubmit={() => setLeadBlockMessage(null)}
+        submitText="확인"
         title="Lead 평가자가 필요합니다"
         width={520}
         destroyOnHidden
-        footer={
-          <div className="tw-flex tw-justify-end">
-            <AppButton variant="primary" onClick={() => setLeadBlockMessage(null)}>
-              확인
-            </AppButton>
-          </div>
-        }
       >
-        {leadBlockMessage ? <LeadFailureBody message={leadBlockMessage} /> : null}
-      </Modal>
+        <div className="tw-px-5 tw-py-4">
+          {leadBlockMessage ? <LeadFailureBody message={leadBlockMessage} /> : null}
+        </div>
+      </AppSingleActionModal>
 
-      <Modal
+      <AppSingleActionModal
         open={!!blocked}
-        onCancel={() => setBlocked(null)}
+        onClose={() => setBlocked(null)}
+        onSubmit={() => setBlocked(null)}
+        submitText="확인"
         title="시즌 활성화 전 확인이 필요합니다"
         width={700}
         destroyOnHidden
-        footer={
-          <div className="tw-flex tw-justify-end">
-            <AppButton variant="primary" onClick={() => setBlocked(null)}>
-              확인
-            </AppButton>
-          </div>
-        }
       >
+        <div className="tw-px-5 tw-py-4">
         {blocked ? (
           <div className="tw-space-y-4">
             <div className="tw-grid tw-grid-cols-1 tw-gap-3 md:tw-grid-cols-2">
@@ -154,7 +148,8 @@ export function SeasonActivationButton({ seasonId, disabled, disabledTooltip }: 
             <MemberSection label="개인 목표 없음" members={blocked.missingGoalsMembers} variant="slate" />
           </div>
         ) : null}
-      </Modal>
+        </div>
+      </AppSingleActionModal>
     </>
   );
 }

@@ -14,7 +14,6 @@ import {
   Form,
   Input,
   InputNumber,
-  Modal,
   Popconfirm,
   Select,
   Space,
@@ -25,6 +24,8 @@ import {
 import { PlusOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs, { type Dayjs } from 'dayjs';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
+import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import type { OvertimeRequest, OvertimeRequestCreatePayload } from '@/features/salary-service/types';
 
@@ -319,17 +320,18 @@ export function MyOvertimeRequestsPage() {
       </Card>
 
       {/* 신청 모달 (전자결재 자동 발의) */}
-      <Modal
+      <AppDoubleActionModal
         open={createOpen}
-        onCancel={() => setCreateOpen(false)}
-        onOk={() => form.submit()}
+        onClose={() => setCreateOpen(false)}
+        onConfirm={() => form.submit()}
         confirmLoading={createM.isPending}
-        okText="신청 (결재 발의)"
+        confirmText="신청 (결재 발의)"
         cancelText="취소"
         title="초과근무 신청"
-        destroyOnClose
+        destroyOnHidden
         width={620}
       >
+        <div className="tw-px-5 tw-py-4">
         <Typography.Paragraph type="secondary" className="!tw-text-xs">
           신청 시 전자결재 시스템에 자동으로 결재 문서가 발의됩니다.
         </Typography.Paragraph>
@@ -398,20 +400,19 @@ export function MyOvertimeRequestsPage() {
             <Input.TextArea rows={3} maxLength={300} showCount />
           </Form.Item>
         </Form>
-      </Modal>
+        </div>
+      </AppDoubleActionModal>
 
       {/* 상세 모달 */}
-      <Modal
+      <AppSingleActionModal
         open={Boolean(detailRow)}
-        onCancel={() => setDetailRow(null)}
-        footer={[
-          <Button key="close" onClick={() => setDetailRow(null)}>
-            닫기
-          </Button>,
-        ]}
+        onClose={() => setDetailRow(null)}
+        onSubmit={() => setDetailRow(null)}
+        submitText="닫기"
         title="초과근무 신청 상세"
         width={520}
       >
+        <div className="tw-px-5 tw-py-4">
         {detailRow && (
           <Descriptions column={1} bordered size="small">
             <Descriptions.Item label="근무일">{detailRow.targetDate}</Descriptions.Item>
@@ -434,7 +435,8 @@ export function MyOvertimeRequestsPage() {
             <Descriptions.Item label="사유">{detailRow.reason ?? '-'}</Descriptions.Item>
           </Descriptions>
         )}
-      </Modal>
+        </div>
+      </AppSingleActionModal>
     </Space>
   );
 }

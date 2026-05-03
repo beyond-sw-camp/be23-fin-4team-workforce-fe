@@ -56,6 +56,16 @@ function collectSelectableMemberIdsFromOrg(org: OrgChartOrgNode): string[] {
   return out;
 }
 
+/** 조직 노드 체크 시: 하위 조직원은 제외하고 이 조직에 직접 소속된 멤버만 (부서 자체는 선택 대상이 아님). */
+function collectDirectSelectableMemberIdsFromOrg(org: OrgChartOrgNode): string[] {
+  const out: string[] = [];
+  for (const m of org.members) {
+    if (m.jobGradeName.trim() === ORG_CHART_HIDDEN_JOB_GRADE) continue;
+    if (isSelectableMember(m.memberStatus)) out.push(m.memberId);
+  }
+  return out;
+}
+
 function collectAllSelectableFromRoots(orgs: OrgChartOrgNode[]): string[] {
   const acc: string[] = [];
   for (const o of orgs) acc.push(...collectSelectableMemberIdsFromOrg(o));
@@ -95,7 +105,8 @@ export function ContractRecipientOrgChartModal({
     if (!open) return;
     setKeyword('');
     setExpandedKeys([]);
-    setSelected(new Set(initialSelectedMemberIds ?? []));
+    const cleaned = (initialSelectedMemberIds ?? []).map((id) => String(id ?? '').trim()).filter(Boolean);
+    setSelected(new Set(cleaned));
   }, [open, initialSelectedMemberIds]);
 
   const { data, isLoading, isError } = useQuery({
@@ -182,33 +193,60 @@ export function ContractRecipientOrgChartModal({
 
     const orgTitleRow = (
       label: string,
-      memberCount: number,
+      bulkMemberIds: string[],
       checked: boolean,
       indeterminate: boolean,
       onToggle: (checked: boolean) => void,
-    ) => (
-      <div className="tw-flex tw-w-full tw-min-w-0 tw-items-center tw-justify-between tw-gap-2 tw-pr-1">
-        <span className="tw-truncate tw-text-sm tw-font-semibold tw-text-slate-800">
-          {label}
-          <span className="tw-ml-1 tw-font-normal tw-text-slate-400"> {memberCount}</span>
-        </span>
-        <span className="tw-shrink-0" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
-          <Checkbox
-            checked={checked}
-            indeterminate={indeterminate}
-            onChange={(e) => onToggle(e.target.checked)}
-            aria-label={`${label} 전체 선택`}
-          />
-        </span>
-      </div>
-    );
+    ) => {
+      const memberCount = bulkMemberIds.length;
+      const toggleSubtreeFromLabel = () => {
+        if (memberCount === 0) return;
+        const allOn = bulkMemberIds.every((id) => selected.has(id));
+        applyBulkSelection(bulkMemberIds, !allOn);
+      };
+      return (
+        <div
+          className="tw-flex tw-w-full tw-min-w-0 tw-items-center tw-justify-between tw-gap-2 tw-pr-1"
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <span
+            className={`tw-truncate tw-text-sm tw-font-semibold tw-text-slate-800 ${memberCount > 0 ? 'tw-cursor-pointer hover:tw-text-[#1e3a5f]' : ''}`}
+            role={memberCount > 0 ? 'button' : undefined}
+            tabIndex={memberCount > 0 ? 0 : undefined}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleSubtreeFromLabel();
+            }}
+            onKeyDown={(e) => {
+              if (memberCount === 0) return;
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                e.stopPropagation();
+                toggleSubtreeFromLabel();
+              }
+            }}
+          >
+            {label}
+            <span className="tw-ml-1 tw-font-normal tw-text-slate-400"> {memberCount}</span>
+          </span>
+          <span className="tw-shrink-0" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+            <Checkbox
+              checked={checked}
+              indeterminate={indeterminate}
+              onChange={(e) => onToggle(e.target.checked)}
+              aria-label={`${label} 소속 직원 전체 선택`}
+            />
+          </span>
+        </div>
+      );
+    };
 
     function buildOrgNodes(orgs: OrgChartOrgNode[]): DataNode[] {
       return orgs.map((org) => {
-        const subtreeIds = collectSelectableMemberIdsFromOrg(org);
-        const checkedCount = subtreeIds.filter((id) => selected.has(id)).length;
-        const orgChecked = subtreeIds.length > 0 && checkedCount === subtreeIds.length;
-        const orgIndeterminate = checkedCount > 0 && checkedCount < subtreeIds.length;
+        const directIds = collectDirectSelectableMemberIdsFromOrg(org);
+        const checkedCount = directIds.filter((id) => selected.has(id)).length;
+        const orgChecked = directIds.length > 0 && checkedCount === directIds.length;
+        const orgIndeterminate = checkedCount > 0 && checkedCount < directIds.length;
         const memberNodes: DataNode[] = [];
         for (const m of org.members) {
           if (m.jobGradeName.trim() === ORG_CHART_HIDDEN_JOB_GRADE) continue;
@@ -223,8 +261,8 @@ export function ContractRecipientOrgChartModal({
         const children = [...memberNodes, ...childOrgNodes];
         return {
           key: `o${KS}${org.organizationId}`,
-          title: orgTitleRow(org.name, subtreeIds.length, orgChecked, orgIndeterminate, (checked) =>
-            applyBulkSelection(subtreeIds, checked),
+          title: orgTitleRow(org.name, directIds, orgChecked, orgIndeterminate, (checked) =>
+            applyBulkSelection(directIds, checked),
           ),
           selectable: false,
           ...(children.length > 0 ? { children } : { isLeaf: true }),
@@ -240,8 +278,30 @@ export function ContractRecipientOrgChartModal({
       {
         key: 'root-company',
         title: (
-          <div className="tw-flex tw-w-full tw-min-w-0 tw-items-center tw-justify-between tw-gap-2 tw-pr-1">
-            <span className="tw-truncate tw-text-sm tw-font-semibold tw-text-[#1e3a5f]">
+          <div
+            className="tw-flex tw-w-full tw-min-w-0 tw-items-center tw-justify-between tw-gap-2 tw-pr-1"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <span
+              className={`tw-truncate tw-text-sm tw-font-semibold tw-text-[#1e3a5f] ${allVisibleIds.length > 0 ? 'tw-cursor-pointer hover:tw-text-[#152a45]' : ''}`}
+              role={allVisibleIds.length > 0 ? 'button' : undefined}
+              tabIndex={allVisibleIds.length > 0 ? 0 : undefined}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (allVisibleIds.length === 0) return;
+                const allOn = allVisibleIds.every((id) => selected.has(id));
+                applyBulkSelection(allVisibleIds, !allOn);
+              }}
+              onKeyDown={(e) => {
+                if (allVisibleIds.length === 0) return;
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const allOn = allVisibleIds.every((id) => selected.has(id));
+                  applyBulkSelection(allVisibleIds, !allOn);
+                }
+              }}
+            >
               {data.companyName}
               <span className="tw-ml-1 tw-font-normal tw-text-slate-400"> {allVisibleIds.length}</span>
             </span>
@@ -250,7 +310,7 @@ export function ContractRecipientOrgChartModal({
                 checked={rootChecked}
                 indeterminate={rootIndeterminate}
                 onChange={(e) => applyBulkSelection(allVisibleIds, e.target.checked)}
-                aria-label="회사 전체 선택"
+                aria-label="회사 소속 직원 전체 선택"
               />
             </span>
           </div>
@@ -300,7 +360,7 @@ export function ContractRecipientOrgChartModal({
               <div className="tw-max-h-[min(56vh,500px)] tw-overflow-auto tw-rounded-xl tw-border tw-border-slate-200 tw-bg-white tw-p-2">
                 <Tree
                   blockNode
-                  expandAction="click"
+                  expandAction={false}
                   showLine={{ showLeafIcon: false }}
                   expandedKeys={expandedKeys}
                   onExpand={(keys) => setExpandedKeys(keys as string[])}

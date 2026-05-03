@@ -12,7 +12,7 @@ import {
   TeamOutlined,
   UnlockOutlined,
 } from '@ant-design/icons';
-import { Alert, Avatar, Card, Modal, Spin, Table, Tag, Typography } from 'antd';
+import { Alert, Avatar, Card, Spin, Table, Tag, Typography } from 'antd';
 import { Link, useParams } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
@@ -31,6 +31,7 @@ import { PERM } from '@/features/permissions/backend-permissions';
 import { PermissionGuard } from '@/features/permissions/permission-guard';
 import { usePermissions } from '@/features/permissions/usePermissionsHook';
 import { AppButton } from '@/shared/ui/AppButton';
+import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
 import { twMerge } from 'tailwind-merge';
 
 function memberStatusLabel(code: string | undefined): string {
@@ -295,7 +296,7 @@ export function MemberDetailPage() {
         </main>
       </div>
 
-      <Modal
+      <AppSingleActionModal
         title={
           <span>
             직원 인사 이력
@@ -305,13 +306,13 @@ export function MemberDetailPage() {
           </span>
         }
         open={historyOpen}
-        onCancel={() => setHistoryOpen(false)}
-        footer={null}
+        onClose={() => setHistoryOpen(false)}
+        onSubmit={() => setHistoryOpen(false)}
+        submitText="닫기"
         width={960}
         destroyOnHidden
-        centered
-        className="[&_.ant-modal-body]:tw-max-h-[min(85vh,800px)] [&_.ant-modal-body]:tw-overflow-y-auto"
       >
+        <div className="tw-max-h-[min(85vh,800px)] tw-overflow-y-auto tw-px-5 tw-py-4">
         <Typography.Paragraph type="secondary" className="!tw-mb-3 !tw-text-xs">
           승진·부서 이동 등 인사 변경 이력입니다. 적용 종료일이 없으면 현재 적용 중인 이력입니다.
         </Typography.Paragraph>
@@ -377,7 +378,8 @@ export function MemberDetailPage() {
             ]}
           />
         )}
-      </Modal>
+        </div>
+      </AppSingleActionModal>
     </div>
   );
 }

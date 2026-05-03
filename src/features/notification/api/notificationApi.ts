@@ -36,6 +36,8 @@ export type NotificationType =
   | 'CALENDAR_TEAM_EVENT_CREATED'
   | 'MEMBER_ROLE_CHANGED'
   | 'MEMBER_INFO_UPDATED'
+  | 'CONTRACT_REMIND'
+  | 'CONTRACT_SENT'
   | string;
 
 export type NotificationItem = {
@@ -86,6 +88,8 @@ const NOTIFICATION_TYPE_KO: Record<string, string> = {
   MEMBER_ROLE_CHANGED: '역할 변경됨',
   MEMBER_INFO_UPDATED: '인사 정보 수정됨',
   LABOR_LAW_WEEKLY_VIOLATION: '주 52시간 초과',
+  CONTRACT_REMIND: '계약 서명 리마인드',
+  CONTRACT_SENT: '전자계약 도착',
 };
 
 const GOAL_BUNDLE_TARGET_TYPE_KO: Record<string, string> = {
@@ -106,7 +110,14 @@ function toNotificationItem(raw: unknown): NotificationItem {
   const type = String(r.notificationType ?? r.type ?? 'UNKNOWN').trim();
   const targetType = typeof r.targetType === 'string' ? r.targetType.trim() : '';
   const targetIdRaw =
-    r.targetId ?? r.target_id ?? r.requestId ?? r.request_id ?? r.approvalRequestId ?? r.approval_request_id;
+    r.targetId ??
+    r.target_id ??
+    r.contractId ??
+    r.contract_id ??
+    r.requestId ??
+    r.request_id ??
+    r.approvalRequestId ??
+    r.approval_request_id;
   const title =
     (type === 'GOAL_EVALUATED' && targetType && GOAL_BUNDLE_TARGET_TYPE_KO[targetType]) ||
     NOTIFICATION_TYPE_KO[type] ||

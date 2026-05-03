@@ -9,6 +9,10 @@ import {
   buildApprovalNotificationNavigate,
   buildGoalBundleNotificationNavigate,
 } from '@/features/notification/lib/approvalNotificationRoute';
+import {
+  buildContractNotificationNavigate,
+  isContractNotificationRoutable,
+} from '@/features/notification/lib/contractNotificationRoute';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 
@@ -33,7 +37,8 @@ function isRoutableNotification(item: NotificationItem): boolean {
   return (
     isApprovalNotification(item.notificationType) ||
     isGoalBundleNotification(item.notificationType, item.targetType) ||
-    isLeavePromotionNotification(item.notificationType)
+    isLeavePromotionNotification(item.notificationType) ||
+    isContractNotificationRoutable(item)
   );
 }
 
@@ -203,6 +208,11 @@ export function NotificationsPage() {
 
     if (isLeavePromotionNotification(item.notificationType)) {
       await navigate({ to: '/app/leave/my-promotion' });
+      return;
+    }
+
+    if (isContractNotificationRoutable(item)) {
+      await navigate(buildContractNotificationNavigate(item.targetId));
       return;
     }
 
