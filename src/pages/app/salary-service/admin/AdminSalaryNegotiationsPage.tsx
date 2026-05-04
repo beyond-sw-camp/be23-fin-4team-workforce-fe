@@ -46,11 +46,11 @@ const NEG_TYPE_KO: Record<string, string> = {
 };
 
 const NEG_STATUS_KO: Record<string, string> = {
-  DRAFT: '초안',
-  SUBMITTED: '제출',
-  APPROVED: '승인',
-  REJECTED: '반려',
-  APPLIED: '적용',
+  DRAFT: '작성 중',
+  SUBMITTED: '직원 응답 대기',
+  APPROVED: '직원 수락',
+  REJECTED: '직원 거절',
+  APPLIED: '적용 완료',
 };
 
 const NEG_STATUS_COLOR: Record<string, string> = {
@@ -67,9 +67,10 @@ function formatWon(n: number | null | undefined) {
 }
 
 function formatPercent(n: number | null | undefined) {
+  // BE 가 이미 % 단위(예: 2.86)로 저장하므로 100 곱하지 않음
   if (n == null || Number.isNaN(n)) return '—';
   const sign = n > 0 ? '+' : '';
-  return `${sign}${(n * 100).toFixed(2)}%`;
+  return `${sign}${n.toFixed(2)}%`;
 }
 
 function useDebouncedValue<T>(value: T, delayMs: number): T {
@@ -268,7 +269,7 @@ export function AdminSalaryNegotiationsPage() {
             연봉 협상 관리
           </Typography.Title>
           <Typography.Text type="secondary" className="tw-text-xs">
-            정기/승진/수시 연봉 협상 등록 → 제출 → 승인 → 적용
+            정기/승진/수시 연봉 협상안 등록 → 직원 통보 → 직원 응답(수락/거절) → 적용
           </Typography.Text>
         </div>
         <Space wrap>
@@ -278,11 +279,11 @@ export function AdminSalaryNegotiationsPage() {
             style={{ width: 130 }}
             options={[
               { value: 'ALL', label: '전체 상태' },
-              { value: 'DRAFT', label: '초안' },
-              { value: 'SUBMITTED', label: '제출' },
-              { value: 'APPROVED', label: '승인' },
-              { value: 'REJECTED', label: '반려' },
-              { value: 'APPLIED', label: '적용' },
+              { value: 'DRAFT', label: '작성 중' },
+              { value: 'SUBMITTED', label: '직원 응답 대기' },
+              { value: 'APPROVED', label: '직원 수락' },
+              { value: 'REJECTED', label: '직원 거절' },
+              { value: 'APPLIED', label: '적용 완료' },
             ]}
           />
           <Select<string>
@@ -386,16 +387,16 @@ function RowActions({
             수정
           </Button>
           <Button size="small" type="primary" onClick={() => onSubmit(id)}>
-            제출
+            직원 통보
           </Button>
         </>
       )}
       {status === 'SUBMITTED' && (
-        <>
-          <Button size="small" type="primary" onClick={() => onDecide(row, 'approve')}>
-            승인
+        <Tooltip title="직원이 화면에서 직접 수락/거절합니다. 응답이 늦으면 관리자 직권으로 처리할 수 있습니다.">
+          <Button size="small" onClick={() => onDecide(row, 'approve')}>
+            관리자 직권 승인
           </Button>
-        </>
+        </Tooltip>
       )}
       {status === 'APPROVED' && (
         <Tooltip title="새 Salary 행을 생성하고 기존 활성 행을 마감합니다">

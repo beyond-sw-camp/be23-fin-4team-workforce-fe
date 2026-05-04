@@ -26,6 +26,7 @@ const PAYROLL_TYPE_KO: Record<string, string> = {
   PERFORMANCE_BONUS: '성과급',
   SPECIAL_BONUS: '특별상여',
   RETROACTIVE: '소급분',
+  RETIREMENT_SETTLEMENT: '퇴직정산',
 };
 
 const { RangePicker } = DatePicker;
@@ -84,9 +85,24 @@ export function MyPayrollPage() {
       },
       {
         title: '지급일자',
-        dataIndex: 'paidAt',
         key: 'paidAt',
-        render: (v: string | null | undefined) => v ?? '—',
+        render: (_, row) => {
+          if (row.paidAt) return row.paidAt;
+          // 확정 상태 등 paidAt 미세팅 시 -> payrollYearMonthDay 기준으로 (예정/미지급) 표기
+          if (!row.payrollYearMonthDay) return '—';
+          const d = dayjs(row.payrollYearMonthDay);
+          if (!d.isValid()) return row.payrollYearMonthDay;
+          const today = dayjs().startOf('day');
+          const isFuture = d.isAfter(today);
+          return (
+            <span>
+              {d.format('YYYY-MM-DD')}{' '}
+              <Typography.Text type={isFuture ? 'secondary' : 'warning'} className="tw-text-xs">
+                ({isFuture ? '예정' : '미지급'})
+              </Typography.Text>
+            </span>
+          );
+        },
       },
       {
         title: '급여구분',
@@ -101,17 +117,14 @@ export function MyPayrollPage() {
         align: 'right',
         render: (v: number) => formatWon(v),
       },
+      // 비과세/과세 분리는 명세서 상세 화면에서 항목별로 확인 가능
+      // 목록 응답(PayrollResDto)에 분리 필드 미포함 -> placeholder 컬럼 제거
       {
-        title: '비과세 총액',
-        key: 'nonTaxableTotal',
+        title: '총공제',
+        dataIndex: 'totalDeduction',
+        key: 'totalDeduction',
         align: 'right',
-        render: () => '—',
-      },
-      {
-        title: '과세총액',
-        key: 'taxableTotal',
-        align: 'right',
-        render: (_, row) => formatWon(row.totalPayment),
+        render: (v: number) => formatWon(v),
       },
       {
         title: '실 수령액',

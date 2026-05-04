@@ -183,7 +183,8 @@ const TALENT_HUB_PATHS = [
 const TALENT_HUB_PATH_SET = new Set<string>(TALENT_HUB_PATHS);
 
 const ORG_HR_GROUP_KEY = 'group-org-hr';
-/** 인사 관리 서브메뉴 — 구성원·조직도 접근과 동일하게 `canAccessMemberDirectory` 로 노출 */
+/** 인사 관리 서브메뉴 — 구성원·조직도 접근과 동일하게 `canAccessMemberDirectory` 로 노출
+ *  조직 개편 시뮬은 시스템 관리자에게만 별도 노출 (아래 admin 분기에서 추가) */
 const ORG_HR_PATHS = ['/app/members', '/app/organization'] as const;
 /** 계약 발송 라우트는 HR 그룹에만 속하며, 메뉴 순서는 `hrGroupExtraChildren`에서 결재 양식 다음에 둠 */
 const ORG_HR_PATH_SET = new Set<string>([...ORG_HR_PATHS, '/app/contracts/send']);
@@ -284,6 +285,7 @@ function buildAppShellMenuItems(
                           title: APP_MENU_LABEL[p],
                       }))
                     : [];
+                // 조직 개편 시뮬은 [조직] 메뉴 내 탭으로 이동됨 (별도 메뉴 노출 X)
                 const extras = hrGroupExtraChildren ?? [];
                 if (baseChildren.length === 0 && extras.length === 0) {
                     continue;
@@ -339,12 +341,6 @@ function buildAppShellMenuItems(
                             icon: <TeamOutlined className="tw-text-lg"/>,
                             label: APP_MENU_LABEL['/app/attendance/company'],
                             title: APP_MENU_LABEL['/app/attendance/company'],
-                        },
-                        {
-                            key: '/app/attendance/corrections',
-                            icon: <ClockCircleOutlined className="tw-text-lg"/>,
-                            label: APP_MENU_LABEL['/app/attendance/corrections'],
-                            title: APP_MENU_LABEL['/app/attendance/corrections'],
                         },
                         {
                             key: '/app/attendance/schedules',
@@ -525,6 +521,7 @@ function buildAppShellMenuItems(
                             label: APP_MENU_LABEL['/app/salary/retirement-policy'],
                             title: APP_MENU_LABEL['/app/salary/retirement-policy'],
                         },
+                        // 퇴직 정산 별도 메뉴 제거 - 급여 정산 관리에서 typeFilter='RETIREMENT_SETTLEMENT' 로 통합 조회/처리
                         {
                             key: '/app/salary/bonus-policy',
                             icon: <DollarOutlined className="tw-text-lg"/>,
@@ -564,12 +561,15 @@ function buildAppShellMenuItems(
                             label: APP_MENU_LABEL['/app/payroll/retirement'],
                             title: APP_MENU_LABEL['/app/payroll/retirement'],
                         },
-                        {
-                            key: '/app/payroll/negotiations',
-                            icon: <DollarOutlined className="tw-text-lg"/>,
-                            label: APP_MENU_LABEL['/app/payroll/negotiations'],
-                            title: APP_MENU_LABEL['/app/payroll/negotiations'],
-                        },
+                        // 연봉협상제 회사에만 노출 - 호봉제는 협상 흐름 자체가 없음
+                        ...(showSalaryNegotiationSubmenu
+                            ? [{
+                                key: '/app/payroll/negotiations',
+                                icon: <DollarOutlined className="tw-text-lg"/>,
+                                label: APP_MENU_LABEL['/app/payroll/negotiations'],
+                                title: APP_MENU_LABEL['/app/payroll/negotiations'],
+                            }]
+                            : []),
                     ],
                 });
             }
@@ -642,10 +642,12 @@ function useAppShellSiderMenuItems(currentPathname: string): {
         staleTime: 60_000,
     });
 
+    // 좌측 메뉴 활성 정책 기반 조건부 노출 (호봉제 회사면 연봉 협상 메뉴 숨김)
+    // admin / 일반 직원 모두 본인 회사 정책 메뉴 가시성에 사용 -> 모든 인증 사용자에 활성화
     const {data: salaryPoliciesForMenu} = useQuery({
         queryKey: ['salary', 'salary-policies'],
         queryFn: () => salaryApi.salaryPolicy.list(),
-        enabled: shouldQuerySalaryMenuData && isAdmin,
+        enabled: status === 'authenticated',
         staleTime: 60_000,
     });
     // `/leave-policies` 503(Service Unavailable) 회피를 위해 근태 서비스 호출 비활성화. 아래 useQuery 복원 시 leavePromotionEnabled를 policies 기반으로 되돌리기
@@ -1621,6 +1623,7 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
     if (pathname === '/app/salary/settings') return ['/app/salary/settings'];
     if (pathname === '/app/salary/pay-grade-table') return ['/app/salary/settings'];
     if (pathname === '/app/salary/retirement-policy') return ['/app/salary/retirement-policy'];
+    if (pathname === '/app/salary/retirement-settlement') return ['/app/salary/retirement-settlement'];
     if (pathname === '/app/salary/negotiations') return ['/app/salary/negotiations'];
     if (pathname === '/app/salary/bonus-policy') return ['/app/salary/bonus-policy'];
     if (pathname === '/app/payroll/allowances') return ['/app/payroll/allowances'];
@@ -1705,6 +1708,7 @@ function menuOpenKeysForPath(
             pathname === '/app/salary/settings' ||
             pathname === '/app/salary/pay-grade-table' ||
             pathname === '/app/salary/retirement-policy' ||
+            pathname === '/app/salary/retirement-settlement' ||
             pathname === '/app/salary/negotiations' ||
             pathname === '/app/salary/bonus-policy')
     ) {

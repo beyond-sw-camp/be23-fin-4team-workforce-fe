@@ -412,11 +412,21 @@ export const salaryApi = {
     },
   },
 
-  /** /salary/retirement — 직원 본인 퇴직금 시뮬레이션 */
+  /** /salary/retirement — 퇴직금 시뮬레이션 */
   retirement: {
     /** 본인 퇴직금 시뮬 회사 정책 자동 적용 */
     async simulateMine(payload: RetirementSimReq): Promise<RetirementSimRes> {
       const { data } = await httpClient.post(`${BASE}/salary/retirement/simulate/me`, payload);
+      unwrapMessage(data);
+      return unwrapApiResponse<RetirementSimRes>(data);
+    },
+
+    /** 관리자 - 특정 직원 퇴직금 시뮬 (퇴직 정산 화면 상세) */
+    async simulateForMember(memberId: string, payload: RetirementSimReq): Promise<RetirementSimRes> {
+      const { data } = await httpClient.post(
+        `${BASE}/salary/retirement/simulate/admin/${encodeURIComponent(memberId)}`,
+        payload,
+      );
       unwrapMessage(data);
       return unwrapApiResponse<RetirementSimRes>(data);
     },
@@ -653,7 +663,21 @@ export const salaryApi = {
       );
     },
 
-    /** [수당 관리] 행별 단건 삭제. */
+    /** 회사 전체 이력 (활성 + 종료, 효력일 역순) - 상세 모드 [전체 이력] 용 */
+    async listAllHistory(): Promise<MemberAllowance[]> {
+      const { data } = await httpClient.get(`${BASE}/salary/admin/allowances/history`);
+      const unwrapped = unwrapApiResponse<MemberAllowance[] | null>(data);
+      return Array.isArray(unwrapped) ? unwrapped : [];
+    },
+
+    /** [수당 관리] 행별 단건 종료 - effectiveTo set, 이력 보존. closeAt 생략 시 오늘. */
+    async closeOne(memberAllowanceId: string, closeAt?: string): Promise<void> {
+      const url = `${BASE}/salary/admin/allowances/${encodeURIComponent(memberAllowanceId)}/close`
+        + (closeAt ? `?closeAt=${encodeURIComponent(closeAt)}` : '');
+      await httpClient.post(url);
+    },
+
+    /** [수당 관리] 행별 단건 완전 삭제 (실수 정정용 - 이력 X). */
     async deleteOne(memberAllowanceId: string): Promise<void> {
       await httpClient.delete(
         `${BASE}/salary/admin/allowances/${encodeURIComponent(memberAllowanceId)}`,
@@ -755,6 +779,26 @@ export const salaryApi = {
       return unwrapApiResponse<SalaryNegotiation>(data);
     },
 
+    /** 직원 본인 응답 - 수락 (SUBMITTED -> APPROVED) */
+    async acceptMine(negotiationId: string, note?: string | null): Promise<SalaryNegotiation> {
+      const { data } = await httpClient.patch(
+        `${BASE}/salary/negotiations/my/${encodeURIComponent(negotiationId)}/accept`,
+        { note: note ?? null },
+      );
+      unwrapMessage(data);
+      return unwrapApiResponse<SalaryNegotiation>(data);
+    },
+
+    /** 직원 본인 응답 - 거절 (SUBMITTED -> REJECTED, 사유 필수) */
+    async rejectMine(negotiationId: string, reason: string): Promise<SalaryNegotiation> {
+      const { data } = await httpClient.patch(
+        `${BASE}/salary/negotiations/my/${encodeURIComponent(negotiationId)}/reject`,
+        { reason },
+      );
+      unwrapMessage(data);
+      return unwrapApiResponse<SalaryNegotiation>(data);
+    },
+
     async delete(negotiationId: string): Promise<void> {
       await httpClient.delete(
         `${BASE}/salary/negotiations/${encodeURIComponent(negotiationId)}`,
@@ -796,6 +840,54 @@ export const salaryApi = {
 
     async delete(id: string): Promise<void> {
       await httpClient.delete(`${BASE}/salary/bonus-policy/${encodeURIComponent(id)}`);
+    },
+  },
+
+  /** /salary/bonus 보너스 일괄 발행 - 시뮬 미리보기 + 발행 */
+  bonusBatch: {
+    async preview(req: {
+      bonusKind: 'REGULAR' | 'PERFORMANCE' | 'HOLIDAY';
+      payDate: string;
+      ratePercent?: number | null;
+      memo?: string | null;
+    }): Promise<{
+      bonusKind: string;
+      payDate: string;
+      policyMaxRate: number | null;
+      appliedRate: number | null;
+      totalEligible: number;
+      totalSkipped: number;
+      totalGrossAmount: number;
+      targets: Array<{
+        memberId: string;
+        name: string;
+        sabun: string | null;
+        organizationName: string | null;
+        baseSalary: number;
+        bonusAmount: number;
+        exceedsLimit: boolean;
+        skipReason: string | null;
+      }>;
+    }> {
+      const { data } = await httpClient.post(`${BASE}/salary/bonus/preview`, req);
+      unwrapMessage(data);
+      return unwrapApiResponse(data);
+    },
+
+    async apply(req: {
+      bonusKind: 'REGULAR' | 'PERFORMANCE' | 'HOLIDAY';
+      payDate: string;
+      ratePercent?: number | null;
+      memo?: string | null;
+    }): Promise<{
+      created: number;
+      failed: number;
+      payrollIds: string[];
+      failures: string[];
+    }> {
+      const { data } = await httpClient.post(`${BASE}/salary/bonus/apply`, req);
+      unwrapMessage(data);
+      return unwrapApiResponse(data);
     },
   },
 };

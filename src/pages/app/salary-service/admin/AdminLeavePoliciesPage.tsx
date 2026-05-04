@@ -574,17 +574,6 @@ function PolicyForm({ form }: PolicyFormProps) {
               />
             </Form.Item>
           </Space>
-          <Alert
-            type="info"
-            showIcon
-            className="!tw-mb-0 !tw-mt-2"
-            message="통보 시점 안내"
-            description={
-              <>
-                만료일로부터 역산한 일수입니다. 매일 자정 자동 발송되며 알림 이력은 저장됩니다.
-              </>
-            }
-          />
         </div>
       ) : null}
       </div>

@@ -164,6 +164,19 @@ export function AdminCompanyHolidaysPage() {
     onError: (e: unknown) => message.error(apiErrorMessage(e) || '법정 공휴일 새로고침에 실패했습니다.'),
   });
 
+  /** 공휴일 근무 데이터 일괄 정리 - 시드 재실행 없이 즉시 cleanup */
+  const cleanupAttendanceM = useMutation({
+    mutationFn: () => attendanceApi.companyHoliday.cleanupAttendance(),
+    onSuccess: (deleted) => {
+      if (deleted > 0) {
+        message.success(`공휴일 근무 데이터 ${deleted}건이 정리되었습니다.`);
+      } else {
+        message.info('정리 대상 없음 - 휴일에 근무 데이터가 없습니다.');
+      }
+    },
+    onError: (e: unknown) => message.error(apiErrorMessage(e) || '정리에 실패했습니다.'),
+  });
+
   const dayHolidays = useMemo(() => holidaysOnDay(holidays, selectedDay), [holidays, selectedDay]);
 
   const openCreateForDay = (d: Dayjs) => {
@@ -310,6 +323,17 @@ export function AdminCompanyHolidaysPage() {
           >
             <Button icon={<ReloadOutlined />} loading={refreshLegalM.isPending} type="default" className="tw-border-indigo-300 tw-bg-white">
               법정 공휴일 새로고침
+            </Button>
+          </Popconfirm>
+          <Popconfirm
+            title="공휴일 근무 데이터 정리"
+            description="등록된 회사 공휴일 일자에 들어있는 직원 근무(DailyAttendance) 데이터를 일괄 삭제합니다. 시드 재실행 없이 즉시 cleanup."
+            okText="정리"
+            cancelText="취소"
+            onConfirm={() => cleanupAttendanceM.mutate()}
+          >
+            <Button danger loading={cleanupAttendanceM.isPending}>
+              공휴일 근무 데이터 정리
             </Button>
           </Popconfirm>
         </Space>
