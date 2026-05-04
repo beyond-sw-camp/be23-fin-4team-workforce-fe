@@ -1,10 +1,11 @@
 /** /app/attendance/overtime-policies - 연장근로 정책 관리 (시스템 관리자) */
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Button, Card, Col, DatePicker, Form, InputNumber, Modal, Row, Select, Space, Table, Typography } from 'antd';
+import { Alert, App, Button, Card, Col, DatePicker, Form, InputNumber, Row, Select, Space, Table, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import type { OvertimePolicy } from '@/features/salary-service/types';
 
 type FormValues = {
@@ -269,18 +270,20 @@ export function AdminOvertimePoliciesPage() {
         />
       </Card>
 
-      <Modal
+      <AppDoubleActionModal
         open={open}
         title={editing ? '연장근로 정책 수정' : '연장근로 정책 등록'}
-        onCancel={() => {
+        onClose={() => {
           setOpen(false);
           setEditing(null);
           form.resetFields();
         }}
-        onOk={() => form.submit()}
+        onConfirm={() => form.submit()}
         confirmLoading={createM.isPending || updateM.isPending}
         width={750}
+        confirmText={editing ? '수정' : '등록'}
       >
+        <div className="tw-px-5 tw-py-4">
         <Form<FormValues>
           form={form}
           layout="vertical"
@@ -427,7 +430,8 @@ export function AdminOvertimePoliciesPage() {
             </Col>
           </Row>
         </Form>
-      </Modal>
+        </div>
+      </AppDoubleActionModal>
     </Space>
   );
 }

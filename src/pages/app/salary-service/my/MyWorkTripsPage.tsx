@@ -9,7 +9,6 @@ import {
   Form,
   Input,
   InputNumber,
-  Modal,
   Popconfirm,
   Select,
   Space,
@@ -19,6 +18,7 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import type { WorkTrip, WorkTripTypeCode, ExpenseTypeCode } from '@/features/salary-service/types';
 
@@ -263,21 +263,22 @@ export function MyWorkTripsPage() {
         />
       </Card>
 
-      <Modal
+      <AppDoubleActionModal
         open={open}
-        onCancel={() => {
+        onClose={() => {
           setOpen(false);
           setEditing(null);
           form.resetFields();
         }}
-        onOk={() => form.submit()}
+        onConfirm={() => form.submit()}
         confirmLoading={createM.isPending || updateM.isPending}
-        okText={editing ? '수정' : '등록'}
+        confirmText={editing ? '수정' : '등록'}
         cancelText="취소"
         title={editing ? '출장/외근 수정' : '출장/외근 등록'}
         destroyOnHidden
         width={520}
       >
+        <div className="tw-px-5 tw-py-4">
         <Form<FormValues>
           form={form}
           layout="vertical"
@@ -367,7 +368,8 @@ export function MyWorkTripsPage() {
             <Select options={EXPENSE_TYPE_OPTIONS} allowClear placeholder="경비 없으면 비워두세요" />
           </Form.Item>
         </Form>
-      </Modal>
+        </div>
+      </AppDoubleActionModal>
     </Space>
   );
 }

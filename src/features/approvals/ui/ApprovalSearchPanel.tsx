@@ -12,6 +12,7 @@ import {
   type ApprovalSearchRequestType,
   type ApprovalSearchStatus,
 } from '@/features/approvals/api/approvalSearchApi';
+import { approvalRequestTypeLabelKo } from '@/features/approvals/lib/approvalRequestTypeKo';
 import {
   APPROVAL_STATUS_COLOR,
   APPROVAL_STATUS_LABEL,
@@ -195,8 +196,7 @@ export function ApprovalSearchPanel({
         key: 'requestType',
         width: 110,
         render: (v: string) => {
-          const k = String(v).toUpperCase() as ApprovalSearchRequestType;
-          return <Tag>{APPROVAL_TYPE_LABEL[k] ?? v}</Tag>;
+          return <Tag>{approvalRequestTypeLabelKo(v)}</Tag>;
         },
       },
       {

@@ -405,9 +405,15 @@ const absenceProxyRoute = createRoute({
   component: AbsenceProxyPage,
 });
 
+const contractsSearchSchema = z.object({
+  /** 알림 등 딥링크로 열 계약 ID */
+  contractId: z.string().optional(),
+});
+
 const electronicContractsRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/contracts',
+  validateSearch: contractsSearchSchema,
   component: ContractsPage,
 });
 

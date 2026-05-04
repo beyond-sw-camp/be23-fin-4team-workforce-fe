@@ -20,7 +20,6 @@ import {
   Form,
   Input,
   InputNumber,
-  Modal,
   Popconfirm,
   Radio,
   Row,
@@ -33,6 +32,8 @@ import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { useEffect, useMemo, useState } from 'react';
 import type { ApiError } from '@/shared/api/types';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
+import { AppModal } from '@/shared/ui/AppModal';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import type { EsgActivity, EsgShopItem, EsgShopOrder, EsgSubject, EsgSubjectCategory } from '@/features/esg/api/esgApi';
 import { esgApi } from '@/features/esg/api/esgApi';
@@ -773,13 +774,13 @@ export function EsgAdminPage() {
         </Col>
       </Row>
 
-      <Modal
+      <AppModal
         title="기능 설정"
         open={dashboardModal === 'config'}
         onCancel={() => setDashboardModal(null)}
         footer={null}
         width={520}
-        destroyOnHidden
+        destroyOnClose
         styles={{ body: modalBodyPadding }}
       >
         <Card className="tw-border-slate-200/80 tw-shadow-sm" size="small">
@@ -810,15 +811,15 @@ export function EsgAdminPage() {
             </Button>
           </Form>
         </Card>
-      </Modal>
+      </AppModal>
 
-      <Modal
+      <AppModal
         title="활동 양식"
         open={dashboardModal === 'subjects'}
         onCancel={() => setDashboardModal(null)}
         footer={null}
         width={960}
-        destroyOnHidden
+        destroyOnClose
         styles={{ body: modalBodyPadding }}
       >
         <Card
@@ -867,15 +868,15 @@ export function EsgAdminPage() {
             ]}
           />
         </Card>
-      </Modal>
+      </AppModal>
 
-      <Modal
+      <AppModal
         title="활동 승인"
         open={dashboardModal === 'approve'}
         onCancel={() => setDashboardModal(null)}
         footer={null}
         width={1120}
-        destroyOnHidden
+        destroyOnClose
         styles={{ body: { ...modalBodyPadding, maxHeight: '78vh', overflowY: 'auto' } }}
       >
         <Space direction="vertical" className="tw-w-full" size={16}>
@@ -1073,15 +1074,15 @@ export function EsgAdminPage() {
             />
           </Card>
         </Space>
-      </Modal>
+      </AppModal>
 
-      <Modal
+      <AppModal
         title="샵 물품 조회"
         open={dashboardModal === 'shop'}
         onCancel={() => setDashboardModal(null)}
         footer={null}
         width={920}
-        destroyOnHidden
+        destroyOnClose
         styles={{ body: { ...modalBodyPadding, maxHeight: '78vh', overflowY: 'auto' } }}
       >
         <Typography.Paragraph type="secondary" className="!tw-mb-3 !tw-text-xs">
@@ -1107,15 +1108,15 @@ export function EsgAdminPage() {
             ]}
           />
         </Card>
-      </Modal>
+      </AppModal>
 
-      <Modal
+      <AppModal
         title="물품 등록"
         open={dashboardModal === 'shopRegister'}
         onCancel={() => setDashboardModal(null)}
         footer={null}
         width={560}
-        destroyOnHidden
+        destroyOnClose
         styles={{ body: { ...modalBodyPadding, maxHeight: '78vh', overflowY: 'auto' } }}
       >
         <Typography.Paragraph type="secondary" className="!tw-mb-3 !tw-text-xs">
@@ -1148,15 +1149,15 @@ export function EsgAdminPage() {
             </Button>
           </Form>
         </Card>
-      </Modal>
+      </AppModal>
 
-      <Modal
+      <AppModal
         title="주문(전체)"
         open={dashboardModal === 'orders'}
         onCancel={() => setDashboardModal(null)}
         footer={null}
         width={960}
-        destroyOnHidden
+        destroyOnClose
         styles={{ body: { ...modalBodyPadding, maxHeight: '78vh', overflowY: 'auto' } }}
       >
         <Typography.Paragraph type="secondary" className="!tw-mb-3 !tw-text-xs">
@@ -1186,15 +1187,15 @@ export function EsgAdminPage() {
             },
           ]}
         />
-      </Modal>
+      </AppModal>
 
-      <Modal
+      <AppModal
         title="점수"
         open={dashboardModal === 'scores'}
         onCancel={() => setDashboardModal(null)}
         footer={null}
         width={880}
-        destroyOnHidden
+        destroyOnClose
         styles={{ body: { ...modalBodyPadding, maxHeight: '78vh', overflowY: 'auto' } }}
       >
         <Space direction="vertical" className="tw-w-full" size={16}>
@@ -1237,20 +1238,22 @@ export function EsgAdminPage() {
             />
           </Card>
         </Space>
-      </Modal>
+      </AppModal>
 
-      <Modal
+      <AppDoubleActionModal
         title={editingSubject ? '활동 양식 수정' : '활동 양식 추가'}
         open={subModalOpen}
-        onCancel={() => {
+        onClose={() => {
           setSubModalOpen(false);
           setEditingSubject(null);
         }}
-        onOk={() => void saveSubject.mutateAsync()}
+        onConfirm={() => void saveSubject.mutateAsync()}
         confirmLoading={saveSubject.isPending}
-        okButtonProps={{ className: esgPrimaryButtonClass }}
+        confirmButtonClassName={esgPrimaryButtonClass}
         destroyOnHidden
+        confirmText="확인"
       >
+        <div className="tw-px-5 tw-py-4">
         <Form form={subForm} layout="vertical">
           <Form.Item name="title" label="제목" rules={[{ required: true }]}>
             <Input />
@@ -1265,32 +1268,36 @@ export function EsgAdminPage() {
             <InputNumber min={0} className="tw-w-full" />
           </Form.Item>
         </Form>
-      </Modal>
+        </div>
+      </AppDoubleActionModal>
 
-      <Modal
+      <AppDoubleActionModal
         title="거절 사유"
         open={rejectOpen}
-        onCancel={() => {
+        onClose={() => {
           setRejectOpen(false);
           setRejectId(null);
           rejectForm.resetFields();
         }}
-        onOk={() =>
-          rejectForm.validateFields().then((v) => {
+        onConfirm={() =>
+          void rejectForm.validateFields().then((v) => {
             if (!rejectId) return Promise.reject(new Error('missing id'));
             return rejectM.mutateAsync({ id: rejectId, reason: v.reason.trim() });
           })
         }
         confirmLoading={rejectM.isPending}
-        okButtonProps={{ className: esgPrimaryButtonClass }}
+        confirmButtonClassName={esgPrimaryButtonClass}
         destroyOnHidden
+        confirmText="확인"
       >
+        <div className="tw-px-5 tw-py-4">
         <Form form={rejectForm} layout="vertical" className="tw-pt-1">
           <Form.Item name="reason" label="사유" rules={[{ required: true, message: '거절 사유를 입력해 주세요.' }]}>
             <Input.TextArea rows={4} placeholder="거절 사유를 입력해 주세요." />
           </Form.Item>
         </Form>
-      </Modal>
+        </div>
+      </AppDoubleActionModal>
     </Space>
   );
 }

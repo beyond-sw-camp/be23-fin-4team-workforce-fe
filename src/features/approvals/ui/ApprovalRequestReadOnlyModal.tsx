@@ -17,11 +17,8 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { useEffect, useMemo, useState } from 'react';
-import {
-  APPROVAL_REQUEST_TYPES,
-  approvalApi,
-  type ApprovalRequestType,
-} from '@/features/approvals/api/approvalApi';
+import { approvalApi, normalizeApprovalRequestType } from '@/features/approvals/api/approvalApi';
+import { approvalRequestTypeLabelKo } from '@/features/approvals/lib/approvalRequestTypeKo';
 import {
   approvalLineIsProxy,
   approvalRequestApi,
@@ -35,6 +32,8 @@ import {
   formatApprovalAttachmentBytes,
   type ApprovalAttachment,
 } from '@/features/approvals/api/approvalAttachmentsApi';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
+import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
 import { useAuth } from '@/features/auth/useAuth';
 import { getRefreshIdentityHeaders } from '@/shared/stores/authRefreshIdentityStore';
 import {
@@ -53,17 +52,6 @@ import { memberApi } from '@/features/member/api/memberApi';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
 
-const REQUEST_TYPE_LABEL: Record<ApprovalRequestType, string> = {
-  VACATION: '휴가',
-  ATTENDANCE: '근태',
-  HR_MOVEMENT: '부서이동',
-  SALARY: '급여',
-  GENERAL: '일반기안',
-  CONTRACT: '전자계약',
-  CERTIFICATE: '문서발급',
-  OFFICIAL: '공문',
-};
-
 const REQUEST_STATUS_LABEL: Record<ApprovalRequestStatus, string> = {
   DRAFT: '임시저장',
   WAIT: '제출됨',
@@ -72,14 +60,6 @@ const REQUEST_STATUS_LABEL: Record<ApprovalRequestStatus, string> = {
   REJECTED: '반려',
   CANCELED: '취소',
 };
-
-function normalizeApprovalRequestType(raw: string | undefined): ApprovalRequestType {
-  const u = String(raw ?? '')
-    .trim()
-    .toUpperCase();
-  if ((APPROVAL_REQUEST_TYPES as readonly string[]).includes(u)) return u as ApprovalRequestType;
-  return 'GENERAL';
-}
 
 function formatDateTime(value?: string | null) {
   if (!value) return '—';
@@ -720,9 +700,12 @@ export function ApprovalRequestReadOnlyModal({
 
   return (
     <>
-    <Modal
+    <AppSingleActionModal
       title={title}
       open={open}
+      onClose={onClose}
+      onSubmit={onClose}
+      submitText="닫기"
       onCancel={onClose}
       footer={
         canCancelRequest ? (
@@ -739,13 +722,9 @@ export function ApprovalRequestReadOnlyModal({
         ) : null
       }
       width={920}
-      style={{ top: 48 }}
-      styles={{
-        content: { resize: 'both', overflow: 'auto' },
-        body: { maxHeight: 'min(85vh, 900px)', overflowY: 'auto' },
-      }}
       destroyOnHidden
     >
+      <div className="tw-max-h-[min(85vh,900px)] tw-overflow-y-auto tw-px-5 tw-py-4">
       {detailLoading || !selectedRequestDetail ? (
         <Typography.Text type="secondary">불러오는 중...</Typography.Text>
       ) : (
@@ -860,9 +839,7 @@ export function ApprovalRequestReadOnlyModal({
                   return (
                     <ApprovalFormPaperLayout
                       documentName={doc.documentName}
-                      categoryLabel={
-                        REQUEST_TYPE_LABEL[normalizeApprovalRequestType(doc.requestType)] ?? String(doc.requestType)
-                      }
+                      categoryLabel={approvalRequestTypeLabelKo(doc.requestType)}
                       requestTypeCode={normalizeApprovalRequestType(doc.requestType)}
                       drafterName={dName}
                       drafterOrg={dOrg}
@@ -1059,27 +1036,30 @@ export function ApprovalRequestReadOnlyModal({
           </Card>
         </Space>
       )}
-    </Modal>
+      </div>
+    </AppSingleActionModal>
 
-    <Modal
+    <AppDoubleActionModal
       title="공문 발송 취소"
       open={officialCancelOpen}
-      onCancel={() => {
+      onClose={() => {
         setOfficialCancelOpen(false);
         setOfficialCancelReason('');
       }}
-      okText="취소 확정"
+      confirmText="취소 확정"
       cancelText="닫기"
+      confirmDanger
       confirmLoading={cancelOfficialBeforeSendM.isPending}
       destroyOnHidden
-      onOk={async () => {
+      onConfirm={async () => {
         if (!officialCancelReason.trim()) {
           message.warning('취소 사유를 입력해 주세요.');
-          throw new Error('validation');
+          return;
         }
         await cancelOfficialBeforeSendM.mutateAsync(officialCancelReason.trim());
       }}
     >
+      <div className="tw-px-5 tw-py-4">
       <Typography.Paragraph type="secondary" className="!tw-mb-2 !tw-text-sm">
         승인된 공문이 수신 부서로 나가기 전에만 취소할 수 있습니다. 취소 사유는 결재·참조자에게 안내됩니다.
       </Typography.Paragraph>
@@ -1091,7 +1071,8 @@ export function ApprovalRequestReadOnlyModal({
         maxLength={2000}
         showCount
       />
-    </Modal>
+      </div>
+    </AppDoubleActionModal>
 
     {/* 일반 결재 취소 모달 - DRAFT/WAIT/PENDING 상태에서 기안자가 직접 취소 */}
     <Modal

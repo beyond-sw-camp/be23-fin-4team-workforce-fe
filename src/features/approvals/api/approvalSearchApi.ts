@@ -7,11 +7,9 @@ export type ApprovalSearchStatus = (typeof APPROVAL_SEARCH_STATUSES)[number];
 export const APPROVAL_SEARCH_TYPES = [
   'VACATION',
   'ATTENDANCE',
-  'HR_MOVEMENT',
-  'SALARY',
+  'HR',
+  'BUSINESS_TRIP',
   'GENERAL',
-  'CONTRACT',
-  'CERTIFICATE',
   'OFFICIAL',
 ] as const;
 export type ApprovalSearchRequestType = (typeof APPROVAL_SEARCH_TYPES)[number];

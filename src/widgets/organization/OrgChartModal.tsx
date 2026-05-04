@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Modal } from 'antd';
+import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
 import { useCallback, useEffect, useState } from 'react';
 import { organizationApi } from '@/features/organization/api/organizationApi';
 import { useMemberChatOpener } from '@/widgets/app-shell/MemberChatOpener';
@@ -64,9 +64,9 @@ export function OrgChartModal({ open, onClose }: { open: boolean; onClose: () =>
   });
 
   return (
-    <Modal
+    <AppSingleActionModal
       title={
-        <div className="tw-flex tw-w-full tw-min-w-0 tw-items-center tw-gap-2 tw-pr-12">
+        <div className="tw-flex tw-w-full tw-min-w-0 tw-items-center tw-gap-2 tw-pr-2">
           <span className="tw-shrink-0 tw-text-base tw-font-semibold tw-text-slate-900">조직도</span>
           <div className="tw-flex tw-shrink-0 tw-items-center">
             <OrgChartViewSettingsPopover value={viewSettings} onChange={persistViewSettings} />
@@ -74,17 +74,13 @@ export function OrgChartModal({ open, onClose }: { open: boolean; onClose: () =>
         </div>
       }
       open={open}
-      onCancel={onClose}
-      footer={null}
+      onClose={onClose}
+      onSubmit={onClose}
+      submitText="닫기"
       width="min(1120px, 98vw)"
       destroyOnHidden
-      centered
-      styles={{
-        header: { borderBottom: '1px solid rgb(241 245 249)', paddingBottom: 12, marginBottom: 0 },
-        body: { paddingTop: 12, paddingBottom: 16 },
-      }}
     >
-      <div className="tw-flex tw-max-h-[min(78vh,720px)] tw-min-h-[min(52vh,420px)] tw-gap-0 tw-overflow-hidden">
+      <div className="tw-flex tw-max-h-[min(78vh,720px)] tw-min-h-[min(52vh,420px)] tw-gap-0 tw-overflow-hidden tw-px-5 tw-pb-4 tw-pt-3">
         <div className="tw-min-h-0 tw-min-w-0 tw-flex-1 tw-overflow-y-auto tw-pr-3">
           <OrgChartPanel
             data={data}
@@ -105,6 +101,6 @@ export function OrgChartModal({ open, onClose }: { open: boolean; onClose: () =>
           />
         </aside>
       </div>
-    </Modal>
+    </AppSingleActionModal>
   );
 }

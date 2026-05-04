@@ -1,6 +1,6 @@
 import { DeleteOutlined, EditOutlined, MoreOutlined, PlusOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Alert, Button, Checkbox, Dropdown, Form, Input, Modal, Popover, Radio, Table, Typography } from 'antd';
+import { App, Alert, Button, Checkbox, Dropdown, Form, Input, Popover, Radio, Table, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -21,6 +21,7 @@ import {
 } from '@/features/member/model/role-permission';
 import { PERM } from '@/features/permissions/backend-permissions';
 import { PermissionGuard } from '@/features/permissions/permission-guard';
+import { AppModal } from '@/shared/ui/AppModal';
 import { usePermissions } from '@/features/permissions/usePermissionsHook';
 
 const RESOURCE_LABELS: Record<PermissionResource, string> = {
@@ -462,14 +463,12 @@ export function OrganizationRolesSection(props: { onMoveToEsgStep?: () => void }
       {/* `destroyOnHidden` 모달이 닫히면 Form이 제거되어 useForm 경고가 난다. */}
       {roleModal === null ? <Form form={form} preserve={false} className="tw-hidden" aria-hidden /> : null}
 
-      <Modal
+      <AppModal
         title={roleModal?.type === 'edit' ? '역할 수정' : '역할 추가'}
         open={roleModal != null}
         onCancel={() => setRoleModal(null)}
-        onOk={() => void handleModalOk()}
         width={960}
         destroyOnHidden
-        confirmLoading={createM.isPending || updateM.isPending}
         footer={
           <div className="tw-flex tw-justify-end tw-gap-2">
             <Button onClick={() => setRoleModal(null)}>취소</Button>
@@ -596,7 +595,7 @@ export function OrganizationRolesSection(props: { onMoveToEsgStep?: () => void }
             </div>
           </Popover>
         </Form>
-      </Modal>
+      </AppModal>
     </>
   );
 }

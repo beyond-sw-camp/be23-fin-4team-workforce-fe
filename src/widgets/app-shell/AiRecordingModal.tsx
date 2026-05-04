@@ -15,7 +15,6 @@ import {
   Empty,
   Form,
   Input,
-  Modal,
   Pagination,
   Popconfirm,
   Select,
@@ -33,6 +32,7 @@ import {
   type AiRecording,
   type AiRecordingLanguage,
 } from '@/features/ai-recordings/api/aiRecordingsApi';
+import { AppModal } from '@/shared/ui/AppModal';
 import { formatApprovalAttachmentBytes } from '@/features/approvals/api/approvalAttachmentsApi';
 
 type AiRecordingModalProps = {
@@ -674,7 +674,7 @@ export function AiRecordingModal({ open, onClose }: AiRecordingModalProps) {
   }, [tab]);
 
   return (
-    <Modal
+    <AppModal
       title={titleNode}
       open={open}
       onCancel={handleClose}
@@ -685,6 +685,6 @@ export function AiRecordingModal({ open, onClose }: AiRecordingModalProps) {
       styles={{ body: { maxHeight: '76vh', overflowY: 'auto' } }}
     >
       {tab === 'list' ? listBody : tab === 'create' ? createBody : detailBody}
-    </Modal>
+    </AppModal>
   );
 }

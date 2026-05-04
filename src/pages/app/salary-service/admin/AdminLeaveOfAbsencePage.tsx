@@ -12,7 +12,6 @@ import {
   DatePicker,
   Form,
   Input,
-  Modal,
   Space,
   Table,
   Tag,
@@ -21,6 +20,7 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { membersApi } from '@/features/members/api/membersApi';
 import type { Member } from '@/features/members/model/types';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
@@ -269,19 +269,20 @@ export function AdminLeaveOfAbsencePage() {
         />
       </Card>
 
-      <Modal
+      <AppDoubleActionModal
         open={Boolean(target)}
-        onCancel={() => {
+        onClose={() => {
           setTarget(null);
           endForm.resetFields();
         }}
-        onOk={() => endForm.submit()}
+        onConfirm={() => endForm.submit()}
         confirmLoading={endM.isPending}
-        okText="조기 복직 처리"
+        confirmText="조기 복직 처리"
         cancelText="취소"
         title="조기 복직 처리"
         destroyOnHidden
       >
+        <div className="tw-px-5 tw-py-4">
         {target && (
           <Space direction="vertical" className="tw-w-full" size={12}>
             <Typography.Text>
@@ -340,7 +341,8 @@ export function AdminLeaveOfAbsencePage() {
             </Form>
           </Space>
         )}
-      </Modal>
+        </div>
+      </AppDoubleActionModal>
     </Space>
   );
 }

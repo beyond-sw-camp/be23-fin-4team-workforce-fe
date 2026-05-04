@@ -14,6 +14,7 @@ function signStatusTag(signStatus: string) {
   const s = signStatus.toUpperCase();
   if (s === 'SIGNED') return <Tag color="success">서명 완료</Tag>;
   if (s === 'REJECTED') return <Tag color="error">거절</Tag>;
+  if (s === 'CANCELED') return <Tag color="default">회수</Tag>;
   if (s === 'PENDING' || s === 'WAITING' || s === 'UNSIGNED' || s === 'NOT_SIGNED') {
     return <Tag>미서명</Tag>;
   }
@@ -64,6 +65,11 @@ export function ContractPartySignaturesCard({ parties }: Props) {
                 서명일시: {formatSignedAt(p.signedAt)}
               </Typography.Text>
             </div>
+            {p.rejectReason?.trim() && String(p.signStatus).toUpperCase() === 'REJECTED' ? (
+              <Typography.Paragraph type="secondary" className="!tw-mb-2 tw-text-sm tw-whitespace-pre-wrap">
+                거절 사유: {p.rejectReason.trim()}
+              </Typography.Paragraph>
+            ) : null}
             {p.signatureImageUrl?.trim() ? (
               <div className="tw-mt-2 tw-rounded-lg tw-border tw-border-slate-200 tw-bg-slate-50 tw-p-2 tw-inline-block tw-max-w-full">
                 <Image

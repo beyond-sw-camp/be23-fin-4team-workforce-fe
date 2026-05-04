@@ -1,4 +1,4 @@
-import type { ApprovalRequestDetail } from '@/features/approvals/api/approvalRequestApi';
+import type { ApprovalRequestDetail, OfficialRecipient } from '@/features/approvals/api/approvalRequestApi';
 
 export const FORM_SCHEMA_FIELD_TYPES = [
   'text',
@@ -23,8 +23,8 @@ export type AiTranscribeFieldConfig = {
   language?: string;
 };
 
-/** select 필드의 options 를 동적으로 로드하는 소스 식별자 */
-export type FormFieldSource = 'companyLeaveType' | string;
+/** select 필드의 options 를 동적으로 로드하는 소스 식별자 (`companyOrganization` 은 회사 조직도 기준 다중 선택) */
+export type FormFieldSource = 'companyLeaveType' | 'companyOrganization' | string;
 
 export type FormFieldSchema = {
   name: string;
@@ -144,6 +144,27 @@ export function parseDetailContentJson(detail: ApprovalRequestDetail): Record<st
   } catch {
     return {};
   }
+}
+
+/** 일반기안 등 본문에 넣는 조직 선택 스냅샷 — `contentJson` 최상위 키 */
+export const APPROVAL_CONTENT_ORG_RECIPIENTS_KEY = 'organizationRecipients';
+
+export function extractOrganizationRecipientsFromContent(content: Record<string, unknown>): OfficialRecipient[] {
+  const raw = content[APPROVAL_CONTENT_ORG_RECIPIENTS_KEY];
+  if (!Array.isArray(raw)) return [];
+  const out: OfficialRecipient[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const o = item as Record<string, unknown>;
+    const id = String(o.recipientOrganizationId ?? o.recipient_organization_id ?? '').trim();
+    const name = String(o.recipientOrganizationName ?? o.recipient_organization_name ?? '').trim();
+    if (id) out.push({ recipientOrganizationId: id, recipientOrganizationName: name || id });
+  }
+  return out;
+}
+
+export function omitOrganizationRecipientsFromContent(content: Record<string, unknown>): void {
+  delete content[APPROVAL_CONTENT_ORG_RECIPIENTS_KEY];
 }
 
 /** 기안 본문의 `title` 필드(양식 기본 '제목') — 없으면 빈 문자열 */

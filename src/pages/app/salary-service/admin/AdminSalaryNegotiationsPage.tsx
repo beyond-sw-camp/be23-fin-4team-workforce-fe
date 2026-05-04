@@ -14,7 +14,6 @@ import {
   Form,
   Input,
   InputNumber,
-  Modal,
   Popconfirm,
   Select,
   Space,
@@ -24,6 +23,7 @@ import {
   Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import dayjs, { type Dayjs } from 'dayjs';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import { memberApi, type MemberLookupRow } from '@/features/member/api/memberApi';
@@ -467,20 +467,21 @@ function CreateModal({
   });
 
   return (
-    <Modal
+    <AppDoubleActionModal
       open={open}
       title="단건 협상 등록"
-      onCancel={() => {
+      onClose={() => {
         form.resetFields();
         onCancel();
       }}
-      onOk={() => form.submit()}
+      onConfirm={() => form.submit()}
       confirmLoading={m.isPending}
-      okText="등록"
+      confirmText="등록"
       cancelText="취소"
       destroyOnHidden
       width={600}
     >
+      <div className="tw-px-5 tw-py-4">
       <Form<CreateFormValues>
         form={form}
         layout="vertical"
@@ -552,7 +553,8 @@ function CreateModal({
           <Input.TextArea rows={3} maxLength={500} placeholder="협상 사유" />
         </Form.Item>
       </Form>
-    </Modal>
+      </div>
+    </AppDoubleActionModal>
   );
 }
 
@@ -752,10 +754,10 @@ function BulkCreateModal({
   };
 
   return (
-    <Modal
+    <AppDoubleActionModal
       open={open}
       title="정기 시즌 일괄 등록"
-      onCancel={() => {
+      onClose={() => {
         form.resetFields();
         setRows([]);
         setMemberKeyword('');
@@ -767,13 +769,14 @@ function BulkCreateModal({
         setMemberCache({});
         onCancel();
       }}
-      onOk={() => form.submit()}
+      onConfirm={() => form.submit()}
       confirmLoading={m.isPending}
-      okText="등록"
+      confirmText="등록"
       cancelText="취소"
       destroyOnHidden
       width={900}
     >
+      <div className="tw-px-5 tw-py-4">
       <Form<BulkFormValues>
         form={form}
         layout="vertical"
@@ -965,7 +968,8 @@ function BulkCreateModal({
           ]}
         />
       </Form>
-    </Modal>
+      </div>
+    </AppDoubleActionModal>
   );
 }
 
@@ -1017,20 +1021,21 @@ function EditModal({
   });
 
   return (
-    <Modal
+    <AppDoubleActionModal
       open={Boolean(target)}
       title={target ? `${target.memberName ?? ''} 협상 수정` : '수정'}
-      onCancel={() => {
+      onClose={() => {
         form.resetFields();
         onCancel();
       }}
-      onOk={() => form.submit()}
+      onConfirm={() => form.submit()}
       confirmLoading={m.isPending}
-      okText="저장"
+      confirmText="저장"
       cancelText="취소"
       destroyOnHidden
       width={520}
     >
+      <div className="tw-px-5 tw-py-4">
       {target && (
         <Form
           form={form}
@@ -1082,7 +1087,8 @@ function EditModal({
           </Form.Item>
         </Form>
       )}
-    </Modal>
+      </div>
+    </AppDoubleActionModal>
   );
 }
 
@@ -1111,17 +1117,18 @@ function DecisionModal({
   const isApprove = target.action === 'approve';
 
   return (
-    <Modal
+    <AppDoubleActionModal
       open={Boolean(target)}
       title={isApprove ? '협상 승인' : '협상 반려'}
-      onCancel={onCancel}
-      onOk={() => onConfirm(note.trim() || null)}
+      onClose={onCancel}
+      onConfirm={() => onConfirm(note.trim() || null)}
       confirmLoading={submitting}
-      okText={isApprove ? '승인' : '반려'}
-      okButtonProps={{ danger: !isApprove }}
+      confirmText={isApprove ? '승인' : '반려'}
+      confirmDanger={!isApprove}
       cancelText="취소"
       destroyOnHidden
     >
+      <div className="tw-px-5 tw-py-4">
       <div className="tw-mb-3">
         <Typography.Text type="secondary" className="tw-text-xs">
           {target.row.memberName} · 제안 {formatWon(target.row.proposedBaseSalary)} ·{' '}
@@ -1135,7 +1142,8 @@ function DecisionModal({
         maxLength={300}
         placeholder={isApprove ? '승인 메모 (선택)' : '반려 사유 (권장)'}
       />
-    </Modal>
+      </div>
+    </AppDoubleActionModal>
   );
 }
 

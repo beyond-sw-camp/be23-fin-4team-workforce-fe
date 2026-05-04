@@ -13,7 +13,6 @@ import {
   Form,
   Input,
   InputNumber,
-  Modal,
   Popconfirm,
   Select,
   Space,
@@ -25,6 +24,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import dayjs, { type Dayjs } from 'dayjs';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import type {
   BonusEligibilityScopeCode,
   BonusPolicy,
@@ -348,22 +348,22 @@ export function AdminBonusPolicyPage() {
         />
       </Card>
 
-      <Modal
+      <AppDoubleActionModal
         open={open}
-        onCancel={() => {
+        onClose={() => {
           setOpen(false);
           setEditing(null);
           form.resetFields();
         }}
-        onOk={() => form.submit()}
+        onConfirm={() => form.submit()}
         confirmLoading={createM.isPending || updateM.isPending}
-        okText={editing ? '수정' : '등록'}
+        confirmText={editing ? '수정' : '등록'}
         cancelText="취소"
         title={editing ? '보너스 정책 수정' : '보너스 정책 등록'}
         destroyOnHidden
         width={1120}
-        styles={{ body: { paddingTop: 12 } }}
       >
+        <div className="tw-px-5 tw-py-4 tw-pt-3">
         <Form<FormValues>
           form={form}
           layout="vertical"
@@ -588,7 +588,8 @@ export function AdminBonusPolicyPage() {
             </Form.Item>
           </div>
         </Form>
-      </Modal>
+        </div>
+      </AppDoubleActionModal>
     </Space>
   );
 }

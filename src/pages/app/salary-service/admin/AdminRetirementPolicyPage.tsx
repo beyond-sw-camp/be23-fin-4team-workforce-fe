@@ -11,7 +11,6 @@ import {
   DatePicker,
   Form,
   Input,
-  Modal,
   Popconfirm,
   Select,
   Space,
@@ -20,6 +19,7 @@ import {
   Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import dayjs from 'dayjs';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import type {
@@ -259,21 +259,22 @@ export function AdminRetirementPolicyPage() {
         />
       </Card>
 
-      <Modal
+      <AppDoubleActionModal
         open={open}
-        onCancel={() => {
+        onClose={() => {
           setOpen(false);
           setEditing(null);
           form.resetFields();
         }}
-        onOk={() => form.submit()}
+        onConfirm={() => form.submit()}
         confirmLoading={createM.isPending || updateM.isPending}
-        okText={editing ? '수정' : '등록'}
+        confirmText={editing ? '수정' : '등록'}
         cancelText="취소"
         title={editing ? '퇴직급여 정책 수정' : '퇴직급여 정책 등록'}
         destroyOnHidden
         width={560}
       >
+        <div className="tw-px-5 tw-py-4">
         <Form<PolicyFormValues>
           form={form}
           layout="vertical"
@@ -330,7 +331,8 @@ export function AdminRetirementPolicyPage() {
             message="제도 변경 시 시뮬레이션·정산 결과가 달라지므로 신중히 등록하세요."
           />
         </Form>
-      </Modal>
+        </div>
+      </AppDoubleActionModal>
     </Space>
   );
 }
