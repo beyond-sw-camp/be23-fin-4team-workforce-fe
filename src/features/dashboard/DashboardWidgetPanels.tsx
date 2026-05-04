@@ -15,6 +15,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
 import type { Me } from '@/features/auth/types';
 import { calendarApi } from '@/features/calendar/api/calendarApi';
+import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import { DASHBOARD_WIDGET_LABELS, type DashboardWidgetId } from '@/features/dashboard/dashboardWidgetsModel';
 import { evaluationRedesignApi } from '@/features/evaluation/api/evaluationRedesignApi';
 import { goalApi } from '@/features/goals/api/goalApi';
@@ -483,8 +484,24 @@ export function DashboardCalendarBlock() {
     queryFn: () => calendarApi.listMonth(today.year(), today.month() + 1),
     staleTime: 60_000,
   });
+  // 회사 임시 공휴일 추가 fetch - 법정 공휴일과 합쳐서 캘린더에 표시
+  const companyHolidayQuery = useQuery({
+    queryKey: ['attendance', 'company-holidays', 'all'],
+    queryFn: () => attendanceApi.companyHoliday.list(),
+    staleTime: 60_000,
+  });
   const events = monthQuery.data?.events ?? [];
-  const holidays = monthQuery.data?.holidays ?? [];
+  const legalHolidays = monthQuery.data?.holidays ?? [];
+  const companyHolidaysMapped = (companyHolidayQuery.data ?? [])
+    .filter((h) => h.holidayDate && h.holidayName)
+    .map((h) => ({ holidayDate: h.holidayDate!, holidayName: h.holidayName! }));
+  const holidayDedup = new Set<string>();
+  const holidays = [...legalHolidays, ...companyHolidaysMapped].filter((h) => {
+    const k = `${h.holidayDate}|${h.holidayName}`;
+    if (holidayDedup.has(k)) return false;
+    holidayDedup.add(k);
+    return true;
+  });
   const upcomingEvents = events
     .filter((event) => !dayjs(event.endAt).isBefore(today.startOf('day')))
     .sort((a, b) => dayjs(a.startAt).valueOf() - dayjs(b.startAt).valueOf())

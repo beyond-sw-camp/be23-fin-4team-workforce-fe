@@ -56,14 +56,14 @@ export function MyAnnualSalaryPage() {
 
   const monthlyColumns: ColumnsType<AnnualSalaryMonthlyRow> = [
     {
-      title: '월',
+      title: '정산 대상 월',
       dataIndex: 'month',
       key: 'month',
-      width: 70,
-      render: (m: number) => `${m}월`,
+      width: 110,
+      render: (m: number) => <Tag color="geekblue">{`${m}월분`}</Tag>,
     },
     {
-      title: '귀속일',
+      title: '지급일',
       dataIndex: 'payrollYearMonthDay',
       key: 'payrollYearMonthDay',
       render: (v?: string | null) => v ?? <Typography.Text type="secondary">—</Typography.Text>,
@@ -209,31 +209,36 @@ export function MyAnnualSalaryPage() {
           size="small"
           className="tw-border-slate-200/80 tw-shadow-sm"
         >
-          {(data?.earnings?.length ?? 0) === 0 ? (
-            <Empty description="지급 항목 없음" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-          ) : (
-            <Table<AnnualSalaryItemBreakdown>
-              rowKey="itemName"
-              loading={summaryQ.isLoading}
-              dataSource={data?.earnings ?? []}
-              columns={breakdownColumns}
-              pagination={false}
-              size="small"
-              summary={(rows) => {
-                const sum = rows.reduce((a, r) => a + r.totalAmount, 0);
-                return (
-                  <Table.Summary.Row className="tw-bg-slate-50">
-                    <Table.Summary.Cell index={0}>
-                      <Typography.Text strong>합계</Typography.Text>
-                    </Table.Summary.Cell>
-                    <Table.Summary.Cell index={1} align="right">
-                      <Typography.Text strong>{formatWon(sum)} 원</Typography.Text>
-                    </Table.Summary.Cell>
-                  </Table.Summary.Row>
-                );
-              }}
-            />
-          )}
+          {(() => {
+            // 0원 항목 숨김 - 회사 공통 템플릿이지만 본인 미부여 항목 0원 노출 방지
+            const earningRows = (data?.earnings ?? []).filter((r) => (r.totalAmount ?? 0) > 0);
+            if (earningRows.length === 0) {
+              return <Empty description="지급 항목 없음" image={Empty.PRESENTED_IMAGE_SIMPLE} />;
+            }
+            return (
+              <Table<AnnualSalaryItemBreakdown>
+                rowKey="itemName"
+                loading={summaryQ.isLoading}
+                dataSource={earningRows}
+                columns={breakdownColumns}
+                pagination={false}
+                size="small"
+                summary={(rows) => {
+                  const sum = rows.reduce((a, r) => a + r.totalAmount, 0);
+                  return (
+                    <Table.Summary.Row className="tw-bg-slate-50">
+                      <Table.Summary.Cell index={0}>
+                        <Typography.Text strong>합계</Typography.Text>
+                      </Table.Summary.Cell>
+                      <Table.Summary.Cell index={1} align="right">
+                        <Typography.Text strong>{formatWon(sum)} 원</Typography.Text>
+                      </Table.Summary.Cell>
+                    </Table.Summary.Row>
+                  );
+                }}
+              />
+            );
+          })()}
         </Card>
 
         <Card
@@ -241,33 +246,37 @@ export function MyAnnualSalaryPage() {
           size="small"
           className="tw-border-slate-200/80 tw-shadow-sm"
         >
-          {(data?.deductions?.length ?? 0) === 0 ? (
-            <Empty description="공제 항목 없음" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-          ) : (
-            <Table<AnnualSalaryItemBreakdown>
-              rowKey="itemName"
-              loading={summaryQ.isLoading}
-              dataSource={data?.deductions ?? []}
-              columns={breakdownColumns}
-              pagination={false}
-              size="small"
-              summary={(rows) => {
-                const sum = rows.reduce((a, r) => a + r.totalAmount, 0);
-                return (
-                  <Table.Summary.Row className="tw-bg-slate-50">
-                    <Table.Summary.Cell index={0}>
-                      <Typography.Text strong>합계</Typography.Text>
-                    </Table.Summary.Cell>
-                    <Table.Summary.Cell index={1} align="right">
-                      <Typography.Text strong type="secondary">
-                        {formatWon(sum)} 원
-                      </Typography.Text>
-                    </Table.Summary.Cell>
-                  </Table.Summary.Row>
-                );
-              }}
-            />
-          )}
+          {(() => {
+            const deductionRows = (data?.deductions ?? []).filter((r) => (r.totalAmount ?? 0) > 0);
+            if (deductionRows.length === 0) {
+              return <Empty description="공제 항목 없음" image={Empty.PRESENTED_IMAGE_SIMPLE} />;
+            }
+            return (
+              <Table<AnnualSalaryItemBreakdown>
+                rowKey="itemName"
+                loading={summaryQ.isLoading}
+                dataSource={deductionRows}
+                columns={breakdownColumns}
+                pagination={false}
+                size="small"
+                summary={(rows) => {
+                  const sum = rows.reduce((a, r) => a + r.totalAmount, 0);
+                  return (
+                    <Table.Summary.Row className="tw-bg-slate-50">
+                      <Table.Summary.Cell index={0}>
+                        <Typography.Text strong>합계</Typography.Text>
+                      </Table.Summary.Cell>
+                      <Table.Summary.Cell index={1} align="right">
+                        <Typography.Text strong type="secondary">
+                          {formatWon(sum)} 원
+                        </Typography.Text>
+                      </Table.Summary.Cell>
+                    </Table.Summary.Row>
+                  );
+                }}
+              />
+            );
+          })()}
         </Card>
       </div>
     </Space>

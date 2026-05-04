@@ -27,12 +27,14 @@ import {
 import { DownloadOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
-import { useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import { memberApi } from '@/features/member/api/memberApi';
 import { SalaryTab } from '@/pages/app/salary-service/admin/AdminSalarySettingsPage';
 import { SalaryRegisterTab } from '@/pages/app/salary-service/admin/SalaryRegisterTab';
 import { AdminMemberAllowancePage } from '@/pages/app/salary-service/admin/AdminMemberAllowancePage';
+import { AdminRetirementSettlementPage } from '@/pages/app/salary-service/admin/AdminRetirementSettlementPage';
+import { AdminBonusBatchTab } from '@/pages/app/salary-service/admin/AdminBonusBatchTab';
 import type {
   Payroll,
   PayrollAdminListItem,
@@ -56,6 +58,7 @@ const PAYROLL_TYPE_KO: Record<string, string> = {
   PERFORMANCE_BONUS: '성과급',
   SPECIAL_BONUS: '특별상여',
   RETROACTIVE: '소급분',
+  RETIREMENT_SETTLEMENT: '퇴직정산',
 };
 
 function formatWon(n: number | null | undefined) {
@@ -130,21 +133,37 @@ export function AdminPayrollPage() {
 
   // 활성 탭을 URL search params 와 동기화 — 상세 화면에서 뒤로가기 시 같은 탭 유지
   const search = useSearch({ strict: false }) as {
-    tab?: 'company' | 'member' | 'register' | 'salary' | 'allowances';
+    tab?: 'company' | 'member' | 'register' | 'bonus' | 'retirement' | 'salary' | 'allowances';
     /** 직원 상세/생성 직후 deep-link 로 들어오면 SalaryTab 이 해당 직원으로 prefill 된 등록 모달을 자동으로 띄운다. */
     createForMemberId?: string;
+    /** 이번달 정산 조회 월 (YYYY-MM) — 상여 발행 후 자동 이동 등 */
+    month?: string;
   };
   const activeTab = search?.tab ?? 'company';
   const setActiveTab = (key: string) => {
     void navigate({
       to: '/app/payroll/admin',
       // 탭 전환 시 deep-link 파라미터(createForMemberId)는 1회성이라 함께 비운다.
-      search: { tab: key as 'company' | 'member' | 'register' | 'salary' | 'allowances' },
+      search: { tab: key as 'company' | 'member' | 'register' | 'bonus' | 'retirement' | 'salary' | 'allowances' },
     });
   };
 
-  const [yearMonth, setYearMonth] = useState<dayjs.Dayjs>(() => dayjs());
+  // URL search 의 month 우선 (상여 발행 후 해당 월로 이동 등) - 없으면 오늘
+  const [yearMonth, setYearMonth] = useState<dayjs.Dayjs>(() =>
+    search?.month ? dayjs(search.month + '-01') : dayjs(),
+  );
   const ym = yearMonth.format('YYYY-MM');
+
+  // URL month 변경 (외부 navigate) -> 내부 state 동기화
+  React.useEffect(() => {
+    if (search?.month) {
+      const d = dayjs(search.month + '-01');
+      if (d.isValid() && d.format('YYYY-MM') !== ym) {
+        setYearMonth(d);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search?.month]);
 
   /* ── 회사 전체 그 달 목록 (메인) ── */
   const listQ = useQuery({
@@ -183,11 +202,13 @@ export function AdminPayrollPage() {
   const [keyword, setKeyword] = useState('');
   const [statusFilter, setStatusFilter] = useState<PayrollStatusCode | 'ALL'>('ALL');
   const [departmentFilter, setDepartmentFilter] = useState<string | 'ALL'>('ALL');
+  const [typeFilter, setTypeFilter] = useState<string>('ALL');
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
       if (statusFilter !== 'ALL' && r.payrollStatus !== statusFilter) return false;
       if (departmentFilter !== 'ALL' && r.organizationName !== departmentFilter) return false;
+      if (typeFilter !== 'ALL' && r.payrollType !== typeFilter) return false;
       if (keyword.trim()) {
         const k = keyword.trim().toLowerCase();
         const hits =
@@ -198,7 +219,32 @@ export function AdminPayrollPage() {
       }
       return true;
     });
-  }, [rows, statusFilter, departmentFilter, keyword]);
+  }, [rows, statusFilter, departmentFilter, typeFilter, keyword]);
+
+  // 급여구분별 합산 KPI - 정기/퇴직/상여/성과/소급분 분리 + 총합
+  const breakdown = useMemo(() => {
+    const groups: Record<string, { count: number; payment: number; net: number }> = {
+      REGULAR_MONTHLY: { count: 0, payment: 0, net: 0 },
+      RETIREMENT_SETTLEMENT: { count: 0, payment: 0, net: 0 },
+      PERFORMANCE_BONUS: { count: 0, payment: 0, net: 0 },
+      SPECIAL_BONUS: { count: 0, payment: 0, net: 0 },
+      RETROACTIVE: { count: 0, payment: 0, net: 0 },
+    };
+    let totalPayment = 0;
+    let totalDeduction = 0;
+    let totalNet = 0;
+    for (const r of filtered) {
+      const t = r.payrollType ?? 'REGULAR_MONTHLY';
+      if (!groups[t]) groups[t] = { count: 0, payment: 0, net: 0 };
+      groups[t].count++;
+      groups[t].payment += r.totalPayment ?? 0;
+      groups[t].net += r.netPay ?? 0;
+      totalPayment += r.totalPayment ?? 0;
+      totalDeduction += r.totalDeduction ?? 0;
+      totalNet += r.netPay ?? 0;
+    }
+    return { groups, totalPayment, totalDeduction, totalNet };
+  }, [filtered]);
 
   /* ── 다중 선택 ── */
   const [selectedKeys, setSelectedKeys] = useState<React.Key[]>([]);
@@ -344,11 +390,21 @@ export function AdminPayrollPage() {
       { title: '이름', dataIndex: 'name', key: 'name', width: 110, render: (v) => v ?? '—' },
       { title: '부서', dataIndex: 'organizationName', key: 'organizationName', width: 130, render: (v) => v ?? '—' },
       {
-        title: '귀속일',
-        dataIndex: 'payrollYearMonthDay',
-        key: 'payrollYearMonthDay',
-        width: 120,
+        title: '정산 대상',
+        key: 'targetYearMonth',
+        width: 170,
         sorter: (a, b) => (a.payrollYearMonthDay ?? '').localeCompare(b.payrollYearMonthDay ?? ''),
+        render: (_, r) => {
+          const ym = r.targetYearMonth;
+          const day = r.payrollYearMonthDay;
+          const monthLabel = ym ? `${parseInt(ym.split('-')[1] ?? '0', 10)}월분` : '-';
+          return (
+            <span>
+              <Tag color="geekblue">{monthLabel}</Tag>
+              <span className="tw-text-slate-500 tw-text-xs">{day ?? ''}</span>
+            </span>
+          );
+        },
       },
       {
         title: '상태',
@@ -442,60 +498,68 @@ export function AdminPayrollPage() {
             label: '이번달 정산',
             children: (
               <Space direction="vertical" className="tw-w-full" size={12}>
-                {/* 정산 가드 — 활성 Salary 미등록 / 계좌 미등록 직원이 있으면 경고 */}
-                {precheckQ.data && (precheckQ.data.missingSalaryCount > 0
-                    || precheckQ.data.missingBankAccountCount > 0) ? (
-                  <Alert
-                    type="warning"
-                    showIcon
-                    message="정산 시작 전 확인 필요"
-                    description={
-                      <div className="tw-text-sm">
-                        {precheckQ.data.missingSalaryCount > 0 ? (
-                          <div>
-                            <b>활성 Salary 미등록 {precheckQ.data.missingSalaryCount}명</b>{' '}
-                            <span className="tw-text-slate-500">
-                              ({precheckQ.data.missingSalary
-                                .slice(0, 5)
-                                .map((m) => m.name ?? m.memberId)
-                                .join(', ')}
-                              {precheckQ.data.missingSalary.length > 5 ? ` 외 ${precheckQ.data.missingSalary.length - 5}명` : ''})
-                            </span>{' '}
-                            —{' '}
-                            <Link
-                              to="/app/payroll/admin"
-                              search={{ tab: 'register' }}
-                              className="tw-font-medium tw-text-[#2563EB]"
-                            >
-                              [급여 등록] 에서 등록 -&gt;
-                            </Link>
-                          </div>
-                        ) : null}
-                        {precheckQ.data.missingBankAccountCount > 0 ? (
-                          <div className="tw-mt-1">
-                            <b>계좌 미등록 {precheckQ.data.missingBankAccountCount}명</b>{' '}
-                            <span className="tw-text-slate-500">
-                              ({precheckQ.data.missingBankAccount
-                                .slice(0, 5)
-                                .map((m) => m.name ?? m.memberId)
-                                .join(', ')}
-                              {precheckQ.data.missingBankAccount.length > 5 ? ` 외 ${precheckQ.data.missingBankAccount.length - 5}명` : ''})
-                            </span>{' '}
-                            — 직원 본인이 마이페이지에서 계좌를 등록해야 이체됩니다.
-                          </div>
-                        ) : null}
-                      </div>
-                    }
-                  />
-                ) : null}
+                {/* 정산 가드 안내 Alert 제거 - KPI 카드만 노출 */}
 
-                {/* KPI 4장: 이번달 정산 탭 내부 상단 */}
+                {/* KPI 상태 4장 */}
                 <div className="tw-grid tw-grid-cols-2 md:tw-grid-cols-4 tw-gap-3">
                   <Card size="small"><Statistic title="대상 직원" value={kpi.total} suffix="명" /></Card>
                   <Card size="small"><Statistic title="작성중" value={kpi.draft} suffix="명" valueStyle={{ color: '#64748b' }} /></Card>
                   <Card size="small"><Statistic title="확정 대기" value={kpi.confirmed} suffix="명" valueStyle={{ color: '#2563eb' }} /></Card>
                   <Card size="small"><Statistic title="지급 완료" value={kpi.paid} suffix="명" valueStyle={{ color: '#16a34a' }} /></Card>
                 </div>
+
+                {/* 급여구분별 합산 - 정기/퇴직/상여/성과 분리 + 총합 */}
+                <Card size="small">
+                  <div className="tw-grid tw-grid-cols-2 md:tw-grid-cols-3 lg:tw-grid-cols-6 tw-gap-3">
+                    <div className="tw-pr-3 tw-border-r tw-border-slate-200">
+                      <Typography.Text type="secondary" className="!tw-text-xs">정기급여</Typography.Text>
+                      <div className="tw-mt-1">
+                        <Typography.Text strong>{formatWon(breakdown.groups.REGULAR_MONTHLY?.payment)}</Typography.Text>
+                        <Typography.Text type="secondary" className="!tw-text-xs tw-ml-1">
+                          ({breakdown.groups.REGULAR_MONTHLY?.count ?? 0}건)
+                        </Typography.Text>
+                      </div>
+                    </div>
+                    <div className="tw-pr-3 tw-border-r tw-border-slate-200">
+                      <Typography.Text type="secondary" className="!tw-text-xs">퇴직정산</Typography.Text>
+                      <div className="tw-mt-1">
+                        <Typography.Text strong>{formatWon(breakdown.groups.RETIREMENT_SETTLEMENT?.payment)}</Typography.Text>
+                        <Typography.Text type="secondary" className="!tw-text-xs tw-ml-1">
+                          ({breakdown.groups.RETIREMENT_SETTLEMENT?.count ?? 0}건)
+                        </Typography.Text>
+                      </div>
+                    </div>
+                    <div className="tw-pr-3 tw-border-r tw-border-slate-200">
+                      <Typography.Text type="secondary" className="!tw-text-xs">상여/성과</Typography.Text>
+                      <div className="tw-mt-1">
+                        <Typography.Text strong>
+                          {formatWon((breakdown.groups.PERFORMANCE_BONUS?.payment ?? 0) + (breakdown.groups.SPECIAL_BONUS?.payment ?? 0))}
+                        </Typography.Text>
+                        <Typography.Text type="secondary" className="!tw-text-xs tw-ml-1">
+                          ({(breakdown.groups.PERFORMANCE_BONUS?.count ?? 0) + (breakdown.groups.SPECIAL_BONUS?.count ?? 0)}건)
+                        </Typography.Text>
+                      </div>
+                    </div>
+                    <div className="tw-pr-3 tw-border-r tw-border-slate-200">
+                      <Typography.Text type="secondary" className="!tw-text-xs">총지급</Typography.Text>
+                      <div className="tw-mt-1">
+                        <Typography.Text strong className="!tw-text-blue-600">{formatWon(breakdown.totalPayment)}</Typography.Text>
+                      </div>
+                    </div>
+                    <div className="tw-pr-3 tw-border-r tw-border-slate-200">
+                      <Typography.Text type="secondary" className="!tw-text-xs">총공제</Typography.Text>
+                      <div className="tw-mt-1">
+                        <Typography.Text strong className="!tw-text-red-600">{formatWon(breakdown.totalDeduction)}</Typography.Text>
+                      </div>
+                    </div>
+                    <div>
+                      <Typography.Text type="secondary" className="!tw-text-xs">실수령 합계</Typography.Text>
+                      <div className="tw-mt-1">
+                        <Typography.Text strong className="!tw-text-emerald-600 !tw-text-base">{formatWon(breakdown.totalNet)}</Typography.Text>
+                      </div>
+                    </div>
+                  </div>
+                </Card>
 
                 <Card>
                   {/* 필터 + 일괄 액션 */}
@@ -517,6 +581,19 @@ export function AdminPayrollPage() {
                           { value: 'DRAFT', label: '작성중' },
                           { value: 'CONFIRMED', label: '확정' },
                           { value: 'PAID', label: '지급완료' },
+                        ]}
+                      />
+                      <Select
+                        value={typeFilter}
+                        onChange={setTypeFilter}
+                        style={{ width: 140 }}
+                        options={[
+                          { value: 'ALL', label: '급여구분 전체' },
+                          { value: 'REGULAR_MONTHLY', label: '정기급여' },
+                          { value: 'RETIREMENT_SETTLEMENT', label: '퇴직정산' },
+                          { value: 'PERFORMANCE_BONUS', label: '성과급' },
+                          { value: 'SPECIAL_BONUS', label: '특별상여' },
+                          { value: 'RETROACTIVE', label: '소급분' },
                         ]}
                       />
                       <Select
@@ -591,6 +668,16 @@ export function AdminPayrollPage() {
             children: <SalaryRegisterTab createForMemberId={search?.createForMemberId} />,
           },
           {
+            key: 'bonus',
+            label: '상여 발행',
+            children: <AdminBonusBatchTab />,
+          },
+          {
+            key: 'retirement',
+            label: '퇴직 정산',
+            children: <AdminRetirementSettlementPage embedded />,
+          },
+          {
             key: 'salary',
             label: '급여 변동 이력',
             children: (
@@ -641,14 +728,35 @@ export function AdminPayrollPage() {
 
 function CompanyHistoryTab() {
   const navigate = useNavigate();
-  const [historyMonth, setHistoryMonth] = useState<dayjs.Dayjs>(() => dayjs());
+  // URL search 의 ym 우선 (상세 -> 목록 복귀 시 보존),
+  // 없으면 직전 월 (월별 정산 결과는 보통 지난달이 최신 지급분이라 직전달이 기본)
+  const search = useSearch({ strict: false }) as { ym?: string };
+  const initialMonth = search?.ym
+    ? dayjs(search.ym + '-01')
+    : dayjs().subtract(1, 'month');
+  const [historyMonth, setHistoryMonth] = useState<dayjs.Dayjs>(() => initialMonth);
   const ym = historyMonth.format('YYYY-MM');
+
+  // 사용자가 월 변경 시 URL 동기화 - 상세보기 진입 후 돌아왔을 때도 그대로 유지
+  const handleMonthChange = (d: dayjs.Dayjs | null) => {
+    if (!d) return;
+    setHistoryMonth(d);
+    void navigate({
+      to: '/app/payroll/admin',
+      search: { tab: 'member', ym: d.format('YYYY-MM') },
+      replace: true,
+    });
+  };
 
   const listQ = useQuery({
     queryKey: ['salary', 'payroll', 'history', ym],
     queryFn: () => salaryApi.payroll.listByCompanyMonth(ym),
   });
-  const rows = listQ.data ?? [];
+  // 월별 정산 결과 = 과거 지급 이력 - PAID 만 노출 (작성중/확정 대기는 이번달 정산 탭에서 처리)
+  const rows = useMemo(
+    () => (listQ.data ?? []).filter((r) => r.payrollStatus === 'PAID'),
+    [listQ.data],
+  );
 
   const departmentOptions = useMemo(() => {
     const set = new Set<string>();
@@ -659,13 +767,13 @@ function CompanyHistoryTab() {
   }, [rows]);
 
   const [keyword, setKeyword] = useState('');
-  const [statusFilter, setStatusFilter] = useState<PayrollStatusCode | 'ALL'>('ALL');
   const [departmentFilter, setDepartmentFilter] = useState<string | 'ALL'>('ALL');
+  const [typeFilter, setTypeFilter] = useState<string>('ALL');
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
-      if (statusFilter !== 'ALL' && r.payrollStatus !== statusFilter) return false;
       if (departmentFilter !== 'ALL' && r.organizationName !== departmentFilter) return false;
+      if (typeFilter !== 'ALL' && r.payrollType !== typeFilter) return false;
       if (keyword.trim()) {
         const k = keyword.trim().toLowerCase();
         const hits =
@@ -676,7 +784,32 @@ function CompanyHistoryTab() {
       }
       return true;
     });
-  }, [rows, statusFilter, departmentFilter, keyword]);
+  }, [rows, departmentFilter, typeFilter, keyword]);
+
+  // 급여구분별 합산 - 정기/퇴직/상여/성과 분리 + 총합
+  const breakdown = useMemo(() => {
+    const groups: Record<string, { count: number; payment: number; net: number }> = {
+      REGULAR_MONTHLY: { count: 0, payment: 0, net: 0 },
+      RETIREMENT_SETTLEMENT: { count: 0, payment: 0, net: 0 },
+      PERFORMANCE_BONUS: { count: 0, payment: 0, net: 0 },
+      SPECIAL_BONUS: { count: 0, payment: 0, net: 0 },
+      RETROACTIVE: { count: 0, payment: 0, net: 0 },
+    };
+    let totalPayment = 0;
+    let totalDeduction = 0;
+    let totalNet = 0;
+    for (const r of filtered) {
+      const t = r.payrollType ?? 'REGULAR_MONTHLY';
+      if (!groups[t]) groups[t] = { count: 0, payment: 0, net: 0 };
+      groups[t].count++;
+      groups[t].payment += r.totalPayment ?? 0;
+      groups[t].net += r.netPay ?? 0;
+      totalPayment += r.totalPayment ?? 0;
+      totalDeduction += r.totalDeduction ?? 0;
+      totalNet += r.netPay ?? 0;
+    }
+    return { groups, totalPayment, totalDeduction, totalNet };
+  }, [filtered]);
 
   const cols: ColumnsType<PayrollAdminListItem> = useMemo(
     () => [
@@ -684,10 +817,20 @@ function CompanyHistoryTab() {
       { title: '이름', dataIndex: 'name', key: 'name', width: 110, render: (v) => v ?? '—' },
       { title: '부서', dataIndex: 'organizationName', key: 'organizationName', width: 130, render: (v) => v ?? '—' },
       {
-        title: '귀속일',
-        dataIndex: 'payrollYearMonthDay',
-        key: 'payrollYearMonthDay',
-        width: 130,
+        title: '정산 대상',
+        key: 'targetYearMonth',
+        width: 180,
+        render: (_, r) => {
+          const ym = r.targetYearMonth;
+          const day = r.payrollYearMonthDay;
+          const monthLabel = ym ? `${parseInt(ym.split('-')[1] ?? '0', 10)}월분` : '-';
+          return (
+            <span>
+              <Tag color="geekblue">{monthLabel}</Tag>
+              <span className="tw-text-slate-500 tw-text-xs">{day ?? ''}</span>
+            </span>
+          );
+        },
       },
       {
         title: '급여구분',
@@ -696,13 +839,7 @@ function CompanyHistoryTab() {
         width: 110,
         render: (v?: string) => PAYROLL_TYPE_KO[v ?? ''] ?? v ?? '—',
       },
-      {
-        title: '상태',
-        dataIndex: 'payrollStatus',
-        key: 'payrollStatus',
-        width: 100,
-        render: (s: string) => <Tag color={STATUS_COLOR[s] ?? 'default'}>{STATUS_KO[s] ?? s}</Tag>,
-      },
+      // 월별 정산 결과는 PAID 만 노출하므로 상태 컬럼 제거 (모두 지급완료)
       { title: '총지급', dataIndex: 'totalPayment', key: 'totalPayment', width: 130, align: 'right',
         render: (v: number) => formatWon(v) },
       { title: '총공제', dataIndex: 'totalDeduction', key: 'totalDeduction', width: 130, align: 'right',
@@ -711,10 +848,27 @@ function CompanyHistoryTab() {
         render: (v: number) => formatWon(v) },
       {
         title: '지급일',
-        dataIndex: 'paidAt',
         key: 'paidAt',
-        width: 120,
-        render: (v?: string | null) => v ?? '—',
+        width: 160,
+        render: (_, r) => {
+          // 실제 지급된 날(paidAt) 우선, 없으면 정산 일 기반 예정/미지급 표시
+          // 토/일은 직전 금요일로 보정 (BEFORE 실무 표준)
+          if (r.paidAt) return r.paidAt;
+          if (!r.payrollYearMonthDay) return <Typography.Text type="secondary">—</Typography.Text>;
+          const d = dayjs(r.payrollYearMonthDay);
+          const dow = d.day();
+          const shifted = dow === 0 ? d.subtract(2, 'day') : dow === 6 ? d.subtract(1, 'day') : d;
+          const today = dayjs().startOf('day');
+          const isFuture = shifted.isAfter(today);
+          return (
+            <span>
+              <Typography.Text type="secondary">{shifted.format('YYYY-MM-DD')}</Typography.Text>{' '}
+              <Typography.Text type={isFuture ? 'secondary' : 'warning'} className="tw-text-xs">
+                ({isFuture ? '예정' : '미지급'})
+              </Typography.Text>
+            </span>
+          );
+        },
       },
       {
         title: '액션',
@@ -725,7 +879,7 @@ function CompanyHistoryTab() {
             <Link
               to="/app/payroll/admin/$payrollId"
               params={{ payrollId: r.payrollId }}
-              search={{ tab: 'member' }}
+              search={{ tab: 'member', ym }}
               className="tw-text-[#2563EB]"
               onClick={(e) => e.stopPropagation()}
             >
@@ -734,15 +888,66 @@ function CompanyHistoryTab() {
           ) : null,
       },
     ],
-    [],
+    [ym],
   );
 
   return (
     <Card>
+      {/* 급여구분별 합산 KPI - 필터된 결과 기준 */}
+      <div className="tw-mb-3 tw-grid tw-grid-cols-2 md:tw-grid-cols-3 lg:tw-grid-cols-6 tw-gap-2 tw-rounded-md tw-bg-slate-50 tw-px-3 tw-py-2.5">
+        <div className="tw-pr-2 tw-border-r tw-border-slate-200">
+          <Typography.Text type="secondary" className="!tw-text-xs">정기급여</Typography.Text>
+          <div className="tw-mt-0.5">
+            <Typography.Text strong>{formatWon(breakdown.groups.REGULAR_MONTHLY?.payment)}</Typography.Text>
+            <Typography.Text type="secondary" className="!tw-text-xs tw-ml-1">
+              ({breakdown.groups.REGULAR_MONTHLY?.count ?? 0}건)
+            </Typography.Text>
+          </div>
+        </div>
+        <div className="tw-pr-2 tw-border-r tw-border-slate-200">
+          <Typography.Text type="secondary" className="!tw-text-xs">퇴직정산</Typography.Text>
+          <div className="tw-mt-0.5">
+            <Typography.Text strong>{formatWon(breakdown.groups.RETIREMENT_SETTLEMENT?.payment)}</Typography.Text>
+            <Typography.Text type="secondary" className="!tw-text-xs tw-ml-1">
+              ({breakdown.groups.RETIREMENT_SETTLEMENT?.count ?? 0}건)
+            </Typography.Text>
+          </div>
+        </div>
+        <div className="tw-pr-2 tw-border-r tw-border-slate-200">
+          <Typography.Text type="secondary" className="!tw-text-xs">상여/성과</Typography.Text>
+          <div className="tw-mt-0.5">
+            <Typography.Text strong>
+              {formatWon((breakdown.groups.PERFORMANCE_BONUS?.payment ?? 0) + (breakdown.groups.SPECIAL_BONUS?.payment ?? 0))}
+            </Typography.Text>
+            <Typography.Text type="secondary" className="!tw-text-xs tw-ml-1">
+              ({(breakdown.groups.PERFORMANCE_BONUS?.count ?? 0) + (breakdown.groups.SPECIAL_BONUS?.count ?? 0)}건)
+            </Typography.Text>
+          </div>
+        </div>
+        <div className="tw-pr-2 tw-border-r tw-border-slate-200">
+          <Typography.Text type="secondary" className="!tw-text-xs">총지급</Typography.Text>
+          <div className="tw-mt-0.5">
+            <Typography.Text strong className="!tw-text-blue-600">{formatWon(breakdown.totalPayment)}</Typography.Text>
+          </div>
+        </div>
+        <div className="tw-pr-2 tw-border-r tw-border-slate-200">
+          <Typography.Text type="secondary" className="!tw-text-xs">총공제</Typography.Text>
+          <div className="tw-mt-0.5">
+            <Typography.Text strong className="!tw-text-red-600">{formatWon(breakdown.totalDeduction)}</Typography.Text>
+          </div>
+        </div>
+        <div>
+          <Typography.Text type="secondary" className="!tw-text-xs">실수령 합계</Typography.Text>
+          <div className="tw-mt-0.5">
+            <Typography.Text strong className="!tw-text-emerald-600">{formatWon(breakdown.totalNet)}</Typography.Text>
+          </div>
+        </div>
+      </div>
+
       <Space wrap className="tw-mb-3">
         <DatePicker.MonthPicker
           value={historyMonth}
-          onChange={(d) => d && setHistoryMonth(d)}
+          onChange={handleMonthChange}
           allowClear={false}
           format="YYYY-MM"
           style={{ width: 140 }}
@@ -755,14 +960,16 @@ function CompanyHistoryTab() {
           allowClear
         />
         <Select
-          value={statusFilter}
-          onChange={setStatusFilter}
-          style={{ width: 130 }}
+          value={typeFilter}
+          onChange={setTypeFilter}
+          style={{ width: 140 }}
           options={[
-            { value: 'ALL', label: '상태 전체' },
-            { value: 'DRAFT', label: '작성중' },
-            { value: 'CONFIRMED', label: '확정' },
-            { value: 'PAID', label: '지급완료' },
+            { value: 'ALL', label: '급여구분 전체' },
+            { value: 'REGULAR_MONTHLY', label: '정기급여' },
+            { value: 'RETIREMENT_SETTLEMENT', label: '퇴직정산' },
+            { value: 'PERFORMANCE_BONUS', label: '성과급' },
+            { value: 'SPECIAL_BONUS', label: '특별상여' },
+            { value: 'RETROACTIVE', label: '소급분' },
           ]}
         />
         <Select
@@ -785,7 +992,11 @@ function CompanyHistoryTab() {
         locale={{ emptyText: '해당 월의 정산 이력이 없습니다.' }}
         onRow={(r) => ({
           onClick: () =>
-            navigate({ to: '/app/payroll/admin/$payrollId', params: { payrollId: r.payrollId }, search: { tab: 'member' } }),
+            navigate({
+              to: '/app/payroll/admin/$payrollId',
+              params: { payrollId: r.payrollId },
+              search: { tab: 'member', ym },
+            }),
           style: { cursor: 'pointer' },
         })}
         size="middle"

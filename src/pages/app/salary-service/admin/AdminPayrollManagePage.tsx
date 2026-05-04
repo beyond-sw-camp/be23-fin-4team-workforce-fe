@@ -2,7 +2,7 @@
  * /app/payroll/admin/$payrollId
  * DRAFT일 때 항목 CRUD, 확정·지급 완료 버튼.
  */
-import { Link, useParams, useSearch } from '@tanstack/react-router';
+import { useParams, useSearch, useRouter } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, App, Button, Card, DatePicker, Descriptions, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Statistic, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
@@ -10,6 +10,7 @@ import dayjs, { type Dayjs } from 'dayjs';
 import { useMemo, useState } from 'react';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import type { RetroactiveMonthlyDiff, RetroactivePayrollResult, PayrollItem, SalaryItemTemplate } from '@/features/salary-service/types';
+import { memberApi } from '@/features/member/api/memberApi';
 
 const STATUS_KO: Record<string, string> = {
   DRAFT: '작성 중',
@@ -29,11 +30,16 @@ function formatWon(n: number | null | undefined) {
 
 export function AdminPayrollManagePage() {
   const { payrollId } = useParams({ strict: false }) as { payrollId: string };
-  // 어느 탭에서 진입했는지 — 뒤로가기 링크에 그대로 전달
+  // 어느 탭/월/메뉴에서 진입했는지 — 뒤로가기 시 그대로 복귀
   const search = useSearch({ strict: false }) as {
-    tab?: 'company' | 'member' | 'salary';
+    tab?: 'company' | 'member' | 'retirement' | 'salary';
+    ym?: string;
+    from?: 'retirement';
   };
   const fromTab = search?.tab ?? 'company';
+  const fromYm = search?.ym;
+  const fromMenu = search?.from;
+  const router = useRouter();
   const { message, modal } = App.useApp();
   const qc = useQueryClient();
   const [addForm] = Form.useForm<{ templateId: string; amount: number }>();
@@ -41,6 +47,8 @@ export function AdminPayrollManagePage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editAmount, setEditAmount] = useState<number>(0);
   const [retroOpen, setRetroOpen] = useState(false);
+  const [bonusModalOpen, setBonusModalOpen] = useState(false);
+  const [itemModalOpen, setItemModalOpen] = useState(false);
 
   const payrollQ = useQuery({
     queryKey: ['salary', 'payroll', payrollId],
@@ -190,8 +198,28 @@ export function AdminPayrollManagePage() {
 
   const sortedItems = useMemo(() => {
     const list = itemsQ.data ?? [];
-    return [...list].sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0));
+    // 0원 항목 제외 - 실제 지급/공제된 항목만 노출 (회사 공통 템플릿이지만 직원별 미부여 항목은 amount=0 으로 펼쳐짐)
+    return [...list]
+      .filter((it) => (it.amount ?? 0) > 0)
+      .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0));
   }, [itemsQ.data]);
+
+  const earningsItems = useMemo(
+    () => sortedItems.filter((it) => it.itemType === 'EARNING'),
+    [sortedItems],
+  );
+  const deductionsItems = useMemo(
+    () => sortedItems.filter((it) => it.itemType === 'DEDUCTION'),
+    [sortedItems],
+  );
+  const earningsTotal = useMemo(
+    () => earningsItems.reduce((s, it) => s + (it.amount ?? 0), 0),
+    [earningsItems],
+  );
+  const deductionsTotal = useMemo(
+    () => deductionsItems.reduce((s, it) => s + (it.amount ?? 0), 0),
+    [deductionsItems],
+  );
 
   // 보너스 정책 한도 검증
   // 정책 사용 시점 활성 baseSalary 기준 성과급 + 상여금 합계가 한도 초과 시 경고
@@ -237,69 +265,80 @@ export function AdminPayrollManagePage() {
     };
   }, [bonusPolicyQ.data, memberSalariesQ.data, itemsQ.data, payroll]);
 
-  const columns: ColumnsType<PayrollItem> = useMemo(
-    () => [
-      { title: '항목', dataIndex: 'itemName', key: 'itemName' },
-      {
-        title: '유형',
-        dataIndex: 'itemType',
-        key: 'itemType',
-        render: (t: string) => ITEM_TYPE_KO[t] ?? t ?? '—',
-      },
-      {
-        title: '금액',
-        key: 'amount',
-        align: 'right',
-        render: (_, row) => {
-          const id = row.payrollItemId;
-          if (!id) return formatWon(row.amount);
-          if (editingId === id) {
-            return (
-              <Space size="small">
-                <InputNumber min={0} value={editAmount} onChange={(v) => setEditAmount(Number(v) || 0)} />
-                <Button size="small" type="primary" onClick={() => updateItemM.mutate({ id, amount: editAmount })}>
-                  저장
-                </Button>
-                <Button size="small" onClick={() => setEditingId(null)}>
-                  취소
-                </Button>
-              </Space>
-            );
-          }
+  const buildColumns = (sign: '+' | '-'): ColumnsType<PayrollItem> => [
+    { title: '항목', dataIndex: 'itemName', key: 'itemName' },
+    {
+      title: '금액',
+      key: 'amount',
+      align: 'right',
+      render: (_, row) => {
+        const id = row.payrollItemId;
+        const amountColor = sign === '+' ? 'tw-text-blue-600' : 'tw-text-red-600';
+        if (!id) {
+          return (
+            <span className={`${amountColor} tw-font-medium`}>
+              {sign} {formatWon(row.amount)}
+            </span>
+          );
+        }
+        if (editingId === id) {
           return (
             <Space size="small">
-              <span>{formatWon(row.amount)}</span>
-              {isDraft && (
-                <Button
-                  type="link"
-                  size="small"
-                  className="!tw-p-0"
-                  onClick={() => {
-                    setEditingId(id);
-                    setEditAmount(row.amount ?? 0);
-                  }}
-                >
-                  수정
-                </Button>
-              )}
+              <InputNumber min={0} value={editAmount} onChange={(v) => setEditAmount(Number(v) || 0)} />
+              <Button size="small" type="primary" onClick={() => updateItemM.mutate({ id, amount: editAmount })}>
+                저장
+              </Button>
+              <Button size="small" onClick={() => setEditingId(null)}>
+                취소
+              </Button>
             </Space>
           );
-        },
-      },
-      {
-        title: '',
-        key: 'del',
-        width: 80,
-        render: (_, row) =>
-          isDraft && row.payrollItemId ? (
-            <Popconfirm title="이 항목을 삭제할까요?" onConfirm={() => deleteItemM.mutate(row.payrollItemId!)}>
-              <Button type="link" danger size="small" className="!tw-p-0">
-                삭제
+        }
+        return (
+          <Space size="small">
+            <span className={`${amountColor} tw-font-medium`}>
+              {sign} {formatWon(row.amount)}
+            </span>
+            {isDraft && (
+              <Button
+                type="link"
+                size="small"
+                className="!tw-p-0"
+                onClick={() => {
+                  setEditingId(id);
+                  setEditAmount(row.amount ?? 0);
+                }}
+              >
+                수정
               </Button>
-            </Popconfirm>
-          ) : null,
+            )}
+          </Space>
+        );
       },
-    ],
+    },
+    {
+      title: '',
+      key: 'del',
+      width: 60,
+      render: (_, row) =>
+        isDraft && row.payrollItemId ? (
+          <Popconfirm title="이 항목을 삭제할까요?" onConfirm={() => deleteItemM.mutate(row.payrollItemId!)}>
+            <Button type="link" danger size="small" className="!tw-p-0">
+              삭제
+            </Button>
+          </Popconfirm>
+        ) : null,
+    },
+  ];
+
+  const earningsColumns = useMemo(
+    () => buildColumns('+'),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [deleteItemM, editingId, editAmount, isDraft, updateItemM],
+  );
+  const deductionsColumns = useMemo(
+    () => buildColumns('-'),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [deleteItemM, editingId, editAmount, isDraft, updateItemM],
   );
 
@@ -309,24 +348,74 @@ export function AdminPayrollManagePage() {
 
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
-      <Link
-        to="/app/payroll/admin"
-        search={{ tab: fromTab }}
-        className="tw-text-sm tw-text-[#2563EB]"
+      <button
+        type="button"
+        onClick={() => {
+          if (fromMenu === 'retirement') {
+            // 퇴직 정산 탭으로 복귀 (별도 메뉴 -> 통합 탭으로 흡수됨)
+            void router.navigate({ to: '/app/payroll/admin', search: { tab: 'retirement' } });
+            return;
+          }
+          // 진입한 탭/월 그대로 복귀 (월별 정산 결과 탭은 ym 보존)
+          // ym 없으면 대장의 정산 대상 월 또는 지급일 기준으로 fallback
+          const ym =
+            fromYm
+            ?? payroll?.targetYearMonth
+            ?? (payroll?.payrollYearMonthDay ? payroll.payrollYearMonthDay.slice(0, 7) : undefined);
+          void router.navigate({
+            to: '/app/payroll/admin',
+            search: ym ? { tab: fromTab, ym } : { tab: fromTab },
+          });
+        }}
+        className="tw-text-sm tw-text-[#2563EB] tw-bg-transparent tw-border-0 tw-p-0 tw-cursor-pointer hover:tw-underline"
       >
-        ← 급여 관리
-      </Link>
+        ← {fromMenu === 'retirement' ? '퇴직 정산' : '급여 관리'}
+      </button>
 
       <Card className="tw-border-slate-200/80 tw-shadow-sm" title="대장 요약" loading={payrollQ.isLoading}>
         {payroll && (
           <>
-            <Descriptions column={{ xs: 1, sm: 2 }} size="small" bordered className="tw-mb-4">
-              <Descriptions.Item label="구성원 ID">{payroll.memberId ?? '—'}</Descriptions.Item>
-              <Descriptions.Item label="귀속일">{payroll.payrollYearMonthDay ?? '—'}</Descriptions.Item>
-              <Descriptions.Item label="상태">
-                <Tag>{STATUS_KO[payroll.payrollStatus ?? ''] ?? payroll.payrollStatus}</Tag>
+            <Descriptions column={{ xs: 1, sm: 2, md: 3 }} size="small" bordered className="tw-mb-4">
+              <Descriptions.Item label="정산 대상 월">
+                {(() => {
+                  const ym = payroll.targetYearMonth;
+                  if (ym) {
+                    const m = parseInt(ym.split('-')[1] ?? '0', 10);
+                    return <Tag color="geekblue">{`${m}월분`}</Tag>;
+                  }
+                  return payroll.payrollYearMonthDay ?? '—';
+                })()}
               </Descriptions.Item>
-              <Descriptions.Item label="실수령">{formatWon(payroll.netPay)}</Descriptions.Item>
+              <Descriptions.Item label="지급일">
+                {(() => {
+                  if (payroll.paidAt) return payroll.paidAt;
+                  if (!payroll.payrollYearMonthDay) return '—';
+                  const d = dayjs(payroll.payrollYearMonthDay);
+                  const dow = d.day();
+                  const shifted = dow === 0 ? d.subtract(2, 'day') : dow === 6 ? d.subtract(1, 'day') : d;
+                  // 지급일 미래면 (예정), 과거인데 paidAt 없으면 (미지급)
+                  const today = dayjs().startOf('day');
+                  const isFuture = shifted.isAfter(today);
+                  return (
+                    <span>
+                      {shifted.format('YYYY-MM-DD')}{' '}
+                      <Typography.Text type={isFuture ? 'secondary' : 'warning'} className="tw-text-xs">
+                        ({isFuture ? '예정' : '미지급'})
+                      </Typography.Text>
+                    </span>
+                  );
+                })()}
+              </Descriptions.Item>
+              <Descriptions.Item label="상태">
+                <Tag color={payroll.payrollStatus === 'PAID' ? 'green' : payroll.payrollStatus === 'CONFIRMED' ? 'blue' : 'default'}>
+                  {STATUS_KO[payroll.payrollStatus ?? ''] ?? payroll.payrollStatus}
+                </Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="총지급">{formatWon(payroll.totalPayment)}</Descriptions.Item>
+              <Descriptions.Item label="총공제">{formatWon(payroll.totalDeduction)}</Descriptions.Item>
+              <Descriptions.Item label="실수령">
+                <Typography.Text strong className="!tw-text-blue-600">{formatWon(payroll.netPay)}</Typography.Text>
+              </Descriptions.Item>
             </Descriptions>
             <Space wrap>
               {isDraft && (
@@ -365,7 +454,6 @@ export function AdminPayrollManagePage() {
           open={retroOpen}
           onClose={() => setRetroOpen(false)}
           memberId={payroll.memberId}
-          memberLabel={payroll.memberId}
         />
       )}
 
@@ -401,73 +489,180 @@ export function AdminPayrollManagePage() {
           />
         )}
         {isDraft && (
-          <>
-            <Form
-              form={bonusForm}
-              layout="inline"
-              className="tw-mb-3 tw-flex tw-flex-wrap tw-items-end tw-gap-2"
-              initialValues={{ bonusType: 'BONUS' }}
-              onFinish={(v) => addBonusM.mutate(v)}
+          <Space className="tw-mb-3" wrap>
+            <Button
+              type="primary"
+              onClick={() => {
+                bonusForm.resetFields();
+                bonusForm.setFieldsValue({ bonusType: 'BONUS' });
+                setBonusModalOpen(true);
+              }}
             >
-              <Form.Item name="bonusType" label="상여/성과" rules={[{ required: true }]}>
-                <Select
-                  className="tw-min-w-[180px]"
-                  options={[
-                    { value: 'BONUS', label: '상여금' },
-                    { value: 'PERFORMANCE', label: '성과급' },
-                  ]}
-                />
-              </Form.Item>
-              <Form.Item name="amount" label="금액" rules={[{ required: true }]}>
-                <InputNumber min={0} className="tw-min-w-[140px]" />
-              </Form.Item>
-              <Form.Item>
-                <Button type="primary" htmlType="submit" loading={addBonusM.isPending}>
-                  상여/성과 추가
-                </Button>
-              </Form.Item>
-            </Form>
-
-            <Form
-              form={addForm}
-              layout="inline"
-              className="tw-mb-4 tw-flex tw-flex-wrap tw-items-end tw-gap-2"
-              onFinish={(v) => addItemM.mutate({ templateId: v.templateId, amount: v.amount })}
+              + 상여/성과 추가
+            </Button>
+            <Button
+              onClick={() => {
+                addForm.resetFields();
+                setItemModalOpen(true);
+              }}
             >
-              <Form.Item name="templateId" label="템플릿" rules={[{ required: true }]}>
-                <Select
-                  placeholder="항목 선택"
-                  className="tw-min-w-[240px]"
-                  options={templateOptions}
-                  loading={templatesQ.isLoading}
-                  showSearch
-                  optionFilterProp="label"
-                />
-              </Form.Item>
-              <Form.Item name="amount" label="금액" rules={[{ required: true }]}>
-                <InputNumber min={0} className="tw-min-w-[140px]" />
-              </Form.Item>
-              <Form.Item>
-                <Button type="primary" htmlType="submit" loading={addItemM.isPending}>
-                  항목 추가
-                </Button>
-              </Form.Item>
-            </Form>
-          </>
+              + 항목 추가
+            </Button>
+          </Space>
         )}
+
+        <Modal
+          open={bonusModalOpen}
+          title="상여/성과 추가"
+          onCancel={() => setBonusModalOpen(false)}
+          onOk={() => bonusForm.submit()}
+          confirmLoading={addBonusM.isPending}
+          okText="추가"
+          cancelText="취소"
+          destroyOnClose
+        >
+          <Form
+            form={bonusForm}
+            layout="vertical"
+            initialValues={{ bonusType: 'BONUS' }}
+            onFinish={(v) =>
+              addBonusM.mutateAsync(v).then(() => setBonusModalOpen(false)).catch(() => {})
+            }
+          >
+            <Form.Item name="bonusType" label="구분" rules={[{ required: true }]}>
+              <Select
+                options={[
+                  { value: 'BONUS', label: '상여금' },
+                  { value: 'PERFORMANCE', label: '성과급' },
+                ]}
+              />
+            </Form.Item>
+            <Form.Item name="amount" label="금액 (원)" rules={[{ required: true }]}>
+              <InputNumber min={0} style={{ width: '100%' }} />
+            </Form.Item>
+          </Form>
+        </Modal>
+
+        <Modal
+          open={itemModalOpen}
+          title="급여 항목 추가"
+          onCancel={() => setItemModalOpen(false)}
+          onOk={() => addForm.submit()}
+          confirmLoading={addItemM.isPending}
+          okText="추가"
+          cancelText="취소"
+          destroyOnClose
+        >
+          <Form
+            form={addForm}
+            layout="vertical"
+            onFinish={(v) =>
+              addItemM
+                .mutateAsync({ templateId: v.templateId, amount: v.amount })
+                .then(() => setItemModalOpen(false))
+                .catch(() => {})
+            }
+          >
+            <Form.Item name="templateId" label="템플릿" rules={[{ required: true }]}>
+              <Select
+                placeholder="항목 선택"
+                options={templateOptions}
+                loading={templatesQ.isLoading}
+                showSearch
+                optionFilterProp="label"
+              />
+            </Form.Item>
+            <Form.Item name="amount" label="금액 (원)" rules={[{ required: true }]}>
+              <InputNumber min={0} style={{ width: '100%' }} />
+            </Form.Item>
+          </Form>
+        </Modal>
+
         {!isDraft && (
           <Typography.Paragraph type="secondary" className="!tw-mt-0 !tw-mb-4 !tw-text-sm">
-            확정·지급된 대장은 항목을 바꿀 수 없습니다.
           </Typography.Paragraph>
         )}
-        <Table<PayrollItem>
-          rowKey={(r) => r.payrollItemId ?? `${r.itemName}`}
-          loading={itemsQ.isLoading}
-          columns={columns}
-          dataSource={sortedItems}
-          pagination={false}
-          size="small"
-        />
+        <div className="tw-grid tw-grid-cols-1 md:tw-grid-cols-2 tw-gap-4">
+          <div>
+            <div className="tw-flex tw-items-center tw-justify-between tw-mb-2">
+              <Typography.Text strong className="!tw-text-blue-600">지급 항목</Typography.Text>
+              <Tag color="blue">{earningsItems.length}건</Tag>
+            </div>
+            <Table<PayrollItem>
+              rowKey={(r) => r.payrollItemId ?? `e-${r.itemName}`}
+              loading={itemsQ.isLoading}
+              columns={earningsColumns}
+              dataSource={earningsItems}
+              pagination={false}
+              size="small"
+              locale={{ emptyText: '지급 항목 없음' }}
+              summary={() => (
+                <Table.Summary.Row className="tw-bg-blue-50">
+                  <Table.Summary.Cell index={0}>
+                    <Typography.Text strong>지급 합계</Typography.Text>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={1} align="right">
+                    <Typography.Text strong className="!tw-text-blue-600">
+                      + {formatWon(earningsTotal)}
+                    </Typography.Text>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={2} />
+                </Table.Summary.Row>
+              )}
+            />
+          </div>
+          <div>
+            <div className="tw-flex tw-items-center tw-justify-between tw-mb-2">
+              <Typography.Text strong className="!tw-text-red-600">공제 항목</Typography.Text>
+              <Tag color="red">{deductionsItems.length}건</Tag>
+            </div>
+            <Table<PayrollItem>
+              rowKey={(r) => r.payrollItemId ?? `d-${r.itemName}`}
+              loading={itemsQ.isLoading}
+              columns={deductionsColumns}
+              dataSource={deductionsItems}
+              pagination={false}
+              size="small"
+              locale={{ emptyText: '공제 항목 없음' }}
+              summary={() => (
+                <Table.Summary.Row className="tw-bg-red-50">
+                  <Table.Summary.Cell index={0}>
+                    <Typography.Text strong>공제 합계</Typography.Text>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={1} align="right">
+                    <Typography.Text strong className="!tw-text-red-600">
+                      - {formatWon(deductionsTotal)}
+                    </Typography.Text>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={2} />
+                </Table.Summary.Row>
+              )}
+            />
+          </div>
+        </div>
+
+        <div className="tw-mt-4 tw-pt-3 tw-border-t tw-border-slate-200 tw-flex tw-justify-end">
+          <Space size="large" wrap>
+            <span>
+              <Typography.Text type="secondary">총지급</Typography.Text>{' '}
+              <Typography.Text strong className="!tw-text-blue-600">
+                {formatWon(earningsTotal)}
+              </Typography.Text>
+            </span>
+            <span>
+              <Typography.Text type="secondary">총공제</Typography.Text>{' '}
+              <Typography.Text strong className="!tw-text-red-600">
+                {formatWon(deductionsTotal)}
+              </Typography.Text>
+            </span>
+            <span>
+              <Typography.Text type="secondary">실수령</Typography.Text>{' '}
+              <Typography.Text strong className="!tw-text-base !tw-text-emerald-600">
+                {formatWon(earningsTotal - deductionsTotal)}
+              </Typography.Text>
+            </span>
+          </Space>
+        </div>
       </Card>
     </Space>
   );
@@ -489,16 +684,21 @@ function RetroactiveModal({
   open,
   onClose,
   memberId,
-  memberLabel,
 }: {
   open: boolean;
   onClose: () => void;
   memberId: string;
-  memberLabel: string;
 }) {
   const { message } = App.useApp();
   const [form] = Form.useForm<RetroFormValues>();
   const [preview, setPreview] = useState<RetroactivePayrollResult | null>(null);
+
+  const memberQ = useQuery({
+    queryKey: ['member', 'detail', memberId],
+    queryFn: () => memberApi.detailOrNull(memberId),
+    enabled: Boolean(memberId) && open,
+    staleTime: 60_000,
+  });
 
   const previewM = useMutation({
     mutationFn: (v: RetroFormValues) =>
@@ -530,12 +730,13 @@ function RetroactiveModal({
   });
 
   const fmt = (n: number | null | undefined) => `${(n ?? 0).toLocaleString('ko-KR')}원`;
+  const m = memberQ.data;
 
   return (
     <Modal
       open={open}
       title="소급분 자동 재계산"
-      width={760}
+      width={720}
       onCancel={() => {
         setPreview(null);
         form.resetFields();
@@ -544,10 +745,20 @@ function RetroactiveModal({
       footer={null}
       destroyOnClose
     >
-      <Typography.Paragraph type="secondary" className="!tw-text-xs">
-        통상임금 인상 시 과거 월 가산수당 (연장 / 야간 / 휴일) 을 새 통상임금 기준으로 재계산해
-        차액을 RETROACTIVE 명세서로 발행합니다. 발행 후 DRAFT 상태로 생성되며 인사팀이 검토 후
-        확정 / 지급 처리해야 합니다.
+      <div className="tw-rounded-md tw-bg-slate-50 tw-border tw-border-slate-200 tw-px-3 tw-py-2 tw-mb-3">
+        <Space size={8} wrap>
+          <Typography.Text strong>{m?.name ?? '—'}</Typography.Text>
+          {m?.sabun && <Tag color="default">사번 {m.sabun}</Tag>}
+          {m?.organizationName && <Tag color="blue">{m.organizationName}</Tag>}
+          {(m?.jobGradeName || m?.jobTitleName) && (
+            <Tag color="geekblue">{[m?.jobGradeName, m?.jobTitleName].filter(Boolean).join(' / ')}</Tag>
+          )}
+        </Space>
+      </div>
+
+      <Typography.Paragraph type="secondary" className="!tw-text-xs !tw-mb-3">
+        통상임금 인상 시 과거 월 가산수당(연장/야간/휴일)을 새 통상임금 기준으로 재계산해 차액을
+        RETROACTIVE 명세서(DRAFT)로 발행합니다.
       </Typography.Paragraph>
 
       <Form<RetroFormValues>
@@ -558,9 +769,6 @@ function RetroactiveModal({
           range: [dayjs().subtract(3, 'month').startOf('month'), dayjs().subtract(1, 'month').endOf('month')],
         }}
       >
-        <Form.Item label="대상 직원" extra={memberLabel}>
-          <Input value={memberId} disabled />
-        </Form.Item>
         <Form.Item
           label="소급 기간 (월 단위)"
           name="range"
@@ -575,7 +783,7 @@ function RetroactiveModal({
             { required: true, message: '새 통상임금을 입력하세요.' },
             { type: 'number', min: 0, message: '0 이상' },
           ]}
-          extra="기본급 + 통상임금 플래그 Y 인 정기수당 합계 — 인상 후 값"
+          extra="기본급 + 통상임금 플래그 Y 정기수당 합계 (인상 후)"
         >
           <InputNumber
             min={0}

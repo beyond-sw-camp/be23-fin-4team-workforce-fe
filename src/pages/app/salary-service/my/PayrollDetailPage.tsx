@@ -34,6 +34,7 @@ const PAYROLL_TYPE_KO: Record<string, string> = {
   PERFORMANCE_BONUS: '성과급',
   SPECIAL_BONUS: '특별상여',
   RETROACTIVE: '소급분',
+  RETIREMENT_SETTLEMENT: '퇴직정산',
 };
 
 function formatWon(n: number | null | undefined) {
@@ -131,22 +132,26 @@ export function PayrollDetailPage() {
     return [...list].sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0));
   }, [itemsQ.data]);
 
-  // 카테고리별 분류
+  // 카테고리별 분류 - 0원 항목 제외 (실제 지급/공제만 노출)
   const earningItems = useMemo(
-    () => sortedItems.filter((i) => i.itemType === 'EARNING'),
+    () => sortedItems.filter((i) => i.itemType === 'EARNING' && (i.amount ?? 0) > 0),
     [sortedItems],
   );
   const taxDeductionItems = useMemo(
     () =>
       sortedItems.filter(
-        (i) => i.itemType === 'DEDUCTION' && TAX_DEDUCTION_NAMES.has(i.itemName ?? ''),
+        (i) => i.itemType === 'DEDUCTION'
+            && TAX_DEDUCTION_NAMES.has(i.itemName ?? '')
+            && (i.amount ?? 0) > 0,
       ),
     [sortedItems],
   );
   const otherDeductionItems = useMemo(
     () =>
       sortedItems.filter(
-        (i) => i.itemType === 'DEDUCTION' && !TAX_DEDUCTION_NAMES.has(i.itemName ?? ''),
+        (i) => i.itemType === 'DEDUCTION'
+            && !TAX_DEDUCTION_NAMES.has(i.itemName ?? '')
+            && (i.amount ?? 0) > 0,
       ),
     [sortedItems],
   );

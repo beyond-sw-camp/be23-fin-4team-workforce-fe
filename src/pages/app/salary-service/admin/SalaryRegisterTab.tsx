@@ -29,9 +29,9 @@ export function SalaryRegisterTab({ createForMemberId }: SalaryRegisterTabProps 
     staleTime: 60_000,
   });
 
-  /** 클릭한 직원의 memberId. 값이 들어가면 SalaryTab 의 모달이 자동으로 열림.
+  /** 클릭한 직원 정보 - 모달 자동 오픈 + 이름·부서 라벨 prefill 용.
    *  닫히면 null 로 reset 해서 다음 등록 클릭에 다시 열 수 있게 한다. */
-  const [registerMemberId, setRegisterMemberId] = useState<string | null>(null);
+  const [registerMember, setRegisterMember] = useState<PayrollPrecheckMemberRef | null>(null);
 
   /** deep-link createForMemberId 1회성 트리거. 같은 값으로 재렌더돼도 한 번만 열도록 ref 추적. */
   const handledCreateMemberIdRef = useRef<string | null>(null);
@@ -39,7 +39,7 @@ export function SalaryRegisterTab({ createForMemberId }: SalaryRegisterTabProps 
     if (!createForMemberId) return;
     if (handledCreateMemberIdRef.current === createForMemberId) return;
     handledCreateMemberIdRef.current = createForMemberId;
-    setRegisterMemberId(createForMemberId);
+    setRegisterMember({ memberId: createForMemberId } as PayrollPrecheckMemberRef);
   }, [createForMemberId]);
 
   const rows = precheckQ.data?.missingSalary ?? [];
@@ -84,7 +84,7 @@ export function SalaryRegisterTab({ createForMemberId }: SalaryRegisterTabProps 
         <Button
           type="primary"
           size="small"
-          onClick={() => r.memberId && setRegisterMemberId(r.memberId)}
+          onClick={() => r.memberId && setRegisterMember(r)}
         >
           급여 등록
         </Button>
@@ -137,8 +137,17 @@ export function SalaryRegisterTab({ createForMemberId }: SalaryRegisterTabProps 
           닫히면 onModalClose 로 부모 state 리셋 -> 같은 직원 다시 클릭해도 재오픈 가능. */}
       <SalaryTab
         tableHidden
-        createForMemberId={registerMemberId ?? undefined}
-        onModalClose={() => setRegisterMemberId(null)}
+        createForMemberId={registerMember?.memberId ?? undefined}
+        prefilledMember={
+          registerMember?.memberId
+            ? {
+                memberId: registerMember.memberId,
+                name: registerMember.name ?? undefined,
+                organizationName: registerMember.organizationName ?? undefined,
+              }
+            : undefined
+        }
+        onModalClose={() => setRegisterMember(null)}
       />
     </Space>
   );

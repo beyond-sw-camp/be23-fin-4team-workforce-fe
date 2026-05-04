@@ -48,9 +48,10 @@ export function MyAttendanceMonthlyPage() {
       { title: '일자', dataIndex: 'attendanceDate', key: 'attendanceDate' },
       {
         title: '상태',
-        dataIndex: 'status',
         key: 'status',
-        render: (s: string) => <AttendanceStatusTag status={s} />,
+        render: (_, row) => (
+          <AttendanceStatusTag status={row.status} workTripType={row.workTripType ?? null} />
+        ),
       },
       {
         title: '출근',

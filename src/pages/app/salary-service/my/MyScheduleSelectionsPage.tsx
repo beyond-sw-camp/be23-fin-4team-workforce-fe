@@ -1,5 +1,5 @@
 /** /app/attendance/schedules/my - 개인 근무 스케줄 (사원) */
-import { Fragment, useMemo, useState } from 'react';
+import React, { Fragment, useMemo, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -41,17 +41,36 @@ const STATUS_KO: Record<string, string> = {
 
 const SCHEDULE_SELECTION_PREFILL_STORAGE_KEY = 'wf-approval-prefill-schedule-selection';
 
-function toHours(minutes?: number | null) {
-  if (minutes == null) return '-';
-  return `${(minutes / 60).toFixed(1)}h`;
+/** 분 -> "0.75H", "40H" 같은 decimal 시간 표기 (개인 근무 스케줄 표 전용) */
+function toDecimalH(minutes?: number | null): string {
+  if (minutes == null || minutes === 0) return '0H';
+  const hrs = minutes / 60;
+  // 정수면 "40H", 소수점이면 "0.75H" 같이 0.25 단위 반올림
+  if (Math.abs(hrs - Math.round(hrs)) < 0.001) return `${Math.round(hrs)}H`;
+  return `${hrs.toFixed(2).replace(/\.?0+$/, '')}H`;
 }
 
-function toHm(minutes?: number | null) {
-  if (minutes == null) return '-';
-  const safe = Math.max(0, Math.floor(minutes));
+/** ISO/LocalDateTime 문자열에서 "HH:mm" 추출 */
+function isoToHm(s?: string | null): string {
+  if (!s) return '';
+  return s.length >= 16 ? s.slice(11, 16) : s;
+}
+
+/** "HH:mm" 또는 "HH:mm:ss" -> 0시 기준 분 */
+function parseHmToMin(s: string): number {
+  const parts = s.split(':');
+  const h = parseInt(parts[0] ?? '0', 10);
+  const m = parseInt(parts[1] ?? '0', 10);
+  return h * 60 + m;
+}
+
+/** "HH:mm" + delta분 -> "HH:mm" (음수 가능, 24h 보정 안함 - 같은 날 가정) */
+function addMinToHm(hm: string, deltaMin: number): string {
+  const total = parseHmToMin(hm) + deltaMin;
+  const safe = Math.max(0, total);
   const h = Math.floor(safe / 60);
   const m = safe % 60;
-  return `${h}h ${m}m`;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
 function trimSeconds(time?: string | null) {
@@ -73,6 +92,7 @@ function ScheduleWeeklyTable({
   fallbackBreakRange,
   holidaySet,
   holidayNameMap,
+  defaultScheduleTimeLabel,
 }: {
   calendarMonth: dayjs.Dayjs;
   dailyMap: Map<string, DailyAttendance>;
@@ -82,6 +102,8 @@ function ScheduleWeeklyTable({
   fallbackBreakRange: { start: string; end: string } | null;
   holidaySet: Set<string>;
   holidayNameMap: Map<string, string>;
+  /** 회사 기본 스케줄 시간 (예: "09:00 ~ 18:00") - 슬롯/스케줄 매핑 없을 때 fallback 으로 표시 */
+  defaultScheduleTimeLabel?: string;
 }) {
   type DayCell = {
     date: dayjs.Dayjs;
@@ -128,45 +150,102 @@ function ScheduleWeeklyTable({
     return result;
   }, [calendarMonth, dailyMap, scheduleMap, fallbackTime, holidaySet, holidayNameMap]);
 
-  /** 근태 행에 표시할 라벨 매핑 */
-  const attendanceLabel = (cell: DayCell): string => {
+  /** 표준 일 근무 시간(분) - 스케줄 있으면 (end-start-break), 없으면 480 (8h) */
+  const standardWorkMinForCell = (cell: DayCell): number => {
+    const sch = cell.schedule;
+    if (sch?.startTime && sch?.endTime) {
+      const start = parseHmToMin(sch.startTime);
+      const end = parseHmToMin(sch.endTime);
+      let breakMin = 60;
+      if (sch.breakStart && sch.breakEnd) {
+        breakMin = parseHmToMin(sch.breakEnd) - parseHmToMin(sch.breakStart);
+      }
+      return Math.max(0, end - start - breakMin);
+    }
+    return 480; // fallback 8h
+  };
+
+  /** 근무 행 셀 텍스트 - 휴일/공휴일 또는 "평일 / HH:mm ~ HH:mm"
+   *  실제 출퇴근 시간(daily.firstClockIn) 대신 항상 회사 스케줄 시간을 표시 */
+  const workCellText = (cell: DayCell): string => {
+    if (cell.holidayName) return '공휴일';
+    const dow = cell.date.day();
+    if (dow === 0 || dow === 6) return '휴일';
+    // 평일 - 슬롯/할당된 스케줄 우선
+    const sch = cell.schedule;
+    if (sch?.startTime && sch?.endTime) {
+      return `평일 / ${trimSeconds(sch.startTime)} ~ ${trimSeconds(sch.endTime)}`;
+    }
+    // 슬롯/스케줄 매핑 없으면 회사 기본 스케줄 시간 사용 (실제 출퇴근 시간 X)
+    if (defaultScheduleTimeLabel) {
+      return `평일 / ${defaultScheduleTimeLabel}`;
+    }
+    return `평일 / ${fallbackTime}`;
+  };
+
+  /** 근태 행 셀 텍스트 - 휴가/결근/반차/출장/외근, 없으면 빈칸 */
+  const attendanceCellText = (cell: DayCell): string => {
     const status = cell.daily?.status;
     if (status === 'LEAVE') return '연차휴가';
-    if (status === 'HALF') return '반차';
+    if (status === 'HALF') return '반차(오후)';
     if (status === 'ABSENT') return '결근';
+    const trip = cell.daily?.workTripType;
+    if (trip === 'BUSINESS_TRIP') return '출장';
+    if (trip === 'OUTSIDE_WORK') return '외근';
     return '';
   };
 
-  /** 초과근무 텍스트: "17:30~18:15 연장근무(0.75H)" */
-  const overtimeText = (cell: DayCell): string => {
+  /** 근태로 인한 차감 시간(분) - 음수 합계 */
+  const attendanceDeductionMin = (cell: DayCell): number => {
+    const status = cell.daily?.status;
+    if (status === 'LEAVE' || status === 'ABSENT') return standardWorkMinForCell(cell);
+    if (status === 'HALF') return Math.floor(standardWorkMinForCell(cell) / 2);
+    return 0;
+  };
+
+  /** 초과근무 행 - "16:00 ~ 18:30\n(연장근무 2.5H)" */
+  const overtimeCell = (cell: DayCell): React.ReactNode => {
     const ot = cell.daily?.overtimeMinutes ?? 0;
-    if (ot <= 0) return '';
-    const h = ot / 60;
-    return `연장근무 ${h.toFixed(2)}H`;
-  };
-
-  /** 한 주의 합계 — 근무 분, 초과 분, 근태 일수. 휴게시간 차감 개념 제거됨. */
-  const weekSummary = (week: DayCell[]) => {
-    let workedMin = 0;
-    let overtimeMin = 0;
-    let leaveDays = 0;
-    let workdayCount = 0; // 평일+업무가 있는 날
-    for (const cell of week) {
-      if (cell.daily?.workedMinutes != null) workedMin += cell.daily.workedMinutes;
-      if (cell.daily?.overtimeMinutes != null) overtimeMin += cell.daily.overtimeMinutes;
-      if (cell.daily?.status === 'LEAVE' || cell.daily?.status === 'HALF') leaveDays += 1;
-      if (!cell.isWeekend) workdayCount += 1;
+    if (ot <= 0) return null;
+    const sch = cell.schedule;
+    let otStartHm: string | null = null;
+    if (sch?.endTime) {
+      otStartHm = trimSeconds(sch.endTime);
+    } else if (cell.daily?.lastClockOut) {
+      // schedule 없으면 lastClockOut 에서 ot 만큼 앞으로 빼기
+      otStartHm = addMinToHm(isoToHm(cell.daily.lastClockOut), -ot);
     }
-    // 표준: 평일 × 8시간 = 주 40H (휴게시간 차감 없음)
-    const standardHours = workdayCount * 8;
-    return { workedMin, overtimeMin, leaveDays, standardHours };
+    const otEndHm = isoToHm(cell.daily?.lastClockOut);
+    const range = otStartHm && otEndHm ? `${otStartHm} ~ ${otEndHm}` : '';
+    return (
+      <div className="tw-leading-tight">
+        {range && <div>{range}</div>}
+        <div className="tw-text-slate-500">(연장근무 {toDecimalH(ot)})</div>
+      </div>
+    );
   };
 
-  /** 한 주의 1주 근로시간 (표준 + 초과) */
+  /** 한 주의 합계 - 표준 근무 / 초과 / 근태 차감 */
+  const weekSummary = (week: DayCell[]) => {
+    let standardMin = 0;
+    let overtimeMin = 0;
+    let deductionMin = 0;
+    for (const cell of week) {
+      if (cell.holidayName) continue;
+      const dow = cell.date.day();
+      if (dow === 0 || dow === 6) continue; // 주말 제외
+      standardMin += standardWorkMinForCell(cell);
+      if (cell.daily?.overtimeMinutes) overtimeMin += cell.daily.overtimeMinutes;
+      deductionMin += attendanceDeductionMin(cell);
+    }
+    return { standardMin, overtimeMin, deductionMin };
+  };
+
+  /** 한 주의 1주 근로시간 = 표준 - 차감 + 초과 (decimal H) */
   const weekTotalText = (week: DayCell[]) => {
     const s = weekSummary(week);
-    const total = s.standardHours + s.overtimeMin / 60;
-    return `${total.toFixed(2)}H`;
+    const total = s.standardMin - s.deductionMin + s.overtimeMin;
+    return toDecimalH(total);
   };
 
   /** 점심시간 텍스트 (HH:mm~HH:mm).
@@ -185,6 +264,12 @@ function ScheduleWeeklyTable({
 
   const cellBase = 'tw-border tw-border-slate-200 tw-px-2 tw-py-1.5 tw-text-xs tw-text-center tw-align-middle';
   const headerBase = 'tw-bg-slate-50 tw-font-semibold tw-text-slate-700';
+  // 요일/주/구분 컬럼 헤더 - 흰색 배경
+  const topHeaderBase = 'tw-bg-white tw-font-semibold tw-text-slate-700';
+  // 일자(일) 행 - 연한 회색
+  const dateRowBase = 'tw-bg-slate-100';
+  // 합계 / 1주 근로시간 컬럼 - 아주 연한 파랑 배경 + 진한 파랑 글씨
+  const summaryColBase = 'tw-bg-blue-50 tw-text-blue-700 tw-font-semibold';
 
   return (
     <div className="tw-overflow-x-auto">
@@ -199,22 +284,22 @@ function ScheduleWeeklyTable({
           <col />
           <col />
           <col />
-          <col style={{ width: 70 }} />
-          <col style={{ width: 90 }} />
+          <col style={{ width: 110 }} />
+          <col style={{ width: 110 }} />
         </colgroup>
         <thead>
           <tr>
-            <th className={`${cellBase} ${headerBase}`}>주</th>
-            <th className={`${cellBase} ${headerBase}`}>구분</th>
-            <th className={`${cellBase} ${headerBase} !tw-text-rose-600`}>일</th>
-            <th className={`${cellBase} ${headerBase}`}>월</th>
-            <th className={`${cellBase} ${headerBase}`}>화</th>
-            <th className={`${cellBase} ${headerBase}`}>수</th>
-            <th className={`${cellBase} ${headerBase}`}>목</th>
-            <th className={`${cellBase} ${headerBase}`}>금</th>
-            <th className={`${cellBase} ${headerBase} !tw-text-rose-600`}>토</th>
-            <th className={`${cellBase} ${headerBase}`}>합계</th>
-            <th className={`${cellBase} ${headerBase}`}>1주 근로시간</th>
+            <th className={`${cellBase} ${topHeaderBase}`}>주</th>
+            <th className={`${cellBase} ${topHeaderBase}`}>구분</th>
+            <th className={`${cellBase} ${topHeaderBase} !tw-text-rose-600`}>일</th>
+            <th className={`${cellBase} ${topHeaderBase}`}>월</th>
+            <th className={`${cellBase} ${topHeaderBase}`}>화</th>
+            <th className={`${cellBase} ${topHeaderBase}`}>수</th>
+            <th className={`${cellBase} ${topHeaderBase}`}>목</th>
+            <th className={`${cellBase} ${topHeaderBase}`}>금</th>
+            <th className={`${cellBase} ${topHeaderBase} !tw-text-rose-600`}>토</th>
+            <th className={`${cellBase} ${topHeaderBase}`}>합계</th>
+            <th className={`${cellBase} ${topHeaderBase}`}>1주 근로시간</th>
           </tr>
         </thead>
         <tbody>
@@ -222,15 +307,15 @@ function ScheduleWeeklyTable({
             const summary = weekSummary(week);
             return (
               <Fragment key={`week-${wIdx}`}>
-                {/* 일자 행 */}
-                <tr>
-                  <td rowSpan={4} className={`${cellBase} ${headerBase}`}>{wIdx + 1}주</td>
+                {/* 일자 행 - 연한 회색 배경 */}
+                <tr className={dateRowBase}>
+                  <td rowSpan={5} className={`${cellBase} ${headerBase}`}>{wIdx + 1}주</td>
                   <td className={`${cellBase} ${headerBase}`}>일</td>
                   {week.map((cell) => (
                     <td
                       key={`${wIdx}-d-${cell.iso}`}
                       className={`${cellBase} ${
-                        !cell.inMonth ? 'tw-text-slate-300' :
+                        !cell.inMonth ? 'tw-text-slate-400' :
                         cell.isWeekend ? 'tw-text-rose-600 tw-font-semibold' :
                         'tw-text-slate-700'
                       }`}
@@ -243,46 +328,69 @@ function ScheduleWeeklyTable({
                       ) : null}
                     </td>
                   ))}
-                  <td className={cellBase}></td>
-                  <td rowSpan={4} className={`${cellBase} tw-text-base tw-font-semibold tw-text-blue-600`}>
+                  <td className={`${cellBase} ${summaryColBase}`}></td>
+                  <td rowSpan={5} className={`${cellBase} ${summaryColBase} tw-text-base tw-whitespace-nowrap`}>
                     {weekTotalText(week)}
+                  </td>
+                </tr>
+
+                {/* 근무 행 - 평일/휴일/공휴일 + 시간 범위, 합계 = 표준 근무 시간 */}
+                <tr>
+                  <td className={`${cellBase} ${headerBase}`}>근무</td>
+                  {week.map((cell) => {
+                    const text = workCellText(cell);
+                    const dow = cell.date.day();
+                    const isHol = cell.holidayName || dow === 0 || dow === 6;
+                    return (
+                      <td
+                        key={`${wIdx}-w-${cell.iso}`}
+                        className={`${cellBase} tw-whitespace-nowrap ${
+                          isHol ? 'tw-text-emerald-600' : 'tw-text-emerald-700'
+                        }`}
+                      >
+                        {text}
+                      </td>
+                    );
+                  })}
+                  <td className={`${cellBase} ${summaryColBase} tw-whitespace-nowrap`}>
+                    {toDecimalH(summary.standardMin)}
                   </td>
                 </tr>
 
                 {/* 점심시간 행 */}
                 <tr>
-                  <td className={`${cellBase} ${headerBase}`}>점심</td>
+                  <td className={`${cellBase} ${headerBase}`}>점심시간</td>
                   {week.map((cell) => (
-                    <td key={`${wIdx}-b-${cell.iso}`} className={`${cellBase} tw-text-slate-500`}>
+                    <td key={`${wIdx}-b-${cell.iso}`} className={`${cellBase} tw-text-slate-500 tw-whitespace-nowrap`}>
                       {breakText(cell)}
                     </td>
                   ))}
-                  <td className={cellBase}></td>
+                  <td className={`${cellBase} ${summaryColBase}`}></td>
                 </tr>
 
-                {/* 근태 행 */}
+                {/* 근태 행 - 휴가/결근/반차, 합계 = 차감 시간 (음수) */}
                 <tr>
                   <td className={`${cellBase} ${headerBase}`}>근태</td>
                   {week.map((cell) => (
-                    <td key={`${wIdx}-a-${cell.iso}`} className={cellBase}>
-                      {attendanceLabel(cell)}
+                    <td key={`${wIdx}-a-${cell.iso}`} className={`${cellBase} tw-text-slate-700`}>
+                      {attendanceCellText(cell)}
                     </td>
                   ))}
-                  <td className={cellBase}>
-                    {summary.leaveDays > 0 ? `${summary.leaveDays}일` : '0H'}
+                  <td className={`${cellBase} ${summaryColBase} tw-whitespace-nowrap`}>
+                    {summary.deductionMin > 0 ? `-${toDecimalH(summary.deductionMin)}` : '-'}
                   </td>
                 </tr>
 
-                {/* 초과근무 행 */}
+                {/* 초과근무 행 - 시간 범위 + (연장근무 X.XXH) */}
                 <tr>
                   <td className={`${cellBase} ${headerBase}`}>초과근무</td>
                   {week.map((cell) => (
                     <td key={`${wIdx}-o-${cell.iso}`} className={cellBase}>
-                      {overtimeText(cell)}
+                      {overtimeCell(cell)}
                     </td>
                   ))}
-                  <td className={`${cellBase} tw-font-semibold tw-text-blue-600`}>
-                    {summary.overtimeMin > 0 ? `${(summary.overtimeMin / 60).toFixed(2)}H` : '0H'}
+                  <td className={`${cellBase} ${summaryColBase} tw-whitespace-nowrap`}>
+                    {summary.overtimeMin > 0 ? toDecimalH(summary.overtimeMin) : '-'}
                   </td>
                 </tr>
               </Fragment>
@@ -302,8 +410,9 @@ export function MyScheduleSelectionsPage() {
   const [openApplyModal, setOpenApplyModal] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => dayjs().startOf('month'));
   const yearMonth = calendarMonth.format('YYYY-MM');
-  const monthFrom = calendarMonth.startOf('month').format('YYYY-MM-DD');
-  const monthTo = calendarMonth.endOf('month').format('YYYY-MM-DD');
+  // 달력 그리드 전체 범위 (이전달 말일 ~ 다음달 초일까지 포함) - 월 경계 빈 칸에도 근태 표시
+  const monthFrom = calendarMonth.startOf('month').startOf('week').format('YYYY-MM-DD');
+  const monthTo = calendarMonth.endOf('month').endOf('week').format('YYYY-MM-DD');
 
   const schedulesQ = useQuery({
     queryKey: ['salary', 'work-schedules'],
@@ -319,7 +428,7 @@ export function MyScheduleSelectionsPage() {
   });
   const monthlyQ = useQuery({
     queryKey: ['salary', 'attendance', 'my', 'monthly-calendar', monthFrom, monthTo],
-    queryFn: () => attendanceApi.attendance.getMyMonthly({ from: monthFrom, to: monthTo, page: 0, size: 31 }),
+    queryFn: () => attendanceApi.attendance.getMyMonthly({ from: monthFrom, to: monthTo, page: 0, size: 45 }),
   });
   const holidaysQ = useQuery({
     queryKey: ['salary', 'company-holidays'],
@@ -408,6 +517,20 @@ export function MyScheduleSelectionsPage() {
     () => (schedulesQ.data ?? []).find((s: WorkSchedule) => s.workType === 'FLEXIBLE'),
     [schedulesQ.data],
   );
+
+  /** 회사 기본(FIXED) 스케줄 - 헤더 시간대 + workCellText fallback 용 */
+  const defaultFixedSchedule = useMemo(
+    () => (schedulesQ.data ?? []).find((s: WorkSchedule) => s.workType === 'FIXED')
+        ?? (schedulesQ.data ?? [])[0],
+    [schedulesQ.data],
+  );
+  const defaultScheduleTimeLabel = useMemo(() => {
+    const s = defaultFixedSchedule;
+    if (s?.startTime && s?.endTime) {
+      return `${trimSeconds(s.startTime)} ~ ${trimSeconds(s.endTime)}`;
+    }
+    return '';
+  }, [defaultFixedSchedule]);
 
   // 회사 활성 FLEXIBLE 스케줄의 모든 슬롯 (배너에서 시간 표시용)
   const activeFlexibleSlotsQ = useQuery({
@@ -607,7 +730,11 @@ export function MyScheduleSelectionsPage() {
     <Space direction="vertical" className="tw-w-full" size={16}>
       <div className="tw-flex tw-flex-wrap tw-items-start tw-justify-between tw-gap-3">
         <div>
-          <Typography.Title level={4} className="!tw-m-0">개인 근무 스케줄(기본근로시간제)</Typography.Title>
+          <Typography.Title level={4} className="!tw-m-0">
+            개인 근무 스케줄(기본근로시간제
+            {defaultScheduleTimeLabel ? ` · ${defaultScheduleTimeLabel}` : ''}
+            )
+          </Typography.Title>
           <Typography.Paragraph type="secondary" className="!tw-mt-1 !tw-mb-0">
             월별 달력으로 스케줄과 근무 현황을 확인하고, 스케줄 변경 신청을 전자결재로 바로 연동합니다.
           </Typography.Paragraph>
@@ -657,6 +784,7 @@ export function MyScheduleSelectionsPage() {
           calendarMonth={calendarMonth}
           dailyMap={dailyMap}
           scheduleMap={scheduleMap}
+          defaultScheduleTimeLabel={defaultScheduleTimeLabel}
           fallbackTime={latestSlotLabel !== '-' ? latestSlotLabel : defaultSlotTime}
           fallbackBreakRange={(() => {
             // 우선순위: 신청에 박힌 점심 → 신청 슬롯의 점심 → 기본 슬롯의 점심.
