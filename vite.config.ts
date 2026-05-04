@@ -4,9 +4,23 @@ import path from 'node:path';
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    chunkSizeWarningLimit: 2000,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          antd: ['antd', '@ant-design/icons'],
+          tanstack: ['@tanstack/react-query', '@tanstack/react-router'],
+          charts: ['chart.js', 'react-chartjs-2', 'echarts'],
+          markdown: ['react-markdown', 'remark-gfm'],
+        },
+      },
+    },
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      'lottie-web': 'lottie-web/build/player/lottie_light',
     },
   },
   server: {

@@ -11,7 +11,6 @@ import {
   Form,
   Input,
   InputNumber,
-  Modal,
   Popconfirm,
   Select,
   Space,
@@ -26,6 +25,7 @@ import dayjs from 'dayjs';
 import { membersApi } from '@/features/members/api/membersApi';
 import type { Member } from '@/features/members/model/types';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import type { WorkSchedule, WorkTypeCode } from '@/features/salary-service/types';
 
 type FormValues = {
@@ -404,21 +404,22 @@ export function AdminWorkSchedulesPage() {
         />
       </Card>
 
-      <Modal
+      <AppDoubleActionModal
         open={open}
-        onCancel={() => {
+        onClose={() => {
           setOpen(false);
           setEditing(null);
           form.resetFields();
         }}
-        onOk={() => form.submit()}
+        onConfirm={() => form.submit()}
         confirmLoading={createM.isPending || updateM.isPending}
-        okText={editing ? '수정' : '등록'}
+        confirmText={editing ? '수정' : '등록'}
         cancelText="취소"
         title={editing ? '스케줄 수정' : '스케줄 추가'}
-        destroyOnClose
+        destroyOnHidden
         width={560}
       >
+        <div className="tw-px-5 tw-py-4">
         <ScheduleForm
           form={form}
           editing={editing}
@@ -430,7 +431,8 @@ export function AdminWorkSchedulesPage() {
             void navigate({ to: '/app/attendance/flexible-slots' });
           }}
         />
-      </Modal>
+        </div>
+      </AppDoubleActionModal>
     </Space>
   );
 }

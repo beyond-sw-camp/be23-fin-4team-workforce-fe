@@ -1,5 +1,5 @@
 import {useMutation, useQuery} from '@tanstack/react-query';
-import {App, Avatar, Button, Checkbox, Form, Input, Select, Space, Spin, Tag, Tree, Typography} from 'antd';
+import {App, Avatar, Button, Checkbox, Form, Input, Space, Spin, Tag, Tree, Typography} from 'antd';
 import type {DataNode} from 'antd/es/tree';
 import {RightOutlined, SearchOutlined, TeamOutlined} from '@ant-design/icons';
 import {useEffect, useMemo, useState} from 'react';
@@ -71,7 +71,8 @@ export function GroupCreateModal({open, onClose, onCreated, seasonId, designs, e
             return;
         }
         form.resetFields();
-    }, [open, editGroup, form]);
+        form.setFieldValue('designId', designs[0]?.designId);
+    }, [open, editGroup, form, designs]);
 
     return (
         <AppDoubleActionModal
@@ -164,11 +165,9 @@ export function GroupCreateModal({open, onClose, onCreated, seasonId, designs, e
                     label={L.groupDesign}
                     rules={[{required: true, message: '설계를 반드시 선택해 주세요.'}]}
                 >
-                    <Select
-                        allowClear
-                        placeholder={L.designSelect}
-                        options={designs.map((d) => ({value: d.designId, label: d.name}))}
-                    />
+                    <div className="tw-rounded-xl tw-border tw-border-slate-200 tw-bg-slate-50/70 tw-p-3 tw-text-sm tw-text-slate-600">
+                        기본 평가 정책이 자동 적용됩니다. 그룹에서는 대상자와 평가자 유형만 정하면 됩니다.
+                    </div>
                 </Form.Item>
             </Form>
             <OrgMemberPickerModal

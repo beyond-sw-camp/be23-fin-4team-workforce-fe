@@ -1,9 +1,16 @@
 import { CloseOutlined, ExpandOutlined, FileAddOutlined, FileTextOutlined, FolderOutlined, SearchOutlined, ShrinkOutlined } from '@ant-design/icons';
-import { Button, Empty, Input, Modal, Spin, Tooltip, Tree, Typography } from 'antd';
+import { Button, Empty, Input, Spin, Tooltip, Tree, Typography } from 'antd';
+import { AppModal } from '@/shared/ui/AppModal';
 import type { TreeProps } from 'antd';
 import type { DataNode } from 'antd/es/tree';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { APPROVAL_REQUEST_TYPES, type ApprovalDocument, type ApprovalRequestType } from '@/features/approvals/api/approvalApi';
+import {
+  APPROVAL_REQUEST_TYPES,
+  normalizeApprovalRequestType,
+  type ApprovalDocument,
+  type ApprovalRequestType,
+} from '@/features/approvals/api/approvalApi';
+import { APPROVAL_REQUEST_TYPE_LABEL_KO, approvalRequestTypeLabelKo } from '@/features/approvals/lib/approvalRequestTypeKo';
 import { parseFormSchema, shouldHideApprovalFormFieldInSelectModalPreview } from '@/features/approvals/lib/approvalFormSchema';
 import {
   ApprovalFormPaperFieldRow,
@@ -12,13 +19,6 @@ import {
 } from '@/features/approvals/ui/ApprovalFormPaperLayout';
 import { PRETTY_SCROLLBAR_CLASS } from '@/features/member-chat/ui/shared/prettyScrollbar';
 import { DetailPageHeader } from '@/shared/ui/DetailPageHeader';
-function normalizeRequestType(raw: string | undefined): ApprovalRequestType {
-  const u = String(raw ?? '')
-    .trim()
-    .toUpperCase();
-  return (APPROVAL_REQUEST_TYPES as readonly string[]).includes(u) ? (u as ApprovalRequestType) : 'GENERAL';
-}
-
 function formatDocTitle(name?: string | null): string {
   const raw = String(name ?? '').trim();
   const compact = raw.replace(/\s+/g, '');
@@ -32,22 +32,9 @@ const REQUEST_TYPE_FOLDER_ORDER: readonly ApprovalRequestType[] = [
   'OFFICIAL',
   'VACATION',
   'ATTENDANCE',
-  'HR_MOVEMENT',
-  'SALARY',
-  'CONTRACT',
-  'CERTIFICATE',
+  'HR',
+  'BUSINESS_TRIP',
 ] as const;
-
-const REQUEST_TYPE_FOLDER_LABEL: Record<ApprovalRequestType, string> = {
-  VACATION: '휴가',
-  ATTENDANCE: '근태',
-  HR_MOVEMENT: '부서이동',
-  SALARY: '급여',
-  GENERAL: '일반기안',
-  CONTRACT: '전자계약',
-  CERTIFICATE: '문서발급',
-  OFFICIAL: '공문',
-};
 
 export type ApprovalFormSelectModalProps = {
   open: boolean;
@@ -96,13 +83,21 @@ export function ApprovalFormSelectModal({
     });
   }, [documents, search]);
 
+  /** 양식(leaf) 더블클릭 시 선택 + 작성 iframe으로 바로 이동 */
+  const goToComposeForDocumentId = useCallback((documentId: string) => {
+    if (!documents.some((d) => d.documentId === documentId)) return;
+    setSelectedId(documentId);
+    setComposeDocId(documentId);
+    setDocListSidebarCollapsed(true);
+  }, [documents]);
+
   const treeData: DataNode[] = useMemo(() => {
     const byType = new Map<ApprovalRequestType, ApprovalDocument[]>();
     for (const t of APPROVAL_REQUEST_TYPES) {
       byType.set(t, []);
     }
     for (const doc of filteredDocs) {
-      const t = normalizeRequestType(doc.requestType);
+      const t = normalizeApprovalRequestType(doc.requestType);
       byType.get(t)?.push(doc);
     }
 
@@ -114,7 +109,7 @@ export function ApprovalFormSelectModal({
         return na.localeCompare(nb, 'ko');
       });
       if (list.length === 0) continue;
-      const folderLabel = REQUEST_TYPE_FOLDER_LABEL[requestType] ?? requestType;
+      const folderLabel = APPROVAL_REQUEST_TYPE_LABEL_KO[requestType];
       nodes.push({
         key: `grp-${requestType}`,
         title: (
@@ -128,16 +123,23 @@ export function ApprovalFormSelectModal({
           key: `doc-${doc.documentId}`,
           isLeaf: true,
           title: (
-            <span className="tw-inline-flex tw-items-center tw-gap-1.5">
-              <FileTextOutlined className="tw-text-slate-500" />
-              <span className="tw-truncate">{formatDocTitle(doc.documentName)}</span>
+            <span
+              className="tw-inline-flex tw-w-full tw-min-w-0 tw-cursor-pointer tw-items-center tw-gap-1.5"
+              onDoubleClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                goToComposeForDocumentId(doc.documentId);
+              }}
+            >
+              <FileTextOutlined className="tw-shrink-0 tw-text-slate-500" />
+              <span className="tw-min-w-0 tw-truncate">{formatDocTitle(doc.documentName)}</span>
             </span>
           ),
         })),
       });
     }
     return nodes;
-  }, [filteredDocs]);
+  }, [filteredDocs, goToComposeForDocumentId]);
 
   const selectedDoc = selectedId ? docById.get(selectedId) : undefined;
   const composeDoc = composeDocId ? docById.get(composeDocId) : undefined;
@@ -167,7 +169,7 @@ export function ApprovalFormSelectModal({
   };
 
   return (
-    <Modal
+    <AppModal
       title={
         <div className="tw-flex tw-items-center tw-justify-between tw-gap-2">
             <span className="tw-text-sm tw-font-semibold tw-text-slate-800">전자결재</span>
@@ -227,7 +229,7 @@ export function ApprovalFormSelectModal({
                     setComposeDocId(undefined);
                     setDocListSidebarCollapsed(false);
                   }}
-                  title={`결재 작성 - ${formatDocTitle(composeDoc?.documentName)}`}
+                  title={`결재 작성중 - ${formatDocTitle(composeDoc?.documentName)}`}
                   showShare={false}
                 />
               </div>
@@ -241,11 +243,18 @@ export function ApprovalFormSelectModal({
                 <span>결재 문서 미리보기</span>
               </div>
               {selectedDoc ? (
-                <div className={`tw-min-h-0 tw-flex-1 tw-overflow-auto tw-bg-slate-50/40 tw-p-6 ${PRETTY_SCROLLBAR_CLASS}`}>
+                <div
+                  className={`tw-min-h-0 tw-flex-1 tw-cursor-pointer tw-select-none tw-overflow-auto tw-bg-slate-50/40 tw-p-6 ${PRETTY_SCROLLBAR_CLASS}`}
+                  title="더블클릭하면 이 양식으로 작성을 시작합니다."
+                  onDoubleClick={() => {
+                    if (!selectedDoc) return;
+                    handleOk();
+                  }}
+                >
                   <ApprovalFormPaperLayout
                     documentName={formatDocTitle(selectedDoc.documentName)}
-                    categoryLabel={REQUEST_TYPE_FOLDER_LABEL[normalizeRequestType(selectedDoc.requestType)] ?? '기안'}
-                    requestTypeCode={normalizeRequestType(selectedDoc.requestType)}
+                    categoryLabel={approvalRequestTypeLabelKo(selectedDoc.requestType)}
+                    requestTypeCode={normalizeApprovalRequestType(selectedDoc.requestType)}
                     drafterName="기안자"
                     drafterOrg="소속부서"
                     drafterJobTitle="직책"
@@ -294,7 +303,7 @@ export function ApprovalFormSelectModal({
                       결재 양식을 선택해 주세요
                     </Typography.Title>
                     <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-max-w-md !tw-text-sm !tw-leading-relaxed">
-                      왼쪽에서 타입별 폴더를 펼친 뒤 작성할 양식을 누르면 입력 정보 미리보기를 확인할 수 있습니다.
+                      왼쪽에서 타입별 폴더를 펼친 뒤 양식을 누르면 미리보기를 확인할 수 있고, 양식을 더블클릭하면 바로 작성 화면으로 이동합니다.
                     </Typography.Paragraph>
                   </div>
                 </div>
@@ -349,6 +358,6 @@ export function ApprovalFormSelectModal({
           </div>
         </div>
       </div>
-    </Modal>
+    </AppModal>
   );
 }

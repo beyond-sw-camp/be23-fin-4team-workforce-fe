@@ -1,1377 +1,742 @@
-﻿import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { App as AntdApp, Alert, Card, Form, Input, InputNumber, List, Progress, Select, Space, Tabs, Tag, Typography } from 'antd';
-import { PlusOutlined } from '@ant-design/icons';
-import { DownOutlined, RightOutlined } from '@ant-design/icons';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useSearch } from '@tanstack/react-router';
+import { useEffect, useMemo, useState } from 'react';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useSearch } from '@tanstack/react-router';
+import {
+  CheckCircleOutlined,
+  DeleteOutlined,
+  FileDoneOutlined,
+  PlusOutlined,
+  TeamOutlined,
+  UserOutlined,
+} from '@ant-design/icons';
+import { App, Card, Collapse, List, Popconfirm, Select, Space, Tag, Typography } from 'antd';
 import { useAuth } from '@/features/auth/useAuth';
-import { PERM, canManageOrganizationScopedGoals } from '@/features/permissions/backend-permissions';
-import { usePermissions } from '@/features/permissions/usePermissionsHook';
 import { approvalApi } from '@/features/approval/api/approvalApi';
 import type { GoalApprovalBundle } from '@/features/approval/model/types';
 import { ApprovalQueueList } from '@/features/approval/ui/ApprovalQueueList';
 import { BundleDetailModal } from '@/features/approval/ui/BundleDetailModal';
 import { goalApi } from '@/features/goals/api/goalApi';
-import type { Goal, GoalHealthStatus, KpiCycle } from '@/features/goals/model/types';
-import { memberApi } from '@/features/member/api/memberApi';
-import { useMemberDisplayNames } from '@/features/members/hooks/useMemberDisplayNames';
-import { SingleMemberOrgChartSelectModal } from '@/features/members/ui/SingleMemberOrgChartSelectModal';
-import { organizationApi } from '@/features/organization/api/organizationApi';
-import { GoalCard } from '@/features/goals/ui/GoalCard';
+import type { Goal } from '@/features/goals/model/types';
+import { CycleSubmissionPanel } from '@/features/goals/ui/CycleSubmissionPanel';
 import { GoalEditModal } from '@/features/goals/ui/GoalEditModal';
-import { OrganizationPickerInput } from '@/features/goals/ui/OrganizationPickerInput';
+import { useMemberDisplayNames } from '@/features/members/hooks/useMemberDisplayNames';
+import { organizationApi, type OrgChartOrgNode } from '@/features/organization/api/organizationApi';
+import { canManageOrganizationScopedGoals } from '@/features/permissions/backend-permissions';
+import { usePermissions } from '@/features/permissions/usePermissionsHook';
 import { AppButton } from '@/shared/ui/AppButton';
-import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppEmptyIllustrated } from '@/shared/ui/AppEmptyIllustrated';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 
 const { Text } = Typography;
 const SECTION_CARD = 'tw-rounded-2xl tw-border tw-border-slate-200/90 tw-shadow-sm tw-shadow-slate-900/5';
 
-function buildOrganizationNameMap(
-  organizations: Array<{ organizationId: string; name: string; children?: unknown[] }> | undefined,
-): Map<string, string> {
-  const map = new Map<string, string>();
-  const walk = (nodes: Array<{ organizationId: string; name: string; children?: unknown[] }>) => {
-    nodes.forEach((node) => {
-      map.set(node.organizationId, node.name);
-      walk((node.children ?? []) as typeof nodes);
-    });
-  };
-  walk(organizations ?? []);
-  return map;
-}
-
-type PerformanceTab = 'my-objective' | 'integrated';
-
-function resolveEnabledTab(
-  enabledTabs: PerformanceTab[],
-  candidate?: PerformanceTab,
-): PerformanceTab {
-  if (candidate && enabledTabs.includes(candidate)) return candidate;
-  return enabledTabs[0] ?? 'my-objective';
-}
+type GoalView = 'my' | 'org' | 'company';
 
 export default function PerformancePage() {
   const { user } = useAuth();
-  const { message } = AntdApp.useApp();
-  const navigate = useNavigate();
-  const search = useSearch({ strict: false }) as { view?: PerformanceTab; bundleId?: string };
   const { hasPermission } = usePermissions();
-  const canReadCompany = hasPermission(PERM.GOAL_READ);
-  const canReadOrganization = hasPermission(PERM.ORGANIZATION_READ);
-  /** 조직 목표 작성·상세 수정 권한은 백엔드 TEAM/COMPANY CREATE·UPDATE 정책과 맞춘다. */
-  const canManageOrgObjectives = canManageOrganizationScopedGoals(hasPermission);
-  const showObjectiveCreate = canManageOrgObjectives;
+  const search = useSearch({ strict: false }) as { view?: string; bundleId?: string };
+  const canManageOrgGoals = canManageOrganizationScopedGoals(hasPermission);
+  const canViewCompanyGoals =
+    user?.isSystemAdmin === true || hasPermission({ resource: 'GOAL', action: 'READ', scope: 'company' });
+  const activeView = normalizeGoalView(search.view, canManageOrgGoals, canViewCompanyGoals);
 
-  const enabledTabs = useMemo<PerformanceTab[]>(() => {
-    const tabs: PerformanceTab[] = ['my-objective'];
-    if (canReadCompany || canReadOrganization) tabs.push('integrated');
-    return tabs;
-  }, [canReadCompany, canReadOrganization]);
-
-  const [tab, setTab] = useState<PerformanceTab>(resolveEnabledTab(enabledTabs, search.view as PerformanceTab | undefined));
   const [editOpen, setEditOpen] = useState(false);
   const [editGoal, setEditGoal] = useState<Goal | null>(null);
-  const [presetAlignedOrgGoalId, setPresetAlignedOrgGoalId] = useState<string | null>(null);
-  const [detailGoal, setDetailGoal] = useState<Goal | null>(null);
-  const [selectedBundle, setSelectedBundle] = useState<GoalApprovalBundle | null>(null);
   const [defaultOwnerType, setDefaultOwnerType] = useState<'MEMBER' | 'ORGANIZATION'>('MEMBER');
+  const [selectedBundle, setSelectedBundle] = useState<GoalApprovalBundle | null>(null);
 
-  useEffect(() => {
-    if (!enabledTabs.includes(tab)) {
-      setTab(resolveEnabledTab(enabledTabs));
-    }
-  }, [enabledTabs, tab]);
-
-  useEffect(() => {
-    const next = resolveEnabledTab(enabledTabs, search.view as PerformanceTab | undefined);
-    if (next !== tab) {
-      setTab(next);
-    }
-  }, [enabledTabs, search.view, tab]);
-
-  const { data: myBundlesForKrGuard = [] } = useQuery({
+  const { data: myGoals = [], isLoading: myGoalsLoading } = useQuery({
+    queryKey: ['goals-mine'],
+    queryFn: () => goalApi.listMyGoals(),
+    enabled: !!user?.id,
+  });
+  const { data: myObjectives = [], isLoading: myObjectivesLoading } = useQuery({
+    queryKey: ['goals-my-objectives'],
+    queryFn: () => goalApi.listMyObjectives(),
+    enabled: !!user?.id && canManageOrgGoals,
+  });
+  const { data: companyGoals = [], isLoading: companyGoalsLoading } = useQuery({
+    queryKey: ['goals-company'],
+    queryFn: async () => {
+      try {
+        return await goalApi.listCompanyGoals();
+      } catch {
+        return [];
+      }
+    },
+    enabled: canViewCompanyGoals || canManageOrgGoals,
+  });
+  const { data: requestedBundles = [] } = useQuery({
     queryKey: ['my-bundles'],
     queryFn: () => approvalApi.listMyRequested(),
+    enabled: !!user?.id,
   });
-  const cycleHasPendingApproval = useMemo(() => {
-    const set = new Set<string>();
-    myBundlesForKrGuard.forEach((b) => {
-      if (b.status === 'PENDING') set.add(b.cycleKey);
-    });
-    return (cycleKey: string) => set.has(cycleKey);
-  }, [myBundlesForKrGuard]);
-
-  const { data: deepLinkedBundle } = useQuery({
-    queryKey: ['approval-bundle', search.bundleId],
-    queryFn: () => approvalApi.get(String(search.bundleId)),
+  const { data: routedBundle } = useQuery({
+    queryKey: ['goal-approval-bundle', search.bundleId],
+    queryFn: () => approvalApi.get(search.bundleId!),
     enabled: !!search.bundleId,
-    retry: false,
   });
 
-  useEffect(() => {
-    if (!deepLinkedBundle) return;
-    setSelectedBundle(deepLinkedBundle);
-  }, [deepLinkedBundle]);
-
-  const openEditWithGuard = useCallback(
-    (goal: Goal) => {
-      if (goal.ownerType === 'MEMBER') {
-        if (goal.status !== 'DRAFT') {
-          message.warning('승인 대기 중이거나 완료된 개인 목표는 수정할 수 없어요.');
-          return;
-        }
-        if (cycleHasPendingApproval(goal.cycleKey)) {
-          message.warning('승인 요청이 진행 중인 사이클의 개인 목표는 수정할 수 없어요.');
-          return;
-        }
-      }
-      setEditGoal(goal);
-      setPresetAlignedOrgGoalId(null);
-      setDefaultOwnerType(goal.ownerType);
-      setEditOpen(true);
-    },
-    [cycleHasPendingApproval, message],
+  const ownerIds = useMemo(
+    () => Array.from(new Set([...myGoals, ...myObjectives, ...companyGoals].map((g) => g.ownerId).filter(Boolean))),
+    [companyGoals, myGoals, myObjectives],
   );
-
-  const openCreateKrFromObjective = useCallback(
-    (objective: Goal) => {
-      if (cycleHasPendingApproval(objective.cycleKey)) {
-        message.warning('승인 요청이 진행 중인 사이클에는 개인 목표를 추가할 수 없어요.');
-        return;
-      }
-      setEditGoal(null);
-      setDefaultOwnerType('MEMBER');
-      setPresetAlignedOrgGoalId(objective.goalId);
-      setEditOpen(true);
-    },
-    [cycleHasPendingApproval, message],
-  );
+  const { labelFor } = useMemberDisplayNames(ownerIds);
 
   if (!user) return null;
 
-  const tabItems = [
-    {
-      key: 'my-objective',
-      label: '내 목표',
-      children: (
-        <div className="tw-px-4 tw-pb-4 tw-pt-2">
-          <MyObjectivesTab
-            onEdit={openEditWithGuard}
-            onOpenDetail={setDetailGoal}
-            onCreateKrFromObjective={openCreateKrFromObjective}
-          />
-        </div>
-      ),
-    },
-    ...(canReadCompany || canReadOrganization
-      ? [
-          {
-            key: 'integrated',
-            label: '전사 목표',
-            children: (
-              <div className="tw-px-4 tw-pb-4 tw-pt-2">
-                <IntegratedGoalsTab
-                  canReadCompany={canReadCompany}
-                  onOpenDetail={setDetailGoal}
-                  onCreateKrFromObjective={openCreateKrFromObjective}
-                />
-              </div>
-            ),
-          },
-        ]
-      : []),
-  ];
+  const pageCopy = getPageCopy(activeView);
+  const canCreateCurrentGoal = activeView === 'my' || (activeView === 'org' && canManageOrgGoals);
+
+  useEffect(() => {
+    if (routedBundle) setSelectedBundle(routedBundle);
+  }, [routedBundle]);
 
   return (
-    <div className="tw-mx-auto tw-w-full tw-space-y-10">
+    <div className="tw-mx-auto tw-w-full tw-space-y-6">
       <AppWorkspacePageTitle
         eyebrow="PERFORMANCE"
-        title="목표"
-        subtitle="내 개인 목표와 우리 조직의 조직 목표, 그리고 전사 공개 목표를 한 곳에서 관리할 수 있어요."
+        title={pageCopy.title}
+        subtitle={pageCopy.subtitle}
         extra={
-          <Space>
-            {showObjectiveCreate && (
-              <AppButton
-                variant="secondary"
-                onClick={() => {
-                  setEditGoal(null);
-                  setPresetAlignedOrgGoalId(null);
-                  setDefaultOwnerType('ORGANIZATION');
-                  setEditOpen(true);
-                }}
-              >
-                조직 목표 작성
-              </AppButton>
-            )}
+          canCreateCurrentGoal ? (
             <AppButton
               variant="primary"
               icon={<PlusOutlined />}
               onClick={() => {
+                setDefaultOwnerType(activeView === 'org' ? 'ORGANIZATION' : 'MEMBER');
                 setEditGoal(null);
-                setPresetAlignedOrgGoalId(null);
-                setDefaultOwnerType('MEMBER');
                 setEditOpen(true);
               }}
             >
-              개인 목표 작성
+              {activeView === 'org' ? '조직 목표 생성' : '개인 목표 생성'}
             </AppButton>
-          </Space>
+          ) : null
         }
       />
 
-      <Card className={SECTION_CARD} styles={{ body: { padding: 4 } }}>
-        <Tabs
-          activeKey={tab}
-          onChange={(next) => {
-            if (!enabledTabs.includes(next as PerformanceTab)) return;
-            setTab(next as PerformanceTab);
-            navigate({
-              to: '/app/performance',
-              search: { view: next as PerformanceTab },
-              replace: true,
-            });
+      {activeView === 'my' ? (
+        <MyGoalsView
+          goals={myGoals}
+          bundles={requestedBundles}
+          loading={myGoalsLoading}
+          onBundleSelect={setSelectedBundle}
+          onEditGoal={(goal) => {
+            setDefaultOwnerType(goal.ownerType);
+            setEditGoal(goal);
+            setEditOpen(true);
           }}
-          tabBarStyle={{ paddingLeft: 16, paddingRight: 16, marginBottom: 0 }}
-          items={tabItems}
         />
-      </Card>
+      ) : null}
 
-      <section className="tw-space-y-4">
-        <div>
-          <Text strong className="tw-text-[16px] tw-text-slate-900">승인 센터</Text>
-          <div className="tw-mt-1 tw-text-sm tw-text-slate-500">
-            사이클 단위로 묶인 목표 승인 요청을 한 곳에서 처리하고, 내가 올린 요청 이력도 확인할 수 있어요.
-          </div>
-        </div>
-        <Card className={SECTION_CARD} styles={{ body: { padding: 4 } }}>
-          <Tabs
-            tabBarStyle={{ paddingLeft: 16, paddingRight: 16, marginBottom: 0 }}
-            items={[
-              {
-                key: 'queue',
-                label: '결재 처리',
-                children: (
-                  <div className="tw-px-4 tw-pb-4 tw-pt-2">
-                    <ApprovalQueueList onSelect={setSelectedBundle} />
-                  </div>
-                ),
-              },
-              {
-                key: 'history',
-                label: '내 요청 이력',
-                children: (
-                  <div className="tw-px-4 tw-pb-4 tw-pt-2">
-                    <RequestedHistory onSelect={setSelectedBundle} />
-                  </div>
-                ),
-              },
-            ]}
-          />
-        </Card>
-      </section>
+      {activeView === 'org' ? (
+        <OrgGoalsView
+          objectives={myObjectives}
+          companyGoals={companyGoals}
+          loading={myObjectivesLoading}
+          companyGoalsLoading={companyGoalsLoading}
+          canManageOrgGoals={canManageOrgGoals}
+          labelFor={labelFor}
+          onBundleSelect={setSelectedBundle}
+        />
+      ) : null}
+
+      {activeView === 'company' ? (
+        <CompanyGoalsView goals={companyGoals} loading={companyGoalsLoading} />
+      ) : null}
 
       <GoalEditModal
         open={editOpen}
-        onClose={() => setEditOpen(false)}
+        onClose={() => {
+          setEditOpen(false);
+          setEditGoal(null);
+        }}
         goal={editGoal}
         defaultOwnerId={user.id}
         defaultOwnerType={defaultOwnerType}
-        presetAlignedOrgGoalId={presetAlignedOrgGoalId}
       />
       <BundleDetailModal
         open={!!selectedBundle}
         bundle={selectedBundle}
-        onClose={() => {
-          setSelectedBundle(null);
-          if (search.bundleId) {
-            navigate({
-              to: '/app/performance',
-              search: { view: tab },
-              replace: true,
-            });
-          }
-        }}
+        onClose={() => setSelectedBundle(null)}
         currentUserId={user.id}
-      />
-      <GoalDetailModal
-        goal={detailGoal}
-        myBundles={myBundlesForKrGuard}
-        onClose={() => setDetailGoal(null)}
-        onEdit={(goal) => {
-          setDetailGoal(null);
-          openEditWithGuard(goal);
-        }}
-        canEditObjective={canManageOrgObjectives}
       />
     </div>
   );
 }
 
-function MyObjectivesTab({
-  onEdit,
-  onOpenDetail,
-  onCreateKrFromObjective,
+function MyGoalsView({
+  goals,
+  bundles,
+  loading,
+  onBundleSelect,
+  onEditGoal,
 }: {
-  onEdit?: (goal: Goal) => void;
-  onOpenDetail: (goal: Goal) => void;
-  onCreateKrFromObjective: (objective: Goal) => void;
+  goals: Goal[];
+  bundles: GoalApprovalBundle[];
+  loading: boolean;
+  onBundleSelect: (bundle: GoalApprovalBundle) => void;
+  onEditGoal: (goal: Goal) => void;
 }) {
-  const { message, modal } = AntdApp.useApp();
+  const { message } = App.useApp();
   const queryClient = useQueryClient();
-  const [selectedCycleKey, setSelectedCycleKey] = useState('');
-  const { data: objectives = [], isLoading } = useQuery({
-    queryKey: ['goals-my-objectives'],
-    queryFn: () => goalApi.listMyObjectives(),
-  });
-  const cycleOptions = useMemo(
-    () =>
-      Array.from(new Set(objectives.map((goal) => goal.cycleKey)))
-        .filter(Boolean)
-        .sort((a, b) => b.localeCompare(a))
-        .map((cycleKey) => ({ value: cycleKey, label: cycleKey })),
-    [objectives],
-  );
-  const selectedCycleObjectives = useMemo(
-    () => objectives.filter((goal) => goal.cycleKey === selectedCycleKey),
-    [objectives, selectedCycleKey],
-  );
-  const { data: myGoals = [] } = useQuery({
-    queryKey: ['goals-mine'],
-    queryFn: () => goalApi.listMyGoals(),
-  });
-  const { data: myBundles = [] } = useQuery({
-    queryKey: ['my-bundles'],
-    queryFn: () => approvalApi.listMyRequested(),
-  });
-  const { data: orgChart } = useQuery({
-    queryKey: ['organization-org-chart'],
-    queryFn: () => organizationApi.getOrgChart(),
-  });
-  const orgNameMap = useMemo(() => buildOrganizationNameMap(orgChart?.organizations), [orgChart]);
-  const requestTargetKrs = useMemo(() => {
-    if (!selectedCycleKey) return [];
-    return myGoals
-      .filter(
-        (goal) =>
-          goal.ownerType === 'MEMBER' &&
-          goal.cycleKey === selectedCycleKey &&
-          (goal.status === 'DRAFT' || goal.status === 'PENDING'),
-      )
-      .sort((a, b) => (b.weightPct || 0) - (a.weightPct || 0));
-  }, [myGoals, selectedCycleKey]);
-  const selectedCycleApprovedBundle = useMemo(
-    () => myBundles.find((bundle) => bundle.cycleKey === selectedCycleKey && bundle.status === 'APPROVED') ?? null,
-    [myBundles, selectedCycleKey],
-  );
-  const selectedCyclePendingBundle = useMemo(
-    () => myBundles.find((bundle) => bundle.cycleKey === selectedCycleKey && bundle.status === 'PENDING') ?? null,
-    [myBundles, selectedCycleKey],
-  );
-  const showKrDraftActions = !selectedCycleApprovedBundle && !selectedCyclePendingBundle;
-  const approvedCycleKrs = useMemo(() => {
-    if (!selectedCycleKey) return [];
-    return myGoals
-      .filter(
-        (goal) =>
-          goal.ownerType === 'MEMBER' &&
-          goal.cycleKey === selectedCycleKey &&
-          (goal.status === 'ACTIVE' || goal.status === 'COMPLETED'),
-      )
-      .sort((a, b) => (b.weightPct || 0) - (a.weightPct || 0));
-  }, [myGoals, selectedCycleKey]);
-  const cycleKrList = selectedCycleApprovedBundle ? approvedCycleKrs : requestTargetKrs;
-  const deleteMut = useMutation({
+  const memberGoalsAll = goals.filter((goal) => goal.ownerType === 'MEMBER');
+  const { cycleFilter, setCycleFilter, cycleOptions } = useCycleFilter(memberGoalsAll);
+  const memberGoals = filterGoalsByCycle(memberGoalsAll, cycleFilter);
+  const filteredBundles = filterBundlesByCycle(bundles, cycleFilter);
+  const goalsByCycle = groupByCycle(memberGoals);
+  const pendingByCycle = useMemo(() => {
+    const map = new Map<string, GoalApprovalBundle>();
+    filteredBundles.filter((bundle) => bundle.status === 'PENDING').forEach((bundle) => map.set(bundle.cycleKey, bundle));
+    return map;
+  }, [filteredBundles]);
+  const approvedByCycle = useMemo(() => {
+    const map = new Map<string, GoalApprovalBundle>();
+    filteredBundles
+      .filter((bundle) => bundle.status === 'APPROVED')
+      .forEach((bundle) => {
+        const current = map.get(bundle.cycleKey);
+        const nextAt = bundle.updatedAt ?? bundle.requestedAt ?? '';
+        const currentAt = current?.updatedAt ?? current?.requestedAt ?? '';
+        if (!current || nextAt.localeCompare(currentAt) > 0) map.set(bundle.cycleKey, bundle);
+      });
+    return map;
+  }, [filteredBundles]);
+  const lastRejectedByCycle = useMemo(() => {
+    const map = new Map<string, GoalApprovalBundle>();
+    filteredBundles
+      .filter((bundle) => bundle.status === 'REJECTED')
+      .forEach((bundle) => {
+        const current = map.get(bundle.cycleKey);
+        const nextAt = bundle.updatedAt ?? bundle.requestedAt ?? '';
+        const currentAt = current?.updatedAt ?? current?.requestedAt ?? '';
+        if (!current || nextAt.localeCompare(currentAt) > 0) map.set(bundle.cycleKey, bundle);
+      });
+    return map;
+  }, [filteredBundles]);
+  const deleteGoalMut = useMutation({
     mutationFn: (goalId: string) => goalApi.deleteGoal(goalId),
     onSuccess: () => {
-      message.success('개인 목표를 삭제했어요.');
+      message.success('작성 중인 개인 목표를 삭제했어요.');
       queryClient.invalidateQueries({ queryKey: ['goals-mine'] });
       queryClient.invalidateQueries({ queryKey: ['goals-my-objectives'] });
       queryClient.invalidateQueries({ queryKey: ['my-bundles'] });
+      queryClient.invalidateQueries({ queryKey: ['my-approval-queue'] });
     },
-    onError: (error: any) => message.error(error?.message ?? '개인 목표 삭제에 실패했어요.'),
+    onError: () => message.error('개인 목표 삭제에 실패했어요. 잠시 후 다시 시도해 주세요.'),
   });
 
-  useEffect(() => {
-    const firstCycleOption = cycleOptions[0];
-    if (!selectedCycleKey && firstCycleOption) {
-      setSelectedCycleKey(String(firstCycleOption.value));
-      return;
-    }
-    if (selectedCycleKey && !cycleOptions.some((option) => option.value === selectedCycleKey)) {
-      setSelectedCycleKey(String(firstCycleOption?.value ?? ''));
-    }
-  }, [cycleOptions, selectedCycleKey]);
-
-  const cycleKrCount = selectedCycleApprovedBundle ? approvedCycleKrs.length : requestTargetKrs.length;
-
   return (
-    <div className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-gap-4">
-      <div className="tw-grid tw-min-h-0 tw-flex-1 tw-gap-4 lg:tw-grid-cols-[320px_1fr]">
-        <Card className="tw-h-fit tw-border-slate-200/80 tw-shadow-sm" styles={{ body: { padding: 12 } }}>
-          <aside className="tw-bg-white lg:tw-sticky lg:tw-top-4 lg:tw-self-start">
-            <div className="tw-mb-2 tw-mt-4 tw-text-xs tw-font-semibold tw-uppercase tw-tracking-wide tw-text-slate-500">
-              {selectedCycleApprovedBundle ? '승인 완료 개인 목표 목록' : '승인 요청 대상 개인 목표'}
-            </div>
-            <div className="tw-flex tw-flex-col tw-gap-2">
-              {cycleKrList.length === 0 ? (
-                <div className="tw-rounded-xl tw-border tw-border-dashed tw-border-slate-200 tw-bg-slate-50 tw-p-3 tw-text-xs tw-text-slate-500">
-                  {selectedCycleApprovedBundle
-                    ? '선택한 사이클에 승인 완료된 개인 목표가 없어요.'
-                    : '선택한 사이클에 승인 요청 대상 개인 목표가 없어요.'}
-                </div>
-              ) : (
-                cycleKrList.map((goal) => (
-                  <div
-                    key={goal.goalId}
-                    className="tw-cursor-pointer tw-rounded-xl tw-border tw-border-slate-200 tw-bg-white tw-p-3 hover:tw-border-slate-300 hover:tw-bg-slate-50"
-                    onClick={() => onOpenDetail(goal)}
-                  >
-                    <div className="tw-truncate tw-text-sm tw-font-semibold tw-text-slate-900">{goal.title}</div>
-                    <div className="tw-mt-1 tw-flex tw-items-center tw-justify-between tw-text-xs tw-text-slate-500">
-                      <span>
-                        {selectedCycleApprovedBundle
-                          ? goal.status === 'COMPLETED'
-                            ? '완료'
-                            : '승인 완료'
-                          : goal.status === 'PENDING'
-                            ? '승인 대기'
-                            : '작성 중'}
-                      </span>
-                      <span>가중치 {goal.weightPct}%</span>
-                    </div>
-                    {showKrDraftActions && (
-                      <div className="tw-mt-2 tw-flex tw-gap-1.5">
-                        <AppButton
-                          variant="secondary"
-                          size="small"
-                          className="!tw-h-7 !tw-rounded-lg !tw-px-2.5 !tw-text-xs !tw-font-semibold"
-                          disabled={!onEdit || goal.status !== 'DRAFT' || deleteMut.isPending}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            onEdit?.(goal);
-                          }}
-                        >
-                          수정
-                        </AppButton>
-                        <AppButton
-                          variant="danger"
-                          size="small"
-                          className="!tw-h-7 !tw-rounded-lg !tw-px-2.5 !tw-text-xs !tw-font-semibold"
-                          disabled={goal.status !== 'DRAFT'}
-                          loading={deleteMut.isPending}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            modal.confirm({
-                              title: '개인 목표 삭제',
-                              content: '삭제한 개인 목표는 복구할 수 없어요. 계속할까요?',
-                              onOk: () => deleteMut.mutate(goal.goalId),
-                            });
-                          }}
-                        >
-                          삭제
-                        </AppButton>
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
-            {selectedCycleKey && !selectedCycleApprovedBundle && (
-              <div className="tw-mt-3 tw-border-t tw-border-slate-100 tw-pt-3">
-                <CycleSubmissionQuickPanel
-                  cycleKey={selectedCycleKey}
-                  goals={myGoals}
-                  bundles={myBundles}
-                />
-              </div>
-            )}
-          </aside>
+    <div className="tw-space-y-4">
+      <CycleFilterBar value={cycleFilter} onChange={setCycleFilter} options={cycleOptions} />
+      {loading ? (
+        <Card className={SECTION_CARD} styles={{ body: { padding: 24 } }}>
+          <Text className="tw-text-sm tw-text-slate-500">내 목표를 불러오는 중입니다.</Text>
         </Card>
-
-        <Card className="tw-min-w-0 tw-border-slate-200/80 tw-shadow-sm" styles={{ body: { padding: 12 } }}>
-          <div className="tw-min-w-0 tw-rounded-xl tw-border tw-border-slate-200 tw-bg-white tw-p-4">
-            <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-3">
-              <span className="tw-text-sm tw-text-slate-500">기준 사이클</span>
-              <Select
-                value={selectedCycleKey || undefined}
-                style={{ width: 188 }}
-                options={cycleOptions}
-                onChange={setSelectedCycleKey}
-                showSearch
-                optionFilterProp="label"
-                placeholder="사이클 선택"
-              />
-              <span className="tw-ml-2 tw-text-sm tw-text-slate-500">
-                {selectedCycleApprovedBundle ? '승인 완료 개인 목표' : '승인 대상 개인 목표'}
-              </span>
-              <span className="tw-rounded-lg tw-bg-slate-100 tw-px-2.5 tw-py-1 tw-text-sm tw-font-semibold tw-text-slate-800">
-                {cycleKrCount}건
-              </span>
-            </div>
-            <div className="tw-mt-4 tw-min-w-0 tw-overflow-x-auto wf-scrollbar">
-              <div className="tw-min-w-[800px]">
-                {!isLoading && objectives.length === 0 ? (
-                  <AppEmptyIllustrated description="소속 조직에 등록된 조직 목표가 아직 없어요. 조직 목표가 생기면 그 기준과 연결된 개인 목표를 여기서 함께 볼 수 있어요." />
-                ) : selectedCycleObjectives.length > 0 ? (
-                  <Space direction="vertical" size={10} className="tw-w-full">
-                    {selectedCycleObjectives.map((objective, index) => (
-                      <ObjectiveDrilldownCard
-                        key={objective.goalId}
-                        goal={objective}
-                        onOpenDetail={onOpenDetail}
-                        onCreateKr={() => onCreateKrFromObjective(objective)}
-                        showHeader={index === 0}
-                        organizationDisplayName={orgNameMap.get(objective.ownerId)}
-                        disableCreateKr={!!selectedCyclePendingBundle}
-                      />
-                    ))}
-                  </Space>
-                ) : (
-                  <AppEmptyIllustrated description="선택한 사이클의 조직 목표가 없어요." />
-                )}
-              </div>
-            </div>
-          </div>
+      ) : goalsByCycle.length === 0 ? (
+        <Card className={SECTION_CARD} styles={{ body: { padding: 40 } }}>
+          <AppEmptyIllustrated description="아직 작성한 개인 목표가 없습니다." />
         </Card>
-      </div>
-    </div>
-  );
-}
-
-function IntegratedGoalsTab({
-  canReadCompany,
-  onOpenDetail,
-  onCreateKrFromObjective,
-}: {
-  canReadCompany: boolean;
-  onOpenDetail: (goal: Goal) => void;
-  onCreateKrFromObjective: (objective: Goal) => void;
-}) {
-  const [selectedCycleKey, setSelectedCycleKey] = useState('');
-  const [orgFilter, setOrgFilter] = useState('ALL');
-  const [objectiveKeyword, setObjectiveKeyword] = useState('');
-  const [krKeyword, setKrKeyword] = useState('');
-  const { data: companyGoals = [], isLoading } = useQuery({
-    queryKey: ['goals-company-all'],
-    queryFn: () => goalApi.listCompanyGoals(),
-    enabled: canReadCompany,
-  });
-  const { data: orgChart } = useQuery({
-    queryKey: ['organization-org-chart'],
-    queryFn: () => organizationApi.getOrgChart(),
-  });
-  const objectives = useMemo(
-    () => companyGoals.filter((goal) => goal.ownerType === 'ORGANIZATION'),
-    [companyGoals],
-  );
-  const memberGoals = useMemo(
-    () => companyGoals.filter((goal) => goal.ownerType === 'MEMBER'),
-    [companyGoals],
-  );
-  const cycleOptions = useMemo(
-    () =>
-      Array.from(new Set(companyGoals.map((goal) => goal.cycleKey)))
-        .filter(Boolean)
-        .sort((a, b) => b.localeCompare(a))
-        .map((cycleKey) => ({ value: cycleKey, label: cycleKey })),
-    [companyGoals],
-  );
-  const selectedCycleObjectives = useMemo(
-    () => objectives.filter((goal) => goal.cycleKey === selectedCycleKey),
-    [objectives, selectedCycleKey],
-  );
-  const orgNameMap = useMemo(() => buildOrganizationNameMap(orgChart?.organizations), [orgChart]);
-  const memberIds = useMemo(
-    () => Array.from(new Set(memberGoals.map((goal) => goal.ownerId).filter(Boolean))),
-    [memberGoals],
-  );
-  const { data: memberProfiles = [] } = useQuery({
-    queryKey: ['members-detail-by-goals', memberIds],
-    enabled: memberIds.length > 0,
-    queryFn: async () => {
-      const rows = await Promise.all(memberIds.map((id) => memberApi.detailOrNull(id)));
-      return rows.filter((row): row is NonNullable<typeof row> => !!row);
-    },
-  });
-  const memberMetaMap = useMemo(() => {
-    const map = new Map<string, { name: string; organizationName: string; jobGradeName: string }>();
-    memberProfiles.forEach((profile) => {
-      map.set(profile.memberId, {
-        name: profile.name || '-',
-        organizationName: profile.organizationName || '-',
-        jobGradeName: profile.jobGradeName || profile.jobTitleName || '-',
-      });
-    });
-    return map;
-  }, [memberProfiles]);
-  const orgOptions = useMemo(() => {
-    const options = Array.from(orgNameMap.entries())
-      .map(([value, label]) => ({ value, label }))
-      .sort((a, b) => a.label.localeCompare(b.label));
-    return [{ value: 'ALL', label: '전체 조직' }, ...options];
-  }, [orgNameMap]);
-  const childrenByObjective = useMemo(() => {
-    const map = new Map<string, Goal[]>();
-    memberGoals.forEach((goal) => {
-      if (goal.cycleKey !== selectedCycleKey || !goal.alignedOrgGoalId) return;
-      if (!map.has(goal.alignedOrgGoalId)) map.set(goal.alignedOrgGoalId, []);
-      map.get(goal.alignedOrgGoalId)!.push(goal);
-    });
-    map.forEach((goals) => goals.sort((a, b) => (b.weightPct || 0) - (a.weightPct || 0)));
-    return map;
-  }, [memberGoals, selectedCycleKey]);
-  const filteredObjectives = useMemo(() => {
-    const objectiveQ = objectiveKeyword.trim().toLowerCase();
-    const krQ = krKeyword.trim().toLowerCase();
-    return selectedCycleObjectives.filter((objective) => {
-      if (orgFilter !== 'ALL' && objective.ownerId !== orgFilter) return false;
-      if (objectiveQ) {
-        const hay = `${objective.title} ${objective.description}`.toLowerCase();
-        if (!hay.includes(objectiveQ)) return false;
-      }
-      const children = childrenByObjective.get(objective.goalId) || [];
-      if (!krQ) return true;
-      return children.some((kr) => `${kr.title} ${kr.description}`.toLowerCase().includes(krQ));
-    });
-  }, [childrenByObjective, krKeyword, objectiveKeyword, orgFilter, selectedCycleObjectives]);
-
-  useEffect(() => {
-    const firstCycleOption = cycleOptions[0];
-    if (!selectedCycleKey && firstCycleOption) {
-      setSelectedCycleKey(String(firstCycleOption.value));
-      return;
-    }
-    if (selectedCycleKey && !cycleOptions.some((option) => option.value === selectedCycleKey)) {
-      setSelectedCycleKey(String(firstCycleOption?.value ?? ''));
-    }
-  }, [cycleOptions, selectedCycleKey]);
-
-  return (
-    <div className="tw-flex tw-flex-col tw-gap-4">
-      <div className="tw-grid tw-grid-cols-1 tw-gap-3 lg:tw-grid-cols-4">
-        <Select
-          value={selectedCycleKey || undefined}
-          options={cycleOptions}
-          onChange={setSelectedCycleKey}
-          showSearch
-          optionFilterProp="label"
-          placeholder="기준 사이클"
-        />
-        <Select value={orgFilter} options={orgOptions} onChange={setOrgFilter} showSearch optionFilterProp="label" />
-        <Input value={objectiveKeyword} onChange={(event) => setObjectiveKeyword(event.target.value)} placeholder="조직 목표 필터" />
-        <Input value={krKeyword} onChange={(event) => setKrKeyword(event.target.value)} placeholder="개인 목표 필터" />
-      </div>
-      {!isLoading && filteredObjectives.length === 0 ? (
-        <AppEmptyIllustrated description="조건에 맞는 조직 목표나 개인 목표가 없어요." />
       ) : (
-        <div className="tw-min-w-0 tw-overflow-x-auto wf-scrollbar">
-          <div className="tw-min-w-[800px]">
-        <Space direction="vertical" size={10} className="tw-w-full">
-          {filteredObjectives.map((objective, index) => {
-            const children = childrenByObjective.get(objective.goalId) || [];
-            const krQ = krKeyword.trim().toLowerCase();
-            const filteredChildren = children.filter((kr) => {
-              if (krQ && !`${kr.title} ${kr.description}`.toLowerCase().includes(krQ)) return false;
-              if (orgFilter === 'ALL') return true;
-              const meta = memberMetaMap.get(kr.ownerId);
-              const krOrg = meta?.organizationName || '-';
-              const selectedLabel = orgNameMap.get(orgFilter) || krOrg;
-              return krOrg === selectedLabel || objective.ownerId === orgFilter;
-            });
-            return (
-              <ObjectiveDrilldownCard
-                key={objective.goalId}
-                goal={objective}
-                onOpenDetail={onOpenDetail}
-                onCreateKr={() => onCreateKrFromObjective(objective)}
-                showHeader={index === 0}
-                prefetchedChildren={filteredChildren}
-                organizationDisplayName={orgNameMap.get(objective.ownerId)}
-                childOwnerColumnLabel={(child) => memberMetaMap.get(child.ownerId)?.name?.trim() || '구성원'}
-              />
-            );
-          })}
-        </Space>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function CycleSubmissionQuickPanel({
-  cycleKey,
-  goals,
-  bundles,
-}: {
-  cycleKey: string;
-  goals: Goal[];
-  bundles: GoalApprovalBundle[];
-}) {
-  const { message, modal } = AntdApp.useApp();
-  const queryClient = useQueryClient();
-  const [approverId, setApproverId] = useState('');
-  const [approverName, setApproverName] = useState('');
-  const [approverPickerOpen, setApproverPickerOpen] = useState(false);
-
-  const cycleGoals = useMemo(
-    () => goals.filter((goal) => goal.cycleKey === cycleKey && (goal.status === 'DRAFT' || goal.status === 'PENDING')),
-    [cycleKey, goals],
-  );
-  const krGoals = useMemo(() => cycleGoals.filter((goal) => goal.ownerType === 'MEMBER'), [cycleGoals]);
-  const sumWeight = useMemo(() => krGoals.reduce((total, goal) => total + (goal.weightPct || 0), 0), [krGoals]);
-  const pendingBundle = useMemo(
-    () => bundles.find((bundle) => bundle.cycleKey === cycleKey && bundle.status === 'PENDING'),
-    [bundles, cycleKey],
-  );
-  const lastRejected = useMemo(
-    () =>
-      bundles
-        .filter((bundle) => bundle.cycleKey === cycleKey && bundle.status === 'REJECTED')
-        .sort((a, b) => b.revision - a.revision)[0],
-    [bundles, cycleKey],
-  );
-  const submittable = krGoals.length > 0 && sumWeight === 100;
-
-  const submitMut = useMutation({
-    mutationFn: () =>
-      approvalApi.submitCycle(cycleKey, {
-        approverId: approverId || null,
-        watcherIds: [],
-      }),
-    onSuccess: () => {
-      message.success('승인 요청을 등록했어요.');
-      invalidate();
-    },
-    onError: (error: any) => message.error(error?.message ?? '승인 요청 등록에 실패했어요.'),
-  });
-
-  const withdrawMut = useMutation({
-    mutationFn: () => approvalApi.withdraw(pendingBundle!.bundleId),
-    onSuccess: () => {
-      message.success('승인 요청을 회수했어요.');
-      invalidate();
-    },
-    onError: (error: any) => message.error(error?.message ?? '요청 회수에 실패했어요.'),
-  });
-
-  return (
-    <div className="tw-space-y-3">
-      <div className="tw-text-xs tw-font-semibold tw-uppercase tw-tracking-wide tw-text-slate-500">승인 요청</div>
-      <div className="tw-rounded-xl tw-bg-slate-50 tw-p-3">
-        <div className="tw-mb-1 tw-flex tw-items-center tw-justify-between">
-          <span className="tw-text-xs tw-text-slate-500">개인 목표 가중치 합</span>
-          <span className={sumWeight === 100 ? 'tw-text-xs tw-font-semibold tw-text-emerald-600' : 'tw-text-xs tw-font-semibold tw-text-rose-600'}>
-            {sumWeight}/100
-          </span>
-        </div>
-        <Progress percent={Math.min(sumWeight, 100)} showInfo={false} strokeWidth={6} />
-      </div>
-
-      {!pendingBundle && (
-        <div className="tw-flex tw-items-center tw-gap-2">
-          <Input
-            readOnly
-            size="small"
-            className="!tw-rounded-lg"
-            placeholder="승인자 자동 매핑 (선택 가능)"
-            value={approverId ? ((approverName || '선택된 구성원') + ' (' + approverId + ')') : ''}
-          />
-          <AppButton
-            variant="secondary"
-            size="small"
-            className="!tw-h-8 !tw-rounded-lg !tw-px-3 !tw-text-xs !tw-font-semibold"
-            onClick={() => setApproverPickerOpen(true)}
-          >
-                선택
-          </AppButton>
-        </div>
-      )}
-
-      {pendingBundle ? (
-        <AppButton
-          variant="danger"
-          className="tw-w-full"
-          loading={withdrawMut.isPending}
-          onClick={() =>
-            modal.confirm({
-              title: '승인 요청 회수',
-              content: '회수하면 현재 사이클의 개인 목표가 다시 DRAFT 상태로 돌아갑니다.',
-              onOk: () => withdrawMut.mutate(),
-            })
-          }
-        >
-            요청 회수
-        </AppButton>
-      ) : (
-        <AppButton variant="primary" className="tw-w-full" disabled={!submittable} loading={submitMut.isPending} onClick={() => submitMut.mutate()}>
-          일괄 승인 요청
-        </AppButton>
-      )}
-
-      {lastRejected && (
-        <Alert
-          type="warning"
-          showIcon
-          className="!tw-rounded-xl"
-          message={`반려 이력 (revision ${lastRejected.revision})`}
-          description={lastRejected.lastRejectedReason ?? '반려 사유가 없어요.'}
-        />
-      )}
-
-      <SingleMemberOrgChartSelectModal
-        open={approverPickerOpen}
-        title="승인자 선택"
-        selectedMemberId={approverId || undefined}
-        onClose={() => setApproverPickerOpen(false)}
-        onSelect={(member) => {
-          setApproverId(member.memberId);
-          setApproverName(`${member.name} · ${member.organizationName} · ${member.jobGradeName}`);
-          setApproverPickerOpen(false);
-        }}
-      />
-    </div>
-  );
-
-  function invalidate() {
-    queryClient.invalidateQueries({ queryKey: ['goals-mine'] });
-    queryClient.invalidateQueries({ queryKey: ['my-bundles'] });
-  }
-}
-
-function CompanyGoalsTab() {
-  const [cycle, setCycle] = useState<KpiCycle | undefined>();
-  const [typeFilter, setTypeFilter] = useState<'ALL' | 'OBJECTIVE' | 'KR'>('ALL');
-  const { data: goals = [], isLoading } = useQuery({
-    queryKey: ['goals-company', cycle],
-    queryFn: () => goalApi.listCompanyGoals({ cycle }),
-  });
-
-  const filtered = useMemo(() => {
-    if (typeFilter === 'OBJECTIVE') return goals.filter((goal) => goal.ownerType === 'ORGANIZATION');
-    if (typeFilter === 'KR') return goals.filter((goal) => goal.ownerType === 'MEMBER');
-    return goals;
-  }, [goals, typeFilter]);
-
-  return (
-    <div className="tw-flex tw-flex-col tw-gap-4">
-      <div className="tw-flex tw-flex-wrap tw-gap-2">
-        <FilterChip active={typeFilter === 'ALL'} onClick={() => setTypeFilter('ALL')}>전체</FilterChip>
-        <FilterChip active={typeFilter === 'OBJECTIVE'} onClick={() => setTypeFilter('OBJECTIVE')}>조직 목표</FilterChip>
-        <FilterChip active={typeFilter === 'KR'} onClick={() => setTypeFilter('KR')}>개인 목표</FilterChip>
-      </div>
-      <CycleFilterRow cycle={cycle} onChange={setCycle} />
-      {!isLoading && filtered.length === 0 ? (
-        <AppEmptyIllustrated description="조건에 맞는 목표가 없어요." />
-      ) : (
-        <Space direction="vertical" size={4} className="tw-w-full">
-          {filtered.map((goal) => (
-            <GoalCard key={goal.goalId} goal={goal} />
+        <Space direction="vertical" size={12} className="tw-w-full">
+          {goalsByCycle.map(([cycleKey, cycleGoals]) => (
+            <CycleSubmissionPanel
+              key={cycleKey}
+              cycleKey={cycleKey}
+              goals={cycleGoals}
+              pendingBundle={pendingByCycle.get(cycleKey)}
+              approvedBundle={approvedByCycle.get(cycleKey)}
+              lastRejected={lastRejectedByCycle.get(cycleKey)}
+              onEditGoal={onEditGoal}
+              onDeleteGoal={(goal) => deleteGoalMut.mutate(goal.goalId)}
+              deletingGoalId={deleteGoalMut.variables}
+              onBundleSelect={onBundleSelect}
+            />
           ))}
         </Space>
       )}
+      <ApprovalHistoryPanel bundles={filteredBundles} onSelect={onBundleSelect} />
     </div>
   );
 }
 
-function MemberKrTab() {
-  const [orgId, setOrgId] = useState('');
-  const { data: objectives = [] } = useQuery({
-    queryKey: ['goals-org-objectives', orgId],
-    queryFn: () => goalApi.listOrgObjectives({ orgId }),
-    enabled: !!orgId,
-  });
-  const { data: krs = [], isLoading } = useQuery({
-    queryKey: ['goals-org', orgId],
-    queryFn: () => goalApi.listOrgGoals({ orgId }),
-    enabled: !!orgId,
-  });
-
-  return (
-    <div className="tw-flex tw-flex-col tw-gap-4">
-      <OrganizationPickerInput value={orgId} onChange={setOrgId} />
-      {!orgId ? (
-        <AppEmptyIllustrated description="구성원 개인 목표를 보려면 조직을 먼저 선택해 주세요." />
-      ) : (
-        <>
-          <Card
-            className={SECTION_CARD}
-            styles={{ body: { padding: 20 } }}
-            title={<Text strong className="tw-text-[15px] tw-text-slate-900">조직 목표</Text>}
-          >
-            {objectives.length === 0 ? (
-              <AppEmptyIllustrated description="선택한 조직에 등록된 조직 목표가 없어요." />
-            ) : (
-              <Space direction="vertical" size={4} className="tw-w-full">
-                {objectives.map((goal) => (
-                  <GoalCard key={goal.goalId} goal={goal} />
-                ))}
-              </Space>
-            )}
-          </Card>
-
-          <Card
-            className={SECTION_CARD}
-            styles={{ body: { padding: 20 } }}
-            title={<Text strong className="tw-text-[15px] tw-text-slate-900">구성원 개인 목표</Text>}
-          >
-            {!isLoading && krs.length === 0 ? (
-              <AppEmptyIllustrated description="선택한 조직의 개인 목표가 없어요." />
-            ) : (
-              <Space direction="vertical" size={4} className="tw-w-full">
-                {krs.map((goal) => (
-                  <GoalCard key={goal.goalId} goal={goal} showOwnerName />
-                ))}
-              </Space>
-            )}
-          </Card>
-        </>
-      )}
-    </div>
-  );
-}
-
-const OBJECTIVE_DRILLDOWN_GRID =
-  'tw-grid tw-w-full tw-grid-cols-[minmax(220px,1fr)_96px_96px_120px_96px_120px] tw-items-center tw-gap-2';
-
-function ObjectiveDrilldownCard({
-  goal,
-  onOpenDetail,
-  onCreateKr,
-  showHeader = false,
-  prefetchedChildren,
-  childOwnerColumnLabel,
-  organizationDisplayName,
-  disableCreateKr = false,
+function OrgGoalsView({
+  objectives,
+  companyGoals,
+  loading,
+  companyGoalsLoading,
+  canManageOrgGoals,
+  labelFor,
+  onBundleSelect,
 }: {
-  goal: Goal;
-  onOpenDetail: (goal: Goal) => void;
-  onCreateKr: () => void;
-  showHeader?: boolean;
-  /** 통합 목록 화면에서는 필요할 때 자식 개인 목표 목록을 프리패치해서 사용한다. */
-  prefetchedChildren?: Goal[];
-  childOwnerColumnLabel?: (child: Goal) => string;
-  organizationDisplayName?: string;
-  disableCreateKr?: boolean;
+  objectives: Goal[];
+  companyGoals: Goal[];
+  loading: boolean;
+  companyGoalsLoading: boolean;
+  canManageOrgGoals: boolean;
+  labelFor: (memberId: string) => string;
+  onBundleSelect: (bundle: GoalApprovalBundle) => void;
 }) {
-  const usePrefetch = prefetchedChildren !== undefined;
-  const [expanded, setExpanded] = useState(false);
-  const { data: fetchedChildren = [], isLoading } = useQuery({
-    queryKey: ['goal-children', goal.goalId],
-    queryFn: () => goalApi.listObjectiveChildren(goal.goalId),
-    enabled: expanded && !usePrefetch,
+  const { data: orgChart } = useQuery({
+    queryKey: ['performance-org-goals-org-chart'],
+    queryFn: () => organizationApi.getOrgChart(),
+    enabled: canManageOrgGoals,
   });
-  const children = usePrefetch ? prefetchedChildren : fetchedChildren;
-  const childrenLoading = expanded && !usePrefetch && isLoading;
-  const statusText = (status: Goal['status']) => {
-    if (status === 'DRAFT') return '작성 중';
-    if (status === 'PENDING') return '승인 대기';
-    if (status === 'ACTIVE') return '진행 중';
-    if (status === 'COMPLETED') return '완료';
-    if (status === 'CANCELLED') return '취소';
-    if (status === 'SKIPPED') return '제외';
-    return status;
-  };
-  const statusToneClass = (status: Goal['status']) => {
-    if (status === 'DRAFT') return '!tw-bg-slate-100 !tw-text-slate-700';
-    if (status === 'PENDING') return '!tw-bg-amber-50 !tw-text-amber-700';
-    if (status === 'ACTIVE') return '!tw-bg-emerald-50 !tw-text-emerald-700';
-    if (status === 'COMPLETED') return '!tw-bg-blue-50 !tw-text-blue-700';
-    if (status === 'CANCELLED') return '!tw-bg-rose-50 !tw-text-rose-700';
-    return '!tw-bg-orange-50 !tw-text-orange-700';
-  };
-
-  return (
-    <div className="tw-overflow-hidden tw-rounded-2xl tw-border tw-border-slate-200/90 tw-bg-white">
-      {showHeader && (
-        <div
-          className={`${OBJECTIVE_DRILLDOWN_GRID} tw-border-b tw-border-slate-200/80 tw-bg-slate-50 tw-px-4 tw-py-2 tw-text-[11px] tw-font-semibold tw-tracking-wide tw-text-slate-500`}
-        >
-          <div className="tw-pl-0.5">제목</div>
-          <div className="tw-text-left">대상</div>
-          <div className="tw-text-left">사이클</div>
-          <div className="tw-text-left">종료일</div>
-          <div className="tw-text-left">가중치</div>
-          <div className="tw-text-right">작업</div>
-        </div>
-      )}
-      <div className={`${OBJECTIVE_DRILLDOWN_GRID} tw-px-4 tw-py-3`}>
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={() => onOpenDetail(goal)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' || event.key === ' ') onOpenDetail(goal);
-          }}
-          className="tw-flex tw-min-w-0 tw-items-center tw-gap-2 tw-text-left"
-        >
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              setExpanded((value) => !value);
-            }}
-            aria-label={expanded ? '연결된 개인 목표 접기' : '연결된 개인 목표 펼치기'}
-            className="tw-inline-flex tw-h-5 tw-w-5 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-md tw-border tw-border-slate-200 tw-bg-white tw-text-slate-500 tw-transition-colors hover:tw-bg-slate-50"
-          >
-            {expanded ? <DownOutlined className="tw-text-[10px]" /> : <RightOutlined className="tw-text-[10px]" />}
-          </button>
-          <Tag bordered={false} className={`!tw-m-0 !tw-rounded-full !tw-px-2 !tw-py-0 !tw-text-[10px] !tw-font-semibold ${statusToneClass(goal.status)}`}>
-            {statusText(goal.status)}
-          </Tag>
-          <span className="tw-truncate tw-text-[15px] tw-font-semibold tw-text-slate-900">{goal.title}</span>
-        </div>
-        <div
-          className="tw-min-w-0 tw-truncate tw-text-xs tw-text-slate-700"
-          title={
-            goal.ownerType === 'ORGANIZATION'
-              ? (organizationDisplayName?.trim() || undefined)
-              : undefined
-          }
-        >
-          {goal.ownerType === 'ORGANIZATION'
-            ? organizationDisplayName?.trim() || '-'
-            : '개인'}
-        </div>
-        <div className="tw-text-xs tw-text-slate-700">{goal.cycleKey || '-'}</div>
-        <div className="tw-text-xs tw-text-slate-700">{goal.cycleEndDate ? goal.cycleEndDate.slice(0, 10) : '-'}</div>
-        <div
-          className={
-            goal.ownerType === 'ORGANIZATION'
-              ? 'tw-text-xs tw-font-semibold tw-text-slate-500'
-              : 'tw-text-xs tw-font-semibold tw-leading-none tw-text-[#1e3a5f]'
-          }
-        >
-          {goal.ownerType === 'ORGANIZATION' ? (
-            '-'
-          ) : (
-            <>
-              {goal.weightPct ?? 0}
-              <span className="tw-ml-0.5 tw-text-xs tw-font-semibold tw-text-slate-400">%</span>
-            </>
-          )}
-        </div>
-        <div className="tw-flex tw-items-center tw-justify-end tw-gap-1.5" onClick={(event) => event.stopPropagation()}>
-          <AppButton
-            variant="text"
-            size="small"
-            className="!tw-h-7 !tw-rounded-lg !tw-px-2.5 !tw-text-xs !tw-font-semibold"
-            onClick={(event) => {
-              event.stopPropagation();
-              onOpenDetail(goal);
-            }}
-          >
-            상세
-          </AppButton>
-          <AppButton
-            variant="secondary"
-            size="small"
-            icon={<PlusOutlined />}
-            disabled={disableCreateKr}
-            onClick={(event) => {
-              event.stopPropagation();
-              onCreateKr();
-            }}
-            aria-label="개인 목표 작성"
-            title={
-              disableCreateKr ? '승인 요청이 진행 중인 사이클에는 개인 목표를 추가할 수 없어요.' : '개인 목표 작성'
-            }
-            className="tw-h-8 tw-w-8 !tw-rounded-full !tw-p-0"
-          />
-        </div>
-      </div>
-      {expanded && (
-        <div className="tw-border-t tw-border-slate-200/80 tw-bg-slate-50/40">
-          {childrenLoading ? (
-            <div className="tw-p-4 tw-text-sm tw-text-slate-500">연결된 개인 목표를 불러오는 중이에요.</div>
-          ) : children.length === 0 ? (
-            <div className="tw-p-4 tw-text-sm tw-text-slate-500">이 조직 목표에 연결된 개인 목표가 없어요.</div>
-          ) : (
-            children.map((child, index) => (
-              <div
-                key={child.goalId}
-                role="button"
-                tabIndex={0}
-                onClick={() => onOpenDetail(child)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') onOpenDetail(child);
-                }}
-                className={`${OBJECTIVE_DRILLDOWN_GRID} tw-cursor-pointer tw-px-4 tw-py-2.5 tw-text-left tw-transition-colors hover:tw-bg-slate-100/70 ${index > 0 ? 'tw-border-t tw-border-slate-200/70' : ''}`}
-              >
-                <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2 tw-pl-7">
-                  <span className="tw-inline-flex tw-h-4 tw-min-w-4 tw-items-center tw-justify-center tw-rounded tw-bg-slate-200 tw-px-1 tw-text-[10px] tw-font-semibold tw-text-slate-700">
-                    {index + 1}
-                  </span>
-                  <Tag bordered={false} className={`!tw-m-0 !tw-rounded-full !tw-px-2 !tw-py-0 !tw-text-[10px] !tw-font-semibold ${statusToneClass(child.status)}`}>
-                    {statusText(child.status)}
-                  </Tag>
-                  <span className="tw-truncate tw-text-sm tw-font-medium tw-text-slate-900">{child.title}</span>
-                </div>
-                <div className="tw-text-xs tw-text-slate-700">
-                  {childOwnerColumnLabel
-                    ? childOwnerColumnLabel(child)
-                    : child.ownerType === 'ORGANIZATION'
-                      ? '조직'
-                      : '개인'}
-                </div>
-                <div className="tw-text-xs tw-text-slate-700">{child.cycleKey || '-'}</div>
-                <div className="tw-text-xs tw-text-slate-700">{child.cycleEndDate ? child.cycleEndDate.slice(0, 10) : '-'}</div>
-                <div className="tw-text-xs tw-font-semibold tw-leading-none tw-text-[#1e3a5f]">
-                  {child.weightPct ?? 0}
-                  <span className="tw-ml-0.5 tw-text-xs tw-font-semibold tw-text-slate-400">%</span>
-                </div>
-                <div className="tw-flex tw-items-center tw-justify-end" onClick={(event) => event.stopPropagation()}>
-                  <AppButton
-                    variant="text"
-                    size="small"
-                    className="!tw-h-7 !tw-rounded-lg !tw-px-2.5 !tw-text-xs !tw-font-semibold"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onOpenDetail(child);
-                    }}
-                  >
-                    상세
-                  </AppButton>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      )}
-    </div>
+  const orgObjectivesAll = objectives.filter((goal) => goal.ownerType === 'ORGANIZATION');
+  const orgIdsByParent = useMemo(() => buildDescendantOrgIdMap(orgChart?.organizations ?? []), [orgChart]);
+  const managedOrgIds = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          orgObjectivesAll.flatMap((goal) => {
+            if (!goal.ownerId) return [];
+            return orgIdsByParent.get(goal.ownerId) ?? [goal.ownerId];
+          }),
+        ),
+      ),
+    [orgIdsByParent, orgObjectivesAll],
   );
-}
-
-function GoalDetailModal({
-  goal,
-  myBundles,
-  onClose,
-  onEdit,
-  canEditObjective,
-}: {
-  goal: Goal | null;
-  myBundles: GoalApprovalBundle[];
-  onClose: () => void;
-  onEdit: (goal: Goal) => void;
-  canEditObjective: boolean;
-}) {
-  const { message } = AntdApp.useApp();
-  const queryClient = useQueryClient();
-  const [progressForm] = Form.useForm<{ value: number; status: GoalHealthStatus; note?: string }>();
-  const [progressOpen, setProgressOpen] = useState(false);
-  const canEditInModal =
-    !!goal &&
-    (goal.ownerType === 'MEMBER'
-      ? goal.status === 'DRAFT' &&
-        !myBundles.some((b) => b.cycleKey === goal.cycleKey && b.status === 'PENDING')
-      : goal.ownerType === 'ORGANIZATION' && canEditObjective);
-  const canUpdateProgress = !!goal && goal.ownerType === 'MEMBER' && goal.status === 'ACTIVE';
-  const progressPct = Math.max(0, Math.min(100, Number(goal?.achievementPct ?? 0)));
-  const confirmText = canUpdateProgress ? '진행 업데이트' : goal?.ownerType === 'MEMBER' ? '개인 목표 수정' : '조직 목표 수정';
-  const { data: progressUpdates = [], isLoading: isProgressLoading } = useQuery({
-    queryKey: ['goal-progress-updates', goal?.goalId],
-    queryFn: () => goalApi.listProgressUpdates(goal!.goalId),
-    enabled: !!goal && canUpdateProgress,
+  const orgGoalQueries = useQueries({
+    queries: managedOrgIds.map((orgId) => ({
+      queryKey: ['goals-organization-members', orgId],
+      queryFn: () => goalApi.listOrgGoals({ orgId }),
+      enabled: canManageOrgGoals,
+    })),
   });
-  const progressMut = useMutation({
-    mutationFn: (values: { value: number; status: GoalHealthStatus; note?: string }) =>
-      goalApi.addProgressUpdate(goal!.goalId, values),
-    onSuccess: () => {
-      message.success('진행률을 업데이트했어요.');
-      setProgressOpen(false);
-      progressForm.resetFields();
-      queryClient.invalidateQueries({ queryKey: ['goal-progress-updates', goal?.goalId] });
-      queryClient.invalidateQueries({ queryKey: ['goals-mine'] });
-      queryClient.invalidateQueries({ queryKey: ['goals-my-objectives'] });
-      queryClient.invalidateQueries({ queryKey: ['goal-children'] });
-      queryClient.invalidateQueries({ queryKey: ['goal-aggregate'] });
-    },
-    onError: (error: any) => message.error(error?.message ?? '진행률 업데이트에 실패했어요.'),
-  });
-
-  return (
-    <>
-      <AppDoubleActionModal
-        open={!!goal}
-        title={goal ? ((goal.ownerType === 'ORGANIZATION' ? '조직 목표' : '개인 목표') + ' 상세') : '상세'}
-        onClose={onClose}
-        onConfirm={() => {
-          if (goal && canUpdateProgress) {
-            progressForm.setFieldsValue({
-              value: progressPct,
-              status: goal.healthStatus ?? 'ON_TRACK',
-              note: '',
-            });
-            setProgressOpen(true);
-            return;
-          }
-          if (goal && canEditInModal) onEdit(goal);
-        }}
-        cancelText="닫기"
-        confirmText={confirmText}
-        confirmDisabled={!canEditInModal && !canUpdateProgress}
-        width={860}
-        destroyOnHidden
-      >
-        {goal ? (
-          <div className="tw-space-y-4 tw-px-5 tw-py-4">
-            <GoalCard goal={goal} />
-            <div className="tw-rounded-xl tw-border tw-border-slate-200 tw-bg-white tw-p-4">
-              <div className="tw-mb-2 tw-text-xs tw-font-semibold tw-uppercase tw-tracking-wide tw-text-slate-500">설명</div>
-              <div className="tw-whitespace-pre-wrap tw-text-sm tw-text-slate-700">{goal.description || '-'}</div>
-            </div>
-            <div className="tw-grid tw-grid-cols-2 tw-gap-3">
-              <div className="tw-rounded-xl tw-border tw-border-slate-200 tw-bg-slate-50 tw-p-3">
-                <div className="tw-text-xs tw-text-slate-500">사이클</div>
-                <div className="tw-mt-1 tw-text-sm tw-font-semibold tw-text-slate-900">{goal.cycleKey}</div>
-              </div>
-              <div className="tw-rounded-xl tw-border tw-border-slate-200 tw-bg-slate-50 tw-p-3">
-                <div className="tw-text-xs tw-text-slate-500">{goal.ownerType === 'ORGANIZATION' ? '공개 범위' : '가중치'}</div>
-                <div className="tw-mt-1 tw-text-sm tw-font-semibold tw-text-slate-900">
-                  {goal.ownerType === 'ORGANIZATION' ? goal.visibility : `${goal.weightPct}%`}
-                </div>
-              </div>
-            </div>
-            {canUpdateProgress && (
-              <div className="tw-rounded-xl tw-border tw-border-emerald-100 tw-bg-emerald-50/50 tw-p-4">
-                <div className="tw-flex tw-items-center tw-justify-between tw-gap-3">
-                  <div>
-                    <div className="tw-text-sm tw-font-semibold tw-text-slate-900">승인 이후 진행 관리</div>
-                    <div className="tw-mt-1 tw-text-xs tw-text-slate-500">
-                      승인된 목표는 내용 수정 대신 진행률과 메모를 남기고, 이 기록이 평가 단계의 참고 자료가 됩니다.
-                    </div>
-                  </div>
-                  <Tag color="green" className="!tw-m-0 !tw-rounded-full">{progressPct.toFixed(0)}%</Tag>
-                </div>
-                <Progress className="!tw-mt-3" percent={progressPct} showInfo={false} strokeColor="#059669" />
-                <div className="tw-mt-4">
-                  <div className="tw-mb-2 tw-text-xs tw-font-semibold tw-text-slate-500">최근 업데이트</div>
-                  <List
-                    size="small"
-                    loading={isProgressLoading}
-                    dataSource={progressUpdates.slice(0, 3)}
-                    locale={{ emptyText: '아직 업데이트 이력이 없어요.' }}
-                    renderItem={(item) => (
-                      <List.Item className="!tw-px-0">
-                        <div className="tw-w-full">
-                          <div className="tw-flex tw-items-center tw-justify-between tw-gap-3">
-                            <span className="tw-text-sm tw-font-semibold tw-text-slate-800">{item.value ?? 0}%</span>
-                            <span className="tw-text-xs tw-text-slate-400">{item.createdAt ? item.createdAt.slice(0, 10) : ''}</span>
-                          </div>
-                          {item.note && <div className="tw-mt-1 tw-text-xs tw-text-slate-500">{item.note}</div>}
-                        </div>
-                      </List.Item>
-                    )}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-        ) : null}
-      </AppDoubleActionModal>
-      <AppDoubleActionModal
-        open={progressOpen}
-        title="진행률 업데이트"
-        onClose={() => setProgressOpen(false)}
-        onConfirm={() => progressForm.submit()}
-        cancelText="취소"
-        confirmText="저장"
-        confirmLoading={progressMut.isPending}
-        width={520}
-        destroyOnHidden
-      >
-        <Form
-          form={progressForm}
-          layout="vertical"
-          className="tw-px-5 tw-py-4"
-          onFinish={(values) => progressMut.mutate(values)}
-        >
-          <Form.Item
-            name="value"
-            label="진행률"
-            rules={[{ required: true, message: '진행률을 입력해 주세요.' }]}
-          >
-            <InputNumber min={0} max={100} precision={0} addonAfter="%" className="!tw-w-full" />
-          </Form.Item>
-          <Form.Item
-            name="status"
-            label="상태"
-            rules={[{ required: true, message: '상태를 선택해 주세요.' }]}
-          >
-            <Select
-              options={[
-                { value: 'NOT_STARTED', label: '미시작' },
-                { value: 'ON_TRACK', label: '정상' },
-                { value: 'AT_RISK', label: '주의' },
-                { value: 'BEHIND', label: '지연' },
-                { value: 'COMPLETED', label: '완료' },
-              ]}
-            />
-          </Form.Item>
-          <Form.Item name="note" label="메모">
-            <Input.TextArea rows={4} placeholder="진행 상황, 이슈, 다음 액션을 간단히 남겨 주세요." />
-          </Form.Item>
-        </Form>
-      </AppDoubleActionModal>
-    </>
+  const orgMemberGoals = useMemo(
+    () => uniqueGoalsById(orgGoalQueries.flatMap((query) => query.data ?? [])),
+    [orgGoalQueries],
   );
-}
-
-function RequestedHistory({ onSelect }: { onSelect: (bundle: GoalApprovalBundle) => void }) {
-  const { data = [], isLoading } = useQuery({
-    queryKey: ['my-bundles'],
-    queryFn: () => approvalApi.listMyRequested(),
-  });
-  const ids = data.flatMap(
-    (bundle) => [bundle.approverId, bundle.delegateApproverId].filter(Boolean) as string[],
+  const orgMemberGoalsLoading = orgGoalQueries.some((query) => query.isLoading);
+  const scopedGoals = useMemo(() => uniqueGoalsById([...orgMemberGoals, ...companyGoals]), [companyGoals, orgMemberGoals]);
+  const { cycleFilter, setCycleFilter, cycleOptions } = useCycleFilter([...orgObjectivesAll, ...scopedGoals]);
+  const orgObjectives = filterGoalsByCycle(orgObjectivesAll, cycleFilter);
+  const scopedGoalsInCycle = filterGoalsByCycle(scopedGoals, cycleFilter);
+  const objectiveIds = new Set(orgObjectives.map((goal) => goal.goalId));
+  const approvedMemberGoals = scopedGoalsInCycle
+    .filter(
+      (goal) =>
+        goal.ownerType === 'MEMBER' &&
+        isApprovedGoal(goal) &&
+        !!goal.alignedOrgGoalId &&
+        objectiveIds.has(goal.alignedOrgGoalId),
+    )
+    .sort((a, b) => (a.objectiveTitle || '').localeCompare(b.objectiveTitle || '') || b.weightPct - a.weightPct);
+  const approvedMemberIds = useMemo(
+    () => Array.from(new Set(approvedMemberGoals.map((goal) => goal.ownerId).filter(Boolean))),
+    [approvedMemberGoals],
   );
-  useMemberDisplayNames(ids);
+  const managedMembers = useMemo(
+    () => collectMembersByOrgIds(orgChart?.organizations ?? [], managedOrgIds),
+    [managedOrgIds, orgChart],
+  );
+  const setupStatus = useMemo(
+    () => buildGoalSetupStatus(managedMembers, scopedGoalsInCycle, objectiveIds),
+    [managedMembers, objectiveIds, scopedGoalsInCycle],
+  );
+  const orgMetrics = useMemo(
+    () => ({
+      objectives: orgObjectives.length,
+      criteriaReady: orgObjectives.filter(hasAllCriteria).length,
+      approvedMembers: new Set(approvedMemberGoals.map((goal) => goal.ownerId).filter(Boolean)).size,
+      approvedGoals: approvedMemberGoals.length,
+    }),
+    [approvedMemberGoals, orgObjectives],
+  );
+  const { labelFor: labelMemberFor } = useMemberDisplayNames(approvedMemberIds);
 
-  if (!isLoading && data.length === 0) {
-    return <AppEmptyIllustrated description="요청한 승인 이력이 없어요." />;
+  if (!canManageOrgGoals) {
+    return (
+      <Card className={SECTION_CARD}>
+        <AppEmptyIllustrated description="조직 목표 관리 권한이 없습니다." />
+      </Card>
+    );
   }
 
   return (
+    <div className="tw-space-y-5">
+      <CycleFilterBar value={cycleFilter} onChange={setCycleFilter} options={cycleOptions} />
+      <Card title="조직 목표 요약" className={SECTION_CARD}>
+        <div className="tw-grid tw-grid-cols-2 tw-gap-3 md:tw-grid-cols-4">
+          <StatusMetric label="조직 목표" value={orgMetrics.objectives} description="선택한 기간의 담당 조직 목표" />
+          <StatusMetric
+            label="평가 기준 완료"
+            value={orgMetrics.criteriaReady}
+            tone={orgMetrics.criteriaReady === orgMetrics.objectives ? 'green' : 'gold'}
+            description="S/A/B/C 기준이 모두 있는 목표"
+          />
+          <StatusMetric label="승인 완료 구성원" value={orgMetrics.approvedMembers} tone="green" description="평가 대상 목표를 가진 구성원" />
+          <StatusMetric label="승인된 개인 목표" value={orgMetrics.approvedGoals} description="조직 목표에 연결된 개인 목표" />
+        </div>
+      </Card>
+      <GoalSetupStatusPanel status={setupStatus} />
+      <div className="tw-grid tw-grid-cols-1 tw-gap-5 xl:tw-grid-cols-[minmax(0,1fr)_420px]">
+        <Card title="조직 목표" className={SECTION_CARD} loading={loading}>
+          <CompactGoalRows goals={orgObjectives} empty="담당 조직 목표가 없습니다." mode="objective" />
+        </Card>
+        <Card title="팀 목표 승인 큐" className={SECTION_CARD}>
+          <ApprovalQueueList onSelect={onBundleSelect} />
+        </Card>
+      </div>
+      <Card title="승인된 개인 목표" className={SECTION_CARD} loading={companyGoalsLoading || orgMemberGoalsLoading}>
+        <MemberGroupedGoalList
+          goals={approvedMemberGoals}
+          empty="담당 조직 목표에 연결되어 승인된 개인 목표가 없습니다."
+          labelFor={(memberId) => labelMemberFor(memberId) || labelFor(memberId)}
+        />
+      </Card>
+    </div>
+  );
+}
+
+function ApprovalHistoryPanel({
+  bundles,
+  onSelect,
+}: {
+  bundles: GoalApprovalBundle[];
+  onSelect: (bundle: GoalApprovalBundle) => void;
+}) {
+  const sorted = useMemo(
+    () =>
+      [...bundles].sort((a, b) => {
+        const aDate = a.updatedAt ?? a.requestedAt ?? '';
+        const bDate = b.updatedAt ?? b.requestedAt ?? '';
+        return bDate.localeCompare(aDate);
+      }),
+    [bundles],
+  );
+
+  return (
+    <Card title="목표 승인 이력" className={SECTION_CARD}>
+      {sorted.length === 0 ? (
+        <AppEmptyIllustrated description="아직 승인 요청 이력이 없습니다." />
+      ) : (
+        <Collapse
+          ghost
+          items={[
+            {
+              key: 'history',
+              label: (
+                <span className="tw-text-sm tw-font-semibold tw-text-slate-900">
+                  승인 요청 이력 {sorted.length}건
+                </span>
+              ),
+              children: (
+                <List
+                  dataSource={sorted}
+                  renderItem={(bundle) => (
+                    <List.Item
+                      className="tw-cursor-pointer hover:tw-bg-slate-50"
+                      onClick={() => onSelect(bundle)}
+                    >
+                      <List.Item.Meta
+                        title={
+                          <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
+                            <Text strong>{bundle.cycleKey}</Text>
+                            <StatusTag status={bundle.status} />
+                          </div>
+                        }
+                        description={
+                          <div className="tw-flex tw-flex-wrap tw-gap-2 tw-text-xs tw-text-slate-500">
+                            <span>목표 {bundle.goalIds.length}개</span>
+                            <span>가중치 {bundle.weightSumSnapshot}%</span>
+                            {bundle.requestedAt ? <span>요청일 {bundle.requestedAt.slice(0, 10)}</span> : null}
+                            {bundle.revision ? <span>revision {bundle.revision}</span> : null}
+                          </div>
+                        }
+                      />
+                    </List.Item>
+                  )}
+                />
+              ),
+            },
+          ]}
+        />
+      )}
+    </Card>
+  );
+}
+
+function CompanyGoalsView({
+  goals,
+  loading,
+}: {
+  goals: Goal[];
+  loading: boolean;
+}) {
+  const { cycleFilter, setCycleFilter, cycleOptions } = useCycleFilter(goals);
+  const { data: orgChart } = useQuery({
+    queryKey: ['performance-company-org-chart'],
+    queryFn: () => organizationApi.getOrgChart(),
+  });
+  const filteredGoals = filterGoalsByCycle(goals, cycleFilter);
+  const orgGoals = filteredGoals.filter((goal) => goal.ownerType === 'ORGANIZATION');
+  const orgNameById = useMemo(() => buildOrgNameMap(orgChart?.organizations ?? []), [orgChart]);
+  const groupedOrgGoals = groupOrgGoalsByOwner(orgGoals, orgNameById);
+  const companyMetrics = buildCompanyGoalMetrics(orgGoals);
+
+  return (
+    <div className="tw-space-y-5">
+      <CycleFilterBar value={cycleFilter} onChange={setCycleFilter} options={cycleOptions} />
+      <Card title="전사 목표 지표" className={SECTION_CARD}>
+        <div className="tw-grid tw-grid-cols-2 tw-gap-3 md:tw-grid-cols-4">
+          <StatusMetric
+            label="등록된 조직 목표"
+            value={companyMetrics.totalGoals}
+            description="선택한 목표 기간에 생성된 조직 목표 수"
+          />
+          <StatusMetric
+            label="목표를 낸 조직"
+            value={companyMetrics.organizationsWithGoals}
+            description="조직 목표를 1개 이상 가진 조직 수"
+          />
+          <StatusMetric
+            label="평가 기준 완료"
+            value={companyMetrics.criteriaReady}
+            tone="green"
+            description="S/A/B/C 기준이 모두 입력된 조직 목표 수"
+          />
+          <StatusMetric
+            label="평가에 사용될 목표"
+            value={companyMetrics.activeGoals}
+            tone="gold"
+            description="현재 평가 대상 상태인 조직 목표 수"
+          />
+        </div>
+      </Card>
+      <Card title="조직별 목표" className={SECTION_CARD} loading={loading}>
+        {groupedOrgGoals.length === 0 ? (
+          <AppEmptyIllustrated description="전사 조직 목표가 없습니다." />
+        ) : (
+          <OrganizationGroupedGoalList groups={groupedOrgGoals} />
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function CycleFilterBar({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<{ value: string; label: string }>;
+}) {
+  return (
+    <Card className={SECTION_CARD} styles={{ body: { padding: 16 } }}>
+      <div className="tw-flex tw-flex-col tw-gap-3 md:tw-flex-row md:tw-items-center md:tw-justify-between">
+        <div>
+          <Text strong className="!tw-text-sm !tw-text-slate-900">
+            목표 기간 필터
+          </Text>
+          <div className="tw-mt-1 tw-text-xs tw-text-slate-500">
+            목표 수립, 승인 요청, 평가 대상 현황을 같은 목표 기간 기준으로 확인합니다.
+          </div>
+        </div>
+        <Select
+          value={value}
+          onChange={onChange}
+          className="tw-w-full md:tw-w-[220px]"
+          options={[{ value: 'ALL', label: '전체 목표 기간' }, ...options]}
+        />
+      </div>
+    </Card>
+  );
+}
+
+type GoalSetupMemberStatus = {
+  memberId: string;
+  memberName: string;
+  status: 'APPROVED' | 'PENDING' | 'REJECTED' | 'DRAFT' | 'EMPTY';
+  goalCount: number;
+  weightPct: number;
+  updatedAt?: string;
+};
+
+type GoalSetupStatus = {
+  total: number;
+  approved: number;
+  pending: number;
+  notReady: number;
+  incompleteMembers: GoalSetupMemberStatus[];
+};
+
+function GoalSetupStatusPanel({ status }: { status: GoalSetupStatus }) {
+  return (
+    <Card title="구성원 목표 수립 현황" className={SECTION_CARD}>
+      <div className="tw-grid tw-grid-cols-2 tw-gap-3 md:tw-grid-cols-4">
+        <StatusMetric label="전체 구성원" value={status.total} />
+        <StatusMetric label="승인 완료" value={status.approved} tone="green" />
+        <StatusMetric label="승인 대기" value={status.pending} tone="gold" />
+        <StatusMetric label="미완료" value={status.notReady} tone="red" />
+      </div>
+      <Collapse
+        ghost
+        className="tw-mt-4"
+        items={[
+          {
+            key: 'incomplete-members',
+            label: (
+              <span className="tw-text-sm tw-font-semibold tw-text-slate-900">
+                아직 완료되지 않은 구성원 {status.incompleteMembers.length}명
+              </span>
+            ),
+            children:
+              status.incompleteMembers.length === 0 ? (
+                <AppEmptyIllustrated description="모든 구성원의 목표가 승인 완료되었습니다." />
+              ) : (
+                <List
+                  dataSource={status.incompleteMembers}
+                  renderItem={(member) => (
+                    <List.Item className="!tw-items-start">
+                      <List.Item.Meta
+                        avatar={<UserOutlined />}
+                        title={
+                          <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
+                            <Text strong className="!tw-text-[14px] !tw-text-slate-900">
+                              {member.memberName}
+                            </Text>
+                            <GoalSetupStatusTag status={member.status} />
+                          </div>
+                        }
+                        description={
+                          <div className="tw-flex tw-flex-wrap tw-gap-2 tw-text-xs tw-text-slate-500">
+                            <span>개인 목표 {member.goalCount}개</span>
+                            <span>가중치 {member.weightPct}%</span>
+                            {member.updatedAt ? <span>최근 수정 {member.updatedAt.slice(0, 10)}</span> : null}
+                          </div>
+                        }
+                      />
+                    </List.Item>
+                  )}
+                />
+              ),
+          },
+        ]}
+      />
+    </Card>
+  );
+}
+
+function StatusMetric({
+  label,
+  value,
+  description,
+  tone = 'default',
+}: {
+  label: string;
+  value: number;
+  description?: string;
+  tone?: 'default' | 'green' | 'gold' | 'red';
+}) {
+  const toneClass =
+    tone === 'green'
+      ? 'tw-bg-emerald-50 tw-text-emerald-700'
+      : tone === 'gold'
+        ? 'tw-bg-amber-50 tw-text-amber-700'
+        : tone === 'red'
+          ? 'tw-bg-rose-50 tw-text-rose-700'
+          : 'tw-bg-slate-50 tw-text-slate-700';
+  return (
+    <div className={`tw-rounded-xl tw-p-4 ${toneClass}`}>
+      <div className="tw-text-xs tw-font-semibold">{label}</div>
+      <div className="tw-mt-1 tw-text-2xl tw-font-bold">{value}</div>
+      {description ? <div className="tw-mt-2 tw-text-[11px] tw-leading-4 tw-opacity-80">{description}</div> : null}
+    </div>
+  );
+}
+
+function GoalSetupStatusTag({ status }: { status: GoalSetupMemberStatus['status'] }) {
+  const map: Record<GoalSetupMemberStatus['status'], { color: string; label: string }> = {
+    APPROVED: { color: 'green', label: '승인 완료' },
+    PENDING: { color: 'gold', label: '승인 대기' },
+    REJECTED: { color: 'red', label: '반려' },
+    DRAFT: { color: 'default', label: '작성 중' },
+    EMPTY: { color: 'default', label: '미작성' },
+  };
+  const next = map[status];
+  return <Tag color={next.color}>{next.label}</Tag>;
+}
+
+function GoalList({
+  goals,
+  empty,
+  labelFor,
+  showOwner = true,
+  showOwnerTag = true,
+  onEdit,
+  onDelete,
+  deletingGoalId,
+}: {
+  goals: Goal[];
+  empty: string;
+  labelFor?: (memberId: string) => string;
+  showOwner?: boolean;
+  showOwnerTag?: boolean;
+  onEdit?: (goal: Goal) => void;
+  onDelete?: (goal: Goal) => void;
+  deletingGoalId?: string;
+}) {
+  if (goals.length === 0) return <AppEmptyIllustrated description={empty} />;
+  return (
     <List
-      loading={isLoading}
-      dataSource={data}
-      renderItem={(bundle) => (
+      dataSource={goals}
+      renderItem={(goal) => (
         <List.Item
-          className="tw-cursor-pointer hover:tw-bg-slate-50 !tw-px-3 !tw-rounded-xl"
-          onClick={() => onSelect(bundle)}
+          className={onEdit ? 'tw-cursor-pointer !tw-items-start hover:tw-bg-slate-50' : '!tw-items-start'}
+          onClick={() => onEdit?.(goal)}
+          actions={
+            onDelete && goal.ownerType === 'MEMBER' && goal.status === 'DRAFT'
+              ? [
+                  <span key="delete" onClick={(event) => event.stopPropagation()}>
+                    <Popconfirm
+                      title="작성 중인 목표 삭제"
+                      description="삭제한 목표는 되돌릴 수 없습니다."
+                      okText="삭제"
+                      cancelText="취소"
+                      okButtonProps={{ danger: true, loading: deletingGoalId === goal.goalId }}
+                      onConfirm={() => onDelete(goal)}
+                    >
+                      <AppButton
+                        variant="text"
+                        danger
+                        size="small"
+                        icon={<DeleteOutlined />}
+                        loading={deletingGoalId === goal.goalId}
+                      >
+                        삭제
+                      </AppButton>
+                    </Popconfirm>
+                  </span>,
+                ]
+              : undefined
+          }
         >
           <List.Item.Meta
+            avatar={goal.ownerType === 'ORGANIZATION' ? <TeamOutlined /> : <UserOutlined />}
             title={
-              <div className="tw-flex tw-items-center tw-gap-2 tw-flex-wrap">
-                <Tag
-                  color={statusColor(bundle.status)}
-                  className="!tw-m-0 !tw-rounded-full !tw-px-2.5 !tw-py-0.5 !tw-text-[11px] !tw-font-semibold"
-                >
-                  {statusLabel(bundle.status)}
-                </Tag>
-                <Tag
-                  bordered={false}
-                  className="!tw-m-0 !tw-rounded-full !tw-bg-slate-100 !tw-px-2.5 !tw-py-0.5 !tw-text-[11px] !tw-font-medium !tw-text-slate-700"
-                >
-                  {bundle.cycleKey}
-                </Tag>
-                {bundle.revision > 1 && (
-                  <Tag
-                    bordered={false}
-                    className="!tw-m-0 !tw-rounded-full !tw-bg-amber-50 !tw-px-2.5 !tw-py-0.5 !tw-text-[11px] !tw-font-medium !tw-text-amber-700"
-                  >
-                    재상신 r{bundle.revision}
-                  </Tag>
-                )}
+              <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
+                <Text strong className="!tw-text-[15px] !tw-text-slate-900">
+                  {goal.title}
+                </Text>
+                {showOwnerTag ? <OwnerTag goal={goal} /> : null}
+                <StatusTag status={goal.status} />
               </div>
             }
             description={
-              <Text className="!tw-text-sm !tw-text-slate-500">
-                목표 {bundle.goalIds.length}개 · 가중치 {bundle.weightSumSnapshot}% ·{' '}
-                {bundle.requestedAt && new Date(bundle.requestedAt).toLocaleString('ko-KR')}
-              </Text>
+              <div className="tw-space-y-2">
+                <div className="tw-flex tw-flex-wrap tw-gap-2 tw-text-xs tw-text-slate-500">
+                  <span>{goal.cycleKey || goal.cycle}</span>
+                  {goal.ownerType === 'MEMBER' ? <span>가중치 {goal.weightPct}%</span> : null}
+                  {showOwner && labelFor && goal.ownerType === 'MEMBER' ? <span>{labelFor(goal.ownerId)}</span> : null}
+                  {goal.objectiveTitle ? <span>상위 목표: {goal.objectiveTitle}</span> : null}
+                </div>
+                <Text className="!tw-text-sm !tw-text-slate-600">{goal.description}</Text>
+                <GradeCriteria goal={goal} />
+              </div>
             }
           />
         </List.Item>
@@ -1380,56 +745,488 @@ function RequestedHistory({ onSelect }: { onSelect: (bundle: GoalApprovalBundle)
   );
 }
 
-function statusColor(status: GoalApprovalBundle['status']) {
-  switch (status) {
-    case 'PENDING': return 'gold';
-    case 'APPROVED': return 'green';
-    case 'REJECTED': return 'red';
-    case 'WITHDRAWN': return 'default';
-  }
-}
+function MemberGroupedGoalList({
+  goals,
+  empty,
+  labelFor,
+}: {
+  goals: Goal[];
+  empty: string;
+  labelFor: (memberId: string) => string;
+}) {
+  const groups = useMemo(() => groupMemberGoalsByOwner(goals, labelFor), [goals, labelFor]);
+  if (groups.length === 0) return <AppEmptyIllustrated description={empty} />;
 
-function statusLabel(status: GoalApprovalBundle['status']) {
-  switch (status) {
-    case 'PENDING': return '대기';
-    case 'APPROVED': return '승인';
-    case 'REJECTED': return '반려';
-    case 'WITHDRAWN': return '회수';
-  }
-}
-
-function CycleFilterRow({ cycle, onChange }: { cycle?: KpiCycle; onChange: (cycle?: KpiCycle) => void }) {
   return (
-    <div className="tw-flex tw-flex-wrap tw-gap-2">
-      <FilterChip active={!cycle} onClick={() => onChange(undefined)}>전체 사이클</FilterChip>
-      <FilterChip active={cycle === 'QUARTERLY'} onClick={() => onChange('QUARTERLY')}>분기</FilterChip>
-      <FilterChip active={cycle === 'HALF_YEARLY'} onClick={() => onChange('HALF_YEARLY')}>반기</FilterChip>
-      <FilterChip active={cycle === 'YEARLY'} onClick={() => onChange('YEARLY')}>연간</FilterChip>
+    <Collapse
+      className="tw-rounded-2xl tw-border tw-border-slate-200/90 tw-bg-white"
+      items={groups.map((group) => ({
+        key: group.memberId,
+        label: (
+          <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-3">
+            <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-3">
+              <div className="tw-flex tw-h-9 tw-w-9 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-full tw-bg-emerald-50 tw-text-sm tw-font-bold tw-text-emerald-700">
+                {group.memberName.slice(0, 1)}
+              </div>
+              <div className="tw-min-w-0">
+                <div className="tw-truncate tw-text-[15px] tw-font-semibold tw-text-slate-900">{group.memberName}</div>
+                <div className="tw-mt-0.5 tw-text-[11px] tw-text-slate-400">구성원 ID {shortId(group.memberId)}</div>
+              </div>
+            </div>
+            <div className="tw-flex tw-flex-wrap tw-gap-1.5">
+              <Tag color="green" className="!tw-m-0">
+                승인 목표 {group.goals.length}개
+              </Tag>
+              <Tag color={group.totalWeight === 100 ? 'blue' : 'gold'} className="!tw-m-0">
+                가중치 {group.totalWeight}%
+              </Tag>
+            </div>
+          </div>
+        ),
+        children: (
+          <div className="tw-rounded-xl tw-bg-slate-50/70 tw-p-3">
+            <CompactGoalRows goals={group.goals} empty="승인된 개인 목표가 없습니다." mode="member" />
+          </div>
+        ),
+      }))}
+    />
+  );
+}
+
+function OrganizationGroupedGoalList({
+  groups,
+}: {
+  groups: Array<{ ownerId: string; organizationName: string; goals: Goal[] }>;
+}) {
+  return (
+    <Collapse
+      className="tw-rounded-2xl tw-border tw-border-slate-200/90 tw-bg-white"
+      items={groups.map((group) => ({
+        key: group.ownerId,
+        label: (
+          <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-3">
+            <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-3">
+              <div className="tw-flex tw-h-9 tw-w-9 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-full tw-bg-blue-50 tw-text-sm tw-font-bold tw-text-blue-700">
+                {group.organizationName.slice(0, 1)}
+              </div>
+              <div className="tw-min-w-0">
+                <div className="tw-truncate tw-text-[15px] tw-font-semibold tw-text-slate-900">
+                  {group.organizationName}
+                </div>
+                <div className="tw-mt-0.5 tw-text-[11px] tw-text-slate-400">조직 ID {shortId(group.ownerId)}</div>
+              </div>
+            </div>
+            <div className="tw-flex tw-flex-wrap tw-gap-1.5">
+              <Tag color="blue" className="!tw-m-0">
+                조직 목표 {group.goals.length}개
+              </Tag>
+              <Tag color={group.goals.every(hasAllCriteria) ? 'green' : 'gold'} className="!tw-m-0">
+                평가 기준 {group.goals.filter(hasAllCriteria).length}/{group.goals.length}
+              </Tag>
+            </div>
+          </div>
+        ),
+        children: (
+          <div className="tw-rounded-xl tw-bg-slate-50/70 tw-p-3">
+            <CompactGoalRows goals={group.goals} empty="조직 목표가 없습니다." mode="objective" />
+          </div>
+        ),
+      }))}
+    />
+  );
+}
+
+function CompactGoalRows({
+  goals,
+  empty,
+  mode,
+}: {
+  goals: Goal[];
+  empty: string;
+  mode: 'objective' | 'member';
+}) {
+  if (goals.length === 0) return <AppEmptyIllustrated description={empty} />;
+  return (
+    <div className="tw-overflow-hidden tw-rounded-xl tw-border tw-border-slate-200 tw-bg-white">
+      <div
+        className={
+          'tw-grid tw-gap-3 tw-border-b tw-border-slate-100 tw-bg-slate-50 tw-px-4 tw-py-2 tw-text-[11px] tw-font-semibold tw-text-slate-500 ' +
+          (mode === 'member' ? 'tw-grid-cols-[minmax(0,1fr)_88px_96px]' : 'tw-grid-cols-[minmax(0,1fr)_108px_96px]')
+        }
+      >
+        <span>목표</span>
+        <span className={mode === 'member' ? 'tw-text-right' : 'tw-text-center'}>
+          {mode === 'member' ? '가중치' : '평가 기준'}
+        </span>
+        <span className="tw-text-center">상태</span>
+      </div>
+      {goals.map((goal) => (
+        <div
+          key={goal.goalId}
+          className={
+            'tw-grid tw-gap-3 tw-border-b tw-border-slate-100 tw-px-4 tw-py-3 last:tw-border-b-0 ' +
+            (mode === 'member' ? 'tw-grid-cols-[minmax(0,1fr)_88px_96px]' : 'tw-grid-cols-[minmax(0,1fr)_108px_96px]')
+          }
+        >
+          <div className="tw-min-w-0">
+            <div className="tw-truncate tw-text-sm tw-font-semibold tw-text-slate-900">{goal.title}</div>
+            <div className="tw-mt-1 tw-line-clamp-1 tw-text-xs tw-text-slate-500">
+              {mode === 'member'
+                ? goal.objectiveTitle
+                  ? `연결 목표: ${goal.objectiveTitle}`
+                  : goal.description || '연결된 조직 목표 없음'
+                : goal.description || '설명 없음'}
+            </div>
+          </div>
+          <div className={mode === 'member' ? 'tw-self-center tw-text-right tw-text-sm tw-font-bold tw-text-[#1e3a5f]' : 'tw-self-center tw-text-center'}>
+            {mode === 'member' ? `${goal.weightPct}%` : <CriteriaReadyTag goal={goal} />}
+          </div>
+          <div className="tw-self-center tw-text-center">
+            <StatusTag status={goal.status} />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
 
-function FilterChip({
-  active,
-  onClick,
-  children,
-}: {
-  active?: boolean;
-  onClick: () => void;
-  children: ReactNode;
-}) {
+function CriteriaReadyTag({ goal }: { goal: Goal }) {
+  const ready = hasAllCriteria(goal);
+  return <Tag color={ready ? 'green' : 'gold'} className="!tw-m-0">{ready ? '완료' : '미완료'}</Tag>;
+}
+
+function OwnerTag({ goal }: { goal: Goal }) {
+  if (goal.ownerType === 'ORGANIZATION') return <Tag color="blue">조직 목표</Tag>;
+  if (goal.alignedOrgGoalId) return <Tag color="cyan">조직 목표 연결</Tag>;
+  return <Tag>개인 목표</Tag>;
+}
+
+function StatusTag({ status }: { status: string }) {
+  const color =
+    status === 'ACTIVE' || status === 'APPROVED'
+      ? 'green'
+      : status === 'PENDING'
+        ? 'gold'
+        : status === 'REJECTED'
+          ? 'red'
+          : 'default';
+  const label: Record<string, string> = {
+    DRAFT: '작성 중',
+    PENDING: '승인 대기',
+    ACTIVE: '평가 대상',
+    COMPLETED: '완료',
+    CANCELLED: '취소',
+    SKIPPED: '제외',
+    APPROVED: '승인',
+    REJECTED: '반려',
+    WITHDRAWN: '철회',
+  };
+  return <Tag color={color}>{label[status] ?? status}</Tag>;
+}
+
+function GradeCriteria({ goal }: { goal: Goal }) {
+  if (!hasAnyCriteria(goal)) {
+    return (
+      <Tag icon={<FileDoneOutlined />} color="default">
+        직접 입력 기준 필요
+      </Tag>
+    );
+  }
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={
-        active
-          ? 'tw-h-9 tw-rounded-full tw-border-0 tw-bg-[#1e3a5f] tw-px-4 tw-text-sm tw-font-semibold tw-text-white hover:tw-bg-[#152a45]'
-          : 'tw-h-9 tw-rounded-full tw-border tw-border-slate-200 tw-bg-white tw-px-4 tw-text-sm tw-font-medium tw-text-slate-700 hover:tw-border-[#2563EB]/30 hover:tw-bg-[#EFF6FF] hover:tw-text-[#2563EB]'
-      }
-    >
-      {children}
-    </button>
+    <div className="tw-flex tw-flex-wrap tw-gap-1.5">
+      {(['S', 'A', 'B', 'C'] as const).map((grade) => {
+        const value = goal[`grade${grade}` as keyof Goal] as string | undefined;
+        return value ? (
+          <Tag key={grade} className="!tw-m-0 !tw-rounded-full" icon={grade === 'S' ? <CheckCircleOutlined /> : undefined}>
+            {grade}: {value}
+          </Tag>
+        ) : null;
+      })}
+    </div>
   );
 }
 
+function groupByCycle(goals: Goal[]) {
+  const map = new Map<string, Goal[]>();
+  goals.forEach((goal) => {
+    const key = goal.cycleKey || `${goal.cycle}:${goal.cycleStartDate}`;
+    map.set(key, [...(map.get(key) ?? []), goal]);
+  });
+  return Array.from(map.entries()).sort(([a], [b]) => b.localeCompare(a));
+}
+
+function useCycleFilter(goals: Goal[]) {
+  const cycleOptions = useMemo(() => cycleOptionsFromGoals(goals), [goals]);
+  const defaultCycle = useMemo(() => resolveDefaultCycleFilter(goals, cycleOptions), [cycleOptions, goals]);
+  const [cycleFilter, setCycleFilterValue] = useState(defaultCycle);
+  const [touched, setTouched] = useState(false);
+
+  useEffect(() => {
+    const values = new Set(['ALL', ...cycleOptions.map((option) => option.value)]);
+    if (!values.has(cycleFilter)) {
+      setCycleFilterValue(defaultCycle);
+      setTouched(false);
+      return;
+    }
+    if (!touched && cycleFilter !== defaultCycle) {
+      setCycleFilterValue(defaultCycle);
+    }
+  }, [cycleFilter, cycleOptions, defaultCycle, touched]);
+
+  const setCycleFilter = (value: string) => {
+    setTouched(true);
+    setCycleFilterValue(value);
+  };
+
+  return { cycleFilter, setCycleFilter, cycleOptions };
+}
+
+function cycleOptionsFromGoals(goals: Goal[]) {
+  return Array.from(new Set(goals.map((goal) => goal.cycleKey || `${goal.cycle}:${goal.cycleStartDate}`).filter(Boolean)))
+    .sort((a, b) => b.localeCompare(a))
+    .map((cycleKey) => ({ value: cycleKey, label: cycleKey }));
+}
+
+function resolveDefaultCycleFilter(goals: Goal[], options: Array<{ value: string; label: string }>) {
+  if (options.length === 0) return 'ALL';
+  const today = toDayNumber(new Date());
+  const currentGoal = goals
+    .filter((goal) => goal.cycleStartDate && goal.cycleEndDate)
+    .find((goal) => {
+      const start = toDayNumber(goal.cycleStartDate);
+      const end = toDayNumber(goal.cycleEndDate);
+      return start <= today && today <= end;
+    });
+  if (currentGoal) {
+    return currentGoal.cycleKey || `${currentGoal.cycle}:${currentGoal.cycleStartDate}`;
+  }
+  const currentHalf = currentHalfYearCycleKey(new Date());
+  if (options.some((option) => option.value === currentHalf)) return currentHalf;
+  const currentYear = String(new Date().getFullYear());
+  const yearOption = options.find((option) => option.value.includes(currentYear));
+  return yearOption?.value ?? options[0]?.value ?? 'ALL';
+}
+
+function filterGoalsByCycle(goals: Goal[], cycleKey: string) {
+  if (cycleKey === 'ALL') return goals;
+  return goals.filter((goal) => (goal.cycleKey || `${goal.cycle}:${goal.cycleStartDate}`) === cycleKey);
+}
+
+function filterBundlesByCycle(bundles: GoalApprovalBundle[], cycleKey: string) {
+  if (cycleKey === 'ALL') return bundles;
+  return bundles.filter((bundle) => bundle.cycleKey === cycleKey);
+}
+
+function toDayNumber(value: Date | string) {
+  if (value instanceof Date) {
+    return Number(
+      `${value.getFullYear()}${String(value.getMonth() + 1).padStart(2, '0')}${String(value.getDate()).padStart(2, '0')}`,
+    );
+  }
+  return Number(value.slice(0, 10).replaceAll('-', '')) || 0;
+}
+
+function currentHalfYearCycleKey(date: Date) {
+  const half = date.getMonth() < 6 ? 'H1' : 'H2';
+  return `${date.getFullYear()}-${half}`;
+}
+
+function hasAnyCriteria(goal: Goal) {
+  return Boolean(goal.gradeS || goal.gradeA || goal.gradeB || goal.gradeC);
+}
+
+function isApprovedGoal(goal: Goal) {
+  return (
+    goal.status === 'ACTIVE' ||
+    goal.status === 'COMPLETED' ||
+    goal.goalApprovalStatus === 'APPROVED' ||
+    Boolean(goal.approvedAt)
+  );
+}
+
+function uniqueGoalsById(goals: Goal[]) {
+  const map = new Map<string, Goal>();
+  goals.forEach((goal) => {
+    const key = goal.goalId || goal.id;
+    if (key && !map.has(key)) map.set(key, goal);
+  });
+  return Array.from(map.values());
+}
+
+function buildOrgNameMap(organizations: OrgChartOrgNode[]) {
+  const map = new Map<string, string>();
+  const walk = (nodes: OrgChartOrgNode[]) => {
+    nodes.forEach((node) => {
+      map.set(node.organizationId, node.name);
+      walk(node.children ?? []);
+    });
+  };
+  walk(organizations);
+  return map;
+}
+
+function buildDescendantOrgIdMap(organizations: OrgChartOrgNode[]) {
+  const map = new Map<string, string[]>();
+  const walk = (node: OrgChartOrgNode): string[] => {
+    const descendants = node.children.flatMap(walk);
+    const ids = [node.organizationId, ...descendants];
+    map.set(node.organizationId, ids);
+    return ids;
+  };
+  organizations.forEach(walk);
+  return map;
+}
+
+function collectMembersByOrgIds(organizations: OrgChartOrgNode[], orgIds: string[]) {
+  const targetIds = new Set(orgIds);
+  const map = new Map<string, { memberId: string; name: string }>();
+  const walk = (nodes: OrgChartOrgNode[]) => {
+    nodes.forEach((node) => {
+      if (targetIds.has(node.organizationId)) {
+        node.members.forEach((member) => {
+          if (member.memberId) map.set(member.memberId, { memberId: member.memberId, name: member.name });
+        });
+      }
+      walk(node.children ?? []);
+    });
+  };
+  walk(organizations);
+  return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function buildGoalSetupStatus(
+  members: Array<{ memberId: string; name: string }>,
+  goals: Goal[],
+  objectiveIds: Set<string>,
+): GoalSetupStatus {
+  const rows = members.map((member) => {
+    const memberGoals = goals.filter(
+      (goal) =>
+        goal.ownerType === 'MEMBER' &&
+        goal.ownerId === member.memberId &&
+        !!goal.alignedOrgGoalId &&
+        objectiveIds.has(goal.alignedOrgGoalId),
+    );
+    const approvedGoals = memberGoals.filter(isApprovedGoal);
+    const approvedWeight = approvedGoals.reduce((sum, goal) => sum + (goal.weightPct || 0), 0);
+    const status: GoalSetupMemberStatus['status'] =
+      approvedGoals.length > 0 && approvedWeight >= 100
+        ? 'APPROVED'
+        : memberGoals.some((goal) => goal.status === 'PENDING' || goal.goalApprovalStatus === 'PENDING')
+          ? 'PENDING'
+          : memberGoals.some((goal) => goal.goalApprovalStatus === 'REJECTED')
+            ? 'REJECTED'
+            : memberGoals.length > 0
+              ? 'DRAFT'
+              : 'EMPTY';
+
+    return {
+      memberId: member.memberId,
+      memberName: member.name,
+      status,
+      goalCount: memberGoals.length,
+      weightPct: memberGoals.reduce((sum, goal) => sum + (goal.weightPct || 0), 0),
+      updatedAt: memberGoals
+        .map((goal) => goal.updatedAt || goal.createdAt || '')
+        .filter(Boolean)
+        .sort((a, b) => b.localeCompare(a))[0],
+    };
+  });
+
+  const approved = rows.filter((row) => row.status === 'APPROVED').length;
+  const pending = rows.filter((row) => row.status === 'PENDING').length;
+  const incompleteMembers = rows
+    .filter((row) => row.status !== 'APPROVED')
+    .sort((a, b) => statusOrder(a.status) - statusOrder(b.status) || a.memberName.localeCompare(b.memberName));
+
+  return {
+    total: rows.length,
+    approved,
+    pending,
+    notReady: rows.length - approved,
+    incompleteMembers,
+  };
+}
+
+function statusOrder(status: GoalSetupMemberStatus['status']) {
+  const order: Record<GoalSetupMemberStatus['status'], number> = {
+    PENDING: 0,
+    REJECTED: 1,
+    DRAFT: 2,
+    EMPTY: 3,
+    APPROVED: 4,
+  };
+  return order[status];
+}
+
+function buildCompanyGoalMetrics(goals: Goal[]) {
+  return {
+    totalGoals: goals.length,
+    organizationsWithGoals: new Set(goals.map((goal) => goal.ownerId).filter(Boolean)).size,
+    criteriaReady: goals.filter(hasAllCriteria).length,
+    activeGoals: goals.filter((goal) => goal.status === 'ACTIVE').length,
+  };
+}
+
+function hasAllCriteria(goal: Goal) {
+  return Boolean(goal.gradeS && goal.gradeA && goal.gradeB && goal.gradeC);
+}
+
+function groupOrgGoalsByOwner(goals: Goal[], orgNameById: Map<string, string>) {
+  const map = new Map<string, Goal[]>();
+  goals.forEach((goal) => {
+    const key = goal.ownerId || 'UNKNOWN';
+    map.set(key, [...(map.get(key) ?? []), goal]);
+  });
+  return Array.from(map.entries())
+    .map(([ownerId, groupGoals]) => ({
+      ownerId,
+      organizationName: orgNameById.get(ownerId) ?? `조직 ${shortId(ownerId)}`,
+      goals: groupGoals.sort((a, b) => (a.cycleKey || '').localeCompare(b.cycleKey || '') || a.title.localeCompare(b.title)),
+    }))
+    .sort((a, b) => a.organizationName.localeCompare(b.organizationName));
+}
+
+function groupMemberGoalsByOwner(goals: Goal[], labelFor: (memberId: string) => string) {
+  const map = new Map<string, Goal[]>();
+  goals.forEach((goal) => {
+    const key = goal.ownerId || 'UNKNOWN';
+    map.set(key, [...(map.get(key) ?? []), goal]);
+  });
+  return Array.from(map.entries())
+    .map(([memberId, groupGoals]) => ({
+      memberId,
+      memberName: labelFor(memberId) || `구성원 ${shortId(memberId)}`,
+      totalWeight: groupGoals.reduce((sum, goal) => sum + (goal.weightPct || 0), 0),
+      goals: groupGoals.sort((a, b) => (a.objectiveTitle || '').localeCompare(b.objectiveTitle || '') || a.title.localeCompare(b.title)),
+    }))
+    .sort((a, b) => a.memberName.localeCompare(b.memberName));
+}
+
+function shortId(id: string) {
+  return id && id !== 'UNKNOWN' ? id.slice(0, 8) : '미확인';
+}
+
+function normalizeGoalView(view: string | undefined, canManageOrgGoals: boolean, canViewCompanyGoals: boolean): GoalView {
+  if (view === 'org' && canManageOrgGoals) return 'org';
+  if (view === 'company' && canViewCompanyGoals) return 'company';
+  return 'my';
+}
+
+function getPageCopy(view: GoalView) {
+  const copy: Record<GoalView, { title: string; subtitle: string }> = {
+    my: {
+      title: '내 목표',
+      subtitle: '개인 목표를 작성하고, 가중치 100%를 맞춘 뒤 같은 화면에서 승인 요청까지 진행합니다.',
+    },
+    org: {
+      title: '조직 목표 관리',
+      subtitle: '조직 목표와 평가 기준을 만들고 팀원의 목표 승인 요청을 처리합니다.',
+    },
+    company: {
+      title: '전사 목표 현황',
+      subtitle: '특수 관리자 전용 화면입니다. 모든 조직의 목표를 목표 기간 기준으로 확인합니다.',
+    },
+  };
+  return copy[view];
+}

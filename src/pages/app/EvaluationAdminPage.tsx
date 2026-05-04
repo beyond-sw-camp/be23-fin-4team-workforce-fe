@@ -28,7 +28,7 @@ const STAGE_LABEL: Record<string, string> = {
   PEER_OPEN: '동료 의견 수집',
   UPWARD_OPEN: '상향 의견 수집',
   DOWNWARD_OPEN: '하향 의견 수집',
-  CALIBRATION_OPEN: '리드 검토 중',
+  CALIBRATION_OPEN: '등급 검토 중',
   CALIBRATION_LOCKED: '최종 확정 대기',
   CONFIRMED: '확정 완료',
   SKIPPED_LEAVER: '퇴사/제외 처리',
@@ -51,12 +51,14 @@ type SkipTarget = { responseId: string; targetMemberLabel: string } | null;
 
 type EvaluationAdminPageProps = {
   embedded?: boolean;
+  seasonId?: string;
 };
 
-export default function EvaluationAdminPage({ embedded = false }: EvaluationAdminPageProps) {
+export default function EvaluationAdminPage({ embedded = false, seasonId: fixedSeasonId }: EvaluationAdminPageProps) {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
-  const [seasonId, setSeasonId] = useState('');
+  const [selectedSeasonId, setSelectedSeasonId] = useState('');
+  const seasonId = fixedSeasonId || selectedSeasonId;
   const [leadTarget, setLeadTarget] = useState<LeadReassignTarget>(null);
   const [leadPickerOpen, setLeadPickerOpen] = useState(false);
   const [reassignReason, setReassignReason] = useState('');
@@ -128,13 +130,13 @@ export default function EvaluationAdminPage({ embedded = false }: EvaluationAdmi
     mutationFn: ({ responseId, evaluatorId, reason }: { responseId: string; evaluatorId: string; reason?: string }) =>
       evaluationRedesignApi.reassignLead(responseId, evaluatorId, reason),
     onSuccess: () => {
-      message.success('Lead evaluator를 변경했습니다.');
+      message.success('최종 검토자를 변경했습니다.');
       invalidateSeasonQueries();
       setLeadTarget(null);
       setLeadPickerOpen(false);
       setReassignReason('');
     },
-    onError: (error: any) => message.error(error?.message ?? 'Lead 변경에 실패했습니다.'),
+    onError: (error: any) => message.error(error?.message ?? '최종 검토자 변경에 실패했습니다.'),
   });
 
   const skipMut = useMutation({
@@ -155,32 +157,34 @@ export default function EvaluationAdminPage({ embedded = false }: EvaluationAdmi
         <AppWorkspacePageTitle
           eyebrow="EVALUATION ADMIN"
           title="평가 운영"
-          subtitle="공개 차단 응답, 시즌 리스크, Lead 재할당, 제외 처리를 한 화면에서 확인합니다."
+          subtitle="공개 차단 응답, 평가 진행 리스크, 최종 검토자 변경, 제외 처리를 한 화면에서 확인합니다."
         />
       ) : null}
 
-      <Card className={SECTION_CARD} styles={{ body: { padding: 16 } }}>
-        <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-3">
-          <Text strong className="tw-text-sm tw-text-slate-700">
-            평가 시즌
-          </Text>
-          <Select
-            loading={seasonsLoading}
-            value={seasonId || undefined}
-            onChange={setSeasonId}
-            placeholder="운영할 시즌을 선택하세요."
-            style={{ minWidth: 320 }}
-            options={seasons.map((season) => ({
-              value: season.seasonId,
-              label: `${season.name} · ${season.status}${season.resultsPublishedAt ? ' · 공개 완료' : ''}`,
-            }))}
-          />
-          {selectedSeason?.resultPublishDate ? <Tag>공개 예정 {selectedSeason.resultPublishDate}</Tag> : null}
-          {selectedSeason?.resultsPublishedAt ? <Tag color="green">공개 완료</Tag> : null}
-        </div>
-      </Card>
+      {!fixedSeasonId ? (
+        <Card className={SECTION_CARD} styles={{ body: { padding: 16 } }}>
+          <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-3">
+            <Text strong className="tw-text-sm tw-text-slate-700">
+              평가 기간
+            </Text>
+            <Select
+              loading={seasonsLoading}
+              value={seasonId || undefined}
+              onChange={setSelectedSeasonId}
+              placeholder="관리할 평가를 선택하세요."
+              style={{ minWidth: 320 }}
+              options={seasons.map((season) => ({
+                value: season.seasonId,
+                label: `${season.name} · ${season.status}${season.resultsPublishedAt ? ' · 공개 완료' : ''}`,
+              }))}
+            />
+            {selectedSeason?.resultPublishDate ? <Tag>공개 예정 {selectedSeason.resultPublishDate}</Tag> : null}
+            {selectedSeason?.resultsPublishedAt ? <Tag color="green">공개 완료</Tag> : null}
+          </div>
+        </Card>
+      ) : null}
 
-      {!seasonId ? <AppEmptyIllustrated description="운영할 시즌을 먼저 선택해 주세요." /> : null}
+      {!seasonId ? <AppEmptyIllustrated description="관리할 평가를 먼저 선택해 주세요." /> : null}
 
       {seasonId ? (
         <>
@@ -194,7 +198,7 @@ export default function EvaluationAdminPage({ embedded = false }: EvaluationAdmi
               loading={blockersLoading}
             />
             <KpiCard
-              label="운영 리스크 알림"
+              label="확인 필요 사항 알림"
               value={operationalAlerts?.totalAlerts ?? '-'}
               accent={operationalAlerts?.totalAlerts ? 'rose' : 'emerald'}
               hint={operationalAlerts?.totalAlerts ? '확인 필요' : '이상 없음'}
@@ -205,7 +209,7 @@ export default function EvaluationAdminPage({ embedded = false }: EvaluationAdmi
               accent="slate"
               hint={
                 meetingStatus
-                  ? `미완료 ${meetingStatus.uncompletedCount} · 일정 미정 ${meetingStatus.unscheduledCount}`
+                  ? `미완료 ${meetingStatus.uncompletedCount}`
                   : ''
               }
             />
@@ -214,11 +218,11 @@ export default function EvaluationAdminPage({ embedded = false }: EvaluationAdmi
           <Card
             className={SECTION_CARD}
             styles={{ body: { padding: 20 } }}
-            title={<Text strong className="tw-text-[15px] tw-text-slate-900">시즌 리스크 버블</Text>}
+            title={<Text strong className="tw-text-[15px] tw-text-slate-900">평가 진행 리스크</Text>}
           >
             <div className="tw-mb-4 tw-text-sm tw-text-slate-500">
-              시즌 진행 중 인사 상태가 바뀐 응답을 운영 관점에서 먼저 보여줍니다. 이 화면은 자동 처리보다
-              운영 판단을 우선하는 경량 버전입니다.
+              평가 진행 중 인사 상태가 바뀐 응답을 관리자 관점에서 먼저 보여줍니다. 이 화면은 자동 처리보다
+              관리자 확인을 우선하는 경량 버전입니다.
             </div>
             {!operationalAlerts || operationalAlerts.alerts.length === 0 ? (
               <Empty
@@ -242,12 +246,12 @@ export default function EvaluationAdminPage({ embedded = false }: EvaluationAdmi
                           <Tag color={isHigh ? 'red' : 'gold'} bordered={false}>
                             {alert.alertType}
                           </Tag>
-                          <span className="tw-text-xs tw-text-slate-500">Lead: {evaluatorLabel}</span>
+                          <span className="tw-text-xs tw-text-slate-500">최종 검토자: {evaluatorLabel}</span>
                         </div>
                       }
                       description={
                         <div className="tw-space-y-3">
-                          <div className="tw-text-sm tw-leading-6 tw-text-slate-600">{alert.message}</div>
+                          <div className="tw-text-sm tw-leading-6 tw-text-slate-600">{toUserFriendlyMessage(alert.message)}</div>
                           <div className="tw-flex tw-flex-wrap tw-gap-2">
                             <AppButton
                               size="small"
@@ -261,7 +265,7 @@ export default function EvaluationAdminPage({ embedded = false }: EvaluationAdmi
                                 setLeadPickerOpen(true);
                               }}
                             >
-                              Lead 변경
+                              최종 검토자 변경
                             </AppButton>
                             <AppButton
                               size="small"
@@ -373,7 +377,7 @@ export default function EvaluationAdminPage({ embedded = false }: EvaluationAdmi
                         {labelFor(blocker.targetMemberId) || blocker.targetMemberId.slice(0, 8)}
                       </span>
                       <span className="tw-text-xs tw-text-slate-400">
-                        Lead: {labelFor(blocker.evaluatorId) || blocker.evaluatorId.slice(0, 8)}
+                        최종 검토자: {labelFor(blocker.evaluatorId) || blocker.evaluatorId.slice(0, 8)}
                       </span>
                     </div>
                     <Space>
@@ -389,7 +393,7 @@ export default function EvaluationAdminPage({ embedded = false }: EvaluationAdmi
                           setLeadPickerOpen(true);
                         }}
                       >
-                        Lead 변경
+                        최종 검토자 변경
                       </AppButton>
                       <AppButton
                         size="small"
@@ -414,7 +418,7 @@ export default function EvaluationAdminPage({ embedded = false }: EvaluationAdmi
           {selectedSeason?.resultsPublishedAt ? (
             <Card className={SECTION_CARD} styles={{ body: { padding: 20 } }}>
               <div className="tw-text-sm tw-text-slate-600">
-                이 시즌은 이미 공개되었습니다. 추가 정정이 필요하면 개별 응답을 reopen 한 뒤 다시 확정해 주세요.
+                이 평가는 이미 공개되었습니다. 추가 정정이 필요하면 개별 응답을 reopen 한 뒤 다시 확정해 주세요.
               </div>
             </Card>
           ) : null}
@@ -423,7 +427,7 @@ export default function EvaluationAdminPage({ embedded = false }: EvaluationAdmi
 
       <SingleMemberOrgChartSelectModal
         open={leadPickerOpen && !!leadTarget}
-        title="새 Lead evaluator 선택"
+        title="새 최종 검토자 선택"
         onClose={() => {
           setLeadPickerOpen(false);
           setLeadTarget(null);
@@ -441,7 +445,7 @@ export default function EvaluationAdminPage({ embedded = false }: EvaluationAdmi
 
       <AppConfirmModal
         open={!!leadTarget}
-        title="Lead 변경 사유"
+        title="최종 검토자 변경 사유"
         onOk={() => setLeadPickerOpen(true)}
         onCancel={() => {
           setLeadTarget(null);
@@ -450,13 +454,13 @@ export default function EvaluationAdminPage({ embedded = false }: EvaluationAdmi
       >
         <div className="tw-space-y-3">
           <div className="tw-text-sm tw-text-slate-600">
-            <strong>{leadTarget?.targetMemberLabel}</strong> 응답의 Lead evaluator를 바꾸기 전에 사유를 남겨주세요.
+            <strong>{leadTarget?.targetMemberLabel}</strong> 응답의 최종 검토자를 바꾸기 전에 사유를 남겨주세요.
           </div>
           <TextArea
             rows={4}
             value={reassignReason}
             onChange={(event) => setReassignReason(event.target.value)}
-            placeholder="예: 조직 이동으로 기존 Lead가 더 이상 평가를 진행하기 어렵습니다."
+            placeholder="예: 조직 이동으로 기존 최종 검토자가 더 이상 평가를 진행하기 어렵습니다."
           />
         </div>
       </AppConfirmModal>
@@ -485,7 +489,7 @@ export default function EvaluationAdminPage({ embedded = false }: EvaluationAdmi
             rows={4}
             value={skipReason}
             onChange={(event) => setSkipReason(event.target.value)}
-            placeholder="예: 시즌 종료 전 퇴사로 평가 진행 불가"
+            placeholder="예: 평가 종료 전 퇴사로 평가 진행 불가"
           />
         </div>
       </AppConfirmModal>
@@ -498,6 +502,14 @@ export default function EvaluationAdminPage({ embedded = false }: EvaluationAdmi
     void queryClient.invalidateQueries({ queryKey: ['evaluation-operational-alerts', seasonId] });
     void queryClient.invalidateQueries({ queryKey: ['evaluation-seasons'] });
   }
+}
+
+function toUserFriendlyMessage(message?: string | null) {
+  return (message ?? '')
+    .replaceAll('Lead evaluator', '최종 검토자')
+    .replaceAll('Lead 평가자', '최종 검토자')
+    .replaceAll('Lead', '최종 검토자')
+    .replaceAll('DOWNWARD', '상급자 평가');
 }
 
 function KpiCard({

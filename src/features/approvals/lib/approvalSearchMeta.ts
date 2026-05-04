@@ -2,6 +2,7 @@ import type {
   ApprovalSearchRequestType,
   ApprovalSearchStatus,
 } from '@/features/approvals/api/approvalSearchApi';
+import { APPROVAL_REQUEST_TYPE_LABEL_KO } from '@/features/approvals/lib/approvalRequestTypeKo';
 
 export const APPROVAL_STATUS_LABEL: Record<ApprovalSearchStatus, string> = {
   DRAFT: '임시저장',
@@ -19,13 +20,7 @@ export const APPROVAL_STATUS_COLOR: Record<ApprovalSearchStatus, string> = {
   REJECTED: 'red',
 };
 
-export const APPROVAL_TYPE_LABEL: Record<ApprovalSearchRequestType, string> = {
-  VACATION: '휴가',
-  ATTENDANCE: '근태',
-  HR_MOVEMENT: '인사이동',
-  SALARY: '급여',
-  GENERAL: '일반기안',
-  CONTRACT: '전자계약',
-  CERTIFICATE: '증명서',
-  OFFICIAL: '공문',
-};
+export const APPROVAL_TYPE_LABEL = APPROVAL_REQUEST_TYPE_LABEL_KO as Record<
+  ApprovalSearchRequestType,
+  string
+>;

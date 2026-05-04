@@ -5,7 +5,7 @@ export default function MyEvaluationResultsListPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    navigate({ to: '/app/evaluations', search: { view: 'results' }, replace: true });
+    navigate({ to: '/app/evaluations', replace: true });
   }, [navigate]);
 
   return null;

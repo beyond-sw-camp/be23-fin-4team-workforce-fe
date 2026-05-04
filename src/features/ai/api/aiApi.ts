@@ -34,9 +34,44 @@ export type AiChatHistoryItem = {
   sources?: string[];
 };
 
+export type AiChatActionType =
+  | 'ask'
+  | 'confirm'
+  | 'redirect_to_form'
+  | 'cancelled'
+  | 'error'
+  /** 캘린더 일정 등록 완료(DB 반영됨) */
+  | 'created';
+
+export type AiChatActionButton = {
+  label: string;
+  value: string;
+};
+
+export type AiChatPreviewData = {
+  documentId?: string;
+  documentName?: string;
+  fields?: Record<string, unknown>;
+  contentJson?: string;
+  approvalLines?: unknown[];
+};
+
+export type AiChatRequest = {
+  question?: string;
+  sessionId?: string;
+  action?: string;
+};
+
 export type AiChatResponse = {
   answer: string;
   sources: string[];
+  type?: AiChatActionType | null;
+  sessionId?: string | null;
+  actions?: AiChatActionButton[] | null;
+  preview?: AiChatPreviewData | null;
+  redirectUrl?: string | null;
+  requestId?: string | null;
+  errorCode?: string | null;
 };
 
 function normalizeDoc(raw: Record<string, unknown>): AiUploadedDocument | null {
@@ -159,7 +194,67 @@ function unwrapChatResponse(raw: unknown): AiChatResponse {
   const sources = Array.isArray(inner.sources)
     ? inner.sources.filter((x): x is string => typeof x === 'string')
     : [];
-  return { answer, sources };
+  const typeRaw = inner.type;
+  const type =
+    typeRaw === 'ask' ||
+    typeRaw === 'confirm' ||
+    typeRaw === 'redirect_to_form' ||
+    typeRaw === 'cancelled' ||
+    typeRaw === 'error' ||
+    typeRaw === 'created'
+      ? typeRaw
+      : null;
+  const sessionId = typeof inner.sessionId === 'string' ? inner.sessionId : null;
+  const actions = Array.isArray(inner.actions)
+    ? inner.actions
+        .map((x) => {
+          if (!x || typeof x !== 'object') return null;
+          const o = x as Record<string, unknown>;
+          const label = typeof o.label === 'string' ? o.label : '';
+          const value = typeof o.value === 'string' ? o.value : '';
+          if (!label || !value) return null;
+          return { label, value };
+        })
+        .filter((v): v is AiChatActionButton => v != null)
+    : null;
+  const previewRaw = inner.preview;
+  const preview =
+    previewRaw && typeof previewRaw === 'object'
+      ? {
+          documentId:
+            typeof (previewRaw as Record<string, unknown>).documentId === 'string'
+              ? ((previewRaw as Record<string, unknown>).documentId as string)
+              : undefined,
+          documentName:
+            typeof (previewRaw as Record<string, unknown>).documentName === 'string'
+              ? ((previewRaw as Record<string, unknown>).documentName as string)
+              : undefined,
+          fields:
+            (previewRaw as Record<string, unknown>).fields &&
+            typeof (previewRaw as Record<string, unknown>).fields === 'object' &&
+            !Array.isArray((previewRaw as Record<string, unknown>).fields)
+              ? ((previewRaw as Record<string, unknown>).fields as Record<string, unknown>)
+              : undefined,
+          contentJson:
+            typeof (previewRaw as Record<string, unknown>).contentJson === 'string'
+              ? ((previewRaw as Record<string, unknown>).contentJson as string)
+              : undefined,
+          approvalLines: Array.isArray((previewRaw as Record<string, unknown>).approvalLines)
+            ? ((previewRaw as Record<string, unknown>).approvalLines as unknown[])
+            : undefined,
+        }
+      : null;
+  return {
+    answer,
+    sources,
+    type,
+    sessionId,
+    actions,
+    preview,
+    redirectUrl: typeof inner.redirectUrl === 'string' ? inner.redirectUrl : null,
+    requestId: typeof inner.requestId === 'string' ? inner.requestId : null,
+    errorCode: typeof inner.errorCode === 'string' ? inner.errorCode : null,
+  };
 }
 
 /** `YYYY-MM-DD HH:mm:ss` 등 공백 구분 로컬 형식 보정 */
@@ -224,9 +319,10 @@ export const aiApi = {
     await httpClient.delete(`${AI_PREFIX}/documents/${encodeURIComponent(documentId)}`);
   },
 
-  async chat(question: string): Promise<AiChatResponse> {
+  async chat(payload: string | AiChatRequest): Promise<AiChatResponse> {
     /** LLM은 수십 초 넘어갈 수 있어 기본 httpClient(60s)보다 길게 — 500은 서버 오류(타임아웃 아님) */
-    const response = await httpClient.post(`${CHAT_PREFIX}/chat`, { question }, { timeout: 120_000 });
+    const body = typeof payload === 'string' ? { question: payload } : payload;
+    const response = await httpClient.post(`${CHAT_PREFIX}/chat`, body, { timeout: 120_000 });
     return unwrapChatResponse(response.data);
   },
 

@@ -474,7 +474,7 @@ export function AdminAttendancePage() {
         onClose={() => setDrawerRow(null)}
         title="근태 상세"
         width={420}
-        destroyOnClose
+        destroyOnHidden
       >
         {drawerRow ? (
           <>

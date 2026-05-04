@@ -17,6 +17,7 @@ import {
   Form,
   Input,
   Modal,
+  InputNumber,
   Popconfirm,
   Select,
   Statistic,
@@ -29,6 +30,8 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs, { type Dayjs } from 'dayjs';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
+import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import type { OvertimeRequest, OvertimeRequestCreatePayload } from '@/features/salary-service/types';
 import { approvalRequestApi } from '@/features/approvals/api/approvalRequestApi';
@@ -379,17 +382,18 @@ export function MyOvertimeRequestsPage() {
       </Card>
 
       {/* 신청 모달 (전자결재 자동 발의) */}
-      <Modal
+      <AppDoubleActionModal
         open={createOpen}
-        onCancel={() => setCreateOpen(false)}
-        onOk={() => form.submit()}
+        onClose={() => setCreateOpen(false)}
+        onConfirm={() => form.submit()}
         confirmLoading={createM.isPending}
-        okText="신청 (결재 발의)"
+        confirmText="신청 (결재 발의)"
         cancelText="취소"
         title="초과근무 신청"
-        destroyOnClose
+        destroyOnHidden
         width={620}
       >
+        <div className="tw-px-5 tw-py-4">
         <Typography.Paragraph type="secondary" className="!tw-text-xs">
           신청 시 전자결재 시스템으로 이동됩니다.
         </Typography.Paragraph>
@@ -453,11 +457,17 @@ export function MyOvertimeRequestsPage() {
             <Input.TextArea rows={3} maxLength={300} showCount />
           </Form.Item>
         </Form>
-      </Modal>
+        </div>
+      </AppDoubleActionModal>
 
-      {/* 상세 모달 - A 결재 흐름 정보 */}
-      <Modal
+      {/* 상세 모달 */}
+      <AppSingleActionModal
         open={Boolean(detailRow)}
+        onClose={() => setDetailRow(null)}
+        onSubmit={() => setDetailRow(null)}
+        submitText="닫기"
+        title="초과근무 신청 상세"
+        width={620}
         onCancel={() => setDetailRow(null)}
         footer={[
           detailRow?.approvalRequestId ? (
@@ -497,9 +507,31 @@ export function MyOvertimeRequestsPage() {
             닫기
           </Button>,
         ]}
-        title="초과근무 결재 흐름"
-        width={560}
+        destroyOnHidden
       >
+        <div className="tw-px-5 tw-py-4">
+        {detailRow && (
+          <Descriptions column={1} bordered size="small">
+            <Descriptions.Item label="근무일">{detailRow.targetDate}</Descriptions.Item>
+            <Descriptions.Item label="구분">
+              {TYPE_KO[detailRow.requestType ?? ''] ?? detailRow.requestType}
+            </Descriptions.Item>
+            <Descriptions.Item label="시간">
+              {detailRow.requestType === 'POST'
+                ? `${detailRow.actualStartTime ?? '-'} ~ ${detailRow.actualEndTime ?? '-'}`
+                : `${detailRow.plannedStartTime ?? '-'} ~ ${detailRow.plannedEndTime ?? '-'}`}
+            </Descriptions.Item>
+            <Descriptions.Item label="시간(분)">
+              {detailRow.requestType === 'POST' ? detailRow.actualMinutes : detailRow.requestedMinutes}
+            </Descriptions.Item>
+            <Descriptions.Item label="상태">
+              <Tag color={STATUS_COLOR[detailRow.approvalStatus ?? ''] ?? 'default'}>
+                {STATUS_KO[detailRow.approvalStatus ?? ''] ?? detailRow.approvalStatus}
+              </Tag>
+            </Descriptions.Item>
+            <Descriptions.Item label="사유">{detailRow.reason ?? '-'}</Descriptions.Item>
+          </Descriptions>
+        )}
         {detailRow && (() => {
           const approval = detailApprovalQ.data;
           const lines = approval?.approvalLines ?? [];
@@ -610,7 +642,8 @@ export function MyOvertimeRequestsPage() {
             </>
           );
         })()}
-      </Modal>
+        </div>
+      </AppSingleActionModal>
     </Space>
   );
 }

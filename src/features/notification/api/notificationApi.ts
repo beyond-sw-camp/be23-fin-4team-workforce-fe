@@ -20,7 +20,6 @@ export type NotificationType =
   | 'GOAL_BUNDLE_APPROVED'
   | 'GOAL_BUNDLE_REJECTED'
   | 'GOAL_BUNDLE_WITHDRAWN'
-  | 'GOAL_BUNDLE_DELEGATED'
   | 'SALARY_PUBLISHED'
   | 'GOAL_EVALUATED'
   | 'EVALUATION_REMINDER'
@@ -36,6 +35,33 @@ export type NotificationType =
   | 'CALENDAR_TEAM_EVENT_CREATED'
   | 'MEMBER_ROLE_CHANGED'
   | 'MEMBER_INFO_UPDATED'
+  | 'CONTRACT_REMIND'
+  | 'CONTRACT_SENT'
+  | 'CONTRACT_SIGNED'
+  | 'CONTRACT_CANCELED'
+  | 'CONTRACT_EXPIRED'
+  | 'CONTRACT_DECLINED'
+  | 'CONTRACT_REJECTED'
+  | 'CONTRACT_COMPLETED'
+  | 'CONTRACT_VIEWED'
+  | 'WORK_TRIP_REQUESTED'
+  | 'WORK_TRIP_APPROVED'
+  | 'WORK_TRIP_REJECTED'
+  | 'WORK_TRIP_CANCELED'
+  | 'BUSINESS_TRIP_REQUESTED'
+  | 'OVERTIME_REQUESTED'
+  | 'OVERTIME_APPROVED'
+  | 'OVERTIME_REJECTED'
+  | 'OVERTIME_CANCELED'
+  | 'MEETING_SCHEDULED'
+  | 'MEETING_REMINDER'
+  | 'MEETING_CANCELED'
+  | 'MEETING_COMPLETED'
+  | 'MEETING_REQUESTED'
+  | 'APPROVAL_REMINDER'
+  | 'APPROVAL_DELEGATED'
+  | 'LEAVE_CANCELED'
+  | 'LEAVE_CANCELLED'
   | string;
 
 export type NotificationItem = {
@@ -69,7 +95,6 @@ const NOTIFICATION_TYPE_KO: Record<string, string> = {
   GOAL_BUNDLE_APPROVED: '목표 승인 완료',
   GOAL_BUNDLE_REJECTED: '목표 승인 반려',
   GOAL_BUNDLE_WITHDRAWN: '목표 승인 회수',
-  GOAL_BUNDLE_DELEGATED: '목표 승인 위임',
   SALARY_PUBLISHED: '급여 명세서 발행',
   GOAL_EVALUATED: '목표 평가 완료',
   EVALUATION_REMINDER: '평가 미제출 안내',
@@ -86,6 +111,34 @@ const NOTIFICATION_TYPE_KO: Record<string, string> = {
   MEMBER_ROLE_CHANGED: '역할 변경됨',
   MEMBER_INFO_UPDATED: '인사 정보 수정됨',
   LABOR_LAW_WEEKLY_VIOLATION: '주 52시간 초과',
+  CONTRACT_REMIND: '계약 서명 리마인드',
+  CONTRACT_SENT: '전자계약 도착',
+  CONTRACT_SIGNED: '전자계약 서명 완료',
+  CONTRACT_CANCELED: '계약 회수',
+  CONTRACT_EXPIRED: '전자계약 만료',
+  CONTRACT_DECLINED: '전자계약 거절',
+  CONTRACT_REJECTED: '전자계약 반려',
+  CONTRACT_COMPLETED: '전자계약 완료',
+  CONTRACT_VIEWED: '전자계약 열람',
+  WORK_TRIP_REQUESTED: '출장 신청',
+  WORK_TRIP_APPROVED: '출장 승인',
+  WORK_TRIP_REJECTED: '출장 반려',
+  WORK_TRIP_CANCELED: '출장 취소',
+  BUSINESS_TRIP_REQUESTED: '출장 신청',
+  OVERTIME_REQUESTED: '연장근무 신청',
+  OVERTIME_APPROVED: '연장근무 승인',
+  OVERTIME_REJECTED: '연장근무 반려',
+  OVERTIME_CANCELED: '연장근무 취소',
+  MEETING_SCHEDULED: '면담 예약',
+  MEETING_REMINDER: '면담 알림',
+  MEETING_CANCELED: '면담 취소',
+  MEETING_COMPLETED: '면담 완료',
+  MEETING_REQUESTED: '면담 요청',
+  APPROVAL_REMINDER: '결재 리마인드',
+  APPROVAL_DELEGATED: '결재 위임',
+  LEAVE_CANCELED: '휴가 신청 취소',
+  LEAVE_CANCELLED: '휴가 신청 취소',
+  UNKNOWN: '알림',
 };
 
 const GOAL_BUNDLE_TARGET_TYPE_KO: Record<string, string> = {
@@ -93,8 +146,130 @@ const GOAL_BUNDLE_TARGET_TYPE_KO: Record<string, string> = {
   GOAL_BUNDLE_APPROVED: '목표 승인 완료',
   GOAL_BUNDLE_REJECTED: '목표 승인 반려',
   GOAL_BUNDLE_WITHDRAWN: '목표 승인 회수',
-  GOAL_BUNDLE_DELEGATED: '목표 승인 위임',
 };
+
+/** NOTIFICATION_TYPE_KO 에 없는 SCREAMING_SNAKE_CASE 용 토큰별 한글 (순서대로 이어서 표시) */
+const NOTIFICATION_TOKEN_KO: Record<string, string> = {
+  APPROVAL: '결재',
+  ATTENDANCE: '근태',
+  MODIFIED: '수정',
+  LEAVE: '휴가',
+  REQUESTED: '요청',
+  APPROVED: '승인',
+  REJECTED: '반려',
+  CANCELED: '취소',
+  CANCELLED: '취소',
+  WITHDRAWN: '회수',
+  REFERENCED: '참조 지정',
+  CIRCULATED: '공람',
+  REMIND: '리마인드',
+  REMINDER: '알림',
+  PROMOTION: '사용 통보',
+  FIRST: '1차',
+  SECOND: '2차',
+  DESIGNATION: '지정',
+  GOAL: '목표',
+  BUNDLE: '묶음',
+  SALARY: '급여',
+  PUBLISHED: '발행',
+  EVALUATED: '평가 완료',
+  EVALUATION: '평가',
+  REOPENED: '재작성',
+  MEMBER: '구성원',
+  DORMANT: '휴직',
+  RETURN: '복직',
+  ESG: 'ESG',
+  ACTIVITY: '활동',
+  POINT: '포인트',
+  EARNED: '적립',
+  CAMPAIGN: '캠페인',
+  STARTED: '시작',
+  CLOSED: '종료',
+  SHOP: '샵',
+  ORDER: '주문',
+  COMPLETE: '완료',
+  COMPLETED: '완료',
+  CALENDAR: '캘린더',
+  TEAM: '팀',
+  EVENT: '일정',
+  CREATED: '등록',
+  ROLE: '역할',
+  CHANGED: '변경',
+  INFO: '정보',
+  UPDATED: '수정',
+  LABOR: '노동',
+  LAW: '법',
+  WEEKLY: '주간',
+  VIOLATION: '위반',
+  SENT: '도착',
+  SIGNED: '서명',
+  CONTRACT: '전자계약',
+  MEETING: '면담',
+  OVERTIME: '연장근무',
+  WORK: '업무',
+  TRIP: '출장',
+  BUSINESS: '출장',
+  DOMESTIC: '국내',
+  INTERNATIONAL: '해외',
+  SCHEDULED: '예약',
+  FLEXIBLE: '유연근무',
+  PAYROLL: '급여',
+  ADJUSTED: '조정',
+  RECALCULATED: '재계산',
+  INVITED: '초대',
+  JOINED: '가입',
+  LEFT: '퇴사',
+  SYSTEM: '시스템',
+  BOARD: '게시판',
+  POST: '게시',
+  ANNOUNCEMENT: '공지',
+  OFFICIAL: '공문',
+  DOCUMENT: '문서',
+  PRIVACY: '개인정보',
+  CONSENT: '동의',
+  EMPLOYMENT: '고용',
+  NDA: '비밀유지',
+  PENDING: '대기',
+  DELEGATED: '위임',
+  COMMENT: '댓글',
+  VIEWED: '열람',
+  DECLINED: '거절',
+  EXPIRED: '만료',
+  RECALL: '회수',
+  NOTICE: '공지',
+  SUBMITTED: '제출',
+  IMPORTED: '가져오기',
+  EXPORTED: '보내기',
+  SYNC: '동기화',
+  ALERT: '알림',
+  WARNING: '경고',
+  FAILED: '실패',
+  SUCCESS: '성공',
+  TARGET: '대상',
+  SOURCE: '출처',
+  NEW: '신규',
+  DRAFT: '임시저장',
+  ARCHIVED: '보관',
+  RESTORED: '복원',
+  TRANSFER: '이동',
+  ASSIGN: '배정',
+  ASSIGNMENT: '배정',
+  SLOT: '슬롯',
+  SLOTS: '슬롯',
+  REQUEST: '요청',
+};
+
+function titleFromSnakeCaseTokens(upperType: string): string {
+  if (!/^[A-Z0-9_]+$/.test(upperType)) return upperType;
+  const pieces = upperType.split('_').filter(Boolean);
+  const parts: string[] = [];
+  for (const p of pieces) {
+    const k = NOTIFICATION_TOKEN_KO[p];
+    if (k) parts.push(k);
+  }
+  if (parts.length === 0) return '알림';
+  return parts.join(' ');
+}
 
 function normalizeYesNo(v: unknown): 'YES' | 'NO' {
   const s = String(v ?? '').trim().toUpperCase();
@@ -103,14 +278,24 @@ function normalizeYesNo(v: unknown): 'YES' | 'NO' {
 
 function toNotificationItem(raw: unknown): NotificationItem {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
-  const type = String(r.notificationType ?? r.type ?? 'UNKNOWN').trim();
-  const targetType = typeof r.targetType === 'string' ? r.targetType.trim() : '';
+  const type = String(r.notificationType ?? r.type ?? 'UNKNOWN')
+    .trim()
+    .toUpperCase();
+  const targetTypeRaw = typeof r.targetType === 'string' ? r.targetType.trim() : '';
+  const targetType = targetTypeRaw.toUpperCase();
   const targetIdRaw =
-    r.targetId ?? r.target_id ?? r.requestId ?? r.request_id ?? r.approvalRequestId ?? r.approval_request_id;
+    r.targetId ??
+    r.target_id ??
+    r.contractId ??
+    r.contract_id ??
+    r.requestId ??
+    r.request_id ??
+    r.approvalRequestId ??
+    r.approval_request_id;
   const title =
     (type === 'GOAL_EVALUATED' && targetType && GOAL_BUNDLE_TARGET_TYPE_KO[targetType]) ||
     NOTIFICATION_TYPE_KO[type] ||
-    type;
+    titleFromSnakeCaseTokens(type);
   return {
     notificationId: String(r.notificationId ?? r.id ?? '').trim(),
     notificationType: type,

@@ -1,4 +1,5 @@
-import { DeleteOutlined, MinusCircleOutlined } from '@ant-design/icons';
+import { DeleteOutlined, MinusCircleOutlined, SettingOutlined } from '@ant-design/icons';
+import dayjs from 'dayjs';
 import {
   DndContext,
   KeyboardSensor,
@@ -10,9 +11,25 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Button, Input, Select, Space, Switch, Table, Tag, Tooltip, Typography } from 'antd';
-import type { ColumnsType } from 'antd/es/table';
-import { createContext, useCallback, useContext, useMemo, useRef, type CSSProperties, type HTMLAttributes, type Key } from 'react';
+import { Alert, Button, Input, Select, Space, Switch, Tag, Tooltip, Typography } from 'antd';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  Fragment,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
+import { approvalRequestTypeLabelKo } from '@/features/approvals/lib/approvalRequestTypeKo';
+import {
+  ApprovalFormPaperFieldRow,
+  ApprovalFormPaperLayout,
+  ApprovalFormStampColumn,
+} from '@/features/approvals/ui/ApprovalFormPaperLayout';
 import {
   FORM_SCHEMA_FIELD_TYPES,
   type FormFieldSchema,
@@ -65,30 +82,33 @@ function FormSchemaDragHandle() {
   );
 }
 
-type SortableFormSchemaTableRowProps = HTMLAttributes<HTMLTableRowElement> & {
-  'data-row-key'?: Key;
-};
-
 const SchemaRowLockedMapContext = createContext<Map<string, boolean>>(new Map());
 
-function SortableFormSchemaTableRow({ children, style, className, ...rest }: SortableFormSchemaTableRowProps) {
-  const id = String(rest['data-row-key'] ?? '');
+type SortableFieldListRowProps = {
+  id: string;
+  selected: boolean;
+  locked: boolean;
+  onSelect: () => void;
+  onDelete?: () => void;
+  children: ReactNode;
+};
+
+function SortableFieldListRow({ id, selected, locked, onSelect, onDelete, children }: SortableFieldListRowProps) {
   const lockedMap = useContext(SchemaRowLockedMapContext);
-  const locked = lockedMap.get(id) === true;
+  const rowDisabled = lockedMap.get(id) === true;
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id,
-    disabled: locked,
+    disabled: rowDisabled,
   });
 
   const mergedStyle: CSSProperties = {
-    ...(style as CSSProperties),
     transform: CSS.Transform.toString(transform),
     transition,
     ...(isDragging
       ? {
           position: 'relative',
-          zIndex: 1,
-          boxShadow: '0 2px 10px rgba(0,0,0,0.12)',
+          zIndex: 2,
+          boxShadow: '0 2px 12px rgba(0, 0, 0, 0.12)',
           background: 'var(--ant-color-bg-container, #fff)',
         }
       : {}),
@@ -101,18 +121,108 @@ function SortableFormSchemaTableRow({ children, style, className, ...rest }: Sor
 
   return (
     <SortableFormSchemaRowContext.Provider value={ctxValue}>
-      <tr ref={setNodeRef} style={mergedStyle} className={className} {...rest}>
-        {children}
-      </tr>
+      <div
+        ref={setNodeRef}
+        style={mergedStyle}
+        {...attributes}
+        role="button"
+        tabIndex={0}
+        onClick={onSelect}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            onSelect();
+            e.preventDefault();
+          }
+        }}
+        className={`tw-flex tw-min-w-0 tw-w-full tw-max-w-full tw-items-center tw-gap-1.5 tw-rounded-lg tw-border tw-px-2 tw-py-2 tw-text-left tw-outline-none tw-transition-colors ${
+          selected
+            ? 'tw-border-[#1e3a5f] tw-bg-[#1e3a5f]/[0.06] tw-ring-1 tw-ring-[#1e3a5f]/25'
+            : 'tw-border-slate-200/90 tw-bg-white hover:tw-bg-slate-50'
+        }`}
+      >
+        {locked ? (
+          <Typography.Text type="secondary" className="tw-w-7 tw-shrink-0 tw-text-center tw-text-[10px]">
+            고정
+          </Typography.Text>
+        ) : (
+          <span onClick={(e) => e.stopPropagation()} className="tw-shrink-0">
+            <FormSchemaDragHandle />
+          </span>
+        )}
+        <div className="tw-min-w-0 tw-flex-1">{children}</div>
+        {!locked && onDelete ? (
+          <Button
+            type="text"
+            danger
+            size="small"
+            icon={<DeleteOutlined />}
+            className="tw-shrink-0"
+            aria-label="삭제"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+          />
+        ) : null}
+      </div>
     </SortableFormSchemaRowContext.Provider>
   );
 }
+
+function previewControlForField(field: FormFieldSchema) {
+  const ph = field.placeholder?.trim() || undefined;
+  const common = 'tw-w-full';
+  switch (field.type) {
+    case 'textarea':
+      return <Input.TextArea readOnly className={common} rows={2} placeholder={ph} value="" />;
+    case 'number':
+      return <Input readOnly className={common} type="number" placeholder={ph} />;
+    case 'date':
+      return <Input readOnly className={common} type="date" />;
+    case 'datetime-local':
+      return <Input readOnly className={common} type="datetime-local" />;
+    case 'time':
+      return <Input readOnly className={common} type="time" />;
+    case 'select': {
+      const opts = (field.options ?? []).map((o) => o.trim()).filter(Boolean);
+      return (
+        <Select
+          disabled
+          className={common}
+          placeholder={ph ?? '선택'}
+          options={(opts.length ? opts : ['(선택지 없음)']).map((o) => ({ value: o, label: o }))}
+        />
+      );
+    }
+    case 'hidden':
+      return <Tag>숨김 필드</Tag>;
+    case 'ai_transcribe':
+      return <Tag color="blue">녹음·AI 필드</Tag>;
+    default:
+      return <Input readOnly className={common} placeholder={ph ?? '입력 예시'} />;
+  }
+}
+
+export type ApprovalFormSchemaPaperPreviewMeta = {
+  documentName: string;
+  categoryLabel: string;
+  requestTypeCode: string;
+};
 
 export type ApprovalFormSchemaBuilderProps = {
   value: FormFieldSchema[];
   onChange: (next: FormFieldSchema[]) => void;
   /** true면 `locked: true` 행은 편집·삭제·순서 이동 불가 (양식 수정 화면) */
   respectFieldLocks?: boolean;
+  /** 우측 기안서 스타일 미리보기 제목·유형 (미주입 시 placeholder) */
+  paperPreviewMeta?: ApprovalFormSchemaPaperPreviewMeta;
+  /**
+   * 좌측 사이드바 상단. 없으면 paperPreviewMeta로 양식명·요청(유형)을 읽기 전용으로 표시합니다.
+   * 결재 양식 추가처럼 상단에서 직접 입력해야 할 때 Form.Item 등을 넣습니다.
+   */
+  sidebarTop?: ReactNode;
+  /** 상단 안내 Alert 바로 아래에 렌더 (예: 캘린더 연동 설정) */
+  belowHelpSlot?: ReactNode;
 };
 
 function SelectOptionsEditor({
@@ -183,7 +293,15 @@ export function ApprovalFormSchemaBuilder({
   value,
   onChange,
   respectFieldLocks = false,
+  paperPreviewMeta: paperPreviewMetaProp,
+  sidebarTop,
+  belowHelpSlot,
 }: ApprovalFormSchemaBuilderProps) {
+  const paperPreviewMeta: ApprovalFormSchemaPaperPreviewMeta = paperPreviewMetaProp ?? {
+    documentName: '미리보기',
+    categoryLabel: '—',
+    requestTypeCode: 'GENERAL',
+  };
   const rowIdsRef = useRef<string[]>([]);
 
   const sortableIds = useMemo(() => {
@@ -214,11 +332,25 @@ export function ApprovalFormSchemaBuilder({
     return m;
   }, [value, sortableIds, respectFieldLocks]);
 
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (value.length === 0) {
+      setSelectedIndex(null);
+      return;
+    }
+    setSelectedIndex((cur) => {
+      if (cur == null) return null;
+      if (cur >= value.length) return null;
+      return cur;
+    });
+  }, [value.length]);
+
   const onDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active, over } = event;
       if (!over || active.id === over.id) return;
-      const ids = rowIdsRef.current;
+      const ids = [...rowIdsRef.current];
       const oldIndex = ids.findIndex((x) => x === active.id);
       const newIndex = ids.findIndex((x) => x === over.id);
       if (oldIndex < 0 || newIndex < 0) return;
@@ -231,20 +363,16 @@ export function ApprovalFormSchemaBuilder({
           if (pos !== i) return;
         }
       }
-      rowIdsRef.current = arrayMove([...ids], oldIndex, newIndex);
+      const selectedId =
+        selectedIndex != null && selectedIndex >= 0 && selectedIndex < ids.length ? ids[selectedIndex] : null;
+      rowIdsRef.current = arrayMove(ids, oldIndex, newIndex);
       onChange(nextFields);
+      if (selectedId != null) {
+        const ni = rowIdsRef.current.findIndex((x) => x === selectedId);
+        if (ni >= 0) setSelectedIndex(ni);
+      }
     },
-    [onChange, respectFieldLocks, value],
-  );
-
-  const rows = useMemo(
-    () =>
-      value.map((field, index) => ({
-        key: sortableIds[index] ?? `row-${index}`,
-        index,
-        field,
-      })),
-    [value, sortableIds],
+    [onChange, respectFieldLocks, value, selectedIndex],
   );
 
   const updateAt = (index: number, patch: Partial<FormFieldSchema>) => {
@@ -277,8 +405,15 @@ export function ApprovalFormSchemaBuilder({
 
   const removeAt = (index: number) => {
     if (respectFieldLocks && value[index]?.locked) return;
+    const next = value.filter((_, i) => i !== index);
     rowIdsRef.current = rowIdsRef.current.filter((_, i) => i !== index);
-    onChange(value.filter((_, i) => i !== index));
+    setSelectedIndex((cur) => {
+      if (cur == null) return null;
+      if (index < cur) return cur - 1;
+      if (index === cur) return null;
+      return cur;
+    });
+    onChange(next);
   };
 
   const addField = () => {
@@ -293,189 +428,238 @@ export function ApprovalFormSchemaBuilder({
         placeholder: '',
       },
     ]);
+    setSelectedIndex(value.length);
   };
 
-  const columns: ColumnsType<(typeof rows)[number]> = [
-    {
-      title: '순서',
-      key: 'order',
-      width: 52,
-      align: 'center',
-      render: (_, record) =>
-        rowLocked(record.field) ? (
-          <Typography.Text type="secondary" className="!tw-text-[11px]">
-            고정
+  const renderFieldProperties = (index: number) => {
+    const field = value[index];
+    if (!field) return null;
+    const locked = rowLocked(field);
+    return (
+      <div className="tw-box-border tw-min-w-0 tw-max-w-full tw-space-y-3 tw-overflow-x-hidden tw-rounded-lg tw-border tw-border-slate-200 tw-bg-white tw-p-3 tw-shadow-sm">
+        <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2 tw-border-b tw-border-slate-100 tw-pb-2">
+          <SettingOutlined className="tw-text-[#1e3a5f]" />
+          <Typography.Text strong className="tw-text-xs">
+            필드 속성
           </Typography.Text>
-        ) : (
-          <FormSchemaDragHandle />
-        ),
-    },
-    {
-      title: '필드 코드',
-      key: 'name',
-      width: 108,
-      render: (_, record) => {
-        const locked = rowLocked(record.field);
-        return (
-          <Space size={4} wrap className="tw-w-full tw-min-w-0">
-            {locked ? (
-              <Tag color="blue" className="!tw-m-0">
-                잠금
-              </Tag>
-            ) : null}
+        </div>
+        <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-text-[11px]">
+          이 항목의 라벨·형식·힌트를 바꿉니다.
+        </Typography.Paragraph>
+        <div className="tw-min-w-0 tw-space-y-3">
+          <div className="tw-min-w-0 tw-max-w-full">
+            <Typography.Text className="tw-mb-1 tw-block tw-text-[11px] tw-font-medium tw-text-slate-700">필드 이름</Typography.Text>
             <Input
-              value={record.field.name}
+              size="small"
+              className="tw-max-w-full"
+              value={field.label}
               disabled={locked}
-              placeholder="예: title"
-              onChange={(e) => updateAt(record.index, { name: e.target.value })}
-              className="tw-min-w-0 tw-w-full tw-flex-1 tw-font-mono tw-text-sm"
+              placeholder="예: 휴가 기간"
+              onChange={(e) => updateAt(index, { label: e.target.value })}
             />
-          </Space>
-        );
-      },
-    },
-    {
-      title: '항목 이름(라벨)',
-      key: 'label',
-      width: 118,
-      render: (_, record) => (
-        <Input
-          className="tw-w-full tw-min-w-0"
-          value={record.field.label}
-          disabled={rowLocked(record.field)}
-          placeholder="예: 제목"
-          onChange={(e) => updateAt(record.index, { label: e.target.value })}
-        />
-      ),
-    },
-    {
-      title: '입력 형식',
-      key: 'type',
-      width: 118,
-      render: (_, record) => (
-        <Select
-          className="tw-w-full tw-min-w-0"
-          popupMatchSelectWidth={false}
-          value={record.field.type}
-          disabled={rowLocked(record.field)}
-          options={TYPE_OPTIONS}
-          onChange={(t) => updateAt(record.index, { type: t as FormFieldType })}
-        />
-      ),
-    },
-    {
-      title: '안내 문구(선택)',
-      key: 'placeholder',
-      width: 96,
-      render: (_, record) => (
-        <Input
-          className="tw-w-full tw-min-w-0"
-          value={record.field.placeholder ?? ''}
-          disabled={rowLocked(record.field)}
-          placeholder="placeholder"
-          onChange={(e) => updateAt(record.index, { placeholder: e.target.value || undefined })}
-        />
-      ),
-    },
-    {
-      title: (
-        <Tooltip title="수정 제한(잠금): 켜면 이후 양식 수정 시 이 항목의 삭제·이름·형식·순서 변경이 제한됩니다.">
-          <span>잠금</span>
-        </Tooltip>
-      ),
-      key: 'locked',
-      width: 64,
-      render: (_, record) => (
-        <Tooltip
-          title={
-            record.field.locked === true
-              ? '끄면 필드 코드·이름·형식·순서 등을 다시 바꿀 수 있습니다.'
-              : '켜면 이후 양식 수정에서 이 항목의 삭제·이름·형식·순서 변경이 제한됩니다.'
-          }
-        >
-          <Switch
-            size="small"
-            checked={record.field.locked === true}
-            onChange={(checked) => updateAt(record.index, { locked: checked ? true : false })}
+          </div>
+          <div className="tw-min-w-0 tw-max-w-full">
+            <Typography.Text className="tw-mb-1 tw-block tw-text-[11px] tw-font-medium tw-text-slate-700">입력 형식</Typography.Text>
+            <Select
+              size="small"
+              className="tw-w-full tw-max-w-full"
+              popupMatchSelectWidth
+              value={field.type}
+              disabled={locked}
+              options={TYPE_OPTIONS}
+              onChange={(t) => updateAt(index, { type: t as FormFieldType })}
+            />
+          </div>
+          <div className="tw-min-w-0 tw-max-w-full">
+            <Typography.Text className="tw-mb-1 tw-block tw-text-[11px] tw-font-medium tw-text-slate-700">안내 문구</Typography.Text>
+            <Input
+              size="small"
+              className="tw-max-w-full"
+              value={field.placeholder ?? ''}
+              disabled={locked}
+              placeholder="예: 시작일과 종료일을 선택하세요"
+              onChange={(e) => updateAt(index, { placeholder: e.target.value || undefined })}
+            />
+          </div>
+          <div className="tw-flex tw-min-w-0 tw-max-w-full tw-items-center tw-justify-between tw-gap-2 tw-rounded-md tw-bg-slate-50 tw-px-2.5 tw-py-2">
+            <Typography.Text className="tw-min-w-0 tw-flex-1 tw-text-[11px] [overflow-wrap:anywhere]">
+              잠금(이후 양식 수정 시 제한)
+            </Typography.Text>
+            <Tooltip
+              title={
+                field.locked === true
+                  ? '끄면 항목 이름·형식·순서 등을 다시 바꿀 수 있습니다.'
+                  : '켜면 이후 양식 수정에서 이 항목의 삭제·이름·형식·순서 변경이 제한됩니다.'
+              }
+            >
+              <span className="tw-inline-flex tw-shrink-0">
+              <Switch
+                size="small"
+                checked={field.locked === true}
+                onChange={(checked) => updateAt(index, { locked: checked ? true : false })}
+              />
+              </span>
+            </Tooltip>
+          </div>
+          {locked ? (
+            <Typography.Text type="secondary" className="tw-block tw-break-all tw-text-[10px] tw-font-mono">
+              내부 코드: {field.name}
+            </Typography.Text>
+          ) : null}
+          {field.type === 'select' ? (
+            <div className="tw-min-w-0 tw-max-w-full">
+              <Typography.Text className="tw-mb-1 tw-block tw-text-[11px] tw-font-medium tw-text-slate-700">선택지</Typography.Text>
+              <SelectOptionsEditor
+                options={field.options}
+                disabled={locked}
+                onChange={(opts) => updateAt(index, { options: opts })}
+              />
+            </div>
+          ) : null}
+        </div>
+      </div>
+    );
+  };
+
+  const documentPaperPreview = (
+    <div className="tw-min-h-0 tw-min-w-0 tw-flex-1 tw-overflow-y-auto tw-bg-slate-100/60 tw-p-2 sm:tw-p-3">
+      <Typography.Text type="secondary" className="tw-mb-2 tw-block tw-text-[11px]">
+        문서 미리보기
+      </Typography.Text>
+      <ApprovalFormPaperLayout
+        documentName={paperPreviewMeta.documentName.trim() || '—'}
+        categoryLabel={paperPreviewMeta.categoryLabel}
+        requestTypeCode={paperPreviewMeta.requestTypeCode}
+        drafterName="신청자"
+        drafterOrg="신청부서"
+        writtenDate={dayjs().format('YYYY-MM-DD')}
+        stampColumn={
+          <ApprovalFormStampColumn
+            drafterName="신청자"
+            drafterJobTitle="직위"
+            applicationWrittenDateIso={dayjs().format('YYYY-MM-DD')}
+            approvers={[{ id: 'preview-1', memberName: '결재자', jobTitleName: '직위' }]}
           />
-        </Tooltip>
-      ),
-    },
-    {
-      title: (
-        <Tooltip title="선택(드롭다운) 형식일 때만 사용합니다.">
-          <span>선택지</span>
-        </Tooltip>
-      ),
-      key: 'options',
-      width: 148,
-      render: (_, record) =>
-        record.field.type === 'select' ? (
-          <SelectOptionsEditor
-            options={record.field.options}
-            disabled={rowLocked(record.field)}
-            onChange={(opts) => updateAt(record.index, { options: opts })}
-          />
+        }
+      >
+        {value.length === 0 ? (
+          <tr>
+            <td colSpan={2} className="tw-border tw-border-slate-200 tw-bg-white tw-p-6 tw-text-center">
+              <Typography.Text type="secondary" className="tw-text-xs">
+                항목을 추가하면 여기에 표시됩니다.
+              </Typography.Text>
+            </td>
+          </tr>
         ) : (
-          <Typography.Text type="secondary" className="tw-text-xs">
-            —
+          value.map((field, i) => {
+            if (field.type === 'hidden') return null;
+            const fieldLocked = field.locked === true;
+            const isSel = selectedIndex === i;
+            return (
+              <ApprovalFormPaperFieldRow key={sortableIds[i] ?? `pv-${i}`} label={field.label?.trim() || '(이름 없음)'} required={fieldLocked}>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setSelectedIndex((cur) => (cur === i ? null : i))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      setSelectedIndex((cur) => (cur === i ? null : i));
+                      e.preventDefault();
+                    }
+                  }}
+                  className={isSel ? 'tw-rounded tw-ring-1 tw-ring-[#1e3a5f]/35' : ''}
+                >
+                  {previewControlForField(field)}
+                </div>
+              </ApprovalFormPaperFieldRow>
+            );
+          })
+        )}
+      </ApprovalFormPaperLayout>
+    </div>
+  );
+
+  const sidebarMetaReadonly =
+    sidebarTop == null ? (
+      <div className="tw-mb-3 tw-min-w-0 tw-max-w-full tw-space-y-2 tw-overflow-x-hidden tw-rounded-lg tw-border tw-border-slate-200 tw-bg-white tw-px-3 tw-py-2.5">
+        <div>
+          <Typography.Text className="tw-mb-0.5 tw-block tw-text-[11px] tw-font-medium tw-text-slate-500">양식명</Typography.Text>
+          <Typography.Text className="tw-block tw-text-sm tw-text-slate-900">
+            {paperPreviewMeta.documentName.trim() || '—'}
           </Typography.Text>
-        ),
-    },
-    {
-      title: '',
-      key: 'actions',
-      width: 40,
-      render: (_, record) =>
-        rowLocked(record.field) ? null : (
-          <Button
-            type="text"
-            danger
-            size="small"
-            icon={<DeleteOutlined />}
-            onClick={() => removeAt(record.index)}
-            aria-label="삭제"
-          />
-        ),
-    },
-  ];
+        </div>
+        <div>
+          <Typography.Text className="tw-mb-0.5 tw-block tw-text-[11px] tw-font-medium tw-text-slate-500">요청 유형</Typography.Text>
+          <Typography.Text className="tw-block tw-text-sm tw-text-slate-900">
+            {approvalRequestTypeLabelKo(paperPreviewMeta.requestTypeCode)}
+          </Typography.Text>
+        </div>
+      </div>
+    ) : null;
 
   return (
-    <div className="tw-space-y-3">
-      <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-text-xs">
-        기안서에 표시될 입력 항목을 추가합니다. 필드 코드는 저장 키로 쓰이므로 영문·숫자·밑줄(_)을 권장합니다. 입력 형식이
-        「선택(드롭다운)」이면 맨 오른쪽 선택지 열에서 줄마다 한 칸씩 적고, 「선택지 줄 추가」로 칸을 늘리면 됩니다. 순서 열의
-        점 모양 핸들을 드래그하면 기안 화면의 결재선처럼 행 순서를 바꿀 수 있습니다.
-        {respectFieldLocks ? (
-          <>
-            {' '}
-            <Tag color="blue" className="!tw-m-0">
-              잠금
-            </Tag>
-            표시된 행은 서버에서 고정된 필드로, 삭제·이름·형식·순서를 바꿀 수 없습니다.
-          </>
-        ) : null}
-      </Typography.Paragraph>
+    <div className="tw-min-w-0 tw-max-w-full tw-space-y-2">
+      <Alert
+        type="info"
+        showIcon
+        className="tw-text-sm"
+        message="왼쪽에서 항목을 누르면 아래에 속성이 펼쳐지고, 같은 항목을 다시 누르면 접힙니다. 오른쪽은 기안과 같은 문서 미리보기입니다."
+      />
+      {belowHelpSlot ? <div className="tw-mt-2 tw-min-w-0 tw-max-w-full tw-overflow-x-hidden">{belowHelpSlot}</div> : null}
       <SchemaRowLockedMapContext.Provider value={lockedBySortableId}>
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-          <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
-            <Table
-              size="small"
-              tableLayout="fixed"
-              className="tw-w-full [&_.ant-table-cell]:tw-align-top"
-              pagination={false}
-              rowKey="key"
-              dataSource={rows}
-              columns={columns}
-              components={{ body: { row: SortableFormSchemaTableRow } }}
-              locale={{ emptyText: '필드를 추가해 주세요.' }}
-            />
-          </SortableContext>
+          <div className="tw-flex tw-min-h-[min(52vh,480px)] tw-max-h-[min(70vh,720px)] tw-min-w-0 tw-flex-col tw-gap-0 tw-overflow-hidden tw-rounded-lg tw-border tw-border-slate-200/90 tw-bg-slate-50/30 lg:tw-flex-row">
+            <div className="tw-box-border tw-flex tw-min-h-0 tw-w-full tw-min-w-0 tw-max-w-full tw-shrink-0 tw-flex-col tw-overflow-x-hidden tw-border-slate-200 tw-bg-slate-50/40 tw-border-b tw-p-3 lg:tw-w-[380px] lg:tw-max-w-[380px] lg:tw-shrink-0 lg:tw-border-b-0 lg:tw-border-r lg:tw-border-solid">
+              {sidebarTop ? <div className="tw-mb-3 tw-min-w-0 tw-max-w-full tw-space-y-2">{sidebarTop}</div> : null}
+              {sidebarMetaReadonly}
+              <Typography.Text strong className="tw-mb-2 tw-block tw-text-xs tw-text-slate-600">
+                항목 목록
+              </Typography.Text>
+              <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
+                <div className="tw-flex tw-min-h-0 tw-min-w-0 tw-flex-1 tw-flex-col tw-gap-1.5 tw-overflow-y-auto tw-overflow-x-hidden tw-pr-0.5">
+                  {value.length === 0 ? (
+                    <Typography.Text type="secondary" className="tw-px-1 tw-text-xs">
+                      항목이 없습니다. 아래 버튼으로 추가하세요.
+                    </Typography.Text>
+                  ) : (
+                    value.map((field, i) => {
+                      const id = sortableIds[i] ?? `row-${i}`;
+                      const locked = rowLocked(field);
+                      return (
+                        <Fragment key={id}>
+                          <SortableFieldListRow
+                            id={id}
+                            selected={selectedIndex === i}
+                            locked={locked}
+                            onSelect={() => setSelectedIndex((cur) => (cur === i ? null : i))}
+                            onDelete={locked ? undefined : () => removeAt(i)}
+                          >
+                            <div className="tw-min-w-0">
+                              <div className="tw-truncate tw-text-sm tw-font-medium tw-text-slate-800">
+                                {field.label?.trim() || '(이름 없음)'}
+                              </div>
+                              <div className="tw-truncate tw-text-[11px] tw-text-slate-500">{TYPE_LABEL[field.type]}</div>
+                            </div>
+                          </SortableFieldListRow>
+                          {selectedIndex === i ? (
+                            <div className="tw-ml-1 tw-mt-1 tw-mb-1 tw-min-w-0 tw-max-w-full tw-border-l-2 tw-border-[#1e3a5f]/35 tw-pl-2 tw-pr-0">
+                              {renderFieldProperties(i)}
+                            </div>
+                          ) : null}
+                        </Fragment>
+                      );
+                    })
+                  )}
+                </div>
+              </SortableContext>
+              <Button type="dashed" block size="small" className="tw-mt-2 tw-shrink-0" onClick={addField}>
+                입력 항목 추가
+              </Button>
+            </div>
+            {documentPaperPreview}
+          </div>
         </DndContext>
       </SchemaRowLockedMapContext.Provider>
-      <Button type="dashed" block onClick={addField}>
-        입력 항목 추가
-      </Button>
     </div>
   );
 }
@@ -515,11 +699,11 @@ export function validateSchemaFieldsForSubmit(fields: FormFieldSchema[]): string
   for (const f of fields) {
     const name = f.name.trim();
     const label = f.label.trim();
-    if (!name) return '모든 행에 필드 코드를 입력해 주세요.';
+    if (!name) return '모든 행에 내부 필드 이름이 필요합니다. 항목을 다시 추가해 보세요.';
     if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(name)) {
-      return `필드 코드는 영문으로 시작하고 영문·숫자·_만 사용할 수 있습니다: "${name}"`;
+      return `내부 필드 이름은 영문으로 시작하고 영문·숫자·_만 사용할 수 있습니다: "${name}"`;
     }
-    if (names.has(name)) return `필드 코드가 중복되었습니다: ${name}`;
+    if (names.has(name)) return `내부 필드 이름이 중복되었습니다: ${name}`;
     names.add(name);
     if (!label) return `「${name}」항목의 이름(라벨)을 입력해 주세요.`;
     if (f.type === 'select') {

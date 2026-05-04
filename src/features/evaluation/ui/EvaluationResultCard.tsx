@@ -74,7 +74,7 @@ export function EvaluationResultCard({ response, onClick }: Props) {
           </div>
           {response.confirmedGrade && (
             <div className="tw-mt-4 tw-rounded-xl tw-bg-slate-50 tw-px-3 tw-py-2 tw-text-xs tw-text-slate-500">
-              최종 등급은 Lead가 확정한 KR별 등급을 바탕으로 평가 설계 정책에 따라 자동 산정됩니다.
+              최종 등급은 최종 검토자가 확정한 목표별 등급을 바탕으로 평가 기준에 따라 자동 산정됩니다.
             </div>
           )}
         </div>

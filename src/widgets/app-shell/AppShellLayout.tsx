@@ -1,4 +1,4 @@
-﻿import {
+import {
     ApartmentOutlined,
     AuditOutlined,
     BankOutlined,
@@ -56,6 +56,10 @@ import {
     buildApprovalNotificationNavigate,
     buildGoalBundleNotificationNavigate,
 } from '@/features/notification/lib/approvalNotificationRoute';
+import {
+    buildContractNotificationNavigate,
+    isContractNotificationRoutable,
+} from '@/features/notification/lib/contractNotificationRoute';
 import {companyApi} from '@/features/organization/api/companyApi';
 import {searchApi} from '@/features/search/api/searchApi';
 import {organizationApi} from '@/features/organization/api/organizationApi';
@@ -240,6 +244,7 @@ function buildAppShellMenuItems(
     hrGroupExtraChildren?: NonNullable<MenuProps['items']>,
     leavePromotionEnabled = false,
     showSalaryNegotiationSubmenu = false,
+    talentHubChildren?: NonNullable<MenuProps['items']>,
 ): NonNullable<MenuProps['items']> {
     const items: NonNullable<MenuProps['items']> = [];
     let hubInserted = false;
@@ -257,12 +262,14 @@ function buildAppShellMenuItems(
                     icon: <ProjectOutlined className="tw-text-lg"/>,
                     label: APP_MENU_TALENT_HUB_LABEL,
                     title: APP_MENU_TALENT_HUB_LABEL,
-                    children: TALENT_HUB_PATHS.map((p) => ({
-                        key: p,
-                        icon: APP_MENU_ICONS[p],
-                        label: APP_MENU_LABEL[p],
-                        title: APP_MENU_LABEL[p],
-                    })),
+                    children: talentHubChildren && talentHubChildren.length > 0
+                        ? talentHubChildren
+                        : TALENT_HUB_PATHS.map((p) => ({
+                            key: p,
+                            icon: APP_MENU_ICONS[p],
+                            label: APP_MENU_LABEL[p],
+                            title: APP_MENU_LABEL[p],
+                        })),
                 });
             }
             continue;
@@ -616,7 +623,10 @@ function useAppShellSiderMenuItems(currentPathname: string): {
         staleTime: 300_000,
     });
 
-    /** 연차 촉진 메뉴 노출용. 급여 서비스 503 등일 때는 빈 배열로 삼켜 사이드바 전체가 깨지지 않게 함 */
+    const shouldQuerySalaryMenuData =
+        status === 'authenticated' && currentPathname.startsWith('/app/salary-service');
+
+    /** 연차 촉진 메뉴 노출용. 급여 서비스 화면에서만 조회해 다른 업무 화면의 콘솔 소음을 막음 */
     const {data: leavePoliciesForMenu} = useQuery({
         queryKey: ['salary', 'leave-policies'],
         queryFn: async () => {
@@ -626,7 +636,7 @@ function useAppShellSiderMenuItems(currentPathname: string): {
                 return [];
             }
         },
-        enabled: status === 'authenticated',
+        enabled: shouldQuerySalaryMenuData,
         retry: false,
         staleTime: 60_000,
     });
@@ -657,6 +667,71 @@ function useAppShellSiderMenuItems(currentPathname: string): {
             isAdmin ||
             canAccessMemberDirectory(hasPermission) ||
             canAccessMemberDirectoryFromPermissionStrings(user?.permissions);
+        const canManageGoals =
+            isAdmin ||
+            hasPermission({resource: 'GOAL', action: 'CREATE', scope: 'team'}) ||
+            hasPermission({resource: 'GOAL', action: 'CREATE', scope: 'company'}) ||
+            hasPermission({resource: 'GOAL', action: 'UPDATE', scope: 'team'}) ||
+            hasPermission({resource: 'GOAL', action: 'UPDATE', scope: 'company'});
+        const canManageEvaluation =
+            canManageGoals && (
+            hasPermission(PERM.EVALUATION_CREATE) ||
+            hasPermission(PERM.EVALUATION_UPDATE) ||
+            hasPermission(PERM.EVALUATION_READ)
+            );
+        const canViewCompanyGoals =
+            isAdmin ||
+            hasPermission({resource: 'GOAL', action: 'READ', scope: 'company'});
+        const talentHubChildren: NonNullable<MenuProps['items']> = [
+            {
+                key: encodeWfNavKey({to: '/app/performance', search: {view: 'my'}}),
+                icon: <LineChartOutlined className="tw-text-lg"/>,
+                label: '내 목표',
+                title: '내 목표',
+            },
+            ...(canManageGoals
+                ? [
+                    {
+                        key: encodeWfNavKey({to: '/app/performance', search: {view: 'org'}}),
+                        icon: <TeamOutlined className="tw-text-lg"/>,
+                        label: '조직 목표 관리',
+                        title: '조직 목표 관리',
+                    },
+                ]
+                : []),
+            ...(canViewCompanyGoals
+                ? [
+                    {
+                        key: encodeWfNavKey({to: '/app/performance', search: {view: 'company'}}),
+                        icon: <GlobalOutlined className="tw-text-lg"/>,
+                        label: '전사 목표 현황',
+                        title: '전사 목표 현황',
+                    },
+                ]
+                : []),
+            {
+                key: '/app/evaluations',
+                icon: <FormOutlined className="tw-text-lg"/>,
+                label: '내 평가',
+                title: '내 평가',
+            },
+            {
+                key: '/app/meetings',
+                icon: <VideoCameraOutlined className="tw-text-lg"/>,
+                label: '면담',
+                title: '면담',
+            },
+            ...(canManageEvaluation
+                ? [
+                    {
+                        key: encodeWfNavKey({to: '/app/evaluations', search: {view: 'overview'}}),
+                        icon: <CalendarOutlined className="tw-text-lg"/>,
+                        label: '평가 운영 관리',
+                        title: '평가 운영 관리',
+                    },
+                ]
+                : []),
+        ];
         const contractSendMenuItem = {
             key: '/app/contracts/send' as const,
             icon: APP_MENU_ICONS['/app/contracts/send'],
@@ -705,6 +780,7 @@ function useAppShellSiderMenuItems(currentPathname: string): {
             hrGroupExtraChildren,
             leavePromotionEnabled,
             showSalaryNegotiationSubmenu,
+            talentHubChildren,
         );
 
         const esgMenuItem =
@@ -750,6 +826,7 @@ function useAppShellSiderMenuItems(currentPathname: string): {
         showApprovalFormSettings,
         leavePoliciesForMenu,
         salaryPoliciesForMenu,
+        hasPermission,
     ]);
 }
 
@@ -1223,8 +1300,12 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
         // 2) notificationType=GOAL_EVALUATED + targetType=GOAL_BUNDLE_*
         return t.startsWith('GOAL_BUNDLE_') || tt.startsWith('GOAL_BUNDLE_');
     };
-    const isRoutableNotification = (type: string, targetType?: string): boolean => {
-        return isApprovalNotification(type) || isGoalBundleNotification(type, targetType);
+    const isRoutableNotification = (item: (typeof notifications)[number]): boolean => {
+        return (
+            isApprovalNotification(item.notificationType) ||
+            isGoalBundleNotification(item.notificationType, item.targetType) ||
+            isContractNotificationRoutable(item)
+        );
     };
     const filteredNotifications = notificationTab === 'unread'
         ? notifications.filter((item) => item.isRead !== 'YES')
@@ -1234,6 +1315,11 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
     const routeApprovalNotification = async (item: (typeof notifications)[number]) => {
         if (item.isRead !== 'YES') {
             await markNotificationAsRead.mutateAsync(item.notificationId);
+        }
+        if (isContractNotificationRoutable(item)) {
+            await navigate(buildContractNotificationNavigate(item.targetId));
+            setNotificationPopoverOpen(false);
+            return;
         }
         if (isGoalBundleNotification(item.notificationType, item.targetType)) {
             await navigate(
@@ -1310,7 +1396,7 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
                 ) : (
                     latestNotifications.map((item) => {
                         const unread = item.isRead !== 'YES';
-                        const routable = isRoutableNotification(item.notificationType, item.targetType);
+                        const routable = isRoutableNotification(item);
                         return (
                             <div
                                 key={item.notificationId}
@@ -1491,7 +1577,21 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
 function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknown>): string[] {
     if (/^\/app\/members\/[^/]+$/.test(pathname)) return ['/app/members'];
     if (/^\/app\/meetings\/[^/]+$/.test(pathname)) return ['/app/meetings'];
-    if (/^\/app\/performance\//.test(pathname)) return ['/app/performance'];
+    if (pathname === '/app/performance') {
+        const view = typeof search.view === 'string' ? search.view : 'my';
+        if (view === 'org') return [encodeWfNavKey({to: '/app/performance', search: {view: 'org'}})];
+        if (view === 'company') return [encodeWfNavKey({to: '/app/performance', search: {view: 'company'}})];
+        return [encodeWfNavKey({to: '/app/performance', search: {view: 'my'}})];
+    }
+    if (/^\/app\/performance\//.test(pathname)) return [encodeWfNavKey({to: '/app/performance', search: {view: 'my'}})];
+    if (/^\/app\/evaluations\/seasons\//.test(pathname)) {
+        return [encodeWfNavKey({to: '/app/evaluations', search: {view: 'overview'}})];
+    }
+    if (pathname === '/app/evaluations') {
+        const view = typeof search.view === 'string' ? search.view : '';
+        if (view === 'overview') return [encodeWfNavKey({to: '/app/evaluations', search: {view: 'overview'}})];
+        return ['/app/evaluations'];
+    }
     if (/^\/app\/evaluation-flow(\/|$)/.test(pathname)) return ['/app/evaluations'];
     if (/^\/app\/my-evaluation-result-v2(\/|$)/.test(pathname)) return ['/app/evaluations'];
     if (/^\/app\/evaluation-admin(\/|$)/.test(pathname)) return ['/app/evaluations'];
@@ -1734,9 +1834,8 @@ function AppShellLayout() {
                 <Layout className="tw-flex tw-h-[100dvh] tw-min-h-0 tw-bg-slate-50">
                     <Layout className="tw-flex tw-min-h-0 tw-min-w-0 tw-flex-1 tw-flex-col tw-bg-slate-50">
                         <AppShellHeader hideSearch/>
-                        <Layout.Content
-                            className="wf-scrollbar tw-min-h-0 tw-flex-1 tw-overflow-y-auto tw-bg-transparent tw-p-6">
-                            <Outlet/>
+                        <Layout.Content className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-hidden tw-bg-transparent tw-p-6">
+                            <Outlet />
                         </Layout.Content>
                     </Layout>
                 </Layout>

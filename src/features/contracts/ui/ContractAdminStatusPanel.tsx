@@ -1,27 +1,53 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Card, Modal, Select, Space, Spin, Switch, Table, Tag, Typography } from 'antd';
-import dayjs from 'dayjs';
-import { useMemo, useRef, useState } from 'react';
-import { useAuth } from '@/features/auth/useAuth';
 import {
+  Alert,
+  App,
+  Button,
+  Card,
+  Checkbox,
+  Form,
+  Input,
+  Popconfirm,
+  Select,
+  Space,
+  Spin,
+  Switch,
+  Table,
+  Tag,
+  Timeline,
+  Typography,
+} from 'antd';
+import dayjs from 'dayjs';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
+import { AppModal } from '@/shared/ui/AppModal';
+import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
+import { useAuth } from '@/features/auth/useAuth';
+import { PERM } from '@/features/permissions/backend-permissions';
+import { usePermissions } from '@/features/permissions/usePermissionsHook';
+import {
+  contractEffectiveRejectReason,
+  contractEmployeeCanReject,
   contractEmployeeSignaturePending,
   contractTemplateApi,
   type ContractBatchSummary,
   type ContractRecord,
 } from '@/features/contracts/api/contractTemplateApi';
+import { compactAdminInputJson, parseContractFormSchema } from '@/features/contracts/lib/parseContractFormSchema';
 import { uploadSignaturePngForContract } from '@/features/contracts/lib/uploadSignaturePng';
 import { ApprovalFormPaperFieldRow, ApprovalFormPaperLayout } from '@/features/approvals/ui/ApprovalFormPaperLayout';
 import { CONTRACT_HUB_CARD_CLASS } from '@/features/contracts/ui/contractHubStyles';
 import { ContractPartySignaturesCard } from '@/features/contracts/ui/ContractPartySignaturesCard';
 import { ContractSignaturePad, type ContractSignaturePadHandle } from '@/features/contracts/ui/ContractSignaturePad';
 
-type ContractSchemaField = { key: string; label: string; type: string };
+type ContractSchemaField = { key: string; label: string; type: string; sourceField?: string };
 
 const STATUS_OPTIONS = [
   { value: 'ALL', label: '전체' },
   { value: 'SENT', label: '서명 대기' },
   { value: 'SIGNED', label: '완료' },
   { value: 'REJECTED', label: '거절' },
+  { value: 'CANCELED', label: '회수' },
   { value: 'CREATED', label: '생성됨' },
 ] as const;
 
@@ -36,8 +62,9 @@ function parseSchemaFields(raw: string): ContractSchemaField[] {
         const key = String(o.key ?? o.name ?? '').trim();
         const label = String(o.label ?? '').trim();
         const type = String(o.type ?? 'text').trim();
+        const sourceField = typeof o.sourceField === 'string' ? o.sourceField.trim() : '';
         if (!key || !label) return null;
-        return { key, label, type };
+        return { key, label, type, ...(sourceField ? { sourceField } : {}) };
       })
       .filter((v): v is ContractSchemaField => v != null);
   } catch {
@@ -52,6 +79,15 @@ function parseContent(raw: string): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+function pickAdminFromContractContent(contract: ContractRecord, adminFieldNames: string[]): Record<string, unknown> {
+  const content = parseContent(contract.contentJson);
+  const out: Record<string, unknown> = {};
+  for (const n of adminFieldNames) {
+    if (content[n] !== undefined) out[n] = content[n];
+  }
+  return out;
 }
 
 function formatValue(value: unknown): string {
@@ -70,8 +106,15 @@ function statusTag(status: string) {
   if (s === 'SENT') return <Tag color="processing">서명 대기</Tag>;
   if (s === 'SIGNED') return <Tag color="success">완료</Tag>;
   if (s === 'REJECTED') return <Tag color="error">거절</Tag>;
+  if (s === 'CANCELED') return <Tag color="default">회수</Tag>;
   if (s === 'CREATED') return <Tag>생성됨</Tag>;
   return <Tag>{status}</Tag>;
+}
+
+function employeePartySigned(contract: ContractRecord): boolean {
+  const emp = contract.parties?.find((p) => String(p.partyRole).toUpperCase() === 'EMPLOYEE');
+  if (!emp) return false;
+  return String(emp.signStatus).toUpperCase() === 'SIGNED';
 }
 
 function formatDateTime(value: string): string {
@@ -83,13 +126,26 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'SENT' | 'SIGNED' | 'REJECTED' | 'CREATED'>('ALL');
+  const { hasPermission } = usePermissions();
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'SENT' | 'SIGNED' | 'REJECTED' | 'CANCELED' | 'CREATED'>('ALL');
   const [selectedContractId, setSelectedContractId] = useState<string | null>(null);
   const [selectedBatch, setSelectedBatch] = useState<ContractBatchSummary | null>(null);
   const [onlyUnsigned, setOnlyUnsigned] = useState(false);
   const [signModalContractId, setSignModalContractId] = useState<string | null>(null);
   const [signSubmitting, setSignSubmitting] = useState(false);
   const padRef = useRef<ContractSignaturePadHandle>(null);
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [cancelReasonDraft, setCancelReasonDraft] = useState('');
+  const [rejectModalOpen, setRejectModalOpen] = useState(false);
+  const [rejectReasonDraft, setRejectReasonDraft] = useState('');
+  const [resendModalOpen, setResendModalOpen] = useState(false);
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [batchResendModalOpen, setBatchResendModalOpen] = useState(false);
+  const [resendForm] = Form.useForm<{ adminInput?: Record<string, unknown> }>();
+  const [batchResendForm] = Form.useForm<{
+    batchName: string;
+    items: Array<{ contractId: string; include?: boolean; adminInput?: Record<string, unknown> }>;
+  }>();
 
   const { data: contracts = [], isFetching: contractsLoading, refetch: refetchContracts } = useQuery({
     queryKey: ['contract', 'admin', 'contracts'],
@@ -112,6 +168,104 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
     enabled: Boolean(selectedBatch?.batchId),
   });
 
+  const resendableInBatch = useMemo(
+    () =>
+      batchContracts.filter((c) => {
+        const s = String(c.contractStatus).toUpperCase();
+        return s === 'REJECTED' || s === 'CANCELED';
+      }),
+    [batchContracts],
+  );
+
+  const templateIdForResend =
+    contractDetail?.templateId?.trim() || resendableInBatch[0]?.templateId?.trim() || null;
+
+  const { data: resendTemplate } = useQuery({
+    queryKey: ['contract', 'template', templateIdForResend, 'resend-prefetch'],
+    queryFn: () => contractTemplateApi.get(templateIdForResend!),
+    enabled: (resendModalOpen || batchResendModalOpen) && Boolean(templateIdForResend),
+  });
+
+  const { data: contractHistory = [], isFetching: historyLoading } = useQuery({
+    queryKey: ['contract', 'history', selectedContractId],
+    queryFn: () => contractTemplateApi.getContractHistory(selectedContractId!),
+    enabled: historyModalOpen && Boolean(selectedContractId),
+  });
+
+  const canRecallContract = user?.isSystemAdmin === true || hasPermission(PERM.CONTRACT_CREATE);
+
+  const cancelContractM = useMutation({
+    mutationFn: (vars: { contractId: string; cancelReason: string }) =>
+      contractTemplateApi.cancelContract(vars.contractId, { cancelReason: vars.cancelReason }),
+    onSuccess: async (updated, vars) => {
+      message.success('계약이 회수되었습니다.');
+      queryClient.setQueryData(['contract', 'detail', vars.contractId], updated);
+      setCancelModalOpen(false);
+      setCancelReasonDraft('');
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['contract', 'admin', 'contracts'] }),
+        queryClient.invalidateQueries({ queryKey: ['contract', 'admin', 'batch-contracts'] }),
+        queryClient.invalidateQueries({ queryKey: ['contract', 'my'] }),
+        queryClient.invalidateQueries({ queryKey: ['contract', 'admin', 'batches'] }),
+        queryClient.invalidateQueries({ queryKey: ['contract', 'history', vars.contractId] }),
+      ]);
+    },
+    onError: (e: Error) => message.error(e.message || '계약 회수에 실패했습니다.'),
+  });
+
+  const resendContractM = useMutation({
+    mutationFn: (vars: { contractId: string; adminInputJson?: string | null }) =>
+      contractTemplateApi.resendContract(vars.contractId, { adminInputJson: vars.adminInputJson ?? null }),
+    onSuccess: async (newContract) => {
+      message.success('계약이 재발송되었습니다.');
+      setResendModalOpen(false);
+      resendForm.resetFields();
+      setSelectedContractId(newContract.contractId);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['contract', 'admin', 'contracts'] }),
+        queryClient.invalidateQueries({ queryKey: ['contract', 'admin', 'batches'] }),
+        queryClient.invalidateQueries({ queryKey: ['contract', 'admin', 'batch-contracts'] }),
+        queryClient.invalidateQueries({ queryKey: ['contract', 'my'] }),
+        queryClient.invalidateQueries({ queryKey: ['contract', 'history', newContract.contractId] }),
+      ]);
+      queryClient.setQueryData(['contract', 'detail', newContract.contractId], newContract);
+    },
+    onError: (e: Error) => message.error(e.message || '재발송에 실패했습니다.'),
+  });
+
+  const resendBatchM = useMutation({
+    mutationFn: (vars: {
+      batchId: string;
+      batchName: string;
+      items: Array<{ contractId: string; adminInputJson?: string | null }>;
+    }) => contractTemplateApi.resendBatch(vars.batchId, { batchName: vars.batchName, items: vars.items }),
+    onSuccess: async (batchResult) => {
+      message.success('배치가 재발송되었습니다.');
+      setBatchResendModalOpen(false);
+      batchResendForm.resetFields();
+      const fresh: ContractBatchSummary = {
+        batchId: batchResult.batchId,
+        batchName: batchResult.batchName,
+        templateName: batchResult.templateName,
+        contractType: batchResult.contractType,
+        totalCount: batchResult.totalCount,
+        signedCount: batchResult.signedCount,
+        rejectedCount: batchResult.rejectedCount,
+        previousBatchId: batchResult.previousBatchId,
+        createdBy: batchResult.createdBy ?? '',
+        createdAt: batchResult.createdAt,
+      };
+      setSelectedBatch(fresh);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['contract', 'admin', 'batches'] }),
+        queryClient.invalidateQueries({ queryKey: ['contract', 'admin', 'contracts'] }),
+        queryClient.invalidateQueries({ queryKey: ['contract', 'my'] }),
+        queryClient.invalidateQueries({ queryKey: ['contract', 'admin', 'batch-contracts', batchResult.batchId] }),
+      ]);
+    },
+    onError: (e: Error) => message.error(e.message || '배치 재발송에 실패했습니다.'),
+  });
+
   const signM = useMutation({
     mutationFn: (vars: { contractId: string; signatureImageUrl: string }) =>
       contractTemplateApi.signContract(vars.contractId, { signatureImageUrl: vars.signatureImageUrl }),
@@ -122,9 +276,59 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
         queryClient.invalidateQueries({ queryKey: ['contract', 'detail', vars.contractId] }),
         queryClient.invalidateQueries({ queryKey: ['contract', 'admin', 'batch-contracts'] }),
         queryClient.invalidateQueries({ queryKey: ['contract', 'my'] }),
+        queryClient.invalidateQueries({ queryKey: ['contract', 'history', vars.contractId] }),
       ]);
     },
     onError: (e: Error) => message.error(e.message || '계약 서명에 실패했습니다.'),
+  });
+
+  const rejectContractM = useMutation({
+    mutationFn: (vars: { contractId: string; rejectReason: string }) =>
+      contractTemplateApi.rejectContract(vars.contractId, { rejectReason: vars.rejectReason }),
+    onSuccess: async (updated, vars) => {
+      message.success('계약을 거절했습니다.');
+      queryClient.setQueryData(['contract', 'detail', vars.contractId], updated);
+      setRejectModalOpen(false);
+      setRejectReasonDraft('');
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['contract', 'admin', 'contracts'] }),
+        queryClient.invalidateQueries({ queryKey: ['contract', 'admin', 'batch-contracts'] }),
+        queryClient.invalidateQueries({ queryKey: ['contract', 'my'] }),
+        queryClient.invalidateQueries({ queryKey: ['contract', 'admin', 'batches'] }),
+        queryClient.invalidateQueries({ queryKey: ['contract', 'history', vars.contractId] }),
+      ]);
+    },
+    onError: (e: Error) => message.error(e.message || '계약 거절에 실패했습니다.'),
+  });
+
+  const remindContractM = useMutation({
+    mutationFn: (contractId: string) => contractTemplateApi.remindContract(contractId),
+    onSuccess: async (res, contractId) => {
+      message.success(res.message);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['contract', 'admin', 'contracts'] }),
+        queryClient.invalidateQueries({ queryKey: ['contract', 'detail', contractId] }),
+        queryClient.invalidateQueries({ queryKey: ['contract', 'admin', 'batch-contracts'] }),
+        queryClient.invalidateQueries({ queryKey: ['contract', 'my'] }),
+        queryClient.invalidateQueries({ queryKey: ['contract', 'my-detail', contractId] }),
+      ]);
+    },
+    onError: (e: Error) => message.error(e.message || '서명 리마인드 발송에 실패했습니다.'),
+  });
+
+  const remindBatchM = useMutation({
+    mutationFn: (batchId: string) => contractTemplateApi.remindContractBatch(batchId),
+    onSuccess: async (res, batchId) => {
+      message.success(res.message);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['contract', 'admin', 'contracts'] }),
+        queryClient.invalidateQueries({ queryKey: ['contract', 'admin', 'batch-contracts', batchId] }),
+        queryClient.invalidateQueries({ queryKey: ['contract', 'admin', 'batches'] }),
+        queryClient.invalidateQueries({ queryKey: ['contract', 'my'] }),
+        queryClient.invalidateQueries({ queryKey: ['contract', 'my-detail'] }),
+      ]);
+    },
+    onError: (e: Error) => message.error(e.message || '일괄 리마인드 발송에 실패했습니다.'),
   });
 
   const openSignModal = (contractId: string) => {
@@ -188,6 +392,78 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
     return contractEmployeeSignaturePending(contractDetail);
   }, [contractDetail, user?.id]);
 
+  const canRejectContractAsCurrentEmployee = useMemo(
+    () => (contractDetail ? contractEmployeeCanReject(contractDetail, user?.id) : false),
+    [contractDetail, user?.id],
+  );
+
+  const canShowRecallButton = useMemo(() => {
+    if (!contractDetail || !canRecallContract) return false;
+    if (String(contractDetail.contractStatus).toUpperCase() !== 'SENT') return false;
+    if (employeePartySigned(contractDetail)) return false;
+    return true;
+  }, [canRecallContract, contractDetail]);
+
+  const canShowRemindButton = useMemo(() => {
+    if (!contractDetail || !canRecallContract) return false;
+    return contractEmployeeSignaturePending(contractDetail);
+  }, [canRecallContract, contractDetail]);
+
+  const batchPendingSignatureCount = useMemo(
+    () => batchContracts.filter((c) => contractEmployeeSignaturePending(c)).length,
+    [batchContracts],
+  );
+
+  const canShowResendButton = useMemo(() => {
+    if (!contractDetail || !canRecallContract) return false;
+    const st = String(contractDetail.contractStatus).toUpperCase();
+    if (st !== 'REJECTED' && st !== 'CANCELED') return false;
+    if ((contractDetail.revision ?? 1) >= 5) return false;
+    return true;
+  }, [canRecallContract, contractDetail]);
+
+  const canShowHistoryButton = useMemo(() => {
+    if (!contractDetail) return false;
+    return (contractDetail.revision ?? 1) > 1;
+  }, [contractDetail]);
+
+  const singleResendAdminFields = useMemo(() => {
+    if (!contractDetail) return [];
+    const raw = resendTemplate?.formSchema ?? contractDetail.formSchemaSnapshot;
+    const { fields, metaByName } = parseContractFormSchema(raw);
+    return fields.filter((f) => metaByName[f.name]?.source === 'ADMIN_INPUT');
+  }, [contractDetail, resendTemplate?.formSchema]);
+
+  useEffect(() => {
+    if (!resendModalOpen || !contractDetail) return;
+    const { fields, metaByName } = parseContractFormSchema(contractDetail.formSchemaSnapshot);
+    const names = fields.filter((f) => metaByName[f.name]?.source === 'ADMIN_INPUT').map((f) => f.name);
+    resendForm.setFieldsValue({ adminInput: pickAdminFromContractContent(contractDetail, names) });
+  }, [resendModalOpen, contractDetail?.contractId, contractDetail?.formSchemaSnapshot, resendForm]);
+
+  const batchResendAdminFieldDefs = useMemo(() => {
+    if (resendableInBatch.length === 0) return [];
+    const raw = resendTemplate?.formSchema ?? resendableInBatch[0].formSchemaSnapshot;
+    const { fields, metaByName } = parseContractFormSchema(raw);
+    return fields.filter((f) => metaByName[f.name]?.source === 'ADMIN_INPUT');
+  }, [resendableInBatch, resendTemplate?.formSchema]);
+
+  const openBatchResendModal = () => {
+    if (!selectedBatch || resendableInBatch.length === 0) return;
+    const raw = resendTemplate?.formSchema ?? resendableInBatch[0]?.formSchemaSnapshot ?? '{}';
+    const { fields, metaByName } = parseContractFormSchema(raw);
+    const adminNames = fields.filter((f) => metaByName[f.name]?.source === 'ADMIN_INPUT').map((f) => f.name);
+    batchResendForm.setFieldsValue({
+      batchName: `${selectedBatch.batchName || '배치'} 재발송`.trim(),
+      items: resendableInBatch.map((c) => ({
+        contractId: c.contractId,
+        include: true,
+        adminInput: pickAdminFromContractContent(c, adminNames),
+      })),
+    });
+    setBatchResendModalOpen(true);
+  };
+
   const contractsToolbar = (
     <div className="tw-mb-3 tw-flex tw-items-center tw-justify-between tw-gap-2">
       <Select value={statusFilter} onChange={(v) => setStatusFilter(v)} options={[...STATUS_OPTIONS]} style={{ width: 160 }} />
@@ -206,7 +482,7 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
       onRow={(record) => ({
         onClick: (e) => {
           const el = e.target as HTMLElement;
-          if (el.closest('button, a, [role="button"], .ant-select')) return;
+          if (el.closest('button, a, [role="button"], .ant-select, .ant-tabs')) return;
           setSelectedContractId(record.contractId);
         },
         className: 'tw-cursor-pointer',
@@ -216,7 +492,25 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
         { title: '사번', dataIndex: 'employeeSabun', key: 'employeeSabun', width: compact ? 88 : 120, render: (v: string | null) => v || '—' },
         { title: '부서', dataIndex: 'organizationName', key: 'organizationName', width: compact ? 100 : 140, render: (v: string | null) => v || '—' },
         { title: '템플릿', dataIndex: 'templateName', key: 'templateName', ellipsis: true },
+        {
+          title: '문서번호',
+          dataIndex: 'contractNumber',
+          key: 'contractNumber',
+          width: compact ? 120 : 140,
+          ellipsis: true,
+          render: (v: string | null) => v?.trim() || '—',
+        },
         { title: '상태', dataIndex: 'contractStatus', key: 'contractStatus', width: compact ? 100 : 120, render: (v: string) => statusTag(v) },
+        {
+          title: '회수 사유',
+          key: 'cancelReason',
+          width: compact ? 140 : 180,
+          ellipsis: true,
+          render: (_: unknown, row: ContractRecord) =>
+            String(row.contractStatus).toUpperCase() === 'CANCELED' && row.cancelReason?.trim()
+              ? row.cancelReason.trim()
+              : '—',
+        },
         { title: '생성일', dataIndex: 'createdAt', key: 'createdAt', width: compact ? 138 : 170, render: (v: string) => formatDateTime(v) },
       ]}
     />
@@ -248,14 +542,19 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
         { title: '배치명', dataIndex: 'batchName', key: 'batchName', ellipsis: true },
         { title: '템플릿', dataIndex: 'templateName', key: 'templateName', ellipsis: true },
         {
-          title: '서명률',
+          title: '진행',
           key: 'signedRate',
-          width: compact ? 120 : 170,
+          width: compact ? 148 : 200,
           render: (_: unknown, row) => {
             const total = row.totalCount || 0;
             const signed = row.signedCount || 0;
+            const rejected = row.rejectedCount ?? 0;
             const rate = total > 0 ? Math.round((signed / total) * 100) : 0;
-            return `${signed}/${total} (${rate}%)`;
+            return (
+              <span className="tw-text-xs sm:tw-text-sm">
+                서명 {signed}/{total} ({rate}%), 거절 {rejected}/{total}
+              </span>
+            );
           },
         },
         { title: '생성일', dataIndex: 'createdAt', key: 'createdAt', width: compact ? 138 : 170, render: (v: string) => formatDateTime(v) },
@@ -303,16 +602,67 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
         </Space>
       )}
 
-      <Modal
+      <AppModal
         title={contractDetail ? `계약 상세 - ${contractDetail.templateName}` : '계약 상세'}
         open={selectedContractId != null}
         onCancel={() => setSelectedContractId(null)}
         footer={
-          contractDetail && canSignContractAsCurrentEmployee
-            ? [
-                <Button key="close" onClick={() => setSelectedContractId(null)}>
-                  닫기
-                </Button>,
+          selectedContractId ? (
+            <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-end tw-gap-2">
+              <Button key="close" onClick={() => setSelectedContractId(null)}>
+                닫기
+              </Button>
+              {!detailLoading && contractDetail && canShowHistoryButton ? (
+                <Button key="history" onClick={() => setHistoryModalOpen(true)}>
+                  이력 보기
+                </Button>
+              ) : null}
+              {!detailLoading && contractDetail && canShowResendButton ? (
+                <Button key="resend" onClick={() => setResendModalOpen(true)}>
+                  재발송
+                </Button>
+              ) : null}
+              {!detailLoading && contractDetail && canShowRemindButton ? (
+                <Popconfirm
+                  key="remind"
+                  title="이 직원에게 서명 리마인드 알림을 보낼까요?"
+                  description="템플릿명이 포함된 안내(CONTRACT_REMIND)가 직원에게 발송됩니다."
+                  okText="보내기"
+                  cancelText="취소"
+                  onConfirm={() => void remindContractM.mutateAsync(contractDetail.contractId)}
+                >
+                  <Button
+                    loading={remindContractM.isPending && remindContractM.variables === contractDetail.contractId}
+                  >
+                    서명 리마인드
+                  </Button>
+                </Popconfirm>
+              ) : null}
+              {!detailLoading && contractDetail && canShowRecallButton ? (
+                <Button
+                  key="recall"
+                  danger
+                  onClick={() => {
+                    setCancelReasonDraft('');
+                    setCancelModalOpen(true);
+                  }}
+                >
+                  회수
+                </Button>
+              ) : null}
+              {!detailLoading && contractDetail && canRejectContractAsCurrentEmployee ? (
+                <Button
+                  key="reject"
+                  danger
+                  onClick={() => {
+                    setRejectReasonDraft('');
+                    setRejectModalOpen(true);
+                  }}
+                >
+                  거절
+                </Button>
+              ) : null}
+              {!detailLoading && contractDetail && canSignContractAsCurrentEmployee ? (
                 <Button
                   key="sign"
                   type="primary"
@@ -323,13 +673,15 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
                   onClick={() => openSignModal(contractDetail.contractId)}
                 >
                   서명하기
-                </Button>,
-              ]
-            : null
+                </Button>
+              ) : null}
+            </div>
+          ) : null
         }
         width={920}
-        destroyOnHidden
+        destroyOnClose
       >
+        <div className="tw-px-5 tw-py-4">
         {detailLoading || !contractDetail ? (
           <Spin />
         ) : (
@@ -337,30 +689,96 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
             <Card size="small" title="기본 정보">
               <div className="tw-grid tw-grid-cols-1 sm:tw-grid-cols-2 tw-gap-2 tw-text-sm">
                 <div><strong>템플릿</strong>: {contractDetail.templateName}</div>
+                <div><strong>문서번호</strong>: {contractDetail.contractNumber?.trim() || '—'}</div>
                 <div><strong>상태</strong>: {statusTag(contractDetail.contractStatus)}</div>
+                {contractDetail.sealImageUrl?.trim() ? (
+                  <div className="sm:tw-col-span-2 tw-flex tw-flex-wrap tw-items-center tw-gap-2">
+                    <strong className="tw-shrink-0">회사 직인</strong>
+                    <img
+                      src={contractDetail.sealImageUrl.trim()}
+                      alt="회사 직인"
+                      className="tw-max-h-24 tw-max-w-[200px] tw-rounded tw-border tw-border-slate-200 tw-object-contain tw-bg-white tw-p-1"
+                    />
+                  </div>
+                ) : null}
+                <div><strong>개정 차수</strong>: {contractDetail.revision ?? 1}</div>
+                <div>
+                  <strong>이전 계약</strong>:{' '}
+                  {contractDetail.previousContractId ? (
+                    <Button
+                      type="link"
+                      size="small"
+                      className="!tw-h-auto !tw-p-0"
+                      onClick={() => setSelectedContractId(contractDetail.previousContractId)}
+                    >
+                      이전 버전 보기
+                    </Button>
+                  ) : (
+                    '—'
+                  )}
+                </div>
                 <div><strong>직원명</strong>: {contractDetail.employeeName || '—'}</div>
                 <div><strong>사번</strong>: {contractDetail.employeeSabun || '—'}</div>
                 <div><strong>부서</strong>: {contractDetail.organizationName || '—'}</div>
                 <div><strong>직책</strong>: {contractDetail.jobTitleName || '—'}</div>
+                {String(contractDetail.contractStatus).toUpperCase() === 'CANCELED' && contractDetail.cancelReason?.trim() ? (
+                  <div className="sm:tw-col-span-2">
+                    <strong>회수 사유</strong>:{' '}
+                    <Typography.Paragraph className="!tw-mb-0 tw-inline tw-whitespace-pre-wrap">
+                      {contractDetail.cancelReason.trim()}
+                    </Typography.Paragraph>
+                  </div>
+                ) : null}
+                {String(contractDetail.contractStatus).toUpperCase() === 'REJECTED' && contractEffectiveRejectReason(contractDetail) ? (
+                  <div className="sm:tw-col-span-2">
+                    <strong>거절 사유</strong>:{' '}
+                    <Typography.Paragraph className="!tw-mb-0 tw-inline tw-whitespace-pre-wrap">
+                      {contractEffectiveRejectReason(contractDetail)}
+                    </Typography.Paragraph>
+                  </div>
+                ) : null}
               </div>
             </Card>
-            {canSignContractAsCurrentEmployee ? (
+            {!detailLoading && contractDetail && canRecallContract && (contractDetail.revision ?? 1) >= 5 ? (
+              <Alert
+                type="warning"
+                showIcon
+                message="이 계약은 재발송 한도(5회)에 도달했습니다. 추가 재발송은 불가합니다."
+              />
+            ) : null}
+            {canSignContractAsCurrentEmployee || canRejectContractAsCurrentEmployee ? (
               <Card size="small" className="tw-border-amber-200/90 tw-bg-amber-50/60">
                 <div className="tw-flex tw-flex-col tw-gap-3 sm:tw-flex-row sm:tw-items-center sm:tw-justify-between">
                   <Typography.Text className="!tw-mb-0">
-                    직원 서명이 필요합니다. 내용을 확인한 뒤 서명해 주세요.
+                    {canRejectContractAsCurrentEmployee
+                      ? '내용을 확인한 뒤 서명하거나, 동의하지 않으면 거절할 수 있습니다.'
+                      : '직원 서명이 필요합니다. 내용을 확인한 뒤 서명해 주세요.'}
                   </Typography.Text>
-                  <Button
-                    type="primary"
-                    className="tw-shrink-0"
-                    loading={
-                      signSubmitting ||
-                      (signM.isPending && signM.variables?.contractId === contractDetail.contractId)
-                    }
-                    onClick={() => openSignModal(contractDetail.contractId)}
-                  >
-                    서명하기
-                  </Button>
+                  <Space wrap className="tw-shrink-0">
+                    {canRejectContractAsCurrentEmployee ? (
+                      <Button
+                        danger
+                        onClick={() => {
+                          setRejectReasonDraft('');
+                          setRejectModalOpen(true);
+                        }}
+                      >
+                        거절
+                      </Button>
+                    ) : null}
+                    {canSignContractAsCurrentEmployee ? (
+                      <Button
+                        type="primary"
+                        loading={
+                          signSubmitting ||
+                          (signM.isPending && signM.variables?.contractId === contractDetail.contractId)
+                        }
+                        onClick={() => openSignModal(contractDetail.contractId)}
+                      >
+                        서명하기
+                      </Button>
+                    ) : null}
+                  </Space>
                 </div>
               </Card>
             ) : null}
@@ -379,7 +797,7 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
                   detailFields.map((field) => (
                     <ApprovalFormPaperFieldRow key={field.key} label={field.label}>
                       <Typography.Text className={field.type === 'textarea' ? 'tw-whitespace-pre-wrap tw-break-words' : undefined}>
-                        {formatValue(detailContent[field.key])}
+                        {formatValue(detailContent[field.key] ?? (field.sourceField ? detailContent[field.sourceField] : undefined))}
                       </Typography.Text>
                     </ApprovalFormPaperFieldRow>
                   ))
@@ -392,9 +810,10 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
             </Card>
           </Space>
         )}
-      </Modal>
+        </div>
+      </AppModal>
 
-      <Modal
+      <AppModal
         title={selectedBatch ? `배치 상세 - ${selectedBatch.batchName || selectedBatch.batchId}` : '배치 상세'}
         open={selectedBatch != null}
         onCancel={() => {
@@ -403,11 +822,55 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
         }}
         footer={null}
         width={980}
-        destroyOnHidden
+        destroyOnClose
       >
-        <div className="tw-mb-3 tw-flex tw-items-center tw-justify-end tw-gap-2">
-          <Typography.Text type="secondary">미서명자만 보기</Typography.Text>
-          <Switch checked={onlyUnsigned} onChange={setOnlyUnsigned} />
+        <div className="tw-px-5 tw-py-4">
+        <div className="tw-mb-3 tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2">
+          <Space direction="vertical" size={0}>
+            {selectedBatch ? (
+              <Typography.Text type="secondary" className="tw-text-sm">
+                서명 {selectedBatch.signedCount}/{selectedBatch.totalCount}, 거절 {(selectedBatch.rejectedCount ?? 0)}/{selectedBatch.totalCount}
+              </Typography.Text>
+            ) : null}
+            {selectedBatch?.previousBatchId ? (
+              <Button
+                type="link"
+                size="small"
+                className="!tw-p-0"
+                onClick={() => {
+                  const prev = batches.find((b) => b.batchId === selectedBatch.previousBatchId);
+                  if (prev) setSelectedBatch(prev);
+                  else message.info('목록에 이전 배치가 없습니다. 상단 목록 새로고침 후 다시 시도해 주세요.');
+                }}
+              >
+                이전 배치 보기
+              </Button>
+            ) : null}
+          </Space>
+          <Space wrap>
+            {canRecallContract && selectedBatch && batchPendingSignatureCount > 0 ? (
+              <Popconfirm
+                title={`미서명 ${batchPendingSignatureCount}명에게 서명 리마인드 알림을 일괄 발송할까요?`}
+                description="이미 서명·거절·회수된 건은 제외됩니다."
+                okText="발송"
+                cancelText="취소"
+                onConfirm={() => void remindBatchM.mutateAsync(selectedBatch.batchId)}
+              >
+                <Button
+                  loading={remindBatchM.isPending && remindBatchM.variables === selectedBatch.batchId}
+                >
+                  일괄 리마인드
+                </Button>
+              </Popconfirm>
+            ) : null}
+            {canRecallContract && resendableInBatch.length > 0 ? (
+              <Button type="primary" onClick={() => openBatchResendModal()}>
+                재발송
+              </Button>
+            ) : null}
+            <Typography.Text type="secondary">미서명자만 보기</Typography.Text>
+            <Switch checked={onlyUnsigned} onChange={setOnlyUnsigned} />
+          </Space>
         </div>
         <Table<ContractRecord>
           rowKey="contractId"
@@ -427,16 +890,317 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
             { title: '직원', dataIndex: 'employeeName', key: 'employeeName', width: 140 },
             { title: '사번', dataIndex: 'employeeSabun', key: 'employeeSabun', width: 120, render: (v: string | null) => v || '—' },
             { title: '부서', dataIndex: 'organizationName', key: 'organizationName', width: 140, render: (v: string | null) => v || '—' },
+            {
+              title: '문서번호',
+              dataIndex: 'contractNumber',
+              key: 'contractNumber',
+              width: 130,
+              ellipsis: true,
+              render: (v: string | null) => v?.trim() || '—',
+            },
             { title: '상태', dataIndex: 'contractStatus', key: 'contractStatus', width: 120, render: (v: string) => statusTag(v) },
+            {
+              title: '회수 사유',
+              key: 'cancelReason',
+              width: 160,
+              ellipsis: true,
+              render: (_: unknown, row: ContractRecord) =>
+                String(row.contractStatus).toUpperCase() === 'CANCELED' && row.cancelReason?.trim()
+                  ? row.cancelReason.trim()
+                  : '—',
+            },
           ]}
         />
-      </Modal>
+        </div>
+      </AppModal>
 
-      <Modal
+      <AppDoubleActionModal
+        title="계약 회수"
+        open={cancelModalOpen && Boolean(contractDetail)}
+        onClose={() => {
+          setCancelModalOpen(false);
+          setCancelReasonDraft('');
+        }}
+        confirmText="회수"
+        cancelText="닫기"
+        confirmDanger
+        confirmLoading={cancelContractM.isPending}
+        onConfirm={() => {
+          const r = cancelReasonDraft.trim();
+          if (!r) {
+            message.warning('회수 사유를 입력해 주세요.');
+            return;
+          }
+          if (!contractDetail) return;
+          void cancelContractM.mutateAsync({ contractId: contractDetail.contractId, cancelReason: r });
+        }}
+        destroyOnHidden
+        width={520}
+      >
+        <div className="tw-px-5 tw-py-4">
+        <Typography.Paragraph type="secondary" className="tw-text-sm">
+          회수 시 직원에게 알림이 전송되며, 직원 당사자 서명 상태는 회수됨으로 표시됩니다.
+        </Typography.Paragraph>
+        <Input.TextArea
+          rows={4}
+          value={cancelReasonDraft}
+          onChange={(e) => setCancelReasonDraft(e.target.value)}
+          placeholder="회수 사유를 입력해 주세요."
+          maxLength={2000}
+          showCount
+        />
+        </div>
+      </AppDoubleActionModal>
+
+      <AppDoubleActionModal
+        title="계약 거절"
+        open={rejectModalOpen && Boolean(contractDetail)}
+        onClose={() => {
+          setRejectModalOpen(false);
+          setRejectReasonDraft('');
+        }}
+        confirmText="거절"
+        cancelText="닫기"
+        confirmDanger
+        confirmLoading={rejectContractM.isPending}
+        onConfirm={() => {
+          const r = rejectReasonDraft.trim();
+          if (!r) {
+            message.warning('거절 사유를 입력해 주세요.');
+            return;
+          }
+          if (!contractDetail) return;
+          void rejectContractM.mutateAsync({ contractId: contractDetail.contractId, rejectReason: r });
+        }}
+        destroyOnHidden
+        width={520}
+      >
+        <div className="tw-px-5 tw-py-4">
+        <Typography.Paragraph type="secondary" className="tw-text-sm">
+          거절 후에는 이 계약에 서명할 수 없으며, 인사팀에서 재발송할 수 있습니다.
+        </Typography.Paragraph>
+        <Input.TextArea
+          rows={4}
+          value={rejectReasonDraft}
+          onChange={(e) => setRejectReasonDraft(e.target.value)}
+          placeholder="거절 사유를 입력해 주세요."
+          maxLength={2000}
+          showCount
+        />
+        </div>
+      </AppDoubleActionModal>
+
+      <AppDoubleActionModal
+        title="계약 재발송"
+        open={resendModalOpen && Boolean(contractDetail)}
+        onClose={() => {
+          setResendModalOpen(false);
+          resendForm.resetFields();
+        }}
+        confirmText="재발송"
+        cancelText="닫기"
+        confirmLoading={resendContractM.isPending}
+        onConfirm={async () => {
+          if (!contractDetail) return;
+          try {
+            const v = await resendForm.validateFields();
+            const json = compactAdminInputJson(v.adminInput as Record<string, unknown> | undefined);
+            await resendContractM.mutateAsync({
+              contractId: contractDetail.contractId,
+              adminInputJson: json ?? null,
+            });
+          } catch {
+            /* validation */
+          }
+        }}
+        destroyOnHidden
+        width={640}
+      >
+        <div className="tw-px-5 tw-py-4">
+        <Typography.Paragraph type="secondary" className="tw-text-sm">
+          거절 또는 회수된 계약을 바탕으로 새 계약이 발송됩니다. ADMIN_INPUT 항목만 수정할 수 있으며, 비워 두면 기존 값이 유지됩니다.
+        </Typography.Paragraph>
+        <Form form={resendForm} layout="vertical" className="tw-mt-2">
+          {singleResendAdminFields.length === 0 ? (
+            <Typography.Text type="secondary">이 템플릿에는 관리자 입력(ADMIN_INPUT) 필드가 없습니다.</Typography.Text>
+          ) : (
+            singleResendAdminFields.map((field) => (
+              <Form.Item key={field.name} name={['adminInput', field.name]} label={field.label}>
+                {field.type === 'textarea' ? (
+                  <Input.TextArea rows={3} />
+                ) : (
+                  <Input type={field.type === 'number' ? 'number' : 'text'} />
+                )}
+              </Form.Item>
+            ))
+          )}
+        </Form>
+        </div>
+      </AppDoubleActionModal>
+
+      <AppSingleActionModal
+        title="계약 이력"
+        open={historyModalOpen}
+        onClose={() => setHistoryModalOpen(false)}
+        onSubmit={() => setHistoryModalOpen(false)}
+        submitText="닫기"
+        width={720}
+        destroyOnHidden
+      >
+        <div className="tw-px-5 tw-py-4">
+        {historyLoading ? (
+          <Spin />
+        ) : contractHistory.length === 0 ? (
+          <Typography.Text type="secondary">이력이 없습니다.</Typography.Text>
+        ) : (
+          <Timeline
+            items={contractHistory.map((row) => {
+              const st = String(row.contractStatus).toUpperCase();
+              const color =
+                st === 'SIGNED' ? 'green' : st === 'REJECTED' ? 'red' : st === 'CANCELED' ? 'gray' : 'blue';
+              return {
+                color,
+                children: (
+                  <div className="tw-space-y-1">
+                    <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
+                      <Typography.Text strong>개정 {row.revision ?? 1}</Typography.Text>
+                      {statusTag(row.contractStatus)}
+                      <Typography.Text type="secondary" className="tw-text-xs">
+                        {formatDateTime(row.createdAt)}
+                      </Typography.Text>
+                    </div>
+                    <div className="tw-text-sm">
+                      {row.employeeName} · {row.templateName}
+                    </div>
+                    {st === 'CANCELED' && row.cancelReason?.trim() ? (
+                      <Typography.Text type="secondary" className="tw-text-xs tw-whitespace-pre-wrap">
+                        회수: {row.cancelReason.trim()}
+                      </Typography.Text>
+                    ) : null}
+                    {st === 'REJECTED' && contractEffectiveRejectReason(row) ? (
+                      <Typography.Text type="secondary" className="tw-text-xs tw-whitespace-pre-wrap">
+                        거절: {contractEffectiveRejectReason(row)}
+                      </Typography.Text>
+                    ) : null}
+                    <Button
+                      type="link"
+                      size="small"
+                      className="!tw-h-auto !tw-p-0"
+                      onClick={() => {
+                        setHistoryModalOpen(false);
+                        setSelectedContractId(row.contractId);
+                      }}
+                    >
+                      이 버전 상세 열기
+                    </Button>
+                  </div>
+                ),
+              };
+            })}
+          />
+        )}
+        </div>
+      </AppSingleActionModal>
+
+      <AppDoubleActionModal
+        title={selectedBatch ? `배치 재발송 - ${selectedBatch.batchName}` : '배치 재발송'}
+        open={batchResendModalOpen}
+        onClose={() => {
+          setBatchResendModalOpen(false);
+          batchResendForm.resetFields();
+        }}
+        confirmText="재발송"
+        cancelText="닫기"
+        confirmLoading={resendBatchM.isPending}
+        onConfirm={async () => {
+          if (!selectedBatch) return;
+          try {
+            const v = await batchResendForm.validateFields();
+            const rows = v.items ?? [];
+            const items = rows
+              .filter((row) => row.include !== false)
+              .map((row) => ({
+                contractId: row.contractId,
+                adminInputJson: compactAdminInputJson(row.adminInput as Record<string, unknown> | undefined) ?? null,
+              }));
+            if (items.length === 0) {
+              message.warning('재발송할 계약을 1건 이상 선택해 주세요.');
+              return;
+            }
+            await resendBatchM.mutateAsync({
+              batchId: selectedBatch.batchId,
+              batchName: v.batchName.trim(),
+              items,
+            });
+          } catch {
+            /* validation */
+          }
+        }}
+        width={820}
+        destroyOnHidden
+      >
+        <div className="tw-px-5 tw-py-4">
+        <Form form={batchResendForm} layout="vertical">
+          <Form.Item name="batchName" label="새 배치 이름" rules={[{ required: true, message: '배치 이름을 입력해 주세요.' }]}>
+            <Input maxLength={120} placeholder="예: 2026년 상반기 근로계약 재발송" />
+          </Form.Item>
+          <Typography.Text type="secondary" className="tw-mb-2 tw-block tw-text-sm">
+            거절·회수된 건만 표시됩니다. 포함에서 해제하면 해당 건은 재발송되지 않습니다.
+          </Typography.Text>
+          <Form.List name="items">
+            {(fields) => (
+              <Space direction="vertical" className="tw-w-full" size={12}>
+                {fields.map((field) => {
+                  const idx = field.name;
+                  const row = batchResendForm.getFieldValue(['items', idx]) as { contractId?: string } | undefined;
+                  const rec = resendableInBatch.find((c) => c.contractId === row?.contractId);
+                  return (
+                    <Card
+                      key={field.key}
+                      size="small"
+                      title={
+                        <Space wrap>
+                          <span>{rec?.employeeName ?? row?.contractId ?? '계약'}</span>
+                          {rec ? statusTag(rec.contractStatus) : null}
+                        </Space>
+                      }
+                    >
+                      <Form.Item name={[field.name, 'contractId']} hidden>
+                        <Input />
+                      </Form.Item>
+                      <Form.Item name={[field.name, 'include']} valuePropName="checked" initialValue={true}>
+                        <Checkbox>이 건 재발송에 포함</Checkbox>
+                      </Form.Item>
+                      {batchResendAdminFieldDefs.length === 0 ? (
+                        <Typography.Text type="secondary" className="tw-text-sm">
+                          ADMIN_INPUT 필드가 없습니다.
+                        </Typography.Text>
+                      ) : (
+                        batchResendAdminFieldDefs.map((af) => (
+                          <Form.Item key={`${field.key}-${af.name}`} name={[field.name, 'adminInput', af.name]} label={af.label}>
+                            {af.type === 'textarea' ? (
+                              <Input.TextArea rows={2} />
+                            ) : (
+                              <Input type={af.type === 'number' ? 'number' : 'text'} />
+                            )}
+                          </Form.Item>
+                        ))
+                      )}
+                    </Card>
+                  );
+                })}
+              </Space>
+            )}
+          </Form.List>
+        </Form>
+        </div>
+      </AppDoubleActionModal>
+
+      <AppModal
         title="전자계약 서명"
         open={signModalContractId != null}
         onCancel={closeSignModal}
-        destroyOnHidden
+        destroyOnClose
         okText="서명"
         cancelText="취소"
         confirmLoading={signSubmitting || signM.isPending}
@@ -447,12 +1211,14 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
         width={640}
         styles={{ body: { paddingTop: 8 } }}
       >
+        <div className="tw-px-5 tw-py-4">
         <Typography.Paragraph type="secondary" className="tw-mb-3 tw-text-sm">
           계약 내용을 확인한 뒤 아래 패드에 서명하고 &quot;서명&quot;을 눌러 주세요. 서명 이미지는 업로드된 뒤
           전자계약에 반영됩니다.
         </Typography.Paragraph>
         <ContractSignaturePad ref={padRef} className="tw-w-full" />
-      </Modal>
+        </div>
+      </AppModal>
     </>
   );
 }

@@ -11,7 +11,6 @@ import {
   Form,
   InputNumber,
   Input,
-  Modal,
   Popconfirm,
   Select,
   Space,
@@ -20,6 +19,7 @@ import {
   Typography,
 } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import type { CalendarProps } from 'antd';
 import clsx from 'clsx';
 import dayjs from 'dayjs';
@@ -455,20 +455,21 @@ export function AdminCompanyHolidaysPage() {
         </Card>
       </div>
 
-      <Modal
+      <AppDoubleActionModal
         open={open}
-        onCancel={() => {
+        onClose={() => {
           setOpen(false);
           setEditing(null);
           form.resetFields();
         }}
-        onOk={handleHolidayModalOk}
+        onConfirm={handleHolidayModalOk}
         confirmLoading={createM.isPending || updateM.isPending}
-        okText={editing ? '수정' : '등록'}
+        confirmText={editing ? '수정' : '등록'}
         cancelText="취소"
         title={editing ? '공휴일 수정' : '공휴일 추가'}
-        destroyOnClose
+        destroyOnHidden
       >
+        <div className="tw-px-5 tw-py-4">
         <Form<FormValues>
           form={form}
           layout="vertical"
@@ -489,7 +490,8 @@ export function AdminCompanyHolidaysPage() {
             />
           </Form.Item>
         </Form>
-      </Modal>
+        </div>
+      </AppDoubleActionModal>
     </Space>
   );
 }

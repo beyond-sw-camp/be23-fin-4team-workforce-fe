@@ -54,14 +54,6 @@ export function ApprovalQueueList({ onSelect }: Props) {
                     재상신 r{b.revision}
                   </Tag>
                 )}
-                {b.delegateApproverId && (
-                  <Tag
-                    bordered={false}
-                    className="!tw-m-0 !tw-rounded-full !tw-bg-purple-50 !tw-px-2.5 !tw-py-0.5 !tw-text-[11px] !tw-font-medium !tw-text-purple-700"
-                  >
-                    위임됨
-                  </Tag>
-                )}
               </div>
             }
             description={

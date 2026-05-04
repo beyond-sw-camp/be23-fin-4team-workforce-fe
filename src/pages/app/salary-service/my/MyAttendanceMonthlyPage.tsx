@@ -6,6 +6,8 @@ import {
   Button,
   Card,
   DatePicker,
+  Form,
+  Input,
   Table,
   Tag,
   Typography,
@@ -168,6 +170,105 @@ export function MyAttendanceMonthlyPage() {
           }}
         />
       </Card>
+
+      {/* ─── 정정 신청 모달 ─── */}
+      <AppDoubleActionModal
+        open={correctionOpen}
+        title="출퇴근 정정 신청"
+        onClose={closeCorrectionModal}
+        onConfirm={() => form.submit()}
+        confirmText="신청"
+        cancelText="취소"
+        confirmLoading={correctionMut.isPending}
+        destroyOnHidden
+      >
+        <div className="tw-px-5 tw-py-4">
+        <Alert
+          type="info"
+          showIcon
+          className="tw-mb-3"
+          message={
+            correctionAllowedDates && correctionAllowedDates.size > 0
+              ? '출근·퇴근 시각 중 한 가지 이상과 사유는 필수입니다. 정정 일자는 위에 안내된 정정 후보 일자만 선택할 수 있으며, 최근 7일 이내여야 합니다.'
+              : '출근·퇴근 시각 중 한 가지 이상 + 사유는 필수예요. 최근 7일 이내만 신청 가능합니다.'
+          }
+        />
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={(vals) => correctionMut.mutate(vals)}
+        >
+          <Form.Item
+            name="attendanceDate"
+            label="정정 일자"
+            rules={[
+              { required: true, message: '일자는 필수입니다.' },
+              {
+                validator: (_, value: Dayjs | undefined) => {
+                  if (!value) return Promise.resolve();
+                  const ds = value.format('YYYY-MM-DD');
+                  const outOfWeek =
+                    value.isAfter(dayjs(), 'day') ||
+                    value.isBefore(dayjs().subtract(7, 'day'), 'day');
+                  if (outOfWeek) {
+                    return Promise.reject(new Error('최근 7일 이내 일자만 신청할 수 있습니다.'));
+                  }
+                  if (correctionAllowedDates && correctionAllowedDates.size > 0 && !correctionAllowedDates.has(ds)) {
+                    return Promise.reject(new Error('정정이 필요한 일자만 선택할 수 있습니다.'));
+                  }
+                  return Promise.resolve();
+                },
+              },
+            ]}
+          >
+            <DatePicker
+              style={{ width: '100%' }}
+              disabledDate={(d) => {
+                const ds = d.format('YYYY-MM-DD');
+                const outOfWeek =
+                  d.isAfter(dayjs(), 'day') || d.isBefore(dayjs().subtract(7, 'day'), 'day');
+                if (outOfWeek) return true;
+                if (correctionAllowedDates && correctionAllowedDates.size > 0) {
+                  return !correctionAllowedDates.has(ds);
+                }
+                return false;
+              }}
+              format="YYYY-MM-DD"
+            />
+          </Form.Item>
+
+          <div className="tw-grid tw-grid-cols-2 tw-gap-3">
+            <Form.Item name="clockIn" label="출근 시각 (선택)">
+              <TimePicker
+                format="HH:mm"
+                style={{ width: '100%' }}
+                minuteStep={5}
+              />
+            </Form.Item>
+            <Form.Item name="clockOut" label="퇴근 시각 (선택)">
+              <TimePicker
+                format="HH:mm"
+                style={{ width: '100%' }}
+                minuteStep={5}
+              />
+            </Form.Item>
+          </div>
+
+          <Form.Item
+            name="reason"
+            label="사유"
+            rules={[{ required: true, message: '사유는 필수입니다.' }]}
+          >
+            <Input.TextArea
+              rows={3}
+              placeholder="예: 회의 후 외근으로 퇴근 미체크"
+              maxLength={100}
+              showCount
+            />
+          </Form.Item>
+        </Form>
+        </div>
+      </AppDoubleActionModal>
     </div>
   );
 }
