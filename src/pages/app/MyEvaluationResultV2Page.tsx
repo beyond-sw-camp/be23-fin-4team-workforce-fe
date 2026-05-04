@@ -10,6 +10,7 @@ import type { EvaluationFlowResponse } from '@/features/evaluation/model/workflo
 import { EvaluationResultCard } from '@/features/evaluation/ui/EvaluationResultCard';
 import { meetingApi } from '@/features/meetings/api/meetingApi';
 import { AppButton } from '@/shared/ui/AppButton';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppEmptyIllustrated } from '@/shared/ui/AppEmptyIllustrated';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 

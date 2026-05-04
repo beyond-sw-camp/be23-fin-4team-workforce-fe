@@ -3,8 +3,9 @@
 // - 선택 날짜는 Tag 리스트로 정렬 노출, 개별 X 로 제거 가능
 // - 회신은 사용 계획 기록만, LeaveRequest 자동 생성 X / 잔여 차감 없음
 import { useEffect, useMemo, useState } from 'react';
+import { Alert, Button, DatePicker, Space, Tag, Typography } from 'antd';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Button, DatePicker, Modal, Space, Tag, Typography } from 'antd';
 import { CloseOutlined } from '@ant-design/icons';
 import dayjs, { type Dayjs } from 'dayjs';
 import type { LeavePromotionMy } from '@/features/salary-service/types';
@@ -109,12 +110,12 @@ export function PromotionResponseModal({
   };
 
   return (
-    <Modal
+    <AppDoubleActionModal
       open={target !== null}
       title="연차 사용 계획 회신"
-      okText="회신하기"
+      confirmText="회신하기"
       cancelText="취소"
-      okButtonProps={{ disabled: picked.length === 0 || overLimit }}
+      confirmDisabled={picked.length === 0 || overLimit}
       confirmLoading={confirmLoading}
       onCancel={onCancel}
       onOk={submit}
@@ -220,6 +221,6 @@ export function PromotionResponseModal({
           )}
         </Space>
       ) : null}
-    </Modal>
+    </AppDoubleActionModal>
   );
 }

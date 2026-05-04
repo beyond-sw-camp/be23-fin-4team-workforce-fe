@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type Key } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { App, Button, Card, Dropdown, Form, Input, InputNumber, Modal, Popconfirm, Popover, Progress, Radio, Select, Space, Spin, Steps, Table, Tag, Tree, Typography, Upload } from 'antd';
+import { App, Button, Card, Dropdown, Form, Input, InputNumber, Popconfirm, Popover, Progress, Radio, Select, Space, Spin, Steps, Table, Tag, Tree, Typography, Upload } from 'antd';
 import type { DataNode } from 'antd/es/tree';
 import type { UploadProps } from 'antd';
 import type { UploadFile } from 'antd/es/upload/interface';
@@ -16,6 +16,7 @@ import { organizationApi } from '@/features/organization/api/organizationApi';
 import { OrganizationRolesSection } from '@/features/organization/ui/OrganizationRolesSection';
 import type { OrganizationTreeNode } from '@/features/organization/api/organizationApi';
 import { AppButton } from '@/shared/ui/AppButton';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { ApprovalsAdminPage } from '@/pages/app/ApprovalsAdminPage';
 import { AdminCompanyHolidaysPage } from '@/pages/app/salary-service/admin/AdminCompanyHolidaysPage';
 import { AdminSalarySettingsPage } from '@/pages/app/salary-service/admin/AdminSalarySettingsPage';
@@ -463,7 +464,7 @@ export default function OnboardingStepperPage() {
               </aside>
             ) : null}
             <div
-              className={`tw-min-h-[220px] tw-min-w-0 tw-w-full tw-rounded-xl tw-border tw-border-slate-200/90 tw-bg-slate-50/40 tw-p-3 tw-transition-shadow ${
+              className={`tw-box-border tw-min-h-[220px] tw-min-w-0 tw-w-full tw-rounded-xl tw-border tw-border-slate-200/90 tw-bg-slate-50/40 tw-px-4 tw-py-3 tw-transition-shadow ${
                 orgStep0TreeHighlight ? 'tw-ring-2 tw-ring-blue-500 tw-ring-offset-2 tw-ring-offset-slate-50' : ''
               }`}
             >
@@ -554,11 +555,11 @@ export default function OnboardingStepperPage() {
               </span>
             </Popover>
           </div>
-          <Modal
+          <AppDoubleActionModal
             title={orgModal?.mode === 'edit' ? '조직명 수정' : orgModal?.parentId ? '하위 조직 추가' : '최상위 조직 추가'}
             open={orgModal != null}
-            onCancel={() => setOrgModal(null)}
-            onOk={async () => {
+            onClose={() => setOrgModal(null)}
+            onConfirm={async () => {
               const v = await orgForm.validateFields();
               if (!orgModal) return;
               if (orgModal.mode === 'edit') {
@@ -572,7 +573,9 @@ export default function OnboardingStepperPage() {
             }}
             confirmLoading={orgCreate.isPending || orgUpdate.isPending}
             destroyOnHidden
+            confirmText="확인"
           >
+            <div className="tw-px-5 tw-py-4">
             <Form form={orgForm} layout="vertical">
               <Popover
                 {...ORG_GUIDE_POPOVER_SHARED}
@@ -598,7 +601,8 @@ export default function OnboardingStepperPage() {
                 </Form.Item>
               </Popover>
             </Form>
-          </Modal>
+            </div>
+          </AppDoubleActionModal>
         </Space>
       );
     }
@@ -695,11 +699,11 @@ export default function OnboardingStepperPage() {
               />
             </Card>
           </div>
-          <Modal
+          <AppDoubleActionModal
             title="직급 추가"
             open={gradeModalOpen}
-            onCancel={() => setGradeModalOpen(false)}
-            onOk={async () => {
+            onClose={() => setGradeModalOpen(false)}
+            onConfirm={async () => {
               const v = await gradeForm.validateFields();
               await gradeCreate.mutateAsync({ name: v.name.trim(), displayOrder: Number(v.displayOrder) });
               setJobGuideStep(1);
@@ -707,7 +711,9 @@ export default function OnboardingStepperPage() {
             }}
             confirmLoading={gradeCreate.isPending}
             destroyOnHidden
+            confirmText="확인"
           >
+            <div className="tw-px-5 tw-py-4">
             <Form form={gradeForm} layout="vertical">
               <Form.Item name="name" label="직급명" rules={[{ required: true, message: '직급명을 입력해 주세요.' }]}>
                 <Input />
@@ -716,12 +722,13 @@ export default function OnboardingStepperPage() {
                 <InputNumber className="tw-w-full" />
               </Form.Item>
             </Form>
-          </Modal>
-          <Modal
+            </div>
+          </AppDoubleActionModal>
+          <AppDoubleActionModal
             title="직책 추가"
             open={titleModalOpen}
-            onCancel={() => setTitleModalOpen(false)}
-            onOk={async () => {
+            onClose={() => setTitleModalOpen(false)}
+            onConfirm={async () => {
               const v = await titleForm.validateFields();
               await titleCreate.mutateAsync({ name: v.name.trim(), displayOrder: Number(v.displayOrder) });
               setJobGuideStep(2);
@@ -729,7 +736,9 @@ export default function OnboardingStepperPage() {
             }}
             confirmLoading={titleCreate.isPending}
             destroyOnHidden
+            confirmText="확인"
           >
+            <div className="tw-px-5 tw-py-4">
             <Form form={titleForm} layout="vertical">
               <Form.Item name="name" label="직책명" rules={[{ required: true, message: '직책명을 입력해 주세요.' }]}>
                 <Input />
@@ -738,7 +747,8 @@ export default function OnboardingStepperPage() {
                 <InputNumber className="tw-w-full" />
               </Form.Item>
             </Form>
-          </Modal>
+            </div>
+          </AppDoubleActionModal>
         </Space>
       );
     }
@@ -760,7 +770,9 @@ export default function OnboardingStepperPage() {
     }
     if (current === 5) {
       return (
-        <ApprovalsAdminPage />
+        <div className="tw-flex tw-min-h-0 tw-flex-1 tw-w-full tw-flex-col">
+          <ApprovalsAdminPage />
+        </div>
       );
     }
     if (current === 6) {
@@ -995,34 +1007,66 @@ export default function OnboardingStepperPage() {
   };
 
   return (
-    <Space direction="vertical" className="tw-w-full" size={16}>
-      <Card className="tw-border-slate-200/80 tw-shadow-sm">
-        <Typography.Title level={4} className="!tw-mb-1">
-          초기 회사 온보딩
-        </Typography.Title>
-        <Typography.Text type="secondary">
-          각 단계는 모두 선택 사항입니다. 생성/조회 API만 연동되어 있으며, 스태퍼에서 이전/다음/스킵으로 이동합니다.
-        </Typography.Text>
-        <div className="tw-mt-4">
-          <Progress percent={progressPercent} />
-          <Typography.Text type="secondary">{`${doneCount}/${ONBOARDING_STEPS.length} 단계 완료`}</Typography.Text>
-        </div>
-      </Card>
+    <div className="tw-flex tw-h-full tw-min-h-0 tw-w-full tw-max-w-full tw-flex-col tw-gap-3 tw-overflow-hidden">
+      <div className="tw-flex tw-shrink-0 tw-flex-col tw-gap-3">
+        <Card className="tw-border-slate-200/80 tw-shadow-sm" size="small">
+          <Typography.Title level={4} className="!tw-mb-1 !tw-mt-0 !tw-text-base md:!tw-text-lg">
+            초기 회사 온보딩
+          </Typography.Title>
+          <Typography.Text type="secondary" className="tw-text-xs md:tw-text-sm">
+            각 단계는 모두 선택 사항입니다. 생성/조회 API만 연동되어 있으며, 스태퍼에서 이전/다음으로 이동합니다. 설정을 나중에 하려면 아래 링크로 온보딩 전체를 건너뛸 수 있습니다.
+          </Typography.Text>
+          <div className="tw-mt-2 tw-flex tw-flex-wrap tw-items-center tw-justify-end">
+            <Popconfirm
+              title="온보딩 전체를 건너뛸까요?"
+              description="남은 단계 없이 온보딩을 완료 처리하고 메인 화면으로 이동합니다. 이후 설정 메뉴에서 언제든 이어서 구성할 수 있습니다."
+              okText="건너뛰기"
+              cancelText="취소"
+              onConfirm={() => void finishMutation.mutateAsync()}
+            >
+              <Button
+                type="link"
+                className="!tw-h-auto !tw-p-0 !tw-font-medium !tw-text-[#1677ff] hover:!tw-text-[#4096ff]"
+                loading={finishMutation.isPending}
+              >
+                {'>> '}온보딩 전체 건너뛰기
+              </Button>
+            </Popconfirm>
+          </div>
+          <div className="tw-mt-3">
+            <Progress percent={progressPercent} size="small" />
+            <Typography.Text type="secondary" className="tw-text-xs">
+              {`${doneCount}/${ONBOARDING_STEPS.length} 단계 완료`}
+            </Typography.Text>
+          </div>
+        </Card>
 
-      <Card className="tw-border-slate-200/80 tw-shadow-sm">
-        <Steps
-          className="[&_.ant-steps-item-icon]:!tw-w-7 [&_.ant-steps-item-icon]:!tw-h-7 [&_.ant-steps-item-icon]:!tw-leading-7 [&_.ant-steps-item-icon]:!tw-mt-1 [&_.ant-steps-item-icon_.ant-steps-icon]:!tw-text-xs [&_.ant-steps-item-tail]:!tw-top-4"
-          current={current}
-          items={ONBOARDING_STEPS.map((s, idx) => ({
-            title: s.title,
-            status: statuses[idx] === 'completed' ? 'finish' : statuses[idx] === 'skipped' ? 'wait' : 'process',
-          }))}
-          onChange={(idx) => setCurrent(idx)}
-        />
-      </Card>
+        <Card className="tw-border-slate-200/80 tw-shadow-sm" size="small">
+          <Steps
+            className="[&_.ant-steps-item-icon]:!tw-w-7 [&_.ant-steps-item-icon]:!tw-h-7 [&_.ant-steps-item-icon]:!tw-leading-7 [&_.ant-steps-item-icon]:!tw-mt-1 [&_.ant-steps-item-icon_.ant-steps-icon]:!tw-text-xs [&_.ant-steps-item-tail]:!tw-top-4"
+            current={current}
+            items={ONBOARDING_STEPS.map((s, idx) => ({
+              title: s.title,
+              status: statuses[idx] === 'completed' ? 'finish' : statuses[idx] === 'skipped' ? 'wait' : 'process',
+            }))}
+            onChange={(idx) => setCurrent(idx)}
+          />
+        </Card>
+      </div>
 
       <Card
-        className="tw-border-slate-200/80 tw-shadow-sm"
+        className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-hidden tw-border-slate-200/80 tw-shadow-sm"
+        styles={{
+          body: {
+            flex: 1,
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            paddingTop: 12,
+            paddingBottom: 12,
+          },
+        }}
         title={
           <Space>
             <span>{`${current + 1}. ${currentStep.title}`}</span>
@@ -1030,48 +1074,51 @@ export default function OnboardingStepperPage() {
           </Space>
         }
       >
-        <Space direction="vertical" className="tw-w-full" size={12}>
-          {renderStepContent()}
-
-          <Space wrap>
-            <AppButton variant="secondary" onClick={gotoPrev} disabled={current === 0}>
-              이전
-            </AppButton>
-            <Popover
-              {...ORG_GUIDE_POPOVER_SHARED}
-              title={current === 6 && esgGuideStep === 3 && onboardingEsgEnabledYn === 'YES' ? '4단계: 다음 단계 이동' : '2단계: 다음 단계 이동'}
-              content={
-                <Typography.Paragraph className="!tw-mb-0 tw-max-w-[280px] tw-text-sm">
-                  {current === 6 && esgGuideStep === 3 && onboardingEsgEnabledYn === 'YES'
-                    ? '저장이 완료되었습니다. 다음 버튼으로 다음 단계로 이동해 주세요.'
-                    : 'OFF를 선택했다면 저장 없이 다음 버튼으로 이동해 주세요.'}
-                </Typography.Paragraph>
-              }
-              open={
-                current === 6 &&
-                ((esgGuideStep === 1 && onboardingEsgEnabledYn === 'NO') ||
-                  (esgGuideStep === 3 && onboardingEsgEnabledYn === 'YES'))
-              }
-              placement="topRight"
-              overlayStyle={{ zIndex: 1060 }}
-            >
-              <span
-                ref={esgNextBtnWrapRef}
-                className={
-                  current === 6 &&
-                  ((esgGuideStep === 1 && onboardingEsgEnabledYn === 'NO') ||
-                    (esgGuideStep === 3 && onboardingEsgEnabledYn === 'YES'))
-                    ? 'tw-inline-block tw-rounded-xl tw-ring-2 tw-ring-blue-500 tw-ring-offset-2'
-                    : 'tw-inline-block'
-                }
-              >
-                <AppButton variant="secondary" onClick={gotoNext} disabled={isLast}>
-                  다음
+        <div className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-gap-3 tw-overflow-hidden">
+          <div className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-y-auto wf-scrollbar tw-px-2">
+            {renderStepContent()}
+          </div>
+          <div className="tw-flex tw-shrink-0 tw-flex-wrap tw-items-center tw-justify-end tw-border-t tw-border-slate-100 tw-pt-3">
+            <Space wrap>
+                <AppButton variant="secondary" onClick={gotoPrev} disabled={current === 0}>
+                  이전
                 </AppButton>
-              </span>
-            </Popover>
-          </Space>
-        </Space>
+                <Popover
+                  {...ORG_GUIDE_POPOVER_SHARED}
+                  title={current === 6 && esgGuideStep === 3 && onboardingEsgEnabledYn === 'YES' ? '4단계: 다음 단계 이동' : '2단계: 다음 단계 이동'}
+                  content={
+                    <Typography.Paragraph className="!tw-mb-0 tw-max-w-[280px] tw-text-sm">
+                      {current === 6 && esgGuideStep === 3 && onboardingEsgEnabledYn === 'YES'
+                        ? '저장이 완료되었습니다. 다음 버튼으로 다음 단계로 이동해 주세요.'
+                        : 'OFF를 선택했다면 저장 없이 다음 버튼으로 이동해 주세요.'}
+                    </Typography.Paragraph>
+                  }
+                  open={
+                    current === 6 &&
+                    ((esgGuideStep === 1 && onboardingEsgEnabledYn === 'NO') ||
+                      (esgGuideStep === 3 && onboardingEsgEnabledYn === 'YES'))
+                  }
+                  placement="topRight"
+                  overlayStyle={{ zIndex: 1060 }}
+                >
+                  <span
+                    ref={esgNextBtnWrapRef}
+                    className={
+                      current === 6 &&
+                      ((esgGuideStep === 1 && onboardingEsgEnabledYn === 'NO') ||
+                        (esgGuideStep === 3 && onboardingEsgEnabledYn === 'YES'))
+                        ? 'tw-inline-block tw-rounded-xl tw-ring-2 tw-ring-blue-500 tw-ring-offset-2'
+                        : 'tw-inline-block'
+                    }
+                  >
+                    <AppButton variant="secondary" onClick={gotoNext} disabled={isLast}>
+                      다음
+                    </AppButton>
+                  </span>
+                </Popover>
+            </Space>
+          </div>
+        </div>
       </Card>
 
       {current === 0 && orgCreateFlowDone ? (
@@ -1130,6 +1177,6 @@ export default function OnboardingStepperPage() {
           </Popover>
         </div>
       ) : null}
-    </Space>
+    </div>
   );
 }

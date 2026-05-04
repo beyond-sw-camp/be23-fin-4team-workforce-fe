@@ -1,12 +1,13 @@
 import { DeleteOutlined, EditOutlined, MoreOutlined, PlusOutlined, RightOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Card, Dropdown, Form, Input, InputNumber, Modal, Space, Table, Tabs, Tree, Typography } from 'antd';
+import { App, Button, Card, Dropdown, Form, Input, InputNumber, Space, Table, Tabs, Tree, Typography } from 'antd';
 import type { DataNode } from 'antd/es/tree';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { useMemo, useState, type Key } from 'react';
 import { type OrganizationTreeNode, organizationApi } from '@/features/organization/api/organizationApi';
 import { OrganizationRolesSection } from '@/features/organization/ui/OrganizationRolesSection';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 
 type OrgSettingsTab = 'structure' | 'grades' | 'titles' | 'roles';
 
@@ -620,27 +621,29 @@ export function OrganizationPage() {
         />
       </Card>
 
-      <Modal
+      <AppDoubleActionModal
         title={orgModal?.mode === 'create' ? (orgModal.parentId ? '하위 조직 추가' : '최상위 조직 추가') : '조직명 수정'}
         open={orgModal !== null}
-        onCancel={() => setOrgModal(null)}
-        onOk={() => void submitOrgModal()}
+        onClose={() => setOrgModal(null)}
+        onConfirm={() => void submitOrgModal()}
         confirmLoading={createOrgM.isPending || updateOrgM.isPending}
-        okText="저장"
+        confirmText="저장"
         destroyOnHidden
       >
+        <div className="tw-px-5 tw-py-4">
         <Form form={orgForm} layout="vertical" className="tw-mt-2">
           <Form.Item name="name" label="조직명" rules={[{ required: true, message: '조직명을 입력해 주세요.' }]}>
             <Input placeholder="예: 본사, 개발팀" />
           </Form.Item>
         </Form>
-      </Modal>
+        </div>
+      </AppDoubleActionModal>
 
-      <Modal
+      <AppDoubleActionModal
         title={gradeModal?.mode === 'create' ? '직급 추가' : '직급 수정'}
         open={gradeModal !== null}
-        onCancel={() => setGradeModal(null)}
-        onOk={async () => {
+        onClose={() => setGradeModal(null)}
+        onConfirm={async () => {
           const v = await gradeForm.validateFields();
           if (!gradeModal) return;
           const displayOrder = typeof v.displayOrder === 'number' ? v.displayOrder : Number(v.displayOrder);
@@ -651,10 +654,11 @@ export function OrganizationPage() {
           }
         }}
         confirmLoading={createGradeM.isPending || updateGradeM.isPending}
-        okText="저장"
-        okButtonProps={{ className: toolbarPrimaryBtn }}
+        confirmText="저장"
+        confirmButtonClassName={toolbarPrimaryBtn}
         destroyOnHidden
       >
+        <div className="tw-px-5 tw-py-4">
         <Form form={gradeForm} layout="vertical" className="tw-mt-2">
           <Form.Item name="name" label="직급명" rules={[{ required: true, message: '직급명을 입력해 주세요.' }]}>
             <Input placeholder="예: 대리, 과장" />
@@ -670,13 +674,14 @@ export function OrganizationPage() {
             <InputNumber min={0} step={1} className="tw-w-full" />
           </Form.Item>
         </Form>
-      </Modal>
+        </div>
+      </AppDoubleActionModal>
 
-      <Modal
+      <AppDoubleActionModal
         title={titleModal?.mode === 'create' ? '직책 추가' : '직책 수정'}
         open={titleModal !== null}
-        onCancel={() => setTitleModal(null)}
-        onOk={async () => {
+        onClose={() => setTitleModal(null)}
+        onConfirm={async () => {
           const v = await titleForm.validateFields();
           if (!titleModal) return;
           const displayOrder = typeof v.displayOrder === 'number' ? v.displayOrder : Number(v.displayOrder);
@@ -687,10 +692,11 @@ export function OrganizationPage() {
           }
         }}
         confirmLoading={createTitleM.isPending || updateTitleM.isPending}
-        okText="저장"
-        okButtonProps={{ className: toolbarPrimaryBtn }}
+        confirmText="저장"
+        confirmButtonClassName={toolbarPrimaryBtn}
         destroyOnHidden
       >
+        <div className="tw-px-5 tw-py-4">
         <Form form={titleForm} layout="vertical" className="tw-mt-2">
           <Form.Item name="name" label="직책명" rules={[{ required: true, message: '직책명을 입력해 주세요.' }]}>
             <Input placeholder="예: 팀장, 담당" />
@@ -706,7 +712,8 @@ export function OrganizationPage() {
             <InputNumber min={0} step={1} className="tw-w-full" />
           </Form.Item>
         </Form>
-      </Modal>
+        </div>
+      </AppDoubleActionModal>
     </div>
   );
 }

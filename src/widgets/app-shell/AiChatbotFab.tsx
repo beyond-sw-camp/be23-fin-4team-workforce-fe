@@ -4,7 +4,13 @@ import { useNavigate } from '@tanstack/react-router';
 import { App, Button, Popconfirm, Spin, Tooltip } from 'antd';
 import dayjs from 'dayjs';
 import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { aiApi, sortAiChatHistoryChronological } from '@/features/ai/api/aiApi';
+import {
+  aiApi,
+  sortAiChatHistoryChronological,
+  type AiChatActionButton,
+  type AiChatRequest,
+  type AiChatResponse,
+} from '@/features/ai/api/aiApi';
 import type { ApiError } from '@/shared/api/types';
 import { AiChatbotLottieIcon } from '@/shared/ui/AiChatbotLottieIcon';
 
@@ -32,6 +38,30 @@ const PH_INPUT = '\uBA54\uC2DC\uC9C0\uB97C \uC785\uB825\uD558\uC138\uC694\u2026'
 const HINT_KEYS = 'Enter \uC804\uC1A1 \u00B7 Shift+Enter \uC904\uBC14\uAFC8';
 const AI_TITLE = 'AI \uBE44\uC11C';
 const SOURCES_PREFIX = '\uCC38\uACE0: ';
+const ACTION_PREFILL_STORAGE_KEY = 'wf-approval-prefill-chatbot-action';
+
+/** GET /chat/history 에서 버튼 클릭이 `[버튼: action]` 형태로 저장될 때 말풍선 라벨 */
+const CHAT_BUTTON_QUESTION_LABEL: Record<string, string> = {
+  go_to_form: '\uACB0\uC7AC \uD654\uBA74\uC73C\uB85C \uC774\uB3D9',
+  cancel: '\uCDE8\uC18C',
+  create_event: '\uB4F1\uB85D',
+};
+const BTN_CALENDAR_VIEW = '캘린더 보기';
+
+function displayChatUserQuestion(raw: string): string {
+  const q = raw.trim();
+  const bracket = q.match(/^\[버튼\s*:\s*([^\]]+)]\s*$/);
+  if (bracket) {
+    const key = bracket[1].trim().toLowerCase();
+    if (CHAT_BUTTON_QUESTION_LABEL[key]) return CHAT_BUTTON_QUESTION_LABEL[key];
+  }
+  const legacy = q.match(/^\[button\s*:\s*([^\]]+)]\s*$/i);
+  if (legacy) {
+    const key = legacy[1].trim().toLowerCase();
+    if (CHAT_BUTTON_QUESTION_LABEL[key]) return CHAT_BUTTON_QUESTION_LABEL[key];
+  }
+  return raw;
+}
 const FAB_HOVER_HINT = '\uBB34\uC5C7\uC774\uB4E0 \uAD81\uAE08\uD55C \uC810\uC744 \uCC57\uBD07 AI\uC5D0\uAC8C \uBB3C\uC5B4\uBCF4\uC138\uC694.';
 
 function chatUserMessage(e: unknown, fallback: string): string {
@@ -264,6 +294,24 @@ function AiParsedAnswerBody({
   );
 }
 
+function normalizeActionButtons(buttons: AiChatActionButton[] | null | undefined): AiChatActionButton[] {
+  if (!Array.isArray(buttons)) return [];
+  return buttons.filter((b) => typeof b?.label === 'string' && !!b.label && typeof b?.value === 'string' && !!b.value);
+}
+
+function parseContentPrefill(contentJson?: string | null): Record<string, unknown> | null {
+  if (!contentJson || !contentJson.trim()) return null;
+  try {
+    const parsed = JSON.parse(contentJson) as unknown;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export function AiChatbotFab() {
   const { message } = App.useApp();
   const navigate = useNavigate();
@@ -272,6 +320,10 @@ export function AiChatbotFab() {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
   const [sourcesHint, setSourcesHint] = useState<string[] | null>(null);
+  const [actionSessionId, setActionSessionId] = useState<string | null>(null);
+  const [pendingActionButtons, setPendingActionButtons] = useState<AiChatActionButton[]>([]);
+  /** type=created 이고 redirectUrl이 캘린더일 때만 수동 이동 버튼 */
+  const [createdCalendarViewUrl, setCreatedCalendarViewUrl] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
   const { data: history = [], isLoading: historyLoading } = useQuery({
@@ -283,14 +335,96 @@ export function AiChatbotFab() {
 
   const displayHistory = useMemo(() => sortAiChatHistoryChronological(history), [history]);
 
-  const chatM = useMutation({
-    mutationFn: (question: string) => aiApi.chat(question),
-    onSuccess: (data) => {
+  const navigateFromAnswerLink = useCallback(
+    (pathWithSearch: string) => {
+      try {
+        const u = new URL(pathWithSearch, window.location.origin);
+        const search: Record<string, string> = {};
+        u.searchParams.forEach((v, k) => {
+          search[k] = v;
+        });
+        void navigate({
+          to: u.pathname,
+          ...(Object.keys(search).length > 0 ? { search } : {}),
+          /** 이전 탭의 sideNav 등이 병합되지 않도록 */
+          replace: true,
+        });
+      } catch {
+        void navigate({ to: pathWithSearch, replace: true });
+      }
+    },
+    [navigate],
+  );
+
+  const handleChatActionResponse = useCallback(
+    (data: AiChatResponse) => {
+      setCreatedCalendarViewUrl(null);
+
       const src = Array.isArray(data.sources)
         ? data.sources.filter((s): s is string => typeof s === 'string' && s.trim() !== '')
         : [];
       setSourcesHint(src.length > 0 ? src : null);
+      if (data.sessionId && data.sessionId.trim()) {
+        setActionSessionId(data.sessionId.trim());
+      }
+      setPendingActionButtons(normalizeActionButtons(data.actions));
+      if (data.type === 'cancelled' || data.type === 'error' || data.type === 'created') {
+        setActionSessionId(null);
+        setPendingActionButtons([]);
+      }
+
+      if (data.type === 'created') {
+        const ru = typeof data.redirectUrl === 'string' ? data.redirectUrl.trim() : '';
+        if (ru && ru.includes('/app/calendar')) {
+          setCreatedCalendarViewUrl(ru);
+        }
+      }
+
+      if (data.type === 'redirect_to_form') {
+        const redirectUrl = typeof data.redirectUrl === 'string' ? data.redirectUrl.trim() : '';
+        const preview = data.preview ?? null;
+        const prefDocId = preview?.documentId?.trim();
+        const prefContent = parseContentPrefill(preview?.contentJson);
+        const isCalendarDest = redirectUrl.includes('/app/calendar');
+        const canNavigateHref =
+          redirectUrl.startsWith('/') || /^https?:\/\//i.test(redirectUrl);
+
+        if (!isCalendarDest && prefDocId && prefContent) {
+          sessionStorage.setItem(
+            ACTION_PREFILL_STORAGE_KEY,
+            JSON.stringify({
+              documentId: prefDocId,
+              content: prefContent,
+            }),
+          );
+        }
+
+        if (isCalendarDest) {
+          if (canNavigateHref) navigateFromAnswerLink(redirectUrl);
+        } else if (canNavigateHref) {
+          navigateFromAnswerLink(redirectUrl);
+        } else if (prefDocId) {
+          void navigate({
+            to: '/app/approvals',
+            search: { tab: 'compose', documentId: prefDocId, prefill: 'true' },
+            replace: true,
+          });
+        } else {
+          void navigate({ to: '/app/approvals', search: { tab: 'compose' }, replace: true });
+        }
+        setActionSessionId(null);
+        setPendingActionButtons([]);
+        setOpen(false);
+      }
       void qc.invalidateQueries({ queryKey: ['ai', 'chat-history'] });
+    },
+    [navigate, navigateFromAnswerLink, qc],
+  );
+
+  const chatM = useMutation({
+    mutationFn: (payload: AiChatRequest) => aiApi.chat(payload),
+    onSuccess: (data) => {
+      handleChatActionResponse(data);
     },
     onError: (e: unknown) => {
       if (import.meta.env.DEV) {
@@ -304,6 +438,9 @@ export function AiChatbotFab() {
     mutationFn: () => aiApi.clearChatHistory(),
     onSuccess: () => {
       message.success(OK_CLEAR);
+      setPendingActionButtons([]);
+      setActionSessionId(null);
+      setCreatedCalendarViewUrl(null);
       void qc.invalidateQueries({ queryKey: ['ai', 'chat-history'] });
     },
     onError: (e: unknown) => message.error(chatUserMessage(e, ERR_CLEAR)),
@@ -331,26 +468,18 @@ export function AiChatbotFab() {
     const text = input.trim();
     if (!text || pending) return;
     setInput('');
-    chatM.mutate(text);
-  }, [input, pending, chatM]);
+    chatM.mutate({
+      question: text,
+      ...(actionSessionId ? { sessionId: actionSessionId } : {}),
+    });
+  }, [actionSessionId, input, pending, chatM]);
 
-  const navigateFromAnswerLink = useCallback(
-    (pathWithSearch: string) => {
-      try {
-        const u = new URL(pathWithSearch, window.location.origin);
-        const search: Record<string, string> = {};
-        u.searchParams.forEach((v, k) => {
-          search[k] = v;
-        });
-        void navigate({
-          to: u.pathname,
-          ...(Object.keys(search).length > 0 ? { search } : {}),
-        });
-      } catch {
-        void navigate({ to: pathWithSearch });
-      }
+  const sendAction = useCallback(
+    (action: string) => {
+      if (!action || !actionSessionId || pending) return;
+      chatM.mutate({ action, sessionId: actionSessionId });
     },
-    [navigate],
+    [actionSessionId, pending, chatM],
   );
 
   const scrollToBottom = useCallback(() => {
@@ -451,7 +580,9 @@ export function AiChatbotFab() {
                 <div className="tw-mb-1.5 tw-flex tw-items-end tw-justify-end tw-gap-1">
                   <div className="tw-flex tw-max-w-[72%] tw-flex-col tw-items-end tw-gap-0.5">
                     <div className="tw-cursor-default tw-rounded-[14px_2px_14px_14px] tw-bg-[#3B82F6] tw-px-3 tw-py-1.5 tw-text-[0.8rem] tw-leading-relaxed tw-text-white tw-shadow-[0_1px_4px_rgba(59,130,246,0.25)] tw-transition-[filter] hover:tw-brightness-[0.97]">
-                      <p className="tw-m-0 tw-whitespace-pre-wrap tw-break-words">{item.question}</p>
+                      <p className="tw-m-0 tw-whitespace-pre-wrap tw-break-words">
+                        {displayChatUserQuestion(item.question)}
+                      </p>
                     </div>
                     <span className="tw-text-[9px] tw-text-[#94A3B8]">{formatAiMsgTime(item.createdAt)}</span>
                   </div>
@@ -488,6 +619,36 @@ export function AiChatbotFab() {
                   <Spin size="small" />
                   <span>{PENDING}</span>
                 </div>
+              </div>
+            ) : null}
+
+            {!pending && pendingActionButtons.length > 0 ? (
+              <div className="tw-mt-2 tw-flex tw-flex-wrap tw-gap-2">
+                {pendingActionButtons.map((btn, idx) => (
+                  <Button
+                    key={`${btn.value}-${idx}`}
+                    type={idx === 0 ? 'primary' : 'default'}
+                    size="small"
+                    onClick={() => sendAction(btn.value)}
+                  >
+                    {btn.label}
+                  </Button>
+                ))}
+              </div>
+            ) : null}
+
+            {!pending && createdCalendarViewUrl ? (
+              <div className="tw-mt-2 tw-flex tw-flex-wrap tw-gap-2">
+                <Button
+                  type="primary"
+                  size="small"
+                  onClick={() => {
+                    navigateFromAnswerLink(createdCalendarViewUrl);
+                    setCreatedCalendarViewUrl(null);
+                  }}
+                >
+                  {BTN_CALENDAR_VIEW}
+                </Button>
               </div>
             ) : null}
           </div>

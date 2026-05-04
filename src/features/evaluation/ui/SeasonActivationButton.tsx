@@ -1,9 +1,10 @@
-import { App, Card, Modal, Tag, Tooltip } from 'antd';
+import { App, Card, Tag, Tooltip } from 'antd';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useMemberDisplayNames } from '@/features/members/hooks/useMemberDisplayNames';
 import { evaluationRedesignApi } from '../api/evaluationRedesignApi';
 import { AppButton } from '@/shared/ui/AppButton';
+import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
 import { parseApiError } from '@/shared/api/error-parser';
 
 type BlockedPayload = {

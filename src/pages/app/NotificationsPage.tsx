@@ -9,6 +9,10 @@ import {
   buildApprovalNotificationNavigate,
   buildGoalBundleNotificationNavigate,
 } from '@/features/notification/lib/approvalNotificationRoute';
+import {
+  buildContractNotificationNavigate,
+  isContractNotificationRoutable,
+} from '@/features/notification/lib/contractNotificationRoute';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 
@@ -33,7 +37,8 @@ function isRoutableNotification(item: NotificationItem): boolean {
   return (
     isApprovalNotification(item.notificationType) ||
     isGoalBundleNotification(item.notificationType, item.targetType) ||
-    isLeavePromotionNotification(item.notificationType)
+    isLeavePromotionNotification(item.notificationType) ||
+    isContractNotificationRoutable(item)
   );
 }
 
@@ -44,6 +49,7 @@ function notificationTone(item: NotificationItem): string {
   if (t.startsWith('APPROVAL_')) return 'purple';
   if (t.startsWith('LEAVE_')) return 'green';
   if (t.startsWith('EVALUATION_') || t === 'GOAL_EVALUATED') return 'orange';
+  if (t.startsWith('CONTRACT_')) return 'cyan';
   return 'default';
 }
 
@@ -204,6 +210,11 @@ export function NotificationsPage() {
     // (/app/leave/my-promotion 은 폐지되고 /app/leave 에 통합됨)
     if (isLeavePromotionNotification(item.notificationType)) {
       await navigate({ to: '/app/leave' });
+      return;
+    }
+
+    if (isContractNotificationRoutable(item)) {
+      await navigate(buildContractNotificationNavigate(item.targetId));
       return;
     }
 

@@ -9,7 +9,6 @@ import {
   DatePicker,
   Form,
   Input,
-  Modal,
   Popover,
   Radio,
   Select,
@@ -1436,32 +1435,22 @@ ${showSixthMonthRow ? '' : '.wf-cal-month.ant-picker-calendar .ant-picker-conten
         </div>
       </AppSingleActionModal>
 
-      <Modal
+      <AppDoubleActionModal
         title={editing ? '일정 수정' : '일정 추가'}
         open={formOpen}
-        onCancel={() => {
+        onClose={() => {
           setFormOpen(false);
           setEditing(null);
           form.resetFields();
         }}
-        footer={[
-          <Button key="cancel" onClick={() => setFormOpen(false)}>
-            취소
-          </Button>,
-          <Button
-            key="ok"
-            type="primary"
-            loading={createM.isPending || updateM.isPending}
-            onClick={() => void submitForm()}
-            className="!tw-h-10 !tw-rounded-xl !tw-border-0 !tw-bg-[#1e3a5f] !tw-font-semibold hover:!tw-bg-[#152a45]"
-          >
-            {editing ? '저장' : '등록'}
-          </Button>,
-        ]}
+        onConfirm={() => void submitForm()}
+        confirmText={editing ? '저장' : '등록'}
+        cancelText="취소"
+        confirmLoading={createM.isPending || updateM.isPending}
         width={520}
         destroyOnHidden
       >
-        <Form form={form} layout="vertical" className="tw-pt-2">
+        <Form form={form} layout="vertical" className="tw-px-5 tw-py-4 tw-pt-2">
           <Form.Item name="kind" label="유형" rules={[{ required: true }]}>
             <Radio.Group disabled={Boolean(editing)}>
               <Radio value="personal">개인 일정</Radio>
@@ -1514,7 +1503,7 @@ ${showSixthMonthRow ? '' : '.wf-cal-month.ant-picker-calendar .ant-picker-conten
             }
           </Form.Item>
         </Form>
-      </Modal>
+      </AppDoubleActionModal>
 
       <AppDoubleActionModal
         title={'\uC77C\uC815 \uC0C1\uC138'}

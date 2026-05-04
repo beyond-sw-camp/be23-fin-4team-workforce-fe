@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { Avatar, Descriptions, Modal, Spin, Typography } from 'antd';
+import { Avatar, Descriptions, Spin, Typography } from 'antd';
+import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
 import { EMPLOYMENT_TYPE_KO } from '@/app/locale/app-ko';
 import { memberApi } from '@/features/member/api/memberApi';
 import {
@@ -40,15 +41,16 @@ export function HeaderSearchMemberDetailModal({
   });
 
   return (
-    <Modal
+    <AppSingleActionModal
       title="구성원 정보"
       open={open}
-      onCancel={onClose}
-      footer={null}
+      onClose={onClose}
+      onSubmit={onClose}
+      submitText="닫기"
       width={600}
       destroyOnHidden
-      className="[&_.ant-modal-body]:tw-max-h-[min(78vh,720px)] [&_.ant-modal-body]:tw-overflow-y-auto"
     >
+      <div className="tw-max-h-[min(78vh,720px)] tw-overflow-y-auto tw-px-5 tw-py-4">
       {!memberId ? null : isLoading ? (
         <div className="tw-flex tw-min-h-[200px] tw-items-center tw-justify-center tw-py-8">
           <Spin />
@@ -128,6 +130,7 @@ export function HeaderSearchMemberDetailModal({
           )}
         </div>
       )}
-    </Modal>
+      </div>
+    </AppSingleActionModal>
   );
 }

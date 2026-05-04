@@ -8,7 +8,6 @@ import {
   DatePicker,
   Divider,
   Input,
-  Modal,
   Space,
   Table,
   Tabs,
@@ -32,6 +31,7 @@ import { useAuth } from '@/features/auth/useAuth';
 import { memberApi, type MemberListItemForApproval } from '@/features/member/api/memberApi';
 import { organizationApi } from '@/features/organization/api/organizationApi';
 import { parseApiError } from '@/shared/api/error-parser';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 
 /** `toISOString()`은 UTC로 바뀌어 한국 등 로컬 '오늘'이 전날로 밀릴 수 있음 — LocalDateTime용 로컬 벽시각 */
 function toLocalDateTimePayload(d: Dayjs): string {
@@ -560,22 +560,23 @@ export function AbsenceProxyPage() {
         />
       </Card>
 
-      <Modal
+      <AppDoubleActionModal
         title="부재 위임 등록"
         open={createOpen}
-        onCancel={() => {
+        onClose={() => {
           setCreateOpen(false);
           setSelectedSubstitute(null);
           setPickerRange(null);
           setSubstitutePickerKeyword('');
           setOrgTreeSelectedKey(undefined);
         }}
-        okText="등록"
+        confirmText="등록"
         confirmLoading={createMut.isPending}
-        onOk={() => submitCreate()}
+        onConfirm={() => submitCreate()}
         width={640}
         destroyOnHidden
       >
+        <div className="tw-px-5 tw-py-4">
         <Space direction="vertical" size="middle" className="tw-w-full">
           <div>
             <Typography.Text className="tw-mb-1 tw-block tw-text-sm tw-font-medium">위임 기간</Typography.Text>
@@ -728,7 +729,8 @@ export function AbsenceProxyPage() {
             </div>
           </div>
         </Space>
-      </Modal>
+        </div>
+      </AppDoubleActionModal>
     </div>
   );
 }

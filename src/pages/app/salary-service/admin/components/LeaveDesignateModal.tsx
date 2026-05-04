@@ -1,7 +1,8 @@
 // 관리자 강제 지정 모달 노무수령 거부 절차
 // 캘린더 다중 선택 + 사유 입력 LeaveRequest 자동 생성 잔여 즉시 차감
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, DatePicker, Input, Modal, Space, Tag, Typography } from 'antd';
+import { Alert, DatePicker, Input, Space, Tag, Typography } from 'antd';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import dayjs, { type Dayjs } from 'dayjs';
 import type { LeavePromotionNoResponse } from '@/features/salary-service/types';
 

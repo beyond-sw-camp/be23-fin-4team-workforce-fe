@@ -13,7 +13,6 @@ import {
   Form,
   Input,
   InputNumber,
-  Modal,
   Popconfirm,
   Space,
   Switch,
@@ -23,6 +22,8 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs, { type Dayjs } from 'dayjs';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
+import { AppModal } from '@/shared/ui/AppModal';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import type { PayGradeTable } from '@/features/salary-service/types';
 
@@ -242,19 +243,20 @@ export function AdminPayGradeTablePage({ embedded = false }: { embedded?: boolea
       </Card>
 
       {/* 단건 수정 모달 */}
-      <Modal
+      <AppDoubleActionModal
         open={Boolean(editTarget)}
         title={editTarget ? `${editTarget.step}호봉 수정` : '수정'}
-        onCancel={() => {
+        onClose={() => {
           setEditTarget(null);
           editForm.resetFields();
         }}
-        onOk={() => editForm.submit()}
+        onConfirm={() => editForm.submit()}
         confirmLoading={updateM.isPending}
-        okText="저장"
+        confirmText="저장"
         cancelText="취소"
         destroyOnHidden
       >
+        <div className="tw-px-5 tw-py-4">
         {editTarget && (
           <>
             <Typography.Text type="secondary" className="!tw-text-xs !tw-block tw-mb-3">
@@ -291,7 +293,8 @@ export function AdminPayGradeTablePage({ embedded = false }: { embedded?: boolea
             </Form>
           </>
         )}
-      </Modal>
+        </div>
+      </AppDoubleActionModal>
 
       {/* 일괄 등록 모달 */}
       <BulkCreateModal
@@ -365,7 +368,7 @@ function BulkCreateModal({ open, onCancel, onSubmit, submitting, form }: BulkCre
   };
 
   return (
-    <Modal
+    <AppModal
       open={open}
       onCancel={onCancel}
       onOk={() => form.submit()}
@@ -379,6 +382,7 @@ function BulkCreateModal({ open, onCancel, onSubmit, submitting, form }: BulkCre
         if (o) refreshPreview();
       }}
     >
+      <div className="tw-px-5 tw-py-4">
       <Form<BulkFormValues>
         form={form}
         layout="vertical"
@@ -473,6 +477,7 @@ function BulkCreateModal({ open, onCancel, onSubmit, submitting, form }: BulkCre
           />
         </div>
       </Form>
-    </Modal>
+      </div>
+    </AppModal>
   );
 }

@@ -10,7 +10,6 @@ import {
   Form,
   Input,
   InputNumber,
-  Modal,
   Popconfirm,
   Select,
   Space,
@@ -27,6 +26,7 @@ import { hasActivePayGradeSalaryPolicy } from '@/features/salary-service/lib/sal
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import { memberApi } from '@/features/member/api/memberApi';
 import { AdminPayGradeTablePage } from '@/pages/app/salary-service/admin/AdminPayGradeTablePage';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import type {
   ComprehensiveOvertimeStatus,
   Salary,
@@ -565,7 +565,8 @@ export function SalaryTab() {
         pagination={{ pageSize: 20 }}
         locale={{ emptyText: '등록된 급여 이력이 없습니다.' }}
       />
-      <Modal open={open} onCancel={() => { setOpen(false); setEditing(null); form.resetFields(); }} onOk={() => form.submit()} confirmLoading={createM.isPending || updateM.isPending} okText={editing ? '수정' : '등록'} cancelText="취소" title={editing ? '급여 수정' : '급여 등록'} destroyOnHidden width={560}>
+      <AppDoubleActionModal open={open} onClose={() => { setOpen(false); setEditing(null); form.resetFields(); }} onConfirm={() => form.submit()} confirmLoading={createM.isPending || updateM.isPending} confirmText={editing ? '수정' : '등록'} cancelText="취소" title={editing ? '급여 수정' : '급여 등록'} destroyOnHidden width={560}>
+        <div className="tw-px-5 tw-py-4">
         <Form<SalaryFormValues>
           form={form}
           layout="vertical"
@@ -808,14 +809,15 @@ export function SalaryTab() {
             </>
           )}
         </Form>
-      </Modal>
+        </div>
+      </AppDoubleActionModal>
 
-      <Modal
+      <AppDoubleActionModal
         open={bootstrapOpen}
-        onCancel={() => { setBootstrapOpen(false); bootstrapForm.resetFields(); }}
-        onOk={() => bootstrapForm.submit()}
+        onClose={() => { setBootstrapOpen(false); bootstrapForm.resetFields(); }}
+        onConfirm={() => bootstrapForm.submit()}
         confirmLoading={bootstrapM.isPending}
-        okText="복구 요청"
+        confirmText="복구 요청"
         cancelText="취소"
         title="입사 누락 Salary 복구"
         destroyOnHidden
@@ -839,7 +841,7 @@ export function SalaryTab() {
           <Form.Item label="직급명" name="jobGradeName"><Input maxLength={40} /></Form.Item>
           <Form.Item label="직책명" name="jobTitleName"><Input maxLength={40} /></Form.Item>
         </Form>
-      </Modal>
+      </AppDoubleActionModal>
     </>
   );
 }
@@ -973,7 +975,8 @@ function SalaryPolicyTab() {
     <>
       <div className="tw-flex tw-justify-end tw-mb-3"><Button type="primary" onClick={() => { setEditing(null); form.resetFields(); form.setFieldsValue({ payDay: 25, usePayGradeYn: 'N', wageSystemType: 'NON_COMPREHENSIVE', payDayShiftRule: 'BEFORE', monthlyOrdinaryHours: 209, prorationMethod: 'DAYS_IN_MONTH', effectiveRange: [dayjs(), null] }); setOpen(true); }}>정책 등록</Button></div>
       <Table<SalaryPolicy> rowKey={(r) => r.salaryPolicyId ?? Math.random().toString()} loading={listQ.isLoading} dataSource={listQ.data ?? []} columns={cols} pagination={{ pageSize: 10 }} locale={{ emptyText: '등록된 정책이 없습니다.' }} />
-      <Modal open={open} onCancel={() => { setOpen(false); setEditing(null); form.resetFields(); }} onOk={() => form.submit()} confirmLoading={createM.isPending || updateM.isPending} okText={editing ? '수정' : '등록'} cancelText="취소" title={editing ? '급여 정책 수정' : '급여 정책 등록'} destroyOnHidden width={600}>
+      <AppDoubleActionModal open={open} onClose={() => { setOpen(false); setEditing(null); form.resetFields(); }} onConfirm={() => form.submit()} confirmLoading={createM.isPending || updateM.isPending} confirmText={editing ? '수정' : '등록'} cancelText="취소" title={editing ? '급여 정책 수정' : '급여 정책 등록'} destroyOnHidden width={600}>
+        <div className="tw-px-5 tw-py-4">
         <Form<PolicyFormValues> form={form} layout="vertical" onFinish={(v) => editing?.salaryPolicyId ? updateM.mutate({ id: editing.salaryPolicyId, v }) : createM.mutate(v)}>
           <Form.Item label="정책명" name="policyName" rules={[{ required: true }]}><Input maxLength={60} placeholder="예: ㅇㅇ컴퍼니 급여정책" /></Form.Item>
           <Form.Item label="지급일 (1~31)" name="payDay" rules={[{ required: true }]}><InputNumber min={1} max={31} style={{ width: 120 }} /></Form.Item>
@@ -1056,7 +1059,8 @@ function SalaryPolicyTab() {
           </Space>
           <Form.Item label="적용 기간" name="effectiveRange" rules={[{ required: true }]}><DatePicker.RangePicker allowEmpty={[false, true]} format="YYYY-MM-DD" style={{ width: '100%' }} /></Form.Item>
         </Form>
-      </Modal>
+        </div>
+      </AppDoubleActionModal>
     </>
   );
 }
@@ -1200,7 +1204,18 @@ function TaxRateTab() {
         </Space>
       </div>
       <Table<TaxRate> rowKey={(r) => r.taxRateId ?? Math.random().toString()} loading={listQ.isLoading} dataSource={listQ.data ?? []} columns={cols} pagination={{ pageSize: 20 }} locale={{ emptyText: '등록된 세율이 없습니다.' }} />
-      <Modal open={open} onCancel={() => { setOpen(false); setEditing(null); form.resetFields(); }} onOk={() => form.submit()} confirmLoading={createM.isPending || updateM.isPending} okText={editing ? '수정' : '등록'} cancelText="취소" title={editing ? '세율 수정' : '세율 등록'} destroyOnHidden width={520}>
+      <AppDoubleActionModal
+        open={open}
+        onClose={() => { setOpen(false); setEditing(null); form.resetFields(); }}
+        onConfirm={() => form.submit()}
+        confirmLoading={createM.isPending || updateM.isPending}
+        confirmText={editing ? '수정' : '등록'}
+        cancelText="취소"
+        title={editing ? '세율 수정' : '세율 등록'}
+        destroyOnHidden
+        width={520}
+      >
+        <div className="tw-px-5 tw-py-4">
         <Form<TaxFormValues> form={form} layout="vertical" onFinish={(v) => editing?.taxRateId ? updateM.mutate({ id: editing.taxRateId, v }) : createM.mutate(v)}>
           <Form.Item label="세금 유형" name="taxType" rules={[{ required: true }]}><Select options={taxTypeOpts} /></Form.Item>
           <Form.Item label="적용 연도" name="applyYear" rules={[{ required: true }]}><InputNumber min={2000} max={2099} style={{ width: '100%' }} /></Form.Item>
@@ -1255,7 +1270,8 @@ function TaxRateTab() {
             }}
           </Form.Item>
         </Form>
-      </Modal>
+        </div>
+      </AppDoubleActionModal>
     </>
   );
 }
@@ -1468,7 +1484,8 @@ function SalaryItemTemplateTab() {
         className="!tw-text-[15px]"
         locale={{ emptyText: '등록된 항목이 없습니다.' }}
       />
-      <Modal open={open} onCancel={() => { setOpen(false); setEditing(null); form.resetFields(); }} onOk={() => form.submit()} confirmLoading={createM.isPending || updateM.isPending} okText={editing ? '수정' : '등록'} cancelText="취소" title={editing ? (editing.isSystemDefault ? '시스템 기본 항목(수당) 수정' : '항목(수당) 수정') : '항목(수당) 등록'} destroyOnHidden width={480}>
+      <AppDoubleActionModal open={open} onClose={() => { setOpen(false); setEditing(null); form.resetFields(); }} onConfirm={() => form.submit()} confirmLoading={createM.isPending || updateM.isPending} confirmText={editing ? '수정' : '등록'} cancelText="취소" title={editing ? (editing.isSystemDefault ? '시스템 기본 항목 수정' : '항목 수정') : '항목 등록'} destroyOnHidden width={480}>
+        <div className="tw-px-5 tw-py-4">
         <Form<TemplateFormValues> form={form} layout="vertical" onFinish={(v) => editing?.salaryItemTemplateId ? updateM.mutate({ id: editing.salaryItemTemplateId, v }) : createM.mutate(v)}>
           <Form.Item label="수당명" name="itemName" rules={[{ required: true }]}>
             <Input maxLength={40} placeholder="예: 직책수당, 식대" />
@@ -1537,7 +1554,8 @@ function SalaryItemTemplateTab() {
             </Typography.Paragraph>
           )}
         </Form>
-      </Modal>
+        </div>
+      </AppDoubleActionModal>
     </>
   );
 }

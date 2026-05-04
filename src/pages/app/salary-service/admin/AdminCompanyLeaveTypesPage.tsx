@@ -17,7 +17,6 @@ import {
   Form,
   Input,
   InputNumber,
-  Modal,
   Popconfirm,
   Select,
   Space,
@@ -34,6 +33,7 @@ import {
 } from '@ant-design/icons';
 import dayjs, { type Dayjs } from 'dayjs';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { memberApi } from '@/features/member/api/memberApi';
 import { useAuth } from '@/features/auth/useAuth';
 import type {
@@ -715,17 +715,18 @@ export function AdminCompanyLeaveTypesPage() {
       </Drawer>
 
       {/* [수동 휴가 부여] — 시연용/누락 보정용 즉시 INSERT 모달 */}
-      <Modal
+      <AppDoubleActionModal
         open={grantOpen}
         title="수동 휴가 부여"
-        onCancel={() => setGrantOpen(false)}
-        onOk={onSubmitGrant}
+        onClose={() => setGrantOpen(false)}
+        onConfirm={onSubmitGrant}
         confirmLoading={grantMut.isPending}
-        okText="부여"
+        confirmText="부여"
         cancelText="취소"
         destroyOnHidden
         width={520}
       >
+        <div className="tw-px-5 tw-py-4">
         <Typography.Paragraph type="secondary" className="!tw-text-xs !tw-mb-3">
           매월 1일 휴가 자동 부여 배치를 기다리지 않고, 특정 직원에게 즉시 휴가 잔고를 부여합니다.
           시연·누락 보정용. 일반적인 정기 부여는 자동 배치(`leaveGrantJob`)에 맡기세요.
@@ -783,13 +784,14 @@ export function AdminCompanyLeaveTypesPage() {
             <DatePicker style={{ width: '100%' }} />
           </Form.Item>
         </Form>
-      </Modal>
+        </div>
+      </AppDoubleActionModal>
 
       {/* [기본 휴가 불러오기] — 패턴 D 선택 마법사 */}
-      <Modal
+      <AppDoubleActionModal
         open={initOpen}
-        onCancel={() => setInitOpen(false)}
-        onOk={() => {
+        onClose={() => setInitOpen(false)}
+        onConfirm={() => {
           // 이미 등록된 코드는 backend 가 자동 SKIP 하지만 명시적으로 빼서 보내면 호환성 ↑
           const codes = Array.from(selectedCodes).filter((c) => !existingCodes.has(c));
           if (codes.length === 0) {
@@ -800,11 +802,12 @@ export function AdminCompanyLeaveTypesPage() {
           initDefaultsM.mutate(codes);
         }}
         confirmLoading={initDefaultsM.isPending}
-        okText="추가하기"
+        confirmText="추가하기"
         cancelText="취소"
         title="기본 휴가 불러오기"
         width={580}
       >
+        <div className="tw-px-5 tw-py-4">
         <Typography.Paragraph type="secondary" className="!tw-text-xs !tw-mb-3">
           회사에서 사용할 휴가 종류를 선택하세요. 이미 등록된 항목은 회색으로 표시되며 다시 추가되지 않습니다.
         </Typography.Paragraph>
@@ -866,23 +869,25 @@ export function AdminCompanyLeaveTypesPage() {
         <Typography.Text type="secondary" className="tw-text-xs">
           선택 안 한 휴가 종류는 등록되지 않습니다. 나중에 [기본 휴가 불러오기] 다시 눌러서 추가할 수 있습니다.
         </Typography.Text>
-      </Modal>
+        </div>
+      </AppDoubleActionModal>
 
-      <Modal
+      <AppDoubleActionModal
         open={open}
-        onCancel={() => {
+        onClose={() => {
           setOpen(false);
           setEditing(null);
           form.resetFields();
         }}
-        onOk={() => form.submit()}
+        onConfirm={() => form.submit()}
         confirmLoading={createM.isPending || updateM.isPending}
-        okText={editing ? '수정' : '등록'}
+        confirmText={editing ? '수정' : '등록'}
         cancelText="취소"
         title={editing ? '휴가 종류 수정' : '휴가 종류 추가'}
         destroyOnHidden
         width={560}
       >
+        <div className="tw-px-5 tw-py-4">
         <Form<FormValues> form={form} layout="vertical" onFinish={onSubmit}>
           {/* 시스템 기본 휴가 안내 */}
           {editing?.isSystemDefault && (
@@ -977,7 +982,8 @@ export function AdminCompanyLeaveTypesPage() {
             </Form.Item>
           </div>
         </Form>
-      </Modal>
+        </div>
+      </AppDoubleActionModal>
             </Space>
           ),
         },
