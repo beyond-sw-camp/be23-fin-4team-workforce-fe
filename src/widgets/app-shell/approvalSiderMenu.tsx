@@ -56,6 +56,11 @@ export function approvalSiderSelectedMenuKeys(pathname: string, rawSearch: Recor
     }
     return [navDepartment({ deptView })];
   }
+  if (pathname === '/app/approvals/department-search') {
+    const organizationId = typeof rawSearch.organizationId === 'string' ? rawSearch.organizationId.trim() : '';
+    if (organizationId) return [navDepartment({ organizationId, deptView: 'draft' })];
+    return [navDepartment({ deptView: 'draft' })];
+  }
   if (pathname !== '/app/approvals') return [];
   const tab = typeof rawSearch.tab === 'string' ? rawSearch.tab.trim() : '';
   if (tab === 'admin') {

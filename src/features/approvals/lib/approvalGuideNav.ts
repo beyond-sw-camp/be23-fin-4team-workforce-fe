@@ -246,6 +246,7 @@ export function approvalShellMenuItemKeyFromLocation(
     if (dv === 'received') return 'ap-dept-received';
     return 'ap-dept-all';
   }
+  if (pathname === '/app/approvals/department-search') return 'ap-dept-all';
   if (pathname !== '/app/approvals') return '';
   const tab = search.tab ?? 'compose';
   if (tab === 'compose') return 'ap-compose';

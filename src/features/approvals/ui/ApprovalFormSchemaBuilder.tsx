@@ -28,10 +28,12 @@ import { approvalRequestTypeLabelKo } from '@/features/approvals/lib/approvalReq
 import {
   ApprovalFormPaperFieldRow,
   ApprovalFormPaperLayout,
+  ApprovalFormPaperStaticNoteRow,
   ApprovalFormStampColumn,
 } from '@/features/approvals/ui/ApprovalFormPaperLayout';
 import {
   FORM_SCHEMA_FIELD_TYPES,
+  type AiTranscribeFieldConfig,
   type FormFieldSchema,
   type FormFieldType,
 } from '@/features/approvals/lib/approvalFormSchema';
@@ -45,13 +47,12 @@ const TYPE_LABEL: Record<FormFieldType, string> = {
   time: '시간',
   select: '선택(드롭다운)',
   hidden: '숨김(자동)',
+  static_note: '안내 문구(표시만)',
   ai_transcribe: '녹음 받아쓰기(AI)',
 };
 
-const TYPE_OPTIONS = FORM_SCHEMA_FIELD_TYPES.map((t) => ({
-  value: t,
-  label: TYPE_LABEL[t],
-}));
+/** 신규 필드 추가 시 선택 목록에서 제외 (기존 양식에 남아 있으면 해당 행에서만 표시) */
+const SCHEMA_BUILDER_FIELD_TYPES = FORM_SCHEMA_FIELD_TYPES.filter((t) => t !== 'ai_transcribe');
 
 type SortableFormSchemaRowContextValue = {
   setActivatorNodeRef: (el: HTMLElement | null) => void;
@@ -174,9 +175,9 @@ function previewControlForField(field: FormFieldSchema) {
   const common = 'tw-w-full';
   switch (field.type) {
     case 'textarea':
-      return <Input.TextArea readOnly className={common} rows={2} placeholder={ph} value="" />;
+      return <Input.TextArea readOnly className={common} rows={2} {...(ph ? { placeholder: ph } : {})} value="" />;
     case 'number':
-      return <Input readOnly className={common} type="number" placeholder={ph} />;
+      return <Input readOnly className={common} type="number" {...(ph ? { placeholder: ph } : {})} />;
     case 'date':
       return <Input readOnly className={common} type="date" />;
     case 'datetime-local':
@@ -189,7 +190,7 @@ function previewControlForField(field: FormFieldSchema) {
         <Select
           disabled
           className={common}
-          placeholder={ph ?? '선택'}
+          {...(ph ? { placeholder: ph } : {})}
           options={(opts.length ? opts : ['(선택지 없음)']).map((o) => ({ value: o, label: o }))}
         />
       );
@@ -198,8 +199,16 @@ function previewControlForField(field: FormFieldSchema) {
       return <Tag>숨김 필드</Tag>;
     case 'ai_transcribe':
       return <Tag color="blue">녹음·AI 필드</Tag>;
+    case 'static_note': {
+      const body = (field.staticText ?? '').trim();
+      return body ? (
+        <Typography.Paragraph className="!tw-mb-0 tw-text-[11px] tw-font-normal tw-leading-[1.75] tw-text-black [word-break:keep-all]">
+          {body}
+        </Typography.Paragraph>
+      ) : null;
+    }
     default:
-      return <Input readOnly className={common} placeholder={ph ?? '입력 예시'} />;
+      return <Input readOnly className={common} {...(ph ? { placeholder: ph } : {})} />;
   }
 }
 
@@ -379,6 +388,16 @@ export function ApprovalFormSchemaBuilder({
     const next = value.map((f, i) => {
       if (i !== index) return f;
       let u: FormFieldSchema = { ...f, ...patch };
+      if (patch.type != null && patch.type !== 'ai_transcribe') {
+        const stripped = { ...u } as FormFieldSchema & { config?: AiTranscribeFieldConfig };
+        delete stripped.config;
+        u = stripped as FormFieldSchema;
+      }
+      if (patch.type != null && patch.type !== 'static_note') {
+        const stripped = { ...u } as FormFieldSchema & { staticText?: string };
+        delete stripped.staticText;
+        u = stripped as FormFieldSchema;
+      }
       if (patch.type != null && patch.type !== 'select') {
         const rest = { ...u } as FormFieldSchema & { options?: string[] };
         delete rest.options;
@@ -397,6 +416,9 @@ export function ApprovalFormSchemaBuilder({
           delete rest.locked;
           u = rest as FormFieldSchema;
         }
+      }
+      if (u.type === 'static_note' && u.staticText === undefined) {
+        u = { ...u, staticText: '' };
       }
       return u;
     });
@@ -431,10 +453,110 @@ export function ApprovalFormSchemaBuilder({
     setSelectedIndex(value.length);
   };
 
+  const addStaticNote = () => {
+    rowIdsRef.current = [...rowIdsRef.current, crypto.randomUUID()];
+    onChange([
+      ...value,
+      {
+        name: `note_${Date.now()}`,
+        label: '',
+        type: 'static_note',
+        staticText: '',
+      },
+    ]);
+    setSelectedIndex(value.length);
+  };
+
   const renderFieldProperties = (index: number) => {
     const field = value[index];
     if (!field) return null;
     const locked = rowLocked(field);
+    if (field.type === 'static_note') {
+      return (
+        <div className="tw-box-border tw-min-w-0 tw-max-w-full tw-space-y-3 tw-overflow-x-hidden tw-rounded-lg tw-border tw-border-slate-200 tw-bg-white tw-p-3 tw-shadow-sm">
+          <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2 tw-border-b tw-border-slate-100 tw-pb-2">
+            <SettingOutlined className="tw-text-[#1e3a5f]" />
+            <Typography.Text strong className="tw-text-xs">
+              안내 문구 속성
+            </Typography.Text>
+          </div>
+          <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-text-[11px]">
+            기안·결재 본문에만 표시되며 입력값(contentJson)으로 저장되지 않습니다. 목록에서 드래그해 다른 항목 사이로 옮길 수 있습니다.
+          </Typography.Paragraph>
+          <div className="tw-min-w-0 tw-max-w-full">
+            <Typography.Text className="tw-mb-1 tw-block tw-text-[11px] tw-font-medium tw-text-slate-700">
+              제목 (선택)
+            </Typography.Text>
+            <Input
+              size="small"
+              className="tw-max-w-full"
+              value={field.label}
+              disabled={locked}
+              placeholder="비우면 본문만 표시"
+              onChange={(e) => updateAt(index, { label: e.target.value })}
+            />
+          </div>
+          <div className="tw-min-w-0 tw-max-w-full">
+            <Typography.Text className="tw-mb-1 tw-block tw-text-[11px] tw-font-medium tw-text-slate-700">본문</Typography.Text>
+            <Input.TextArea
+              size="small"
+              className="tw-max-w-full tw-resize-y"
+              rows={5}
+              value={field.staticText ?? ''}
+              disabled={locked}
+              placeholder="직원에게 보여 줄 안내 문구를 입력하세요."
+              maxLength={4000}
+              showCount
+              onChange={(e) => updateAt(index, { staticText: e.target.value })}
+            />
+          </div>
+          <div className="tw-min-w-0 tw-max-w-full">
+            <Typography.Text className="tw-mb-1 tw-block tw-text-[11px] tw-font-medium tw-text-slate-700">입력 형식</Typography.Text>
+            <Select
+              size="small"
+              className="tw-w-full tw-max-w-full"
+              popupMatchSelectWidth
+              value={field.type}
+              disabled={locked}
+              options={
+                field.type === 'ai_transcribe'
+                  ? [
+                      ...SCHEMA_BUILDER_FIELD_TYPES.map((t) => ({ value: t, label: TYPE_LABEL[t] })),
+                      { value: 'ai_transcribe' as FormFieldType, label: `${TYPE_LABEL.ai_transcribe} (기존)` },
+                    ]
+                  : SCHEMA_BUILDER_FIELD_TYPES.map((t) => ({ value: t, label: TYPE_LABEL[t] }))
+              }
+              onChange={(t) => updateAt(index, { type: t as FormFieldType })}
+            />
+          </div>
+          <div className="tw-flex tw-min-w-0 tw-max-w-full tw-items-center tw-justify-between tw-gap-2 tw-rounded-md tw-bg-slate-50 tw-px-2.5 tw-py-2">
+            <Typography.Text className="tw-min-w-0 tw-flex-1 tw-text-[11px] [overflow-wrap:anywhere]">
+              잠금(이후 양식 수정 시 제한)
+            </Typography.Text>
+            <Tooltip
+              title={
+                field.locked === true
+                  ? '끄면 항목 이름·형식·순서 등을 다시 바꿀 수 있습니다.'
+                  : '켜면 이후 양식 수정에서 이 항목의 삭제·이름·형식·순서 변경이 제한됩니다.'
+              }
+            >
+              <span className="tw-inline-flex tw-shrink-0">
+                <Switch
+                  size="small"
+                  checked={field.locked === true}
+                  onChange={(checked) => updateAt(index, { locked: checked ? true : false })}
+                />
+              </span>
+            </Tooltip>
+          </div>
+          {locked ? (
+            <Typography.Text type="secondary" className="tw-block tw-break-all tw-text-[10px] tw-font-mono">
+              내부 코드: {field.name}
+            </Typography.Text>
+          ) : null}
+        </div>
+      );
+    }
     return (
       <div className="tw-box-border tw-min-w-0 tw-max-w-full tw-space-y-3 tw-overflow-x-hidden tw-rounded-lg tw-border tw-border-slate-200 tw-bg-white tw-p-3 tw-shadow-sm">
         <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2 tw-border-b tw-border-slate-100 tw-pb-2">
@@ -466,7 +588,14 @@ export function ApprovalFormSchemaBuilder({
               popupMatchSelectWidth
               value={field.type}
               disabled={locked}
-              options={TYPE_OPTIONS}
+              options={
+                field.type === 'ai_transcribe'
+                  ? [
+                      ...SCHEMA_BUILDER_FIELD_TYPES.map((t) => ({ value: t, label: TYPE_LABEL[t] })),
+                      { value: 'ai_transcribe' as FormFieldType, label: `${TYPE_LABEL.ai_transcribe} (기존)` },
+                    ]
+                  : SCHEMA_BUILDER_FIELD_TYPES.map((t) => ({ value: t, label: TYPE_LABEL[t] }))
+              }
               onChange={(t) => updateAt(index, { type: t as FormFieldType })}
             />
           </div>
@@ -555,6 +684,17 @@ export function ApprovalFormSchemaBuilder({
             if (field.type === 'hidden') return null;
             const fieldLocked = field.locked === true;
             const isSel = selectedIndex === i;
+            if (field.type === 'static_note') {
+              return (
+                <ApprovalFormPaperStaticNoteRow
+                  key={sortableIds[i] ?? `pv-${i}`}
+                  title={field.label?.trim() || undefined}
+                  body={field.staticText ?? ''}
+                  selected={isSel}
+                  onActivate={() => setSelectedIndex((cur) => (cur === i ? null : i))}
+                />
+              );
+            }
             return (
               <ApprovalFormPaperFieldRow key={sortableIds[i] ?? `pv-${i}`} label={field.label?.trim() || '(이름 없음)'} required={fieldLocked}>
                 <div
@@ -636,7 +776,11 @@ export function ApprovalFormSchemaBuilder({
                           >
                             <div className="tw-min-w-0">
                               <div className="tw-truncate tw-text-sm tw-font-medium tw-text-slate-800">
-                                {field.label?.trim() || '(이름 없음)'}
+                                {field.type === 'static_note'
+                                  ? field.label?.trim() ||
+                                    (field.staticText ?? '').trim().slice(0, 28) ||
+                                    '안내 문구'
+                                  : field.label?.trim() || '(이름 없음)'}
                               </div>
                               <div className="tw-truncate tw-text-[11px] tw-text-slate-500">{TYPE_LABEL[field.type]}</div>
                             </div>
@@ -652,9 +796,14 @@ export function ApprovalFormSchemaBuilder({
                   )}
                 </div>
               </SortableContext>
-              <Button type="dashed" block size="small" className="tw-mt-2 tw-shrink-0" onClick={addField}>
-                입력 항목 추가
-              </Button>
+              <Space.Compact block className="tw-mt-2 tw-shrink-0">
+                <Button type="dashed" className="tw-min-w-0 tw-flex-1" size="small" onClick={addField}>
+                  입력 항목
+                </Button>
+                <Button type="dashed" className="tw-min-w-0 tw-flex-1" size="small" onClick={addStaticNote}>
+                  안내 문구
+                </Button>
+              </Space.Compact>
             </div>
             {documentPaperPreview}
           </div>
@@ -671,11 +820,21 @@ export function defaultSchemaFields(): FormFieldSchema[] {
   ];
 }
 
-export function serializeFormSchema(fields: FormFieldSchema[]): string {
+export function serializeFormSchema(fields: FormFieldSchema[], formDescription?: string): string {
   const cleaned: FormFieldSchema[] = fields.map((f) => {
     const name = f.name.trim();
     const label = f.label.trim();
     const type = f.type;
+    if (type === 'static_note') {
+      const st = (f.staticText ?? '').trim();
+      return {
+        name,
+        label: label || '안내',
+        type: 'static_note',
+        ...(st ? { staticText: st } : {}),
+        ...(f.locked === true ? { locked: true } : {}),
+      } as FormFieldSchema;
+    }
     const placeholder = f.placeholder?.trim();
     const base: FormFieldSchema = {
       name,
@@ -690,7 +849,10 @@ export function serializeFormSchema(fields: FormFieldSchema[]): string {
     }
     return base;
   });
-  return JSON.stringify({ fields: cleaned }, null, 2);
+  const desc = formDescription?.trim();
+  const payload: { fields: FormFieldSchema[]; formDescription?: string } = { fields: cleaned };
+  if (desc) payload.formDescription = desc;
+  return JSON.stringify(payload, null, 2);
 }
 
 export function validateSchemaFieldsForSubmit(fields: FormFieldSchema[]): string | null {
@@ -705,6 +867,13 @@ export function validateSchemaFieldsForSubmit(fields: FormFieldSchema[]): string
     }
     if (names.has(name)) return `내부 필드 이름이 중복되었습니다: ${name}`;
     names.add(name);
+    if (f.type === 'static_note') {
+      const body = (f.staticText ?? '').trim();
+      if (!label && !body) {
+        return `안내 문구「${name}」에 제목 또는 본문을 한 줄 이상 입력해 주세요.`;
+      }
+      continue;
+    }
     if (!label) return `「${name}」항목의 이름(라벨)을 입력해 주세요.`;
     if (f.type === 'select') {
       const opts = (f.options ?? []).map((o) => o.trim()).filter(Boolean);

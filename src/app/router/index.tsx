@@ -37,6 +37,7 @@ import { ContractSendPage } from '@/pages/app/ContractSendPage';
 import { ContractsPage } from '@/pages/app/ContractsPage';
 import { AbsenceProxyPage } from '@/pages/app/AbsenceProxyPage';
 import { DepartmentApprovalSearchPage } from '@/pages/app/DepartmentApprovalSearchPage';
+import { DepartmentApprovalsInboxPage } from '@/pages/app/DepartmentApprovalsInboxPage';
 import { MyApprovalRequestsPage } from '@/pages/app/MyApprovalRequestsPage';
 import { GenericPage } from '@/pages/app/GenericPage';
 import { AiDocumentsAdminPage } from '@/pages/app/AiDocumentsAdminPage';
@@ -391,6 +392,23 @@ const departmentApprovalsInboxRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/approvals/department',
   validateSearch: departmentApprovalsSearchSchema,
+  component: DepartmentApprovalsInboxPage,
+});
+
+/** 부서 결재 문서 고급 검색(기존 `/approvals/department` 화면) */
+const departmentApprovalSearchRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/approvals/department-search',
+  validateSearch: z.object({
+    organizationId: z.string().optional(),
+    query: z.string().optional(),
+    status: z.string().optional(),
+    requestType: z.string().optional(),
+    page: z.number().optional(),
+    size: z.number().optional(),
+    fromHome: z.string().optional(),
+    embed: z.string().optional(),
+  }),
   component: DepartmentApprovalSearchPage,
 });
 
@@ -957,6 +975,7 @@ const routeTree = rootRoute.addChildren([
       myApprovalRequestsRoute,
       absenceProxyRoute,
       departmentApprovalsInboxRoute,
+      departmentApprovalSearchRoute,
       electronicContractsRoute,
       contractSendRoute,
       evaluationsRoute,

@@ -1,4 +1,4 @@
-import { App, Card, Tag, Tooltip } from 'antd';
+import { App, Card, Modal, Tag, Tooltip } from 'antd';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useMemberDisplayNames } from '@/features/members/hooks/useMemberDisplayNames';

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Card, Typography } from 'antd';
+import { Alert, Button, Card, Typography } from 'antd';
 import { useCallback, useMemo, useState } from 'react';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
 import {
@@ -91,7 +91,7 @@ export function DepartmentApprovalSearchPage() {
     (next: ApprovalSearchPanelFilters) => {
       const embed = next.embed ?? filters.embed;
       navigate({
-        to: '/app/approvals/department',
+        to: '/app/approvals/department-search',
         search: {
           ...(embed ? { embed } : {}),
           ...(resolvedOrganizationId ? { organizationId: resolvedOrganizationId } : {}),
@@ -109,13 +109,27 @@ export function DepartmentApprovalSearchPage() {
 
   return (
     <div className="tw-mx-auto tw-max-w-6xl tw-space-y-4">
-      <div>
-        <Typography.Title level={4} className="!tw-mb-1">
-          부서 문서함
-        </Typography.Title>
-        <Typography.Text type="secondary">
-          같은 부서 문서 중 공개 문서와 내 비공개 문서를 검색합니다.
-        </Typography.Text>
+      <div className="tw-flex tw-flex-wrap tw-items-start tw-justify-between tw-gap-3">
+        <div>
+          <Typography.Title level={4} className="!tw-mb-1">
+            부서 문서 검색
+          </Typography.Title>
+          <Typography.Text type="secondary">
+            같은 부서 문서 중 공개 문서와 내 비공개 문서를 검색합니다.
+          </Typography.Text>
+        </div>
+        <Button
+          type="default"
+          size="small"
+          onClick={() =>
+            navigate({
+              to: '/app/approvals/department',
+              search: resolvedOrganizationId ? { organizationId: resolvedOrganizationId, deptView: 'draft' } : { deptView: 'draft' },
+            })
+          }
+        >
+          부서 문서함으로
+        </Button>
       </div>
       {!resolvedOrganizationId ? (
         <Alert type="warning" showIcon message="조직 정보를 불러오지 못해 부서 문서 검색을 진행할 수 없습니다." />

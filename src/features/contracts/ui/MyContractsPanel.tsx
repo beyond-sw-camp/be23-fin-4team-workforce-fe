@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearch } from '@tanstack/react-router';
-import { App, Button, Card, Input, Space, Spin, Table, Tabs, Tag, Typography } from 'antd';
+import { Alert, App, Button, Card, Input, Space, Spin, Table, Tabs, Tag, Timeline, Typography } from 'antd';
 import dayjs from 'dayjs';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppModal } from '@/shared/ui/AppModal';
+import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
 import { useAuth } from '@/features/auth/useAuth';
 import {
   contractEffectiveRejectReason,
@@ -14,14 +15,14 @@ import {
   type ContractRecord,
 } from '@/features/contracts/api/contractTemplateApi';
 import { uploadSignaturePngForContract } from '@/features/contracts/lib/uploadSignaturePng';
+import { parseContractFormSchema } from '@/features/contracts/lib/parseContractFormSchema';
 import { ContractPartySignaturesCard } from '@/features/contracts/ui/ContractPartySignaturesCard';
 import { ContractSignaturePad, type ContractSignaturePadHandle } from '@/features/contracts/ui/ContractSignaturePad';
 import {
   ApprovalFormPaperFieldRow,
   ApprovalFormPaperLayout,
+  ApprovalFormPaperStaticNoteRow,
 } from '@/features/approvals/ui/ApprovalFormPaperLayout';
-
-type ContractSchemaField = { key: string; label: string; type: string; sourceField?: string };
 
 const MY_CONTRACT_STATUS_TABS = [
   { key: 'ALL', label: '전체' },
@@ -30,27 +31,6 @@ const MY_CONTRACT_STATUS_TABS = [
   { key: 'REJECTED', label: '거절됨' },
   { key: 'CANCELED', label: '회수됨' },
 ] as const;
-
-function parseSchemaFields(raw: string): ContractSchemaField[] {
-  try {
-    const parsed = JSON.parse(raw) as { fields?: unknown };
-    const items = Array.isArray(parsed.fields) ? parsed.fields : [];
-    return items
-      .map((it) => {
-        if (!it || typeof it !== 'object') return null;
-        const o = it as Record<string, unknown>;
-        const key = String(o.key ?? o.name ?? '').trim();
-        const label = String(o.label ?? '').trim();
-        const type = String(o.type ?? 'text').trim();
-        const sourceField = typeof o.sourceField === 'string' ? o.sourceField.trim() : '';
-        if (!key || !label) return null;
-        return { key, label, type, ...(sourceField ? { sourceField } : {}) };
-      })
-      .filter((v): v is ContractSchemaField => v != null);
-  } catch {
-    return [];
-  }
-}
 
 function parseContent(raw: string): Record<string, unknown> {
   try {
@@ -72,6 +52,11 @@ function formatValue(value: unknown): string {
   } catch {
     return '—';
   }
+}
+
+function formatDateTime(value: string): string {
+  const d = dayjs(value);
+  return d.isValid() ? d.format('YYYY-MM-DD HH:mm') : value;
 }
 
 function statusTag(status: string) {
@@ -114,6 +99,7 @@ export function MyContractsPanel() {
   const [signSubmitting, setSignSubmitting] = useState(false);
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
   const [rejectReasonDraft, setRejectReasonDraft] = useState('');
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const padRef = useRef<ContractSignaturePadHandle>(null);
 
   const { data: myContracts = [], isFetching, refetch } = useQuery({
@@ -133,6 +119,17 @@ export function MyContractsPanel() {
     enabled: Boolean(selectedContractId),
   });
 
+  const {
+    data: myContractHistory = [],
+    isFetching: myHistoryLoading,
+    isError: myHistoryError,
+    error: myHistoryErrorObj,
+  } = useQuery({
+    queryKey: ['contract', 'history', 'my', selectedContractId],
+    queryFn: () => contractTemplateApi.getContractHistoryMy(selectedContractId!),
+    enabled: historyModalOpen && Boolean(selectedContractId),
+  });
+
   const signM = useMutation({
     mutationFn: (vars: { contractId: string; signatureImageUrl: string }) =>
       contractTemplateApi.signContract(vars.contractId, { signatureImageUrl: vars.signatureImageUrl }),
@@ -141,6 +138,7 @@ export function MyContractsPanel() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['contract', 'my'] }),
         queryClient.invalidateQueries({ queryKey: ['contract', 'my-detail', vars.contractId] }),
+        queryClient.invalidateQueries({ queryKey: ['contract', 'history', 'my', vars.contractId] }),
       ]);
     },
     onError: (e: Error) => message.error(e.message || '계약 서명에 실패했습니다.'),
@@ -157,6 +155,7 @@ export function MyContractsPanel() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['contract', 'my'] }),
         queryClient.invalidateQueries({ queryKey: ['contract', 'my-detail', vars.contractId] }),
+        queryClient.invalidateQueries({ queryKey: ['contract', 'history', 'my', vars.contractId] }),
         queryClient.invalidateQueries({ queryKey: ['contract', 'admin', 'contracts'] }),
         queryClient.invalidateQueries({ queryKey: ['contract', 'admin', 'batch-contracts'] }),
         queryClient.invalidateQueries({ queryKey: ['contract', 'admin', 'batches'] }),
@@ -196,10 +195,14 @@ export function MyContractsPanel() {
     }
   };
 
-  const detailFields = useMemo(
-    () => (contractDetail ? parseSchemaFields(contractDetail.formSchemaSnapshot) : []),
+  const detailContractSchema = useMemo(
+    () =>
+      contractDetail?.formSchemaSnapshot?.trim()
+        ? parseContractFormSchema(contractDetail.formSchemaSnapshot)
+        : null,
     [contractDetail],
   );
+  const detailFormDescription = detailContractSchema?.formDescription?.trim() ?? '';
   const detailContent = useMemo(
     () => (contractDetail ? parseContent(contractDetail.contentJson) : {}),
     [contractDetail],
@@ -301,6 +304,11 @@ export function MyContractsPanel() {
         footer={
           selectedContractId ? (
             <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-end tw-gap-2">
+              {!detailLoading && contractDetail ? (
+                <Button key="history" onClick={() => setHistoryModalOpen(true)}>
+                  계약 이력
+                </Button>
+              ) : null}
               <Button key="close" onClick={closeDetail}>
                 닫기
               </Button>
@@ -415,6 +423,14 @@ export function MyContractsPanel() {
                 </div>
               </Card>
             ) : null}
+            {detailFormDescription ? (
+              <Alert
+                type="info"
+                showIcon
+                message="인사팀 안내"
+                description={<span className="tw-whitespace-pre-wrap tw-text-sm">{detailFormDescription}</span>}
+              />
+            ) : null}
             <ContractPartySignaturesCard parties={contractDetail.parties} />
             <Card size="small" title="계약서 내용">
               <div className="tw-max-h-[min(70vh,720px)] tw-overflow-auto">
@@ -427,14 +443,30 @@ export function MyContractsPanel() {
                   drafterJobTitle={contractDetail.jobTitleName || undefined}
                   writtenDate={dayjs(contractDetail.createdAt).isValid() ? dayjs(contractDetail.createdAt).format('YYYY-MM-DD') : contractDetail.createdAt}
                 >
-                  {detailFields.length > 0 ? (
-                    detailFields.map((field) => (
-                      <ApprovalFormPaperFieldRow key={field.key} label={field.label}>
-                        <Typography.Text className={field.type === 'textarea' ? 'tw-whitespace-pre-wrap tw-break-words' : undefined}>
-                          {formatValue(detailContent[field.key] ?? (field.sourceField ? detailContent[field.sourceField] : undefined))}
-                        </Typography.Text>
-                      </ApprovalFormPaperFieldRow>
-                    ))
+                  {detailContractSchema && detailContractSchema.fields.length > 0 ? (
+                    detailContractSchema.fields.map((field) =>
+                      field.type === 'static_note' ? (
+                        <ApprovalFormPaperStaticNoteRow
+                          key={field.name}
+                          title={field.label?.trim() || undefined}
+                          body={field.staticText?.trim() ?? ''}
+                        />
+                      ) : (
+                        <ApprovalFormPaperFieldRow key={field.name} label={field.label}>
+                          <Typography.Text
+                            className={field.type === 'textarea' ? 'tw-whitespace-pre-wrap tw-break-words' : undefined}
+                          >
+                            {formatValue(
+                              (() => {
+                                const meta = detailContractSchema.metaByName[field.name];
+                                const src = meta?.sourceField?.trim();
+                                return detailContent[field.name] ?? (src ? detailContent[src] : undefined);
+                              })(),
+                            )}
+                          </Typography.Text>
+                        </ApprovalFormPaperFieldRow>
+                      ),
+                    )
                   ) : (
                     <ApprovalFormPaperFieldRow label="안내">
                       <Typography.Text type="secondary">양식 스키마를 해석할 수 없습니다.</Typography.Text>
@@ -447,6 +479,81 @@ export function MyContractsPanel() {
         )}
         </div>
       </AppModal>
+
+      <AppSingleActionModal
+        title="계약 이력 (내 문서)"
+        open={historyModalOpen}
+        onClose={() => setHistoryModalOpen(false)}
+        onSubmit={() => setHistoryModalOpen(false)}
+        submitText="닫기"
+        width={720}
+        destroyOnHidden
+      >
+        <div className="tw-px-5 tw-py-4">
+          {myHistoryLoading ? (
+            <Spin />
+          ) : myHistoryError ? (
+            <Alert
+              type="error"
+              showIcon
+              message="이력을 불러오지 못했습니다."
+              description={
+                myHistoryErrorObj instanceof Error
+                  ? myHistoryErrorObj.message
+                  : String(myHistoryErrorObj ?? '알 수 없는 오류')
+              }
+            />
+          ) : myContractHistory.length === 0 ? (
+            <Typography.Text type="secondary">이력이 없습니다.</Typography.Text>
+          ) : (
+            <Timeline
+              items={myContractHistory.map((row) => {
+                const st = String(row.contractStatus).toUpperCase();
+                const color =
+                  st === 'SIGNED' ? 'green' : st === 'REJECTED' ? 'red' : st === 'CANCELED' ? 'gray' : 'blue';
+                return {
+                  color,
+                  children: (
+                    <div className="tw-space-y-1">
+                      <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
+                        <Typography.Text strong>개정 {row.revision ?? 1}</Typography.Text>
+                        {statusTag(row.contractStatus)}
+                        <Typography.Text type="secondary" className="tw-text-xs">
+                          {formatDateTime(row.createdAt)}
+                        </Typography.Text>
+                      </div>
+                      <div className="tw-text-sm">
+                        {row.employeeName} · {row.templateName}
+                      </div>
+                      {st === 'CANCELED' && row.cancelReason?.trim() ? (
+                        <Typography.Text type="secondary" className="tw-text-xs tw-whitespace-pre-wrap">
+                          회수: {row.cancelReason.trim()}
+                        </Typography.Text>
+                      ) : null}
+                      {st === 'REJECTED' && contractEffectiveRejectReason(row) ? (
+                        <Typography.Text type="secondary" className="tw-text-xs tw-whitespace-pre-wrap">
+                          거절: {contractEffectiveRejectReason(row)}
+                        </Typography.Text>
+                      ) : null}
+                      <Button
+                        type="link"
+                        size="small"
+                        className="!tw-h-auto !tw-p-0"
+                        onClick={() => {
+                          setHistoryModalOpen(false);
+                          openDetail(row.contractId);
+                        }}
+                      >
+                        이 버전 상세 열기
+                      </Button>
+                    </div>
+                  ),
+                };
+              })}
+            />
+          )}
+        </div>
+      </AppSingleActionModal>
 
       <AppDoubleActionModal
         title="계약 거절"

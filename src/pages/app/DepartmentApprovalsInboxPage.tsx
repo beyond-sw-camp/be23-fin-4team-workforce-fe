@@ -1,4 +1,4 @@
-import { ArrowLeftOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, SearchOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, App, Button, Card, Table, Tag, Typography } from 'antd';
 import clsx from 'clsx';
@@ -204,6 +204,22 @@ export function DepartmentApprovalsInboxPage() {
             <Typography.Title level={4} className="!tw-m-0 tw-whitespace-nowrap tw-leading-none">
               부서 문서함
             </Typography.Title>
+            {!isEmbedModal ? (
+              <Button
+                type="default"
+                size="small"
+                icon={<SearchOutlined />}
+                className="tw-shrink-0"
+                onClick={() =>
+                  navigate({
+                    to: '/app/approvals/department-search',
+                    search: myOrgId ? { organizationId: myOrgId } : {},
+                  })
+                }
+              >
+                부서 문서 검색
+              </Button>
+            ) : null}
           </div>
           <Typography.Paragraph type="secondary" className="!tw-mb-0 tw-text-sm">
             {deptView === 'received'

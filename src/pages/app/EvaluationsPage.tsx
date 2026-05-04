@@ -6,4 +6,4 @@
  * - /app/evaluations -> EvaluationsHubPage
  * - /app/evaluations/seasons/$seasonId -> EvaluationSeasonDetailPage
  */
-export { EvaluationsHubPage as default } from '@/pages/app/evaluations/EvaluationsHubPage';
+export { default } from '@/pages/app/evaluations/EvaluationsHubPage';

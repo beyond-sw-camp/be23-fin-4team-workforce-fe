@@ -26,6 +26,7 @@ import { memberApi } from '@/features/member/api/memberApi';
 import {
   compactAdminInputJson,
   CONTRACT_FIELD_DEFAULT_SOURCE,
+  CONTRACT_FIELD_STATIC_BLOCK_SOURCE,
   parseContractFormSchema,
   type ContractFieldMeta,
 } from '@/features/contracts/lib/parseContractFormSchema';
@@ -56,10 +57,26 @@ type BatchSendForm = {
   batchName: string;
   items: Array<{ employeeMemberId: string; adminInput?: Record<string, unknown> }>;
 };
-function buildContractSchemaJson(fields: FormFieldSchema[], metaByName: Record<string, ContractFieldMeta>): string {
+function buildContractSchemaJson(
+  fields: FormFieldSchema[],
+  metaByName: Record<string, ContractFieldMeta>,
+  formDescription?: string,
+): string {
   const base = JSON.parse(serializeFormSchema(fields)) as { fields: Array<Record<string, unknown>> };
   const contractFields = base.fields.map((f) => {
     const name = String(f.name ?? '').trim();
+    const type = String(f.type ?? 'text');
+    if (type === 'static_note') {
+      const body = typeof f.staticText === 'string' ? String(f.staticText).trim() : '';
+      return {
+        key: name,
+        label: String(f.label ?? ''),
+        type: 'static_note',
+        source: CONTRACT_FIELD_STATIC_BLOCK_SOURCE,
+        editable: false,
+        ...(body ? { staticText: body } : {}),
+      };
+    }
     const meta = metaByName[name];
     const source = meta?.source || CONTRACT_FIELD_DEFAULT_SOURCE;
     const sourceField = meta?.sourceField?.trim();
@@ -67,14 +84,17 @@ function buildContractSchemaJson(fields: FormFieldSchema[], metaByName: Record<s
     return {
       key: name,
       label: String(f.label ?? ''),
-      type: String(f.type ?? 'text'),
+      type,
       source,
       ...(sourceField ? { sourceField } : {}),
       editable,
       ...(Array.isArray(f.options) && f.options.length > 0 ? { options: f.options } : {}),
     };
   });
-  return JSON.stringify({ fields: contractFields }, null, 2);
+  const desc = formDescription?.trim();
+  const out: { fields: typeof contractFields; formDescription?: string } = { fields: contractFields };
+  if (desc) out.formDescription = desc;
+  return JSON.stringify(out, null, 2);
 }
 
 export function ContractTemplatesAdminPanel({
@@ -108,6 +128,8 @@ export function ContractTemplatesAdminPanel({
   const [editSchemaFields, setEditSchemaFields] = useState<FormFieldSchema[]>([]);
   const [createMetaByName, setCreateMetaByName] = useState<Record<string, ContractFieldMeta>>({});
   const [editMetaByName, setEditMetaByName] = useState<Record<string, ContractFieldMeta>>({});
+  const [createFormDescription, setCreateFormDescription] = useState('');
+  const [editFormDescription, setEditFormDescription] = useState('');
   const [singleRecipientPickerOpen, setSingleRecipientPickerOpen] = useState(false);
   const [batchRecipientPickerOpen, setBatchRecipientPickerOpen] = useState(false);
   const [singleSendModalOpen, setSingleSendModalOpen] = useState(false);
@@ -137,7 +159,7 @@ export function ContractTemplatesAdminPanel({
       contractTemplateApi.create({
         templateName: v.templateName.trim(),
         contractType: v.contractType,
-        formSchema: buildContractSchemaJson(createSchemaFields, createMetaByName),
+        formSchema: buildContractSchemaJson(createSchemaFields, createMetaByName, createFormDescription),
       }),
     onSuccess: () => {
       message.success('계약서 템플릿이 등록되었습니다.');
@@ -145,6 +167,7 @@ export function ContractTemplatesAdminPanel({
       createForm.resetFields();
       setCreateSchemaFields([]);
       setCreateMetaByName({});
+      setCreateFormDescription('');
       void qc.invalidateQueries({ queryKey: ['contract', 'templates'] });
     },
     onError: (e: Error) => message.error(parseApiError(e).message),
@@ -154,7 +177,7 @@ export function ContractTemplatesAdminPanel({
     mutationFn: ({ id, v }: { id: string; v: EditForm }) =>
       contractTemplateApi.update(id, {
         templateName: v.templateName.trim(),
-        formSchema: buildContractSchemaJson(editSchemaFields, editMetaByName),
+        formSchema: buildContractSchemaJson(editSchemaFields, editMetaByName, editFormDescription),
       }),
     onSuccess: () => {
       message.success('계약서 템플릿이 수정되었습니다.');
@@ -162,6 +185,7 @@ export function ContractTemplatesAdminPanel({
       setEditing(null);
       setEditSchemaFields([]);
       setEditMetaByName({});
+      setEditFormDescription('');
       void qc.invalidateQueries({ queryKey: ['contract', 'templates'] });
     },
     onError: (e: Error) => message.error(parseApiError(e).message),
@@ -323,6 +347,7 @@ export function ContractTemplatesAdminPanel({
     });
     setCreateSchemaFields(initial.fields);
     setCreateMetaByName(initial.metaByName);
+    setCreateFormDescription('');
     setCreateOpen(true);
   };
 
@@ -335,6 +360,7 @@ export function ContractTemplatesAdminPanel({
     });
     setEditSchemaFields(parsed.fields);
     setEditMetaByName(parsed.metaByName);
+    setEditFormDescription(parsed.formDescription ?? '');
     setEditOpen(true);
   };
 
@@ -810,6 +836,7 @@ export function ContractTemplatesAdminPanel({
           createForm.resetFields();
           setCreateSchemaFields([]);
           setCreateMetaByName({});
+          setCreateFormDescription('');
         }}
         onConfirm={() => void submitCreate()}
         confirmText="등록"
@@ -835,6 +862,23 @@ export function ContractTemplatesAdminPanel({
                   <Form.Item name="contractType" label="계약 유형" rules={[{ required: true, message: '계약 유형을 선택해 주세요.' }]}>
                     <Select options={contractTypeOptions} placeholder="유형 선택" />
                   </Form.Item>
+                  <div>
+                    <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-font-medium tw-text-slate-700">
+                      인사팀 안내 문구
+                    </Typography.Text>
+                    <Typography.Paragraph type="secondary" className="!tw-mb-2 !tw-text-[11px]">
+                      내 계약 상세·서명 화면에서 직원에게 표시됩니다. (선택)
+                    </Typography.Paragraph>
+                    <Input.TextArea
+                      rows={4}
+                      value={createFormDescription}
+                      onChange={(e) => setCreateFormDescription(e.target.value)}
+                      placeholder="예: 서명 전 연봉표·특약 사항을 반드시 확인하세요."
+                      maxLength={4000}
+                      showCount
+                      className="tw-resize-y"
+                    />
+                  </div>
                 </>
               }
               onChange={(next) => {
@@ -845,7 +889,10 @@ export function ContractTemplatesAdminPanel({
                     const key = f.name.trim();
                     if (!key) continue;
                     if (!merged[key]) {
-                      merged[key] = { source: CONTRACT_FIELD_DEFAULT_SOURCE, editable: false };
+                      merged[key] =
+                        f.type === 'static_note'
+                          ? { source: CONTRACT_FIELD_STATIC_BLOCK_SOURCE, editable: false }
+                          : { source: CONTRACT_FIELD_DEFAULT_SOURCE, editable: false };
                     }
                   }
                   return merged;
@@ -891,6 +938,7 @@ export function ContractTemplatesAdminPanel({
           setEditing(null);
           setEditSchemaFields([]);
           setEditMetaByName({});
+          setEditFormDescription('');
         }}
         onConfirm={() => void submitEdit()}
         confirmText="저장"
@@ -923,6 +971,23 @@ export function ContractTemplatesAdminPanel({
                       </Typography.Text>
                     </div>
                   ) : null}
+                  <div>
+                    <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-font-medium tw-text-slate-700">
+                      인사팀 안내 문구
+                    </Typography.Text>
+                    <Typography.Paragraph type="secondary" className="!tw-mb-2 !tw-text-[11px]">
+                      내 계약 상세·서명 화면에서 직원에게 표시됩니다. (선택)
+                    </Typography.Paragraph>
+                    <Input.TextArea
+                      rows={4}
+                      value={editFormDescription}
+                      onChange={(e) => setEditFormDescription(e.target.value)}
+                      placeholder="예: 서명 전 연봉표·특약 사항을 반드시 확인하세요."
+                      maxLength={4000}
+                      showCount
+                      className="tw-resize-y"
+                    />
+                  </div>
                 </>
               }
               onChange={(next) => {
@@ -933,7 +998,10 @@ export function ContractTemplatesAdminPanel({
                     const key = f.name.trim();
                     if (!key) continue;
                     if (!merged[key]) {
-                      merged[key] = { source: CONTRACT_FIELD_DEFAULT_SOURCE, editable: false };
+                      merged[key] =
+                        f.type === 'static_note'
+                          ? { source: CONTRACT_FIELD_STATIC_BLOCK_SOURCE, editable: false }
+                          : { source: CONTRACT_FIELD_DEFAULT_SOURCE, editable: false };
                     }
                   }
                   return merged;

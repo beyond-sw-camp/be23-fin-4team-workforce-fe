@@ -1,4 +1,4 @@
-import {
+﻿import {
     ApartmentOutlined,
     AuditOutlined,
     BankOutlined,
@@ -145,6 +145,7 @@ const APP_MENU_ICONS: Record<string, ReactNode> = {
     '/app/contracts/send': <FormOutlined className="tw-text-lg"/>,
     '/app/contracts': <SafetyCertificateOutlined className="tw-text-lg"/>,
     '/app/approvals/department': <FolderOpenOutlined className="tw-text-lg"/>,
+    '/app/approvals/department-search': <FolderOpenOutlined className="tw-text-lg"/>,
     '/app/payroll': <DollarOutlined className="tw-text-lg"/>,
     '/app/payroll/annual': <BarChartOutlined className="tw-text-lg"/>,
     '/app/payroll/allowances': <GiftOutlined className="tw-text-lg"/>,

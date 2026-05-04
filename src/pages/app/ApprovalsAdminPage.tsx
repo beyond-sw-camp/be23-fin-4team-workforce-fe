@@ -87,7 +87,7 @@ const CAL_FIELD_NONE = '__none__';
 function buildSchemaFieldOptions(fields: FormFieldSchema[]) {
   return fields.map((f) => ({
     value: f.name,
-    label: `${f.label} (${f.name})`,
+    label: `${f.type === 'static_note' ? f.label.trim() || '안내 문구' : f.label} (${f.name})`,
   }));
 }
 

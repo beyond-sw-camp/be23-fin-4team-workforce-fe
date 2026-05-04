@@ -37,6 +37,7 @@ import { compactAdminInputJson, parseContractFormSchema } from '@/features/contr
 import { uploadSignaturePngForContract } from '@/features/contracts/lib/uploadSignaturePng';
 import { ApprovalFormPaperFieldRow, ApprovalFormPaperLayout } from '@/features/approvals/ui/ApprovalFormPaperLayout';
 import { CONTRACT_HUB_CARD_CLASS } from '@/features/contracts/ui/contractHubStyles';
+import { ContractAdminFormFieldInput } from '@/features/contracts/ui/ContractAdminFormFieldInput';
 import { ContractPartySignaturesCard } from '@/features/contracts/ui/ContractPartySignaturesCard';
 import { ContractSignaturePad, type ContractSignaturePadHandle } from '@/features/contracts/ui/ContractSignaturePad';
 
@@ -1026,11 +1027,7 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
           ) : (
             singleResendAdminFields.map((field) => (
               <Form.Item key={field.name} name={['adminInput', field.name]} label={field.label}>
-                {field.type === 'textarea' ? (
-                  <Input.TextArea rows={3} />
-                ) : (
-                  <Input type={field.type === 'number' ? 'number' : 'text'} />
-                )}
+                <ContractAdminFormFieldInput field={field} textAreaRows={3} />
               </Form.Item>
             ))
           )}
@@ -1178,11 +1175,7 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
                       ) : (
                         batchResendAdminFieldDefs.map((af) => (
                           <Form.Item key={`${field.key}-${af.name}`} name={[field.name, 'adminInput', af.name]} label={af.label}>
-                            {af.type === 'textarea' ? (
-                              <Input.TextArea rows={2} />
-                            ) : (
-                              <Input type={af.type === 'number' ? 'number' : 'text'} />
-                            )}
+                            <ContractAdminFormFieldInput field={af} textAreaRows={2} />
                           </Form.Item>
                         ))
                       )}

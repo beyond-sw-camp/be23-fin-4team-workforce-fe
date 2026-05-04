@@ -1,3 +1,8 @@
+import {
+  parseApprovalLinesArray,
+  type ApprovalLine,
+  type ApprovalRequestDetail,
+} from '@/features/approvals/api/approvalRequestApi';
 import { httpClient } from '@/shared/api/httpClient';
 import { unwrapApiResponse } from '@/shared/api/response';
 
@@ -34,6 +39,8 @@ export type ApprovalSearchItem = {
   createdAt: string;
   /** form 내용 JSON 문자열. 표에서 핵심 날짜(휴가일·연장일 등) 추출용. */
   contentJson?: string;
+  /** 내 기안 검색 등에서 API가 내려줄 때만 채워짐 */
+  approvalLines: ApprovalLine[];
 };
 
 export type ApprovalSearchPage = {
@@ -46,6 +53,22 @@ export type ApprovalSearchPage = {
   last: boolean;
   empty: boolean;
 };
+
+/** `GET /approval/requests/my` 상세 목록을 검색 테이블 행 형태로 변환(결재선 포함) */
+export function mapApprovalDetailToSearchItem(r: ApprovalRequestDetail): ApprovalSearchItem {
+  return {
+    requestId: r.requestId,
+    memberId: r.memberId,
+    requesterName: r.requesterName?.trim() ?? '',
+    requesterOrganizationName: r.requesterOrganizationName?.trim() ?? '',
+    documentName: r.documentName,
+    requestStatus: r.requestStatus,
+    requestType: r.requestType,
+    createdAt: r.createdAt,
+    contentJson: r.contentJson,
+    approvalLines: r.approvalLines ?? [],
+  };
+}
 
 type DepartmentRawItem = {
   requestId: string;
@@ -146,6 +169,7 @@ function toDepartmentSearchItem(row: DepartmentRawItem): ApprovalSearchItem {
     requestType: row.requestType ?? '',
     createdAt: row.createdAt ?? '',
     contentJson: row.contentJson ?? '',
+    approvalLines: [],
   };
 }
 
@@ -154,6 +178,7 @@ function normalizeSearchItem(raw: unknown): ApprovalSearchItem | null {
   const o = raw as Record<string, unknown>;
   const requestId = asText(o.requestId ?? o.request_id);
   if (!requestId) return null;
+  const linesRaw = o.approvalLines ?? o.approval_lines;
   return {
     requestId,
     memberId: asText(o.memberId ?? o.member_id),
@@ -172,6 +197,7 @@ function normalizeSearchItem(raw: unknown): ApprovalSearchItem | null {
       ?? o.submitted_at,
     ),
     contentJson: asText(o.contentJson ?? o.content_json ?? o.content),
+    approvalLines: parseApprovalLinesArray(linesRaw, requestId),
   };
 }
 

@@ -1,4 +1,4 @@
-import { ReloadOutlined, SearchOutlined } from '@ant-design/icons';
+import { FolderOpenOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { Alert, Button, Empty, Input, Select, Space, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
@@ -12,6 +12,8 @@ import {
   type ApprovalSearchRequestType,
   type ApprovalSearchStatus,
 } from '@/features/approvals/api/approvalSearchApi';
+import { ApprovalLineMiniStrip } from '@/features/approvals/ui/ApprovalLineMiniStrip';
+import { getApprovalSubjectFromContentJson } from '@/features/approvals/lib/approvalFormSchema';
 import { approvalRequestTypeLabelKo } from '@/features/approvals/lib/approvalRequestTypeKo';
 import {
   APPROVAL_STATUS_COLOR,
@@ -27,6 +29,13 @@ export type ApprovalSearchPanelFilters = {
   embed?: string;
   page: number;
   size: number;
+};
+
+/** 내 기안 검색: 임시저장 이어쓰기·삭제, 제출·진행 중 취소 */
+export type ApprovalSearchMyDraftManageActions = {
+  onContinueDraft: (requestId: string) => void;
+  /** 사유 입력 모달을 연 뒤 `cancelRequest` 등 호출 */
+  onOpenCancelOrDelete: (requestId: string, requestStatusUpper: string) => void;
 };
 
 function useDebouncedValue<T>(value: T, delayMs: number): T {
@@ -158,11 +167,13 @@ export function ApprovalSearchPanel({
   onFiltersChange,
   queryResult,
   onRowClick,
+  myDraftManageActions,
 }: {
   filters: ApprovalSearchPanelFilters;
   onFiltersChange: (next: ApprovalSearchPanelFilters) => void;
   queryResult: UseQueryResult<ApprovalSearchPage, Error>;
   onRowClick?: (requestId: string) => void;
+  myDraftManageActions?: ApprovalSearchMyDraftManageActions;
 }) {
   const [queryInput, setQueryInput] = useState(filters.query ?? '');
   useEffect(() => {
@@ -177,32 +188,23 @@ export function ApprovalSearchPanel({
 
   const columns = useMemo<ColumnsType<ApprovalSearchItem>>(
     () => [
-      { title: '문서명', dataIndex: 'documentName', key: 'documentName', ellipsis: true, width: 180 },
-      { title: '기안자', dataIndex: 'requesterName', key: 'requesterName', width: 100 },
-      { title: '부서명', dataIndex: 'requesterOrganizationName', key: 'requesterOrganizationName', width: 90, ellipsis: true },
       {
-        title: '상태',
-        dataIndex: 'requestStatus',
-        key: 'requestStatus',
-        width: 100,
-        render: (v: string) => {
-          const k = String(v).toUpperCase() as ApprovalSearchStatus;
-          return <Tag color={APPROVAL_STATUS_COLOR[k] ?? 'default'}>{APPROVAL_STATUS_LABEL[k] ?? v}</Tag>;
-        },
+        title: '제목',
+        key: 'subject',
+        ellipsis: true,
+        render: (_: unknown, r: ApprovalSearchItem) => getApprovalSubjectFromContentJson(r.contentJson) || '—',
       },
       {
-        title: '타입',
-        dataIndex: 'requestType',
-        key: 'requestType',
-        width: 110,
-        render: (v: string) => {
-          return <Tag>{approvalRequestTypeLabelKo(v)}</Tag>;
-        },
+        title: '결재선',
+        key: 'approvalLineStrip',
+        width: 200,
+        render: (_: unknown, r: ApprovalSearchItem) => (
+          <ApprovalLineMiniStrip lines={r.approvalLines} visibleSlots={0} />
+        ),
       },
       {
         title: '내용',
         key: 'summary',
-        width: 180,
         ellipsis: true,
         render: (_: unknown, r: ApprovalSearchItem) => (
           <span className="tw-text-sm tw-text-slate-700">
@@ -211,21 +213,86 @@ export function ApprovalSearchPanel({
         ),
       },
       {
-        title: '작성일',
+        title: '기안일',
         dataIndex: 'createdAt',
         key: 'createdAt',
-        width: 140,
+        width: 132,
+        align: 'center',
+        render: (v: string) => (v ? formatDate(v) : '—'),
+      },
+      {
+        title: '상태',
+        dataIndex: 'requestStatus',
+        key: 'requestStatus',
+        width: 92,
+        align: 'center',
         render: (v: string) => {
-          if (!v) return '-';
-          const d = dayjs(v);
-          if (!d.isValid()) return v;
-          // M/D(요일) HH:MM
-          const pad = (n: number) => String(n).padStart(2, '0');
-          return `${d.month() + 1}/${d.date()}(${WEEKDAY_KO[d.day()]}) ${pad(d.hour())}:${pad(d.minute())}`;
+          const k = String(v).toUpperCase();
+          return <Tag color={APPROVAL_STATUS_COLOR[k] ?? 'default'}>{APPROVAL_STATUS_LABEL[k] ?? v}</Tag>;
+        },
+      },
+      {
+        title: '관리',
+        key: 'actions',
+        width: 140,
+        align: 'center',
+        onCell: () => ({ style: { verticalAlign: 'middle' as const } }),
+        render: (_: unknown, r: ApprovalSearchItem) => {
+          const st = String(r.requestStatus).toUpperCase();
+          if (myDraftManageActions) {
+            const showResume = st === 'DRAFT';
+            const showCancel = st === 'DRAFT' || st === 'WAIT' || st === 'PENDING';
+            if (!showResume && !showCancel) return '—';
+            return (
+              <div
+                className="tw-flex tw-flex-nowrap tw-items-center tw-justify-center tw-gap-x-2 tw-whitespace-nowrap"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {showResume ? (
+                  <Button
+                    type="link"
+                    size="small"
+                    className="!tw-h-7 !tw-px-2"
+                    icon={<FolderOpenOutlined />}
+                    onClick={() => myDraftManageActions.onContinueDraft(r.requestId)}
+                  >
+                    이어쓰기
+                  </Button>
+                ) : null}
+                {showCancel ? (
+                  <Button
+                    type="link"
+                    size="small"
+                    className="!tw-h-7 !tw-px-2"
+                    danger
+                    onClick={() => myDraftManageActions.onOpenCancelOrDelete(r.requestId, st)}
+                  >
+                    {st === 'DRAFT' ? '삭제' : '취소'}
+                  </Button>
+                ) : null}
+              </div>
+            );
+          }
+          if (onRowClick) {
+            return (
+              <Button
+                type="link"
+                size="small"
+                className="!tw-px-2"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRowClick(r.requestId);
+                }}
+              >
+                상세
+              </Button>
+            );
+          }
+          return '—';
         },
       },
     ],
-    [],
+    [onRowClick, myDraftManageActions],
   );
 
   const page = queryResult.data;
@@ -294,6 +361,8 @@ export function ApprovalSearchPanel({
         loading={queryResult.isFetching}
         columns={columns}
         dataSource={rows}
+        tableLayout="fixed"
+        className="tw-w-full [&_.ant-table]:tw-max-w-full"
         locale={{ emptyText: <Empty description="검색 결과가 없습니다" /> }}
         onRow={(record) => ({
           onClick: () => onRowClick?.(record.requestId),

@@ -15,6 +15,7 @@ export const APP_MENU_LABEL: Record<string, string> = {
   '/app/contracts/send': '계약 발송',
   '/app/contracts': '전자계약',
   '/app/approvals/department': '부서 문서함',
+  '/app/approvals/department-search': '부서 문서 검색',
   '/app/payroll': '급여 조회',
   '/app/payroll/annual': '연봉 조회',
   '/app/income': '소득관리',
@@ -145,6 +146,7 @@ export function appHeaderTitleFromPath(
   if (/^\/app\/payroll\/[^/]+$/.test(pathname)) return '급여 명세';
   if (/^\/app\/members\/[^/]+$/.test(pathname)) return '구성원 상세';
   if (pathname === '/app/approvals/department') return '부서 문서함';
+  if (pathname === '/app/approvals/department-search') return '부서 문서 검색';
   if (pathname === '/app/contracts/send') return '계약 발송';
   if (pathname === '/app/contracts') return '전자계약';
   if (/^\/app\/meetings\/[^/]+$/.test(pathname)) return '면담 상세';

@@ -1,3 +1,4 @@
+import dayjs from 'dayjs';
 import type { FormFieldSchema, FormFieldType } from '@/features/approvals/lib/approvalFormSchema';
 
 export type ContractFieldMeta = {
@@ -7,14 +8,17 @@ export type ContractFieldMeta = {
 };
 
 export const CONTRACT_FIELD_DEFAULT_SOURCE = 'ADMIN_INPUT';
+/** 안내 문구(static_note) — 발송 시 직원 입력 대상에서 제외 */
+export const CONTRACT_FIELD_STATIC_BLOCK_SOURCE = 'STATIC_BLOCK';
 
 /** 계약 템플릿 formSchema(JSON)를 파싱해 발송·재발송 폼에 사용합니다. */
 export function parseContractFormSchema(raw: string): {
   fields: FormFieldSchema[];
   metaByName: Record<string, ContractFieldMeta>;
+  formDescription?: string;
 } {
   try {
-    const parsed = JSON.parse(raw) as { fields?: unknown };
+    const parsed = JSON.parse(raw) as { fields?: unknown; formDescription?: unknown };
     const items = Array.isArray(parsed.fields) ? parsed.fields : [];
     const fields: FormFieldSchema[] = [];
     const metaByName: Record<string, ContractFieldMeta> = {};
@@ -24,7 +28,23 @@ export function parseContractFormSchema(raw: string): {
       const name = String(o.key ?? o.name ?? '').trim();
       const label = String(o.label ?? '').trim();
       const type = String(o.type ?? 'text').trim() as FormFieldType;
-      if (!name || !label) continue;
+      const staticTextRaw = typeof o.staticText === 'string' ? o.staticText.trim() : '';
+      if (!name) continue;
+      if (type === 'static_note') {
+        if (!label && !staticTextRaw) continue;
+        fields.push({
+          name,
+          label: label || '안내',
+          type: 'static_note',
+          ...(staticTextRaw ? { staticText: staticTextRaw } : {}),
+        });
+        metaByName[name] = {
+          source: CONTRACT_FIELD_STATIC_BLOCK_SOURCE,
+          editable: false,
+        };
+        continue;
+      }
+      if (!label) continue;
       const options = Array.isArray(o.options)
         ? o.options.filter((v): v is string => typeof v === 'string').map((v) => v.trim()).filter(Boolean)
         : undefined;
@@ -40,20 +60,35 @@ export function parseContractFormSchema(raw: string): {
         editable: o.editable === true,
       };
     }
-    return { fields, metaByName };
+    const fd = parsed.formDescription;
+    const formDescription = typeof fd === 'string' && fd.trim() ? fd.trim() : undefined;
+    return { fields, metaByName, ...(formDescription ? { formDescription } : {}) };
   } catch {
     return { fields: [], metaByName: {} };
   }
 }
 
+function serializeAdminInputEntryValue(value: unknown): unknown {
+  if (dayjs.isDayjs(value)) {
+    const d = value;
+    if (d.hour() === 0 && d.minute() === 0 && d.second() === 0 && d.millisecond() === 0) {
+      return d.format('YYYY-MM-DD');
+    }
+    return d.format('YYYY-MM-DDTHH:mm');
+  }
+  return value;
+}
+
 /** 발송·재발송 시 ADMIN_INPUT 객체를 API용 JSON 문자열로 만듭니다. 비어 있으면 undefined. */
 export function compactAdminInputJson(adminInput: Record<string, unknown> | undefined): string | undefined {
   const normalized = Object.fromEntries(
-    Object.entries(adminInput ?? {}).filter(([, value]) => {
-      if (value == null) return false;
-      if (typeof value === 'string') return value.trim() !== '';
-      return true;
-    }),
+    Object.entries(adminInput ?? {})
+      .map(([k, v]) => [k, serializeAdminInputEntryValue(v)])
+      .filter(([, value]) => {
+        if (value == null) return false;
+        if (typeof value === 'string') return value.trim() !== '';
+        return true;
+      }),
   );
   return Object.keys(normalized).length > 0 ? JSON.stringify(normalized) : undefined;
 }

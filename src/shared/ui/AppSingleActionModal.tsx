@@ -16,6 +16,8 @@ type AppSingleActionModalProps = {
   submitButtonClassName?: string;
   destroyOnHidden?: boolean;
   zIndex?: number;
+  /** 있으면 기본 단일 제출 버튼 대신 사용(닫기·승인 등은 이 안에서 구성) */
+  customFooter?: ReactNode;
 };
 
 /**
@@ -36,29 +38,32 @@ export function AppSingleActionModal({
   submitButtonClassName,
   destroyOnHidden = true,
   zIndex,
+  customFooter,
 }: AppSingleActionModalProps) {
+  const defaultFooter = (
+    <div className="tw-flex tw-items-center">
+      <Button
+        type="primary"
+        onClick={onSubmit}
+        loading={submitLoading}
+        disabled={submitDisabled}
+        className={clsx(
+          '!tw-h-12 !tw-w-full !tw-rounded-xl !tw-border-0 !tw-bg-[#1e3a5f] !tw-px-5 !tw-font-semibold hover:!tw-bg-[#152a45] disabled:!tw-bg-slate-300',
+          submitButtonClassName,
+        )}
+      >
+        {submitText}
+      </Button>
+    </div>
+  );
+
   return (
     <AppModal
       open={open}
       title={title}
       onCancel={onClose}
       zIndex={zIndex}
-      footer={
-        <div className="tw-flex tw-items-center">
-          <Button
-            type="primary"
-            onClick={onSubmit}
-            loading={submitLoading}
-            disabled={submitDisabled}
-            className={clsx(
-              '!tw-h-12 !tw-w-full !tw-rounded-xl !tw-border-0 !tw-bg-[#1e3a5f] !tw-px-5 !tw-font-semibold hover:!tw-bg-[#152a45] disabled:!tw-bg-slate-300',
-              submitButtonClassName,
-            )}
-          >
-            {submitText}
-          </Button>
-        </div>
-      }
+      footer={customFooter != null ? customFooter : defaultFooter}
       width={width}
       destroyOnHidden={destroyOnHidden}
       maskClosable={false}
