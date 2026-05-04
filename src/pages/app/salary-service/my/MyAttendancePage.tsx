@@ -9,10 +9,11 @@ import { LoginOutlined, LogoutOutlined, RedoOutlined } from '@ant-design/icons';
 import { Alert, App, Button, Card, DatePicker, Progress, Space, Statistic, Table, Tabs, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs, { type Dayjs } from 'dayjs';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/features/auth/useAuth';
 import { approvalApi } from '@/features/approvals/api/approvalApi';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
+import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import { normalizeSpringPage } from '@/features/salary-service/lib/normalizePage';
 import type {
   CorrectionStateCode,
@@ -122,6 +123,70 @@ export function MyAttendancePage() {
   const summary = summaryQ.data;
   const totalSev = severityOf(summary?.totalUsagePercent);
   const otSev = severityOf(summary?.overtimeUsagePercent);
+
+  // 활성 SalaryPolicy - wageSystemType 으로 포괄임금제 (COMPREHENSIVE) 여부 판별
+  const salaryPolicyQ = useQuery({
+    queryKey: ['salary', 'salary-policies', 'my-active'],
+    queryFn: () => salaryApi.salaryPolicy.list(),
+    staleTime: 60_000,
+    enabled: activeView === 'weekly',
+  });
+
+  // 히트맵 표시 월 (별도 이동 가능). weekAnchor 변경 시 자동 sync.
+  const [heatmapMonth, setHeatmapMonth] = useState<Dayjs>(() => dayjs().startOf('month'));
+  useEffect(() => {
+    setHeatmapMonth(weekAnchor.startOf('month'));
+  }, [weekAnchor]);
+
+  // 주간/월간 시각화용 일별 근태 - weekAnchor 의 주 + heatmapMonth 그리드 모두 커버
+  const visMonthFrom = useMemo(() => {
+    const a = weekAnchor.startOf('week');
+    const b = heatmapMonth.startOf('month').startOf('week');
+    return (a.isBefore(b) ? a : b).format('YYYY-MM-DD');
+  }, [weekAnchor, heatmapMonth]);
+  const visMonthTo = useMemo(() => {
+    const a = weekAnchor.endOf('week');
+    const b = heatmapMonth.endOf('month').endOf('week');
+    return (a.isAfter(b) ? a : b).format('YYYY-MM-DD');
+  }, [weekAnchor, heatmapMonth]);
+  const visDailyQ = useQuery({
+    queryKey: ['salary', 'attendance', 'my', 'vis-daily', visMonthFrom, visMonthTo],
+    queryFn: () =>
+      attendanceApi.attendance.getMyMonthly({
+        from: visMonthFrom,
+        to: visMonthTo,
+        page: 0,
+        size: 45,
+      }),
+    enabled: activeView === 'weekly',
+  });
+  const visDailyMap = useMemo(() => {
+    const map = new Map<string, DailyAttendance>();
+    const rows = normalizeSpringPage(visDailyQ.data).content;
+    for (const row of rows) {
+      if (row.attendanceDate) map.set(row.attendanceDate, row);
+    }
+    return map;
+  }, [visDailyQ.data]);
+
+  // 회사 공휴일 - 히트맵 셀에 표시
+  const holidaysQ = useQuery({
+    queryKey: ['attendance', 'company-holidays', 'all'],
+    queryFn: () => attendanceApi.companyHoliday.list(),
+    staleTime: 60_000,
+    enabled: activeView === 'weekly',
+  });
+  const holidayMap = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const h of holidaysQ.data ?? []) {
+      if (h.holidayDate && h.holidayName) m.set(h.holidayDate, h.holidayName);
+    }
+    return m;
+  }, [holidaysQ.data]);
+  const isComprehensive = (salaryPolicyQ.data ?? []).some(
+    (p) => p.wageSystemType === 'COMPREHENSIVE'
+        && (!p.effectiveTo || dayjs(p.effectiveTo).isAfter(dayjs(), 'day')),
+  );
 
   // 활성 근무 스케줄 (workType 으로 FIXED/FLEXIBLE 판별 + 정규 출퇴근 시각으로 지각·조퇴 계산)
   const schedulesQ = useQuery({
@@ -274,9 +339,13 @@ export function MyAttendancePage() {
       { title: '일자', dataIndex: 'attendanceDate', key: 'attendanceDate' },
       {
         title: '상태',
-        dataIndex: 'status',
         key: 'status',
-        render: (s: string) => <AttendanceStatusTag status={s} />,
+        render: (_, row) => (
+          <AttendanceStatusTag
+            status={row.status}
+            workTripType={row.workTripType ?? null}
+          />
+        ),
       },
       {
         title: '출근',
@@ -460,100 +529,160 @@ export function MyAttendancePage() {
         <Space direction="vertical" className="tw-w-full" size={16}>
           {/* 기간 선택 - 빠른 버튼 + 기준일 (해당 일자가 속한 주의 요약 조회) */}
           <Card size="small" className="tw-border-slate-200/80">
-            <Space wrap>
-              <span className="tw-text-sm tw-text-slate-600">기준일</span>
-              <DatePicker
-                value={weekAnchor}
-                onChange={(d) => d && setWeekAnchor(d)}
-                allowClear={false}
-                format="YYYY-MM-DD"
-              />
-              <Button size="small" onClick={() => setWeekAnchor(dayjs())}>이번 주</Button>
-              <Button size="small" onClick={() => setWeekAnchor(dayjs().subtract(1, 'week'))}>지난 주</Button>
-              <Button size="small" onClick={() => setWeekAnchor(dayjs().startOf('month'))}>이번 달 시작주</Button>
+            <Space wrap size={8}>
+              <span className="tw-text-sm tw-text-slate-600">조회 주</span>
+              <Button
+                size="small"
+                onClick={() => setWeekAnchor((d) => d.subtract(1, 'year'))}
+                aria-label="이전 해"
+                title="1년 전"
+              >
+                «
+              </Button>
+              <Button
+                size="small"
+                onClick={() => setWeekAnchor((d) => d.subtract(1, 'month'))}
+                aria-label="이전 달"
+                title="한 달 전"
+              >
+                ‹‹
+              </Button>
+              <Button
+                size="small"
+                onClick={() => setWeekAnchor((d) => d.subtract(1, 'week'))}
+                aria-label="이전 주"
+                title="한 주 전"
+              >
+                ‹
+              </Button>
+              <span className="tw-text-sm tw-text-slate-700 tw-font-medium tw-min-w-[180px] tw-text-center">
+                {weekAnchor.startOf('week').format('YYYY-MM-DD')}
+                {' ~ '}
+                {weekAnchor.startOf('week').add(6, 'day').format('YYYY-MM-DD')}
+              </span>
+              <Button
+                size="small"
+                onClick={() => setWeekAnchor((d) => d.add(1, 'week'))}
+                aria-label="다음 주"
+                title="한 주 후"
+                disabled={weekAnchor.add(1, 'week').isAfter(dayjs(), 'week')}
+              >
+                ›
+              </Button>
+              <Button
+                size="small"
+                onClick={() => setWeekAnchor((d) => d.add(1, 'month'))}
+                aria-label="다음 달"
+                title="한 달 후"
+                disabled={weekAnchor.add(1, 'month').isAfter(dayjs(), 'week')}
+              >
+                ››
+              </Button>
+              <Button
+                size="small"
+                onClick={() => setWeekAnchor((d) => d.add(1, 'year'))}
+                aria-label="다음 해"
+                title="1년 후"
+                disabled={weekAnchor.add(1, 'year').isAfter(dayjs(), 'week')}
+              >
+                »
+              </Button>
+              <Button
+                size="small"
+                type={weekAnchor.isSame(dayjs(), 'week') ? 'primary' : 'default'}
+                onClick={() => setWeekAnchor(dayjs())}
+              >
+                이번 주
+              </Button>
             </Space>
           </Card>
 
-          <Card
-            className="tw-border-slate-200/80 tw-shadow-sm"
-            title="주간 근무시간 요약"
-            loading={summaryQ.isLoading}
-            size="small"
-          >
-            {summaryQ.isError && (
-              <Alert
-                type="warning"
-                showIcon
-                className="tw-mb-3"
-                message="주간 근무시간을 불러오지 못했습니다."
-                description="네트워크 또는 권한 문제일 수 있어요. 잠시 후 다시 시도해 주세요."
-              />
-            )}
-            {summary && (
-              <Space direction="vertical" className="tw-w-full" size={8}>
-                <Typography.Text type="secondary" className="tw-text-xs">
-                  대상 주간 {summary.weekStart ?? '—'} ~ {summary.weekEnd ?? '—'}
-                </Typography.Text>
-                <div className="tw-grid tw-grid-cols-1 sm:tw-grid-cols-2 tw-gap-3">
-                  <Card size="small" className="tw-border-slate-200/80">
-                    <Statistic
-                      title="주 총 근무"
-                      value={Math.round(((summary.totalWorkedMinutes ?? 0) / 60) * 10) / 10}
-                      suffix="시간"
-                      valueStyle={{ fontSize: 18, color: percentColor(totalSev) }}
-                    />
-                    <Progress
-                      percent={summary.totalUsagePercent ?? 0}
-                      size="small"
-                      showInfo={false}
-                      strokeColor={percentColor(totalSev)}
-                      status={totalSev === 'exceeded' ? 'exception' : 'normal'}
-                    />
-                    <Typography.Text type="secondary" className="tw-text-xs">
-                      {formatHm(summary.totalWorkedMinutes)} / {formatHm(summary.totalLimitMinutes)}
-                    </Typography.Text>
-                  </Card>
-                  <Card size="small" className="tw-border-slate-200/80">
-                    <Statistic
-                      title="주 연장근무 (승인 완료)"
-                      value={Math.round(((summary.overtimeApprovedMinutes ?? 0) / 60) * 10) / 10}
-                      suffix="시간"
-                      valueStyle={{ fontSize: 18, color: percentColor(otSev) }}
-                    />
-                    <Progress
-                      percent={summary.overtimeUsagePercent ?? 0}
-                      size="small"
-                      showInfo={false}
-                      strokeColor={percentColor(otSev)}
-                      status={otSev === 'exceeded' ? 'exception' : 'normal'}
-                    />
-                    <Typography.Text type="secondary" className="tw-text-xs">
-                      {formatHm(summary.overtimeApprovedMinutes)} / {formatHm(summary.overtimeLimitMinutes)}
-                    </Typography.Text>
-                  </Card>
-                </div>
-                {summary.weeklyHolidayEligible != null && (
+          {/* 좌: 한도 모니터링 + 주간 막대 / 우: 월간 히트맵 - 2열 레이아웃으로 스크롤 최소화 */}
+          <div className="tw-grid tw-grid-cols-1 lg:tw-grid-cols-2 tw-gap-3">
+            <Space direction="vertical" className="tw-w-full" size={12}>
+              <Card
+                className="tw-border-slate-200/80 tw-shadow-sm"
+                title="근무시간 한도 모니터링"
+                loading={summaryQ.isLoading}
+                size="small"
+              >
+                {summaryQ.isError && (
                   <Alert
-                    type={summary.weeklyHolidayEligible ? 'success' : 'info'}
+                    type="warning"
                     showIcon
-                    message={
-                      summary.weeklyHolidayEligible
-                        ? '이번 주 주휴수당 자격 충족 (주 15시간 이상 + 개근)'
-                        : '이번 주 주휴수당 자격 미충족'
-                    }
-                    description={summary.weeklyHolidayReason ?? undefined}
+                    className="tw-mb-3"
+                    message="주간 근무시간을 불러오지 못했습니다."
+                    description="네트워크 또는 권한 문제일 수 있어요. 잠시 후 다시 시도해 주세요."
                   />
                 )}
-              </Space>
-            )}
-          </Card>
+                {summary && (
+                  <Space direction="vertical" className="tw-w-full" size={6}>
+                    <Typography.Text type="secondary" className="!tw-text-xs">
+                      {summary.weekStart ?? '—'} ~ {summary.weekEnd ?? '—'}
+                    </Typography.Text>
+                    {/* 한도 카드 - 1열로 컴팩트 */}
+                    <div className="tw-space-y-2">
+                      <CompactLimitRow
+                        label="이번 주 근무시간"
+                        limitLabel="52h"
+                        value={summary.totalWorkedMinutes}
+                        limit={summary.totalLimitMinutes}
+                        percent={summary.totalUsagePercent}
+                        severity={totalSev}
+                      />
+                      <CompactLimitRow
+                        label="이번 주 연장근무"
+                        limitLabel="12h"
+                        value={summary.overtimeApprovedMinutes}
+                        limit={summary.overtimeLimitMinutes}
+                        percent={summary.overtimeUsagePercent}
+                        severity={otSev}
+                      />
+                      {summary.monthlyOvertimeLimitMinutes != null && summary.monthlyOvertimeLimitMinutes > 0 && (
+                        <CompactLimitRow
+                          label="이번 달 연장근무 누적"
+                          limitLabel={`${Math.round(summary.monthlyOvertimeLimitMinutes / 60)}h`}
+                          value={summary.monthlyOvertimeMinutes}
+                          limit={summary.monthlyOvertimeLimitMinutes}
+                          percent={summary.monthlyOvertimeUsagePercent}
+                          severity={severityOf(summary.monthlyOvertimeUsagePercent)}
+                        />
+                      )}
+                    </div>
+                  </Space>
+                )}
+              </Card>
 
-          {/* 포괄임금 안내 - 별도 정책 API 미적용. 추후 OvertimePolicy 연동 시 사용량 표시 */}
-          <Card size="small" className="tw-border-slate-200/80" title="포괄임금 연장근무">
-            <Typography.Text type="secondary">
-              포괄임금제가 적용된 경우 월별 포괄 한도와 사용량이 여기에 표시됩니다. (회사 정책에 따라 표시)
-            </Typography.Text>
-          </Card>
+              <WeeklyDailyBars weekAnchor={weekAnchor} dailyMap={visDailyMap} />
+            </Space>
+
+            <MonthlyHeatmap
+              monthCursor={heatmapMonth}
+              weekAnchor={weekAnchor}
+              dailyMap={visDailyMap}
+              holidayMap={holidayMap}
+              onPrevMonth={() => {
+                // 월 이동 시 조회 주도 새 월의 첫째날(이 속한 주)로 함께 이동
+                const newMonth = heatmapMonth.subtract(1, 'month').startOf('month');
+                setHeatmapMonth(newMonth);
+                setWeekAnchor(newMonth);
+              }}
+              onNextMonth={() => {
+                const newMonth = heatmapMonth.add(1, 'month').startOf('month');
+                setHeatmapMonth(newMonth);
+                setWeekAnchor(newMonth);
+              }}
+            />
+          </div>
+
+          {/* 포괄임금 안내 - 활성 정책의 wageSystemType=COMPREHENSIVE 일 때만 노출 */}
+          {isComprehensive && (
+            <Card size="small" className="tw-border-slate-200/80" title="포괄임금 연장근무">
+              <Typography.Text type="secondary">
+                포괄임금제가 적용된 경우 월별 포괄 한도와 사용량이 여기에 표시됩니다. (회사 정책에 따라 표시)
+              </Typography.Text>
+            </Card>
+          )}
         </Space>
       ) : (
       <>
@@ -769,5 +898,320 @@ export function MyAttendancePage() {
       </>
       )}
     </Space>
+  );
+}
+
+/** 한도 모니터링 1행 - 라벨 + 값/한도 + Progress */
+function CompactLimitRow({
+  label,
+  limitLabel,
+  value,
+  limit,
+  percent,
+  severity,
+}: {
+  label: string;
+  limitLabel: string;
+  value?: number | null;
+  limit?: number | null;
+  percent?: number | null;
+  severity: Severity;
+}) {
+  const hours = Math.round(((value ?? 0) / 60) * 10) / 10;
+  return (
+    <div>
+      <div className="tw-flex tw-items-baseline tw-justify-between tw-mb-1">
+        <span className="tw-text-xs tw-text-slate-600">
+          {label} <span className="tw-text-slate-400">({limitLabel} 한도)</span>
+        </span>
+        <span className="tw-text-sm tw-font-semibold" style={{ color: percentColor(severity) }}>
+          {hours}h
+          <span className="tw-text-xs tw-text-slate-400 tw-ml-1">/ {Math.round((limit ?? 0) / 60)}h</span>
+        </span>
+      </div>
+      <Progress
+        percent={percent ?? 0}
+        size="small"
+        showInfo={false}
+        strokeColor={percentColor(severity)}
+        status={severity === 'exceeded' ? 'exception' : 'normal'}
+      />
+    </div>
+  );
+}
+
+/**
+ * 이번 주 일별 근무시간 막대 차트 - 월~일 7개 막대
+ *  - 막대 높이 = workedMinutes / 13h (max)
+ *  - 색상: 8h 이하 회색 / 8~10h 파랑 / 10~12h 주황 / 12h+ 빨강
+ *  - 휴가/결근/출장은 텍스트 라벨로 표시
+ */
+function WeeklyDailyBars({
+  weekAnchor,
+  dailyMap,
+}: {
+  weekAnchor: Dayjs;
+  dailyMap: Map<string, DailyAttendance>;
+}) {
+  const days = useMemo(() => {
+    // 일요일 시작 (dayjs 기본 startOf('week') = 일요일)
+    const sunday = weekAnchor.startOf('week');
+    const result: { date: Dayjs; iso: string; daily?: DailyAttendance }[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d = sunday.add(i, 'day');
+      const iso = d.format('YYYY-MM-DD');
+      result.push({ date: d, iso, daily: dailyMap.get(iso) });
+    }
+    return result;
+  }, [weekAnchor, dailyMap]);
+
+  const MAX_HOURS = 13;
+  const colorFor = (hours: number) => {
+    if (hours >= 12) return 'tw-bg-red-500';
+    if (hours >= 10) return 'tw-bg-orange-500';
+    if (hours >= 8) return 'tw-bg-blue-500';
+    if (hours > 0) return 'tw-bg-slate-400';
+    return 'tw-bg-slate-200';
+  };
+  const dowKor = ['일', '월', '화', '수', '목', '금', '토'];
+
+  return (
+    <Card size="small" className="tw-border-slate-200/80" title="이번 주 일별 근무시간">
+      <div className="tw-flex tw-items-end tw-justify-around tw-gap-1 tw-h-[140px] tw-px-1">
+        {days.map((c, i) => {
+          const status = c.daily?.status;
+          const minutes = c.daily?.workedMinutes ?? 0;
+          const hours = minutes / 60;
+          const heightPct = Math.min(100, (hours / MAX_HOURS) * 100);
+          const isWeekend = i === 0 || i === 6;
+          const label =
+            status === 'LEAVE' ? '연차' :
+            status === 'HALF' ? '반차' :
+            status === 'ABSENT' ? '결근' :
+            c.daily?.workTripType === 'BUSINESS_TRIP' ? '출장' :
+            c.daily?.workTripType === 'OUTSIDE_WORK' ? '외근' :
+            null;
+          return (
+            <div key={c.iso} className="tw-flex tw-flex-col tw-items-center tw-flex-1 tw-min-w-0">
+              <div className="tw-text-[10px] tw-text-slate-700 tw-font-medium tw-h-3.5 tw-leading-none">
+                {hours > 0 ? `${hours.toFixed(1)}h` : ''}
+              </div>
+              <div className="tw-w-full tw-h-[88px] tw-flex tw-items-end tw-justify-center tw-mt-0.5">
+                {minutes > 0 ? (
+                  <div
+                    className={`tw-w-full tw-rounded-t ${colorFor(hours)}`}
+                    style={{ height: `${heightPct}%` }}
+                    title={`${c.iso} - ${hours.toFixed(1)}시간 근무`}
+                  />
+                ) : (
+                  <div className="tw-w-full tw-h-full tw-flex tw-items-center tw-justify-center">
+                    {label && (
+                      <span className="tw-text-[10px] tw-text-slate-500 tw-bg-slate-100 tw-px-1 tw-py-0.5 tw-rounded">
+                        {label}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className={`tw-text-[10px] tw-mt-1 tw-leading-none ${isWeekend ? 'tw-text-rose-500' : 'tw-text-slate-600'}`}>
+                {dowKor[i]}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="tw-flex tw-items-center tw-justify-end tw-gap-2 tw-mt-1 tw-text-[10px] tw-text-slate-500">
+        <span className="tw-flex tw-items-center tw-gap-1"><span className="tw-w-2.5 tw-h-2.5 tw-bg-slate-400 tw-rounded-sm" />~8h</span>
+        <span className="tw-flex tw-items-center tw-gap-1"><span className="tw-w-2.5 tw-h-2.5 tw-bg-blue-500 tw-rounded-sm" />8~10h</span>
+        <span className="tw-flex tw-items-center tw-gap-1"><span className="tw-w-2.5 tw-h-2.5 tw-bg-orange-500 tw-rounded-sm" />10~12h</span>
+        <span className="tw-flex tw-items-center tw-gap-1"><span className="tw-w-2.5 tw-h-2.5 tw-bg-red-500 tw-rounded-sm" />12h+</span>
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * 이번 달 일별 캘린더 히트맵
+ *  - 4~6주 그리드, 각 셀 배경 색 강도 = 근무시간
+ *  - 휴가 노랑 / 출장 파랑 / 결근 빨강 / 주말 회색
+ *  - 현재 조회 중인 주는 파란 보더로 강조 (왼쪽 한도 카드와 연동)
+ */
+function MonthlyHeatmap({
+  monthCursor,
+  weekAnchor,
+  dailyMap,
+  holidayMap,
+  onPrevMonth,
+  onNextMonth,
+}: {
+  monthCursor: Dayjs;
+  weekAnchor: Dayjs;
+  dailyMap: Map<string, DailyAttendance>;
+  holidayMap: Map<string, string>;
+  onPrevMonth: () => void;
+  onNextMonth: () => void;
+}) {
+  const month = monthCursor.startOf('month');
+  const monthLabel = month.format('YYYY년 M월');
+  // 현재 조회 중인 주의 시작/끝 (weekAnchor 기준, 일~토)
+  const sundayOfAnchor = weekAnchor.startOf('week');
+  const highlightWeekStart = sundayOfAnchor.format('YYYY-MM-DD');
+  const highlightWeekEnd = sundayOfAnchor.add(6, 'day').format('YYYY-MM-DD');
+  const weeks = useMemo(() => {
+    const start = month.startOf('week');
+    const end = month.endOf('month').endOf('week');
+    const cells: { date: Dayjs; iso: string; inMonth: boolean; daily?: DailyAttendance }[][] = [];
+    let cursor = start;
+    while (cursor.isBefore(end) || cursor.isSame(end, 'day')) {
+      const week: typeof cells[number] = [];
+      for (let d = 0; d < 7; d++) {
+        const date = cursor.add(d, 'day');
+        const iso = date.format('YYYY-MM-DD');
+        week.push({
+          date,
+          iso,
+          inMonth: date.month() === month.month(),
+          daily: dailyMap.get(iso),
+        });
+      }
+      cells.push(week);
+      cursor = cursor.add(7, 'day');
+    }
+    return cells;
+  }, [month, dailyMap]);
+
+  const cellBg = (cell: { inMonth: boolean; daily?: DailyAttendance; date: Dayjs; iso: string }) => {
+    const isHoliday = holidayMap.has(cell.iso);
+    const status = cell.daily?.status;
+    // 공휴일 우선 - 근무 데이터가 있어도 휴일 표시가 우선 (단 LEAVE/HALF/ABSENT 같은 명시적 상태는 별개로 표시)
+    if (isHoliday && !status) {
+      return cell.inMonth ? 'tw-bg-rose-100 tw-text-rose-700' : 'tw-bg-rose-50 tw-text-rose-500 tw-opacity-70';
+    }
+    if (status === 'LEAVE') return cell.inMonth ? 'tw-bg-yellow-200 tw-text-yellow-900' : 'tw-bg-yellow-100 tw-text-yellow-800 tw-opacity-70';
+    if (status === 'HALF') return cell.inMonth ? 'tw-bg-yellow-100 tw-text-yellow-800' : 'tw-bg-yellow-50 tw-text-yellow-700 tw-opacity-70';
+    if (status === 'ABSENT') return cell.inMonth ? 'tw-bg-red-200 tw-text-red-900' : 'tw-bg-red-100 tw-text-red-700 tw-opacity-70';
+    if (cell.daily?.workTripType === 'BUSINESS_TRIP') return cell.inMonth ? 'tw-bg-sky-200 tw-text-sky-900' : 'tw-bg-sky-100 tw-text-sky-700 tw-opacity-70';
+    if (cell.daily?.workTripType === 'OUTSIDE_WORK') return cell.inMonth ? 'tw-bg-sky-100 tw-text-sky-800' : 'tw-bg-sky-50 tw-text-sky-700 tw-opacity-70';
+    const hours = (cell.daily?.workedMinutes ?? 0) / 60;
+    const dim = !cell.inMonth ? ' tw-opacity-60' : '';
+    if (hours >= 12) return 'tw-bg-red-500 tw-text-white' + dim;
+    if (hours >= 10) return 'tw-bg-orange-400 tw-text-white' + dim;
+    if (hours >= 8) return 'tw-bg-blue-400 tw-text-white' + dim;
+    if (hours > 0) return 'tw-bg-blue-200 tw-text-blue-900' + dim;
+    const dow = cell.date.day();
+    if (dow === 0 || dow === 6) return cell.inMonth ? 'tw-bg-slate-100 tw-text-slate-400' : 'tw-bg-slate-50 tw-text-slate-300';
+    if (!cell.inMonth) return 'tw-bg-slate-50 tw-text-slate-300';
+    return 'tw-bg-white tw-text-slate-600 tw-border tw-border-slate-200';
+  };
+
+  const dowKor = ['일', '월', '화', '수', '목', '금', '토'];
+  return (
+    <Card
+      size="small"
+      className="tw-border-slate-200/80"
+      title={
+        <div className="tw-flex tw-items-center tw-justify-center tw-gap-2">
+          <Button size="small" type="text" onClick={onPrevMonth}>‹</Button>
+          <span className="tw-text-base tw-font-semibold">{monthLabel} 일별 근무 히트맵</span>
+          <Button size="small" type="text" onClick={onNextMonth}>›</Button>
+        </div>
+      }
+    >
+      <div className="tw-grid tw-grid-cols-7 tw-gap-0.5 tw-mb-1">
+        {dowKor.map((d, i) => (
+          <div
+            key={`h-${d}`}
+            className={`tw-text-[11px] tw-text-center tw-py-0.5 tw-font-medium ${
+              i === 0 || i === 6 ? 'tw-text-rose-500' : 'tw-text-slate-600'
+            }`}
+          >
+            {d}
+          </div>
+        ))}
+      </div>
+      <div className="tw-flex tw-flex-col tw-gap-0.5">
+        {weeks.map((week, weekIdx) => {
+          const isHighlightWeek = week.some(
+            (c) => c.iso >= highlightWeekStart && c.iso <= highlightWeekEnd,
+          );
+          return (
+            <div
+              key={`w-${weekIdx}`}
+              className={`tw-grid tw-grid-cols-7 tw-gap-0.5 tw-rounded-md tw-p-0.5 tw-transition-colors ${
+                isHighlightWeek
+                  ? 'tw-bg-blue-100/70 tw-ring-2 tw-ring-blue-500 tw-shadow-sm'
+                  : ''
+              }`}
+            >
+              {week.map((cell) => (
+          <div
+            key={cell.iso}
+            className={`tw-aspect-square tw-rounded tw-flex tw-flex-col tw-items-center tw-justify-center ${cellBg(cell)}`}
+            title={(() => {
+              const holidayName = holidayMap.get(cell.iso);
+              const status = cell.daily?.status;
+              const trip = cell.daily?.workTripType;
+              const labels = [];
+              if (holidayName) labels.push(holidayName);
+              if (status === 'LEAVE') labels.push('연차휴가');
+              else if (status === 'HALF') labels.push('반차');
+              else if (status === 'ABSENT') labels.push('결근');
+              if (trip === 'BUSINESS_TRIP') labels.push('출장');
+              if (trip === 'OUTSIDE_WORK') labels.push('외근');
+              const hours = cell.daily?.workedMinutes ? ` - ${(cell.daily.workedMinutes / 60).toFixed(1)}h` : '';
+              return `${cell.iso}${labels.length ? ` (${labels.join(', ')})` : ''}${hours}`;
+            })()}
+          >
+            <div className="tw-text-[11px] tw-font-semibold tw-leading-none">{cell.date.date()}</div>
+            {(() => {
+              const holidayName = holidayMap.get(cell.iso);
+              const status = cell.daily?.status;
+              const trip = cell.daily?.workTripType;
+              // 공휴일 + 근무 데이터: 공휴일 이름 우선 + 근무 시간 작게 같이
+              if (holidayName && !status) {
+                const hours = (cell.daily?.workedMinutes ?? 0) / 60;
+                return (
+                  <>
+                    <div className="tw-text-[9px] tw-leading-none tw-mt-0.5 tw-truncate tw-max-w-full tw-px-0.5">
+                      {holidayName}
+                    </div>
+                    {hours > 0 && (
+                      <div className="tw-text-[8px] tw-leading-none tw-mt-0.5 tw-text-rose-500/70">
+                        ({hours.toFixed(1)}h)
+                      </div>
+                    )}
+                  </>
+                );
+              }
+              if (status === 'LEAVE') return <div className="tw-text-[9px] tw-mt-0.5">연차</div>;
+              if (status === 'HALF') return <div className="tw-text-[9px] tw-mt-0.5">반차</div>;
+              if (status === 'ABSENT') return <div className="tw-text-[9px] tw-mt-0.5">결근</div>;
+              if (trip === 'BUSINESS_TRIP') return <div className="tw-text-[9px] tw-mt-0.5">출장</div>;
+              if (trip === 'OUTSIDE_WORK') return <div className="tw-text-[9px] tw-mt-0.5">외근</div>;
+              if (cell.daily?.workedMinutes && cell.daily.workedMinutes > 0) {
+                return (
+                  <div className="tw-text-[9px] tw-leading-none tw-mt-0.5">
+                    {(cell.daily.workedMinutes / 60).toFixed(1)}h
+                  </div>
+                );
+              }
+              if (!cell.inMonth) return null;
+              return null;
+            })()}
+          </div>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+      <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-end tw-gap-2 tw-mt-2 tw-text-[10px] tw-text-slate-500">
+        <span className="tw-flex tw-items-center tw-gap-1"><span className="tw-w-2.5 tw-h-2.5 tw-bg-blue-200 tw-rounded-sm" />~8h</span>
+        <span className="tw-flex tw-items-center tw-gap-1"><span className="tw-w-2.5 tw-h-2.5 tw-bg-blue-400 tw-rounded-sm" />8~10h</span>
+        <span className="tw-flex tw-items-center tw-gap-1"><span className="tw-w-2.5 tw-h-2.5 tw-bg-orange-400 tw-rounded-sm" />10~12h</span>
+        <span className="tw-flex tw-items-center tw-gap-1"><span className="tw-w-2.5 tw-h-2.5 tw-bg-red-500 tw-rounded-sm" />12h+</span>
+        <span className="tw-flex tw-items-center tw-gap-1"><span className="tw-w-2.5 tw-h-2.5 tw-bg-yellow-200 tw-rounded-sm" />휴가</span>
+        <span className="tw-flex tw-items-center tw-gap-1"><span className="tw-w-2.5 tw-h-2.5 tw-bg-sky-200 tw-rounded-sm" />출장</span>
+      </div>
+    </Card>
   );
 }

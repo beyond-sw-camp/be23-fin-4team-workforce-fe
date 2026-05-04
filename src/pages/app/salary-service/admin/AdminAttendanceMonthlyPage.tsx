@@ -69,7 +69,9 @@ export function AdminAttendanceMonthlyPage() {
           { text: '결근', value: 'ABSENT' },
         ],
         onFilter: (value, record) => record.status === value,
-        render: (s: string) => <AttendanceStatusTag status={s} />,
+        render: (_, row) => (
+          <AttendanceStatusTag status={row.status} workTripType={row.workTripType ?? null} />
+        ),
       },
       {
         title: '근무(분)',

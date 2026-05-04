@@ -61,6 +61,8 @@ export type DailyAttendance = {
   lastClockOut?: string | null;
   workedMinutes?: number | null;
   overtimeMinutes?: number | null;
+  /** 출장/외근 - WorkTripDetail.workTripType (BUSINESS_TRIP / OUTSIDE_WORK), 없으면 null */
+  workTripType?: 'BUSINESS_TRIP' | 'OUTSIDE_WORK' | null;
 };
 
 /** 출퇴근 정정 신청 페이로드 */
@@ -311,6 +313,7 @@ export type PayrollTypeCode =
   | 'PERFORMANCE_BONUS'
   | 'SPECIAL_BONUS'
   | 'RETROACTIVE'
+  | 'RETIREMENT_SETTLEMENT'
   | string;
 
 export type Payroll = {
@@ -318,6 +321,8 @@ export type Payroll = {
   salaryId?: string;
   memberId?: string;
   payrollYearMonthDay?: string;
+  /** 정산 대상 월 (YYYY-MM) - 어느 월분 급여인지 */
+  targetYearMonth?: string | null;
   paidAt?: string | null;
   totalPayment?: number | null;
   totalDeduction?: number | null;
@@ -336,6 +341,8 @@ export type PayrollAdminListItem = {
   name?: string | null;
   organizationName?: string | null;
   payrollYearMonthDay: string;
+  /** 정산 대상 월 (YYYY-MM) */
+  targetYearMonth?: string | null;
   paidAt?: string | null;
   payrollStatus: PayrollStatusCode;
   payrollType?: PayrollTypeCode;
@@ -357,6 +364,8 @@ export type AnnualSalaryMonthlyRow = {
   month: number;
   payrollId?: string | null;
   payrollYearMonthDay?: string | null;
+  /** 정산 대상 월 (YYYY-MM) - 어느 월분 급여 */
+  targetYearMonth?: string | null;
   payrollStatus?: PayrollStatusCode | null;
   totalPayment: number;
   totalDeduction: number;
@@ -766,6 +775,14 @@ export type PayDayShiftRuleCode = 'NONE' | 'BEFORE' | 'AFTER' | string;
 /** 일할계산 방식. DAYS_IN_MONTH 해당월 일수 / FIXED_30 30일 고정 (통상임금 표준) / WORKING_DAYS 월 소정근로일 */
 export type ProrationMethodCode = 'DAYS_IN_MONTH' | 'FIXED_30' | 'WORKING_DAYS' | string;
 
+/**
+ * 급여 지급 주기.
+ * - CURRENT_MONTH: 해당 월에 그 월분 지급 (예 5/25 에 5월분, 보통 payDay 20-말일)
+ * - PREVIOUS_MONTH: 다음 달에 전월분 지급 (예 6/10 에 5월분, 보통 payDay 1-15)
+ * 평균임금 / 일할 / 보너스 환산의 정산 대상 월(targetYearMonth) 산출 기준.
+ */
+export type PayCycleTypeCode = 'CURRENT_MONTH' | 'PREVIOUS_MONTH' | string;
+
 /** SalaryPolicy 는 절사 단위를 갖지 않음. 절사 단위는 OvertimePolicy.overtimeFloorMinutes 가 단일 진실. */
 export type SalaryPolicy = {
   salaryPolicyId?: string;
@@ -784,6 +801,8 @@ export type SalaryPolicy = {
   monthlyOrdinaryHours?: number | null;
   /** 일할계산 방식 입사 / 퇴사 / 기간변경 월 적용 */
   prorationMethod?: ProrationMethodCode | null;
+  /** 급여 지급 주기 (당월분/전월분) */
+  payCycleType?: PayCycleTypeCode | null;
   effectiveFrom?: string;
   effectiveTo?: string | null;
   createdAt?: string | null;
@@ -805,6 +824,8 @@ export type SalaryPolicyCreatePayload = {
   monthlyOrdinaryHours?: number | null;
   /** 일할계산 방식 입사 / 퇴사 / 기간변경 월 적용 */
   prorationMethod?: ProrationMethodCode | null;
+  /** 급여 지급 주기 (당월분/전월분), 기본 CURRENT_MONTH */
+  payCycleType?: PayCycleTypeCode | null;
   effectiveFrom: string;
   effectiveTo?: string | null;
 };
@@ -1087,6 +1108,11 @@ export type WorkTimeSummary = {
   overtimeApprovedMinutes?: number | null;
   overtimeLimitMinutes?: number | null;
   overtimeUsagePercent?: number | null;
+  /** 월 누적 OT (현재 월 1일 ~ 기준일까지 합) */
+  monthlyOvertimeMinutes?: number | null;
+  /** 회사 정책 monthlyOvertimeLimitMinutes - 미설정 시 null */
+  monthlyOvertimeLimitMinutes?: number | null;
+  monthlyOvertimeUsagePercent?: number | null;
   /** 근기법 55조 주휴수당 자격, 주 15시간 이상 + 개근 */
   weeklyHolidayEligible?: boolean | null;
   weeklyHolidayMinRequiredMinutes?: number | null;

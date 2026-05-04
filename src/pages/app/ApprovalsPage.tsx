@@ -212,6 +212,7 @@ type PreActionConfig = {
 };
 
 const SCHEDULE_SELECTION_PREFILL_STORAGE_KEY = 'wf-approval-prefill-schedule-selection';
+const PERSONNEL_ORDER_PREFILL_STORAGE_KEY = 'wf-approval-prefill-personnel-order';
 const CHATBOT_ACTION_PREFILL_STORAGE_KEY = 'wf-approval-prefill-chatbot-action';
 
 /** 쿼리값이 `prefill=%22true%22`처럼 따옴표가 포함된 문자열일 때 정규화 */
@@ -2792,6 +2793,47 @@ export function ApprovalsPage() {
     routeSearch.schReason,
   ]);
 
+  // 인사발령품의서 prefill - 조직 개편 시뮬에서 localStorage 로 넘겨준 contentJson 자동 채움
+  // payload: { documentName: "인사발령품의서", contentJson: { effectiveDate, orderCategory, orderCategoryLabel, reason, summaryText, items: [...] } }
+  // localStorage 사용 - iframe 모달도 부모와 동일 origin 으로 접근 가능 (sessionStorage는 분리됨)
+  // iframe(embed) 안에서만 처리 - 부모쪽이 먼저 localStorage.removeItem 하면 iframe 이 prefill 못 채우는 문제 방지
+  const personnelOrderPrefillAppliedRef = useRef(false);
+  useEffect(() => {
+    if (!isEmbedComposeModal) return;
+    if (tab !== 'compose' || composePhase !== 'fill') return;
+    if (!selectedDocument || selectedDocument.documentName !== '인사발령품의서') {
+      personnelOrderPrefillAppliedRef.current = false;
+      return;
+    }
+    if (personnelOrderPrefillAppliedRef.current) return;
+    const raw = localStorage.getItem(PERSONNEL_ORDER_PREFILL_STORAGE_KEY);
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw) as {
+        documentName?: string;
+        contentJson?: Record<string, unknown>;
+      };
+      const cj = parsed.contentJson ?? {};
+      const current = (form.getFieldValue('content') ?? {}) as Record<string, unknown>;
+      // 사용자 노출 textarea 에는 한글 요약 (UUID 등 ID 제외)
+      const summaryText = typeof cj.summaryText === 'string' ? cj.summaryText : '';
+      form.setFieldsValue({
+        content: {
+          ...current,
+          ...cj,
+          contentJsonText: summaryText,
+        },
+      });
+      personnelOrderPrefillAppliedRef.current = true;
+      message.success('조직 개편 시뮬 변경 사항을 결재 양식에 채웠습니다. 결재선만 지정해 신청하세요.');
+    } catch {
+      // ignore bad payload
+    } finally {
+      localStorage.removeItem(PERSONNEL_ORDER_PREFILL_STORAGE_KEY);
+    }
+  }, [composePhase, form, isEmbedComposeModal, message, selectedDocument, tab]);
+
+  // 챗봇 액션 prefill - sessionStorage 로 넘겨준 documentId+content 자동 입력
   useEffect(() => {
     if (tab !== 'compose' || composePhase !== 'fill') return;
     const raw = sessionStorage.getItem(CHATBOT_ACTION_PREFILL_STORAGE_KEY);

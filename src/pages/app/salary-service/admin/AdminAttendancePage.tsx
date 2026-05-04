@@ -57,8 +57,9 @@ function formatHm(min?: number | null) {
   if (typeof min !== 'number' || !Number.isFinite(min) || min <= 0) return '—';
   const h = Math.floor(min / 60);
   const m = min % 60;
-  if (h === 0) return `${m}m`;
-  return `${h}h ${String(m).padStart(2, '0')}m`;
+  if (h === 0) return `${m}분`;
+  if (m === 0) return `${h}시간`;
+  return `${h}시간 ${m}분`;
 }
 
 function shortId(id?: string | null) {
@@ -186,6 +187,7 @@ export function AdminAttendancePage() {
     let workCount = 0;
     let overtimeMinTotal = 0;
     let overtimeMemberCount = 0;
+    let tripCount = 0;
     filteredContent.forEach((r) => {
       const s = r.status ?? '';
       if (s in counts) counts[s] += 1;
@@ -197,11 +199,16 @@ export function AdminAttendancePage() {
         overtimeMinTotal += r.overtimeMinutes;
         overtimeMemberCount += 1;
       }
+      // 출장/외근 - WorkTripDetail 있는 일자
+      if (r.workTripType === 'BUSINESS_TRIP' || r.workTripType === 'OUTSIDE_WORK') {
+        tripCount += 1;
+      }
     });
     return {
       normal: counts.NORMAL,
       absent: counts.ABSENT,
       leaveOrHalf: counts.LEAVE + counts.HALF,
+      tripCount,
       avgWorkMin: workCount > 0 ? Math.round(workMinTotal / workCount) : 0,
       overtimeMinTotal,
       overtimeMemberCount,
@@ -278,7 +285,9 @@ export function AdminAttendancePage() {
           { text: '결근', value: 'ABSENT' },
         ],
         onFilter: (value, record) => record.status === value,
-        render: (s: string) => <AttendanceStatusTag status={s} />,
+        render: (_, row) => (
+          <AttendanceStatusTag status={row.status} workTripType={row.workTripType ?? null} />
+        ),
       },
     ];
 
@@ -412,13 +421,9 @@ export function AdminAttendancePage() {
         <KpiTile label="정상 출근" value={kpi.normal.toLocaleString()} tone="success" />
         <KpiTile label="결근" value={kpi.absent.toLocaleString()} tone="danger" />
         <KpiTile label="휴가/반차" value={kpi.leaveOrHalf.toLocaleString()} tone="warning" />
+        <KpiTile label="출장/외근" value={kpi.tripCount.toLocaleString()} tone="neutral" />
         <KpiTile label="평균 근무" value={formatHm(kpi.avgWorkMin)} tone="neutral" />
         <KpiTile label="초과근무 인원" value={`${kpi.overtimeMemberCount.toLocaleString()}명`} tone="hot" />
-        <KpiTile
-          label="총 초과근무"
-          value={`${formatHm(kpi.overtimeMinTotal)} / 평균 ${formatHm(kpi.avgOvertimeMin)}`}
-          tone="hot"
-        />
       </div>
 
       <Card className="tw-border-slate-200/80 tw-shadow-sm" size="small">

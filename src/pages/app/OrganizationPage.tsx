@@ -7,11 +7,12 @@ import { useMemo, useState, type Key } from 'react';
 import { type OrganizationTreeNode, organizationApi } from '@/features/organization/api/organizationApi';
 import { OrganizationRolesSection } from '@/features/organization/ui/OrganizationRolesSection';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
+import { AdminOrgRestructurePage } from '@/pages/app/organization/AdminOrgRestructurePage';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 
-type OrgSettingsTab = 'structure' | 'grades' | 'titles' | 'roles';
+type OrgSettingsTab = 'structure' | 'grades' | 'titles' | 'roles' | 'restructure';
 
-const ORG_TAB_KEYS: readonly OrgSettingsTab[] = ['structure', 'grades', 'titles', 'roles'] as const;
+const ORG_TAB_KEYS: readonly OrgSettingsTab[] = ['structure', 'grades', 'titles', 'roles', 'restructure'] as const;
 
 function parseOrgTab(raw: unknown): OrgSettingsTab {
   if (typeof raw === 'string' && (ORG_TAB_KEYS as readonly string[]).includes(raw)) {
@@ -616,6 +617,11 @@ export function OrganizationPage() {
               key: 'roles',
               label: '역할·권한',
               children: <OrganizationRolesSection />,
+            },
+            {
+              key: 'restructure',
+              label: '조직 개편',
+              children: <AdminOrgRestructurePage />,
             },
           ]}
         />

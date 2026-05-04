@@ -53,9 +53,10 @@ export function AdminAttendanceDailyPage() {
       },
       {
         title: '상태',
-        dataIndex: 'status',
         key: 'status',
-        render: (s: string) => <AttendanceStatusTag status={s} />,
+        render: (_, row) => (
+          <AttendanceStatusTag status={row.status} workTripType={row.workTripType ?? null} />
+        ),
       },
       {
         title: '첫 출근',

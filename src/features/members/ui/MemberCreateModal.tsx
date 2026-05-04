@@ -190,13 +190,13 @@ export function MemberCreateModal({ open, onClose }: Props) {
         confirmText="생성 후 급여 등록"
         cancelText="취소"
         confirmButtonClassName={membersCtaButtonClass}
-        width={720}
+        width={880}
         destroyOnHidden
         confirmLoading={createM.isPending}
       >
-        <Form<FormValues> form={form} layout="vertical" className="tw-pt-1">
+        <Form<FormValues> form={form} layout="vertical" className="tw-pt-2 tw-px-2 tw-pb-1">
           {/* 1행: 이름 + 영문 이니셜 */}
-          <div className="tw-grid tw-grid-cols-2 tw-gap-3">
+          <div className="tw-grid tw-grid-cols-2 tw-gap-x-6 tw-gap-y-1">
             <Form.Item name="name" label="이름" rules={[{ required: true, message: '이름을 입력하세요.' }]}>
               <Input placeholder="홍길동" maxLength={80} />
             </Form.Item>
@@ -219,7 +219,7 @@ export function MemberCreateModal({ open, onClose }: Props) {
           </Form.Item>
 
           {/* 3행: 입사일 + 고용 형태 */}
-          <div className="tw-grid tw-grid-cols-2 tw-gap-3">
+          <div className="tw-grid tw-grid-cols-2 tw-gap-x-6 tw-gap-y-1">
             <Form.Item name="joinDate" label="입사일" rules={[{ required: true, message: '입사일을 선택하세요.' }]}>
               <DatePicker className="tw-w-full" format="YYYY-MM-DD" />
             </Form.Item>
@@ -229,7 +229,7 @@ export function MemberCreateModal({ open, onClose }: Props) {
           </div>
 
           {/* 4행: 조직 + 직급 */}
-          <div className="tw-grid tw-grid-cols-2 tw-gap-3">
+          <div className="tw-grid tw-grid-cols-2 tw-gap-x-6 tw-gap-y-1">
             <Form.Item name="organizationId" label="조직" rules={[{ required: true, message: '조직을 선택하세요.' }]}>
               <Select showSearch optionFilterProp="label" options={orgOptions} placeholder="조직 선택" />
             </Form.Item>
@@ -239,7 +239,7 @@ export function MemberCreateModal({ open, onClose }: Props) {
           </div>
 
           {/* 5행: 직책 + 역할 */}
-          <div className="tw-grid tw-grid-cols-2 tw-gap-3">
+          <div className="tw-grid tw-grid-cols-2 tw-gap-x-6 tw-gap-y-1">
             <Form.Item name="jobTitleId" label="직책" rules={[{ required: true, message: '직책을 선택하세요.' }]}>
               <Select showSearch optionFilterProp="label" options={titleOptions} placeholder="직책 선택" />
             </Form.Item>
