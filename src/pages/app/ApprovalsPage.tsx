@@ -316,8 +316,11 @@ const PRE_ACTION_CONFIGS: PreActionConfig[] = [
         startDate = sorted[0] ?? startDate;
         endDate = sorted[sorted.length - 1] ?? endDate;
       }
-      if (!companyLeaveTypeId || !startDate || !endDate) {
-        throw new Error('휴가 종류·시작일·종료일은 필수입니다.');
+      if (!companyLeaveTypeId) {
+        throw new Error('휴가 종류를 선택해 주세요.');
+      }
+      if (!startDate || !endDate) {
+        throw new Error('휴가 날짜를 1개 이상 선택해 주세요.');
       }
       // 첨부파일은 결재문서 생성 후에 업로드되지만 백엔드 LeaveRequestService 는
       // requireEvidenceYn=Y 인 휴가에 대해 evidenceFileUrl 이 null/blank 이면 거부함.
@@ -1640,6 +1643,28 @@ export function ApprovalsPage() {
   const { data: companyLeaveTypes = [] } = useQuery({
     queryKey: ['salary', 'company-leave-types'],
     queryFn: () => attendanceApi.companyLeaveType.list(),
+    staleTime: 60_000,
+  });
+
+  // 휴가 신청 날짜 검증용 - 회사 공휴일 + 본인 휴가 잔여
+  // selectedDocument 가 아래쪽에서 정의되므로 enabled 조건은 docId param 기반(TDZ 방지)
+  // 결재 메뉴 진입 시 1회 fetch + staleTime 길게 → 부담 작음
+  const { data: companyHolidaysForLeave = [] } = useQuery({
+    queryKey: ['attendance', 'company-holidays', 'for-leave-form'],
+    queryFn: () => attendanceApi.companyHoliday.list(),
+    staleTime: 10 * 60_000,
+  });
+  const companyHolidaySet = useMemo(() => {
+    const s = new Set<string>();
+    (companyHolidaysForLeave ?? []).forEach((h) => {
+      const d = (h as unknown as { holidayDate?: string }).holidayDate;
+      if (d) s.add(d);
+    });
+    return s;
+  }, [companyHolidaysForLeave]);
+  const { data: myBalances = [] } = useQuery({
+    queryKey: ['salary', 'member-balance', 'mine', 'for-leave-form'],
+    queryFn: () => attendanceApi.memberBalance.listMine(),
     staleTime: 60_000,
   });
   const companyLeaveTypeOptions = useMemo(
@@ -5751,48 +5776,143 @@ export function ApprovalsPage() {
                               })}
                               {/* 휴가신청서 - 휴가 날짜 multi DatePicker (단일/연속/비연속 모두 한 번에 처리) */}
                               {/* 시작일/종료일 양식 필드는 위에서 숨김 처리, 사용 일수 = 선택한 날짜 개수 */}
+                              {/* 주말/회사 공휴일은 disabledDate 로 선택 차단 + 휴가 종류별 잔여 한도 사전 검증 */}
                               {selectedDocument.documentName === '휴가신청서' && (
-                                <ApprovalFormPaperFieldRow label="휴가 날짜" required>
-                                  <Form.Item
-                                    name={['content', 'plannedDates']}
-                                    className="!tw-mb-0"
-                                    rules={[
-                                      {
-                                        validator: (_, v) =>
-                                          Array.isArray(v) && v.length > 0
-                                            ? Promise.resolve()
-                                            : Promise.reject(new Error('휴가 날짜를 1개 이상 선택해 주세요.')),
-                                      },
-                                    ]}
-                                    getValueProps={(v) => ({
-                                      value: Array.isArray(v)
-                                        ? (v as string[])
-                                            .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))
-                                            .map((d) => dayjs(d, 'YYYY-MM-DD'))
-                                        : null,
-                                    })}
-                                    getValueFromEvent={(d: dayjs.Dayjs[] | dayjs.Dayjs | null) => {
-                                      if (!d) return undefined;
-                                      const arr = Array.isArray(d) ? d : [d];
-                                      const out = arr
-                                        .filter((x) => x && x.isValid())
-                                        .map((x) => x.format('YYYY-MM-DD'))
-                                        .sort();
-                                      return out.length > 0 ? out : undefined;
-                                    }}
-                                  >
-                                    <DatePicker
-                                      multiple
-                                      maxTagCount={10}
-                                      format="YYYY-MM-DD"
-                                      placeholder="휴가일을 클릭해 하나씩 선택 (연속/비연속 모두 가능)"
-                                      className="!tw-max-w-lg tw-w-full"
-                                    />
-                                  </Form.Item>
-                                  <Typography.Text type="secondary" className="!tw-text-[11px] !tw-block !tw-mt-1">
-                                    선택한 날짜 개수가 사용 일수로 카운트됩니다. 주말·공휴일은 제외하고 평일만 골라 주세요.
-                                  </Typography.Text>
-                                </ApprovalFormPaperFieldRow>
+                                <Form.Item
+                                  shouldUpdate={(prev, next) =>
+                                    prev?.content?.vacationType !== next?.content?.vacationType
+                                    || JSON.stringify(prev?.content?.plannedDates) !== JSON.stringify(next?.content?.plannedDates)
+                                  }
+                                  noStyle
+                                >
+                                  {() => {
+                                    const vacationTypeId = form.getFieldValue(['content', 'vacationType']) as string | undefined;
+                                    const selectedType = companyLeaveTypes.find((t) => t.companyLeaveTypeId === vacationTypeId);
+                                    const daysPerUse = selectedType?.daysPerUse ?? 1.0;
+                                    // 잔여 일수 계산 - balanceType 기준 (ANNUAL/CARRYOVER 합산 또는 MONTHLY)
+                                    // 시스템 기본 휴가는 code 기반, 커스텀은 balanceType 컬럼 사용 가정
+                                    const code = (selectedType?.code ?? '').toUpperCase();
+                                    const wantedBalanceTypes = (() => {
+                                      if (!selectedType) return [] as string[];
+                                      if (code === 'MONTHLY') return ['MONTHLY'];
+                                      if (code === 'ANNUAL' || code === 'HALF_AM' || code === 'HALF_PM') return ['ANNUAL', 'CARRYOVER'];
+                                      const bt = (selectedType as unknown as { balanceType?: string | null }).balanceType;
+                                      if (bt) return [bt];
+                                      return [] as string[]; // 경조/병가 등 - 잔여 차감 없음
+                                    })();
+                                    const remainingDays = wantedBalanceTypes.length === 0
+                                      ? null  // 잔여 차감 없음 표시 X
+                                      : myBalances
+                                          .filter((b) => wantedBalanceTypes.includes(b.balanceType ?? ''))
+                                          .reduce((s, b) => s + (b.remaining ?? 0), 0);
+                                    const maxDaysPerYear = selectedType?.maxDaysPerYear ?? null;
+                                    const planned = (form.getFieldValue(['content', 'plannedDates']) as string[] | undefined) ?? [];
+                                    const usageDays = planned.length * daysPerUse;
+                                    const exceedsBalance = remainingDays != null && usageDays > remainingDays;
+                                    const exceedsYearLimit = maxDaysPerYear != null && usageDays > maxDaysPerYear;
+                                    return (
+                                      <ApprovalFormPaperFieldRow label="휴가 날짜" required>
+                                        <Form.Item
+                                          name={['content', 'plannedDates']}
+                                          className="!tw-mb-0"
+                                          rules={[
+                                            {
+                                              validator: (_, v) => {
+                                                if (!Array.isArray(v) || v.length === 0) {
+                                                  return Promise.reject(new Error('휴가 날짜를 1개 이상 선택해 주세요.'));
+                                                }
+                                                if (!vacationTypeId) {
+                                                  return Promise.reject(new Error('휴가 종류를 먼저 선택해 주세요.'));
+                                                }
+                                                const used = v.length * daysPerUse;
+                                                if (remainingDays != null && used > remainingDays) {
+                                                  return Promise.reject(new Error(
+                                                    `잔여 ${remainingDays}일을 초과합니다 (요청 ${used}일).`,
+                                                  ));
+                                                }
+                                                if (maxDaysPerYear != null && used > maxDaysPerYear) {
+                                                  return Promise.reject(new Error(
+                                                    `${selectedType?.name ?? '해당 휴가'} 연간 한도 ${maxDaysPerYear}일을 초과합니다.`,
+                                                  ));
+                                                }
+                                                return Promise.resolve();
+                                              },
+                                            },
+                                          ]}
+                                          getValueProps={(v) => ({
+                                            value: Array.isArray(v)
+                                              ? (v as string[])
+                                                  .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))
+                                                  .map((d) => dayjs(d, 'YYYY-MM-DD'))
+                                              : null,
+                                          })}
+                                          getValueFromEvent={(d: dayjs.Dayjs[] | dayjs.Dayjs | null) => {
+                                            if (!d) return undefined;
+                                            const arr = Array.isArray(d) ? d : [d];
+                                            const out = arr
+                                              .filter((x) => x && x.isValid())
+                                              .map((x) => x.format('YYYY-MM-DD'))
+                                              .sort();
+                                            return out.length > 0 ? out : undefined;
+                                          }}
+                                        >
+                                          <DatePicker
+                                            multiple
+                                            maxTagCount={10}
+                                            format="YYYY-MM-DD"
+                                            placeholder="휴가일을 클릭해 하나씩 선택 (주말/공휴일 제외)"
+                                            className="!tw-max-w-lg tw-w-full"
+                                            // 주말 + 회사 공휴일 + 과거 일자(오늘 이전) 비활성
+                                            disabledDate={(current) => {
+                                              if (!current || !current.isValid()) return false;
+                                              const dow = current.day();
+                                              if (dow === 0 || dow === 6) return true;
+                                              const ymd = current.format('YYYY-MM-DD');
+                                              if (companyHolidaySet.has(ymd)) return true;
+                                              return false;
+                                            }}
+                                          />
+                                        </Form.Item>
+                                        {/* 잔여 정보 안내 */}
+                                        <div className="!tw-mt-1.5 tw-flex tw-flex-wrap tw-items-center tw-gap-2">
+                                          {selectedType ? (
+                                            <>
+                                              <Typography.Text type="secondary" className="!tw-text-[11px]">
+                                                {selectedType.name} · 1회 {daysPerUse}일
+                                              </Typography.Text>
+                                              {remainingDays != null && (
+                                                <Tag
+                                                  color={exceedsBalance ? 'red' : 'blue'}
+                                                  className="!tw-m-0 !tw-text-[11px]"
+                                                >
+                                                  잔여 {remainingDays}일
+                                                </Tag>
+                                              )}
+                                              {maxDaysPerYear != null && (
+                                                <Tag
+                                                  color={exceedsYearLimit ? 'red' : 'default'}
+                                                  className="!tw-m-0 !tw-text-[11px]"
+                                                >
+                                                  연 한도 {maxDaysPerYear}일
+                                                </Tag>
+                                              )}
+                                              <Typography.Text
+                                                type="secondary"
+                                                className={`!tw-text-[11px] ${exceedsBalance || exceedsYearLimit ? '!tw-text-rose-600' : ''}`}
+                                              >
+                                                요청 {usageDays}일
+                                              </Typography.Text>
+                                            </>
+                                          ) : (
+                                            <Typography.Text type="secondary" className="!tw-text-[11px]">
+                                              휴가 종류를 먼저 선택하면 잔여 일수가 표시됩니다.
+                                            </Typography.Text>
+                                          )}
+                                        </div>
+                                      </ApprovalFormPaperFieldRow>
+                                    );
+                                  }}
+                                </Form.Item>
                               )}
                             </ApprovalFormPaperLayout>
                   {composeSelectedOfficial ? (
