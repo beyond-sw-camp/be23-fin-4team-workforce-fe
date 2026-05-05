@@ -83,6 +83,8 @@ export type ApprovalRequestDetail = {
   isDeptVisibleYn?: 'Y' | 'N';
   /** 공문(OFFICIAL) — 최종 승인 후 기안자가 수신 부서로 발송했는지 */
   sendYn?: 'Y' | 'N';
+  /** 결재 상신 시점의 양식 스냅샷 - 양식 변경/숨김 무관하게 viewer 가 사용 */
+  formSchemaSnapshot?: string | null;
 };
 
 export type CreateApprovalRequestPayload = {
@@ -455,6 +457,7 @@ function normalizeRequest(raw: unknown): ApprovalRequestDetail | null {
     ...(recipients != null ? { recipients } : {}),
     ...(isDeptVisibleYn != null ? { isDeptVisibleYn } : {}),
     ...(sendYn != null ? { sendYn } : {}),
+    formSchemaSnapshot: asNullableText(o.formSchemaSnapshot ?? o.form_schema_snapshot),
   };
 }
 

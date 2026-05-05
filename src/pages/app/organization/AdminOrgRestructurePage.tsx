@@ -42,11 +42,13 @@ type SimMember = {
   memberId: string;
   name: string;
   jobGradeName: string;
+  jobTitleName: string;
   /** 시뮬 트리 상에서 현재 속한 조직 */
   currentOrgId: string;
   /** 원본 조직 (변경 비교용) */
   originalOrgId: string;
   originalJobGradeName: string;
+  originalJobTitleName: string;
 };
 
 type Change = {
@@ -58,6 +60,9 @@ type Change = {
   /** 직급 변경 */
   fromJobGrade?: string;
   toJobGrade?: string;
+  /** 직책 변경 */
+  fromJobTitle?: string;
+  toJobTitle?: string;
 };
 
 function flattenOrg(
@@ -77,13 +82,16 @@ function flattenMembers(nodes: OrgChartOrgNode[]): SimMember[] {
   const walk = (ns: OrgChartOrgNode[]) => {
     for (const n of ns) {
       for (const m of n.members ?? []) {
+        const titleName = m.jobTitleName ?? '';
         result.push({
           memberId: m.memberId,
           name: m.name,
           jobGradeName: m.jobGradeName ?? '',
+          jobTitleName: titleName,
           currentOrgId: n.organizationId,
           originalOrgId: n.organizationId,
           originalJobGradeName: m.jobGradeName ?? '',
+          originalJobTitleName: titleName,
         });
       }
       if (n.children?.length) walk(n.children);
@@ -117,6 +125,11 @@ function buildTreeData(
             {m.jobGradeName && (
               <Tag color="default" className="!tw-ml-1.5 !tw-text-[11px]">
                 {m.jobGradeName}
+              </Tag>
+            )}
+            {m.jobTitleName && (
+              <Tag color="purple" className="!tw-ml-1 !tw-text-[11px]">
+                {m.jobTitleName}
               </Tag>
             )}
           </span>
@@ -166,6 +179,12 @@ export function AdminOrgRestructurePage() {
     staleTime: 60_000,
   });
 
+  const jobTitlesQ = useQuery({
+    queryKey: ['organization', 'job-titles'],
+    queryFn: () => organizationApi.listJobTitles(),
+    staleTime: 60_000,
+  });
+
   // 인사발령품의서 양식 documentId 조회 (결재 작성 자동 진입에 사용)
   const personnelDocQ = useQuery({
     queryKey: ['approval', 'documents', 'active', 'personnel-order'],
@@ -188,7 +207,7 @@ export function AdminOrgRestructurePage() {
   const [simMembers, setSimMembers] = useState<SimMember[]>([]);
   // 직원 정보 모달
   const [editTarget, setEditTarget] = useState<SimMember | null>(null);
-  const [editForm] = Form.useForm<{ jobGradeName: string }>();
+  const [editForm] = Form.useForm<{ jobGradeName: string; jobTitleName?: string | null }>();
 
   // org-chart 처음 로드 시 simMembers 초기화
   const initSim = () => {
@@ -209,7 +228,8 @@ export function AdminOrgRestructurePage() {
     for (const m of simMembers) {
       const movedOrg = m.currentOrgId !== m.originalOrgId;
       const changedGrade = m.jobGradeName !== m.originalJobGradeName;
-      if (movedOrg || changedGrade) {
+      const changedTitle = (m.jobTitleName ?? '') !== (m.originalJobTitleName ?? '');
+      if (movedOrg || changedGrade || changedTitle) {
         list.push({
           memberId: m.memberId,
           name: m.name,
@@ -217,6 +237,8 @@ export function AdminOrgRestructurePage() {
           toOrgName: movedOrg ? (orgNameById.get(m.currentOrgId) ?? m.currentOrgId) : undefined,
           fromJobGrade: changedGrade ? m.originalJobGradeName : undefined,
           toJobGrade: changedGrade ? m.jobGradeName : undefined,
+          fromJobTitle: changedTitle ? m.originalJobTitleName : undefined,
+          toJobTitle: changedTitle ? m.jobTitleName : undefined,
         });
       }
     }
@@ -274,7 +296,10 @@ export function AdminOrgRestructurePage() {
     const target = simMembers.find((m) => m.memberId === memberId);
     if (!target) return;
     setEditTarget(target);
-    editForm.setFieldsValue({ jobGradeName: target.jobGradeName });
+    editForm.setFieldsValue({
+      jobGradeName: target.jobGradeName,
+      jobTitleName: target.jobTitleName || null,
+    });
   };
 
   const jobGradeOptions = useMemo(() => {
@@ -284,6 +309,14 @@ export function AdminOrgRestructurePage() {
       return { value: name, label: name };
     });
   }, [jobGradesQ.data]);
+
+  const jobTitleOptions = useMemo(() => {
+    const list = jobTitlesQ.data ?? [];
+    return list.map((t) => {
+      const name = (t.name as string) ?? (t.jobTitleName as string) ?? '';
+      return { value: name, label: name };
+    });
+  }, [jobTitlesQ.data]);
 
   /** 직급명 -> displayOrder 맵. displayOrder 작을수록 높은 직급 (예: 과장=1, 사원=2) */
   const jobGradeOrderByName = useMemo(() => {
@@ -419,6 +452,12 @@ export function AdminOrgRestructurePage() {
                     <Tag color="gold">{c.toJobGrade || '-'}</Tag>
                   </span>
                 )}
+                {c.fromJobTitle !== undefined && c.toJobTitle !== undefined && (
+                  <span>
+                    직책 <Tag>{c.fromJobTitle || '-'}</Tag> →{' '}
+                    <Tag color="purple">{c.toJobTitle || '-'}</Tag>
+                  </span>
+                )}
               </li>
             ))}
           </ul>
@@ -444,14 +483,18 @@ export function AdminOrgRestructurePage() {
             // items 는 BE cascade 용 (memberId 등 ID 포함, 사용자에게는 노출 X)
             const items = changes.map((c) => {
               const sm = simMembers.find((m) => m.memberId === c.memberId);
-              const orderType =
-                c.fromOrgName && c.toOrgName && c.fromJobGrade && c.toJobGrade
-                  ? 'ROLE_CHANGE'
-                  : c.fromOrgName && c.toOrgName
-                    ? 'TRANSFER'
-                    : c.fromJobGrade && c.toJobGrade
-                      ? 'PROMOTION'
-                      : 'ROLE_CHANGE';
+              const movedOrg = !!(c.fromOrgName && c.toOrgName);
+              const changedGrade = !!(c.fromJobGrade && c.toJobGrade);
+              const changedTitle = !!(c.fromJobTitle !== undefined && c.toJobTitle !== undefined);
+              // 두 가지 이상 동시 변경이거나 직책 변경이 부서/직급과 섞인 경우 ROLE_CHANGE
+              // 부서만 -> TRANSFER / 직급만 -> PROMOTION or DEMOTION (FE 가 정확히 모르니 PROMOTION 으로 통일)
+              // 직책만 -> REASSIGN
+              const flags = [movedOrg, changedGrade, changedTitle].filter(Boolean).length;
+              let orderType: 'TRANSFER' | 'PROMOTION' | 'REASSIGN' | 'ROLE_CHANGE';
+              if (flags >= 2) orderType = 'ROLE_CHANGE';
+              else if (movedOrg) orderType = 'TRANSFER';
+              else if (changedGrade) orderType = 'PROMOTION';
+              else orderType = 'REASSIGN';
               return {
                 memberId: c.memberId,
                 memberName: c.name,
@@ -462,8 +505,8 @@ export function AdminOrgRestructurePage() {
                 afterOrganizationName: c.toOrgName ?? null,
                 beforeJobGradeName: c.fromJobGrade ?? null,
                 afterJobGradeName: c.toJobGrade ?? null,
-                beforeJobTitleName: null,
-                afterJobTitleName: null,
+                beforeJobTitleName: c.fromJobTitle ?? null,
+                afterJobTitleName: c.toJobTitle ?? null,
                 reason: v.reason ?? null,
               };
             });
@@ -473,6 +516,9 @@ export function AdminOrgRestructurePage() {
               const parts: string[] = [`${c.name}`];
               if (c.fromOrgName && c.toOrgName) parts.push(`부서: ${c.fromOrgName} -> ${c.toOrgName}`);
               if (c.fromJobGrade && c.toJobGrade) parts.push(`직급: ${c.fromJobGrade || '-'} -> ${c.toJobGrade || '-'}`);
+              if (c.fromJobTitle !== undefined && c.toJobTitle !== undefined) {
+                parts.push(`직책: ${c.fromJobTitle || '-'} -> ${c.toJobTitle || '-'}`);
+              }
               return `- ${parts.join(' / ')}`;
             });
             const summaryText = [
@@ -484,6 +530,12 @@ export function AdminOrgRestructurePage() {
               ...summaryLines,
               ...(v.reason ? ['', `사유: ${v.reason}`] : []),
             ].join('\n');
+            // 인사발령품의서 = OFFICIAL (공문). 결재 승인 후 기안자가 [발송] 누르면
+            // 회사 모든 부서에 자동 배포되도록 recipients 미리 채워서 보냄
+            const recipients = orgList.map((o) => ({
+              recipientOrganizationId: o.orgId,
+              recipientOrganizationName: o.name,
+            }));
             const payload = {
               documentName: '인사발령품의서',
               contentJson: {
@@ -494,6 +546,7 @@ export function AdminOrgRestructurePage() {
                 summaryText,
                 items,
               },
+              recipients,
             };
             // localStorage 사용 - iframe 모달도 부모와 동일 origin 으로 접근 가능
             localStorage.setItem(
@@ -559,17 +612,24 @@ export function AdminOrgRestructurePage() {
           <Form
             form={editForm}
             layout="vertical"
-            initialValues={{ jobGradeName: editTarget.jobGradeName }}
+            initialValues={{
+              jobGradeName: editTarget.jobGradeName,
+              jobTitleName: editTarget.jobTitleName || null,
+            }}
             onFinish={(v) => {
+              const newTitle = (v.jobTitleName ?? '').trim();
               setSimMembers((prev) =>
                 prev.map((m) =>
                   m.memberId === editTarget.memberId
-                    ? { ...m, jobGradeName: v.jobGradeName }
+                    ? { ...m, jobGradeName: v.jobGradeName, jobTitleName: newTitle }
                     : m,
                 ),
               );
               setEditTarget(null);
-              message.success(`${editTarget.name} 직급 → ${v.jobGradeName}`);
+              const titleNote = newTitle !== editTarget.jobTitleName
+                ? ` / 직책 → ${newTitle || '—'}`
+                : '';
+              message.success(`${editTarget.name} 직급 → ${v.jobGradeName}${titleNote}`);
             }}
           >
             <Form.Item
@@ -585,6 +645,17 @@ export function AdminOrgRestructurePage() {
               rules={[{ required: true, message: '직급을 선택하세요.' }]}
             >
               <Select options={jobGradeOptions} placeholder="직급 선택" allowClear />
+            </Form.Item>
+            <Form.Item
+              label="직책 (선택)"
+              name="jobTitleName"
+              extra="비우면 직책 없음으로 변경됩니다."
+            >
+              <Select
+                options={jobTitleOptions}
+                placeholder="직책 선택 (없으면 비움)"
+                allowClear
+              />
             </Form.Item>
           </Form>
         )}

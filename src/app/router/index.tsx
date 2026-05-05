@@ -531,7 +531,7 @@ const myEvaluationResultsRoute = createRoute({
 });
 
 const organizationSearchSchema = z.object({
-  tab: z.enum(['structure', 'grades', 'titles', 'roles']).optional(),
+  tab: z.enum(['structure', 'grades', 'titles', 'roles', 'restructure']).optional(),
 });
 
 const organizationRoute = createRoute({

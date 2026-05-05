@@ -880,8 +880,6 @@ type PolicyFormValues = {
   wageSystemType: WageSystemTypeCode;
   fixedOvertimeMinutes?: number;
   payDayShiftRule: PayDayShiftRuleCode;
-  // 월 소정근로시간 시급 환산 기준 한국 표준 209
-  monthlyOrdinaryHours: number;
   // 일할계산 방식 입사 / 퇴사 / 기간변경 월 적용
   prorationMethod: ProrationMethodCode;
   // 급여 지급 주기 - 당월분 / 전월분
@@ -919,7 +917,6 @@ function SalaryPolicyTab() {
     periodStartType: 'FIRST' as PeriodStartTypeCode,
     periodEndType: 'LAST' as PeriodEndTypeCode,
     payDayShiftRule: v.payDayShiftRule,
-    monthlyOrdinaryHours: v.monthlyOrdinaryHours,
     prorationMethod: v.prorationMethod,
     payCycleType: v.payCycleType,
     effectiveFrom: v.effectiveRange[0].format('YYYY-MM-DD'),
@@ -1002,7 +999,6 @@ function SalaryPolicyTab() {
               wageSystemType: (r.wageSystemType as WageSystemTypeCode) ?? 'NON_COMPREHENSIVE',
               fixedOvertimeMinutes: r.fixedOvertimeMinutes ?? undefined,
               payDayShiftRule: (r.payDayShiftRule as PayDayShiftRuleCode) ?? 'BEFORE',
-              monthlyOrdinaryHours: r.monthlyOrdinaryHours ?? 209,
               prorationMethod: (r.prorationMethod as ProrationMethodCode) ?? 'DAYS_IN_MONTH',
               payCycleType: (r.payCycleType as PayCycleTypeCode) ?? 'CURRENT_MONTH',
               effectiveRange: [r.effectiveFrom ? dayjs(r.effectiveFrom) : dayjs(), r.effectiveTo ? dayjs(r.effectiveTo) : null],
@@ -1016,7 +1012,7 @@ function SalaryPolicyTab() {
 
   return (
     <>
-      <div className="tw-flex tw-justify-end tw-mb-3"><Button type="primary" onClick={() => { setEditing(null); form.resetFields(); form.setFieldsValue({ payDay: 25, usePayGradeYn: 'N', wageSystemType: 'NON_COMPREHENSIVE', payDayShiftRule: 'BEFORE', monthlyOrdinaryHours: 209, prorationMethod: 'DAYS_IN_MONTH', payCycleType: 'CURRENT_MONTH', effectiveRange: [dayjs(), null] }); setOpen(true); }}>정책 등록</Button></div>
+      <div className="tw-flex tw-justify-end tw-mb-3"><Button type="primary" onClick={() => { setEditing(null); form.resetFields(); form.setFieldsValue({ payDay: 25, usePayGradeYn: 'N', wageSystemType: 'NON_COMPREHENSIVE', payDayShiftRule: 'BEFORE', prorationMethod: 'DAYS_IN_MONTH', payCycleType: 'CURRENT_MONTH', effectiveRange: [dayjs(), null] }); setOpen(true); }}>정책 등록</Button></div>
       <Table<SalaryPolicy> rowKey={(r) => r.salaryPolicyId ?? Math.random().toString()} loading={listQ.isLoading} dataSource={listQ.data ?? []} columns={cols} pagination={{ pageSize: 10 }} locale={{ emptyText: '등록된 정책이 없습니다.' }} />
       <AppDoubleActionModal open={open} onClose={() => { setOpen(false); setEditing(null); form.resetFields(); }} onConfirm={() => form.submit()} confirmLoading={createM.isPending || updateM.isPending} confirmText={editing ? '수정' : '등록'} cancelText="취소" title={editing ? '급여 정책 수정' : '급여 정책 등록'} destroyOnHidden width={760}>
         <div className="tw-px-5 tw-py-4">
@@ -1088,45 +1084,71 @@ function SalaryPolicyTab() {
             </Col>
           </Row>
 
-          {/* 4행: 월 소정근로시간 + 일할계산 방식 - 옵셔널 (미입력 시 한국 표준 209h / DAYS_IN_MONTH 자동 적용) */}
-          <Row gutter={12}>
-            <Col span={8}>
-              <Form.Item
-                label="월 소정근로시간"
-                name="monthlyOrdinaryHours"
-                tooltip="시급 환산 기준 (OT/야간/휴일 가산수당 계산의 분모). 미입력 시 한국 표준 209시간 자동 적용"
-                rules={[{ type: 'number', min: 1, max: 300, message: '1 ~ 300' }]}
-              >
-                <InputNumber min={1} max={300} style={{ width: '100%' }} addonAfter="시간" placeholder="기본 209" />
-              </Form.Item>
-            </Col>
-            <Col span={16}>
-              <Form.Item
-                label="일할계산 방식"
-                name="prorationMethod"
-                tooltip="월중 입사/퇴사/급여변경 시 일할 계산 분모. 미입력 시 '해당 월 일수' 자동 적용"
-              >
-                <Select
-                  allowClear
-                  placeholder="기본: 해당 월 일수"
-                  options={[
-                    { value: 'DAYS_IN_MONTH', label: PRORATION_METHOD_KO.DAYS_IN_MONTH },
-                    { value: 'FIXED_30', label: PRORATION_METHOD_KO.FIXED_30 },
-                    { value: 'WORKING_DAYS', label: PRORATION_METHOD_KO.WORKING_DAYS },
-                  ]}
-                />
-              </Form.Item>
-            </Col>
-          </Row>
+          {/* 4행: 일할계산 방식 - 옵셔널 (미입력 시 DAYS_IN_MONTH 자동 적용)
+              월 소정근로시간은 한국 표준 209h 로 고정, BE 가 자동 채움 */}
+          <Form.Item
+            label="일할계산 방식"
+            name="prorationMethod"
+            extra={
+              <span className="tw-text-xs tw-text-slate-500">
+                월중 입사 / 퇴사 / 정책 변경 시 부분월 급여를 어떻게 나눌지 결정 (분모)
+              </span>
+            }
+          >
+            <Select
+              allowClear
+              placeholder="기본: 해당 월 일수 (가장 일반적)"
+              optionLabelProp="title"
+              options={[
+                {
+                  value: 'DAYS_IN_MONTH',
+                  title: '해당 월 일수 (28~31일)',
+                  label: (
+                    <div className="tw-py-1">
+                      <div className="tw-text-sm tw-text-slate-900">해당 월 일수 (28~31일)</div>
+                      <div className="tw-text-xs tw-text-slate-500">가장 일반적 - 그 달 실제 일수로 나눔</div>
+                    </div>
+                  ),
+                },
+                {
+                  value: 'FIXED_30',
+                  title: '고정 30일',
+                  label: (
+                    <div className="tw-py-1">
+                      <div className="tw-text-sm tw-text-slate-900">고정 30일</div>
+                      <div className="tw-text-xs tw-text-slate-500">통상임금 산정 표준 - 매달 동일 분모</div>
+                    </div>
+                  ),
+                },
+                {
+                  value: 'WORKING_DAYS',
+                  title: '월 소정근로일 (간이 22일)',
+                  label: (
+                    <div className="tw-py-1">
+                      <div className="tw-text-sm tw-text-slate-900">월 소정근로일 (간이 22일)</div>
+                      <div className="tw-text-xs tw-text-slate-500">시급제 회사용 - 영업일 기준</div>
+                    </div>
+                  ),
+                },
+              ]}
+            />
+          </Form.Item>
 
           {/* 5행: 적용 기간 */}
-          <Form.Item label="적용 기간" name="effectiveRange" rules={[{ required: true }]} className="!tw-mb-2">
+          <Form.Item label="적용 기간" name="effectiveRange" rules={[{ required: true }]} className="!tw-mb-3">
             <DatePicker.RangePicker allowEmpty={[false, true]} format="YYYY-MM-DD" style={{ width: '100%' }} />
           </Form.Item>
 
-          <Typography.Paragraph type="secondary" className="!tw-mb-0 tw-text-xs">
-            정산 기간은 매월 1일~말일 고정 / 시급 환산 기준 한국 표준 209h / 통상임금 표준은 30일 고정 / 연장근무 인정 단위는 [연장근로 정책]에서 관리
-          </Typography.Paragraph>
+          <Alert
+            type="info"
+            showIcon
+            message={
+              <span className="tw-text-xs">
+                정산 기간 매월 1일 ~ 말일 고정 · 시급 환산 분모 209h · 통상임금 표준 30일 · 연장근무 단위는 [연장근로 정책]에서 별도 관리
+              </span>
+            }
+            className="!tw-py-2"
+          />
         </Form>
         </div>
       </AppDoubleActionModal>

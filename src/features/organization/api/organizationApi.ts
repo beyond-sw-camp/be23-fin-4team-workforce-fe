@@ -42,6 +42,8 @@ export type OrgChartMember = {
   name: string;
   /** 표시용 직급/직책명 (API 필드명이 jobTitle·jobGrade 등으로 섞여 올 수 있음) */
   jobGradeName: string;
+  /** 직책명 (인사발령 직책 변경에 사용) */
+  jobTitleName?: string | null;
   /** 있으면 재직만 보기 필터에 사용 */
   memberStatus?: string;
   /** 구성원 프로필 이미지 URL(백엔드 org-chart 응답 등) */

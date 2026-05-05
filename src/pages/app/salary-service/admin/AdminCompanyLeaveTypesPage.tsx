@@ -46,7 +46,6 @@ type FormValues = {
   isPaidYn: 'Y' | 'N';
   maxDaysPerYear?: number | null;
   requireEvidenceYn: 'Y' | 'N';
-  usageDeadlineDays?: number | null;
   displayOrder: number;
 };
 
@@ -286,7 +285,6 @@ export function AdminCompanyLeaveTypesPage() {
         isPaidYn: v.isPaidYn,
         maxDaysPerYear: v.maxDaysPerYear ?? null,
         requireEvidenceYn: v.requireEvidenceYn,
-        usageDeadlineDays: v.usageDeadlineDays ?? null,
         displayOrder: v.displayOrder,
       }),
     onSuccess: () => {
@@ -313,7 +311,6 @@ export function AdminCompanyLeaveTypesPage() {
         isPaidYn: input.v.isPaidYn,
         maxDaysPerYear: input.v.maxDaysPerYear ?? null,
         requireEvidenceYn: input.v.requireEvidenceYn,
-        usageDeadlineDays: input.v.usageDeadlineDays ?? null,
         displayOrder: input.v.displayOrder,
       }),
     onSuccess: () => {
@@ -349,7 +346,6 @@ export function AdminCompanyLeaveTypesPage() {
           isPaidYn: a.isPaidYn ?? 'Y',
           maxDaysPerYear: a.maxDaysPerYear ?? null,
           requireEvidenceYn: a.requireEvidenceYn ?? 'N',
-          usageDeadlineDays: a.usageDeadlineDays ?? null,
           displayOrder: orderB,
         }),
         attendanceApi.companyLeaveType.update(b.companyLeaveTypeId!, {
@@ -359,7 +355,6 @@ export function AdminCompanyLeaveTypesPage() {
           isPaidYn: b.isPaidYn ?? 'Y',
           maxDaysPerYear: b.maxDaysPerYear ?? null,
           requireEvidenceYn: b.requireEvidenceYn ?? 'N',
-          usageDeadlineDays: b.usageDeadlineDays ?? null,
           displayOrder: orderA,
         }),
       ]);
@@ -438,7 +433,6 @@ export function AdminCompanyLeaveTypesPage() {
       isPaidYn: (record.isPaidYn as 'Y' | 'N') ?? 'Y',
       maxDaysPerYear: record.maxDaysPerYear ?? undefined,
       requireEvidenceYn: (record.requireEvidenceYn as 'Y' | 'N') ?? 'N',
-      usageDeadlineDays: record.usageDeadlineDays ?? undefined,
       displayOrder: record.displayOrder ?? 0,
     });
     setOpen(true);
@@ -690,16 +684,6 @@ export function AdminCompanyLeaveTypesPage() {
                     : `${detailTarget.maxDaysPerYear}일`,
               },
               {
-                key: 'usageDeadlineDays',
-                label: '사용 기한',
-                children:
-                  detailTarget.usageDeadlineDays == null ? (
-                    <Typography.Text type="secondary">기한 없음</Typography.Text>
-                  ) : (
-                    <Tag color="purple">사유 발생일 +{detailTarget.usageDeadlineDays}일</Tag>
-                  ),
-              },
-              {
                 key: 'displayOrder',
                 label: '정렬 순서',
                 children: detailTarget.displayOrder ?? '—',
@@ -922,11 +906,11 @@ export function AdminCompanyLeaveTypesPage() {
             </Form.Item>
           </div>
 
-          {/* ── 2. 사용 한도·기한 ─────────────────── */}
+          {/* ── 2. 사용 한도 ─────────────────── */}
           <Typography.Text strong className="tw-text-slate-700 tw-text-sm">
-            사용 한도·기한 <Typography.Text type="secondary" className="tw-text-xs">(선택)</Typography.Text>
+            사용 한도 <Typography.Text type="secondary" className="tw-text-xs">(선택)</Typography.Text>
           </Typography.Text>
-          <div className="tw-mt-2 tw-mb-4 tw-grid tw-grid-cols-2 tw-gap-3">
+          <div className="tw-mt-2 tw-mb-4">
             <Form.Item
               label="연간 최대 일수"
               name="maxDaysPerYear"
@@ -934,21 +918,6 @@ export function AdminCompanyLeaveTypesPage() {
               className="!tw-mb-0"
             >
               <InputNumber className="tw-w-full" min={0.5} step={0.5} placeholder="예: 5" />
-            </Form.Item>
-
-            <Form.Item
-              label="사유 발생일로부터"
-              name="usageDeadlineDays"
-              extra="결혼·사망 등 N일 이내. 비우면 기한 없음"
-              className="!tw-mb-0"
-            >
-              <InputNumber
-                className="tw-w-full"
-                min={1}
-                step={1}
-                placeholder="예: 30"
-                addonAfter="일"
-              />
             </Form.Item>
           </div>
 
