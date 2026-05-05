@@ -7,6 +7,8 @@ const envSchema = z.object({
   /** 밀리초. 비우면 기본 60초. 외부 연동 등 느린 API용. */
   VITE_API_TIMEOUT_MS: z.string().optional(),
   VITE_ENABLE_MSW: z.enum(['true', 'false']).default('false'),
+  /** true면 계약 발송 adminInput 수집·요청 본문을 콘솔에 출력합니다. */
+  VITE_DEBUG_CONTRACT_SEND: z.enum(['true', 'false']).optional(),
   VITE_LOG_LEVEL: z.string().default('info'),
   VITE_SENTRY_DSN: z.string().optional(),
   VITE_BUILD_COMMIT_SHA: z.string().optional(),
@@ -29,5 +31,6 @@ function parseApiTimeoutMs(raw: string | undefined): number {
 export const env = {
   ...parsed.data,
   VITE_ENABLE_MSW: parsed.data.VITE_ENABLE_MSW === 'true',
+  debugContractSend: parsed.data.VITE_DEBUG_CONTRACT_SEND === 'true',
   apiRequestTimeoutMs: parseApiTimeoutMs(parsed.data.VITE_API_TIMEOUT_MS),
 };

@@ -7,6 +7,9 @@ import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppModal } from '@/shared/ui/AppModal';
 import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
 import { useAuth } from '@/features/auth/useAuth';
+import { PERM } from '@/features/permissions/backend-permissions';
+import { usePermissions } from '@/features/permissions/usePermissionsHook';
+import { parseApiError } from '@/shared/api/error-parser';
 import {
   contractEffectiveRejectReason,
   contractEmployeeCanReject,
@@ -76,6 +79,8 @@ export function MyContractsPanel() {
   const search = useSearch({ strict: false }) as { contractId?: string };
   const contractIdFromSearch = search.contractId?.trim() || undefined;
   const { user } = useAuth();
+  const { hasPermission } = usePermissions();
+  const canReadAdminContract = user?.isSystemAdmin === true || hasPermission(PERM.CONTRACT_READ);
   const [statusFilter, setStatusFilter] = useState<(typeof MY_CONTRACT_STATUS_TABS)[number]['key']>('ALL');
   const [selectedContractId, setSelectedContractId] = useState<string | null>(null);
 
@@ -113,9 +118,27 @@ export function MyContractsPanel() {
     staleTime: 30_000,
   });
 
-  const { data: contractDetail, isFetching: detailLoading } = useQuery({
-    queryKey: ['contract', 'my-detail', selectedContractId],
-    queryFn: () => contractTemplateApi.getContractMy(selectedContractId!),
+  const {
+    data: contractDetail,
+    isFetching: detailLoading,
+    isError: detailError,
+    error: detailErrorObj,
+    refetch: refetchContractDetail,
+  } = useQuery({
+    queryKey: ['contract', 'my-detail', selectedContractId, canReadAdminContract ? '1' : '0'],
+    queryFn: async () => {
+      const id = selectedContractId!;
+      try {
+        return await contractTemplateApi.getContractMy(id);
+      } catch (firstErr) {
+        if (!canReadAdminContract) throw firstErr;
+        try {
+          return await contractTemplateApi.getContract(id);
+        } catch {
+          throw firstErr;
+        }
+      }
+    },
     enabled: Boolean(selectedContractId),
   });
 
@@ -149,7 +172,7 @@ export function MyContractsPanel() {
       contractTemplateApi.rejectContract(vars.contractId, { rejectReason: vars.rejectReason }),
     onSuccess: async (updated, vars) => {
       message.success('계약을 거절했습니다.');
-      queryClient.setQueryData(['contract', 'my-detail', vars.contractId], updated);
+      queryClient.setQueriesData({ queryKey: ['contract', 'my-detail', vars.contractId] }, () => updated);
       setRejectModalOpen(false);
       setRejectReasonDraft('');
       await Promise.all([
@@ -343,11 +366,25 @@ export function MyContractsPanel() {
         width={920}
         style={{ top: 48 }}
         styles={{ content: { resize: 'both', overflow: 'auto' }, body: { maxHeight: 'min(85vh, 900px)', overflowY: 'auto' } }}
-        destroyOnClose
+        destroyOnHidden
       >
         <div className="tw-px-5 tw-py-4">
-        {detailLoading || !contractDetail ? (
+        {detailLoading ? (
           <Spin />
+        ) : detailError ? (
+          <Alert
+            type="error"
+            showIcon
+            message="계약을 불러오지 못했습니다."
+            description={parseApiError(detailErrorObj).message}
+            action={
+              <Button size="small" onClick={() => void refetchContractDetail()}>
+                다시 시도
+              </Button>
+            }
+          />
+        ) : !contractDetail ? (
+          <Typography.Text type="secondary">표시할 계약이 없습니다.</Typography.Text>
         ) : (
           <Space direction="vertical" className="tw-w-full" size={12}>
             <Card size="small" title="기본 정보">
@@ -597,7 +634,7 @@ export function MyContractsPanel() {
         title="전자계약 서명"
         open={signModalContractId != null}
         onCancel={closeSignModal}
-        destroyOnClose
+        destroyOnHidden
         okText="서명"
         cancelText="취소"
         confirmLoading={signSubmitting || signM.isPending}

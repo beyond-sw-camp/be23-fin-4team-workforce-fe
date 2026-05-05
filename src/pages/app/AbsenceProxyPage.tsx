@@ -406,16 +406,10 @@ export function AbsenceProxyPage() {
           : 'tw-mx-auto tw-max-w-5xl',
       )}
     >
-      <div
-        className={clsx(
-          isEmbedModal
-            ? 'tw-flex tw-flex-shrink-0 tw-flex-col tw-gap-3'
-            : 'tw-mb-4 tw-flex tw-flex-wrap tw-items-start tw-justify-between tw-gap-3',
-        )}
-      >
-        <div>
-          <div className="tw-flex tw-flex-nowrap tw-items-center tw-gap-2">
-            {!isEmbedModal ? (
+      {!isEmbedModal ? (
+        <div className="tw-mb-4 tw-flex tw-flex-wrap tw-items-start tw-justify-between tw-gap-3">
+          <div>
+            <div className="tw-flex tw-flex-nowrap tw-items-center tw-gap-2">
               <Button
                 type="text"
                 icon={<ArrowLeftOutlined />}
@@ -429,27 +423,19 @@ export function AbsenceProxyPage() {
                   })
                 }
               />
-            ) : null}
-            <Typography.Title level={4} className="!tw-m-0 tw-leading-none">
-              부재 위임(대결)
-            </Typography.Title>
+              <Typography.Title level={4} className="!tw-m-0 tw-leading-none">
+                부재 위임(대결)
+              </Typography.Title>
+            </div>
+            <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-2 tw-max-w-xl tw-text-sm">
+              휴가·출장 등 부재 시 대결자를 지정하면, 해당 기간 동안 원 결재자 대신 결재 대기함에 문서가 표시되고 승인·반려할 수 있습니다.
+            </Typography.Paragraph>
           </div>
-          <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-2 tw-max-w-xl tw-text-sm">
-            휴가·출장 등 부재 시 대결자를 지정하면, 해당 기간 동안 원 결재자 대신 결재 대기함에 문서가 표시되고 승인·반려할 수 있습니다.
-          </Typography.Paragraph>
-        </div>
-        {isEmbedModal ? (
-          <div className="tw-flex tw-w-full tw-shrink-0 tw-justify-end tw-pr-1">
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
-              위임 등록
-            </Button>
-          </div>
-        ) : (
           <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
             위임 등록
           </Button>
-        )}
-      </div>
+        </div>
+      ) : null}
 
       {mineIsError || delegatedIsError ? (
         <Alert
@@ -498,6 +484,17 @@ export function AbsenceProxyPage() {
         }
       >
         <Tabs
+          tabBarExtraContent={
+            isEmbedModal
+              ? {
+                  right: (
+                    <Button type="primary" size="small" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
+                      위임 등록
+                    </Button>
+                  ),
+                }
+              : undefined
+          }
           rootClassName={
             isEmbedModal
               ? clsx(

@@ -163,14 +163,18 @@ export function MyApprovalRequestsPage() {
 
   const isDraftCancel = cancelTarget != null && cancelTarget.status === 'DRAFT';
 
+  const hidePageChrome = filters.embed === APPROVAL_EMBED_COMPOSE_MODAL;
+
   return (
     <div className="tw-mx-auto tw-max-w-[1400px] tw-w-full tw-space-y-4">
-      <div>
-        <Typography.Title level={4} className="!tw-mb-1">
-          내 기안 문서함
-        </Typography.Title>
-        <Typography.Text type="secondary">내가 기안한 전자결재 문서를 조건별로 검색합니다.</Typography.Text>
-      </div>
+      {hidePageChrome ? null : (
+        <div>
+          <Typography.Title level={4} className="!tw-mb-1">
+            내 기안 문서함
+          </Typography.Title>
+          <Typography.Text type="secondary">내가 기안한 전자결재 문서를 조건별로 검색합니다.</Typography.Text>
+        </div>
+      )}
       <Card className="tw-rounded-xl">
         <ApprovalSearchPanel
           filters={filters}

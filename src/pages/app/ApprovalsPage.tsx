@@ -19,7 +19,6 @@ import {
   SearchOutlined,
   SendOutlined,
   SettingOutlined,
-  InfoCircleOutlined,
 } from '@ant-design/icons';
 import {
   DndContext,
@@ -112,6 +111,8 @@ import {
   type ApprovalRequestStatus,
   approvalRequestApi,
   canSendOfficialDocument,
+  findMyInboxApprovalLine,
+  isInlineSyntheticApprovalId,
   isPendingApprovalLineForProxyActor,
   requestIncludesMyProxyAct,
   type ApprovalLine,
@@ -212,31 +213,6 @@ type PreActionConfig = {
 };
 
 const SCHEDULE_SELECTION_PREFILL_STORAGE_KEY = 'wf-approval-prefill-schedule-selection';
-const PERSONNEL_ORDER_PREFILL_STORAGE_KEY = 'wf-approval-prefill-personnel-order';
-const CHATBOT_ACTION_PREFILL_STORAGE_KEY = 'wf-approval-prefill-chatbot-action';
-
-/** 쿼리값이 `prefill=%22true%22`처럼 따옴표가 포함된 문자열일 때 정규화 */
-function normalizeUrlSearchToken(v: unknown): string {
-  if (v === true) return 'true';
-  if (v === false) return 'false';
-  if (v == null) return '';
-  let s = String(v).trim();
-  if (s.length >= 2) {
-    const a = s[0];
-    const b = s[s.length - 1];
-    if ((a === '"' && b === '"') || (a === "'" && b === "'")) {
-      s = s.slice(1, -1).trim();
-    }
-  }
-  return s;
-}
-
-function isTruthyPrefillParam(v: unknown): boolean {
-  if (v === true) return true;
-  if (v === false) return false;
-  const s = normalizeUrlSearchToken(v).toLowerCase();
-  return s === 'true' || s === '1' || s === 'yes';
-}
 
 function readStr(content: Record<string, unknown>, key: string): string {
   const v = content[key];
@@ -571,12 +547,31 @@ function buildApprovalEmbedUrl(pathname: string, search: Record<string, string |
 }
 
 /** 작성 허브「전체」모달 iframe — 카드별로 열리는 문서함 구역 */
-type ComposeHomeEmbedPanel = 'my-all' | 'viewers' | 'department' | 'official' | 'draft' | 'absence' | 'compose-prefill';
+type ComposeHomeEmbedPanel = 'my-all' | 'viewers' | 'department' | 'official' | 'draft' | 'absence';
 type ApprovalNotificationModal = 'pending' | 'my-all' | 'viewers' | 'official' | 'draft';
+
+/** 허브 문서함 모달 헤더 — 결재 대기 전체 모달과 동일한 겉 형식용 제목 */
+const COMPOSE_HOME_EMBED_PANEL_TITLE: Record<ComposeHomeEmbedPanel, string> = {
+  'my-all': '내 기안 문서함 전체',
+  viewers: '참조/공람 문서 전체',
+  department: '부서 문서함 전체',
+  official: '공문 수신함 전체',
+  draft: '임시 저장 문서 전체',
+  absence: '부재 위임 전체',
+};
+
+function composeHomeEmbedPanelModalTitle(
+  modal: { kind: 'iframe'; panel: ComposeHomeEmbedPanel; composeDraftId?: string },
+): string {
+  if (modal.panel === 'draft' && modal.composeDraftId?.trim()) {
+    return '임시 저장 문서 이어쓰기';
+  }
+  return COMPOSE_HOME_EMBED_PANEL_TITLE[modal.panel];
+}
 
 function composeHomeEmbedPanelUrl(
   panel: ComposeHomeEmbedPanel,
-  opts?: { composeDraftId?: string; prefillDocumentId?: string },
+  opts?: { composeDraftId?: string },
 ): string {
   switch (panel) {
     case 'my-all':
@@ -598,14 +593,6 @@ function composeHomeEmbedPanelUrl(
       return buildApprovalEmbedUrl('/app/approvals', { tab: 'my', box: 'per-draft' });
     case 'absence':
       return buildApprovalEmbedUrl('/app/approvals/absence-proxy', {});
-    case 'compose-prefill':
-      return buildApprovalEmbedUrl('/app/approvals', {
-        tab: 'compose',
-        sideNav: APPROVAL_COMPOSE_WORKBENCH_SIDE_NAV,
-        docId: opts?.prefillDocumentId,
-        documentId: opts?.prefillDocumentId,
-        prefill: 'true',
-      });
     default:
       return buildApprovalEmbedUrl('/app/approvals', { tab: 'my', box: 'per-all' });
   }
@@ -1409,8 +1396,6 @@ export function ApprovalsPage() {
         embed?: string;
         composeDraftId?: string;
         docId?: string;
-        documentId?: string;
-        prefill?: string | boolean;
         approvalModal?: string;
         approvalOpenAt?: string;
         approvalRequestId?: string;
@@ -1453,7 +1438,7 @@ export function ApprovalsPage() {
   const [composeApprovalInfoModalOpen, setComposeApprovalInfoModalOpen] = useState(false);
   const [composePreviewOpen, setComposePreviewOpen] = useState(false);
   const [composeHomeMoreModal, setComposeHomeMoreModal] = useState<
-    | { kind: 'iframe'; panel: ComposeHomeEmbedPanel; composeDraftId?: string; prefillDocumentId?: string }
+    | { kind: 'iframe'; panel: ComposeHomeEmbedPanel; composeDraftId?: string }
     | { kind: 'pending-inbox'; title: string }
     | null
   >(null);
@@ -1496,8 +1481,6 @@ export function ApprovalsPage() {
   const composeDraftHydratingRef = useRef(false);
   /** 허브 모달 iframe에서 `composeDraftId`로 자동 이어쓰기 시 중복 호출 방지 */
   const embedComposeDraftBootRef = useRef<string | null>(null);
-  /** 챗봇 prefill URL(documentId/prefill) 자동 부팅 중복 방지 */
-  const chatbotPrefillBootRef = useRef<string | null>(null);
   /** 회의록 `ai_transcribe` + attachAudio 일 때 임시저장/제출 직후 첨부 업로드용 */
   const composeMeetingAudioBlobRef = useRef<Blob | null>(null);
   const [form] = Form.useForm();
@@ -1549,7 +1532,7 @@ export function ApprovalsPage() {
     if (!onComposeHub || !approvalNotificationModal) return;
     if (String(routeSearch.approvalRequestId ?? '').trim()) return;
     if (approvalNotificationModal === 'pending') {
-      setComposeHomeMoreModal({ kind: 'pending-inbox', title: '결재 대기 문서 전체' });
+      setComposeHomeMoreModal({ kind: 'pending-inbox', title: '결재 대기·예정 문서 전체' });
       return;
     }
     setComposeHomeMoreModal({ kind: 'iframe', panel: approvalNotificationModal });
@@ -1847,6 +1830,28 @@ export function ApprovalsPage() {
     queryFn: () => approvalRequestApi.listPendingApprovals(),
     enabled: pendingQueryEnabled,
   });
+
+  const { data: waitingApprovals = [], isFetching: waitingLoading } = useQuery({
+    queryKey: ['approval-user', 'approval-waiting'],
+    queryFn: () => approvalRequestApi.listWaitingApprovals(),
+    enabled: pendingQueryEnabled,
+  });
+
+  const composeHubInboxPreviewRows = useMemo(() => {
+    const map = new Map<string, ApprovalRequestDetail>();
+    for (const r of pendingRequests) {
+      map.set(r.requestId, r);
+    }
+    for (const r of waitingApprovals) {
+      if (!map.has(r.requestId)) map.set(r.requestId, r);
+    }
+    return [...map.values()].sort((a, b) => {
+      const tb = dayjs(b.createdAt).valueOf();
+      const ta = dayjs(a.createdAt).valueOf();
+      if (tb !== ta) return tb - ta;
+      return a.requestId.localeCompare(b.requestId);
+    });
+  }, [pendingRequests, waitingApprovals]);
 
   const { data: viewerCcRequests = [], isFetching: viewerCcLoading } = useQuery({
     queryKey: ['approval-user', 'viewer-cc'],
@@ -2497,13 +2502,7 @@ export function ApprovalsPage() {
     [initializeComposeForDocument],
   );
 
-  const embedDocId = normalizeUrlSearchToken(routeSearch.docId);
-  const chatbotPrefillFlag = isTruthyPrefillParam(routeSearch.prefill);
-  const chatbotPrefillDocId = normalizeUrlSearchToken(
-    typeof routeSearch.documentId === 'string' && routeSearch.documentId.trim()
-      ? routeSearch.documentId
-      : routeSearch.docId,
-  );
+  const embedDocId = typeof routeSearch.docId === 'string' ? routeSearch.docId.trim() : '';
   const composeDraftIdFromUrl =
     typeof routeSearch.composeDraftId === 'string' ? routeSearch.composeDraftId.trim() : '';
 
@@ -2696,30 +2695,6 @@ export function ApprovalsPage() {
   // iframe embed 모달에선 부모 sessionStorage 접근 불가 → URL params 가 정공법, sessionStorage 는 호환 유지
   const schedulePrefillAppliedRef = useRef(false);
   useEffect(() => {
-    /** 허브가 아닐 때(sideNav=workbench 등)에도 챗봇 prefill 모달을 띄워야 하므로 onComposeHub 제외 */
-    if (tab !== 'compose' || isEmbedComposeModal || !chatbotPrefillFlag || !chatbotPrefillDocId) {
-      chatbotPrefillBootRef.current = null;
-      return;
-    }
-    if (!activeDocuments.length) return;
-    if (chatbotPrefillBootRef.current === chatbotPrefillDocId) return;
-    const doc = activeDocuments.find((d) => d.documentId === chatbotPrefillDocId);
-    if (!doc) return;
-    chatbotPrefillBootRef.current = chatbotPrefillDocId;
-    setComposeHomeMoreModal({
-      kind: 'iframe',
-      panel: 'compose-prefill',
-      prefillDocumentId: chatbotPrefillDocId,
-    });
-  }, [
-    activeDocuments,
-    chatbotPrefillDocId,
-    chatbotPrefillFlag,
-    isEmbedComposeModal,
-    tab,
-  ]);
-
-  useEffect(() => {
     if (tab !== 'compose' || composePhase !== 'fill') return;
     if (!selectedDocument || selectedDocument.documentName !== '출퇴근시간 변경 신청서') {
       schedulePrefillAppliedRef.current = false;
@@ -2786,72 +2761,6 @@ export function ApprovalsPage() {
     routeSearch.schBreakEnd,
     routeSearch.schReason,
   ]);
-
-  // 인사발령품의서 prefill - 조직 개편 시뮬에서 localStorage 로 넘겨준 contentJson 자동 채움
-  // payload: { documentName: "인사발령품의서", contentJson: { effectiveDate, orderCategory, orderCategoryLabel, reason, summaryText, items: [...] } }
-  // localStorage 사용 - iframe 모달도 부모와 동일 origin 으로 접근 가능 (sessionStorage는 분리됨)
-  // iframe(embed) 안에서만 처리 - 부모쪽이 먼저 localStorage.removeItem 하면 iframe 이 prefill 못 채우는 문제 방지
-  const personnelOrderPrefillAppliedRef = useRef(false);
-  useEffect(() => {
-    if (!isEmbedComposeModal) return;
-    if (tab !== 'compose' || composePhase !== 'fill') return;
-    if (!selectedDocument || selectedDocument.documentName !== '인사발령품의서') {
-      personnelOrderPrefillAppliedRef.current = false;
-      return;
-    }
-    if (personnelOrderPrefillAppliedRef.current) return;
-    const raw = localStorage.getItem(PERSONNEL_ORDER_PREFILL_STORAGE_KEY);
-    if (!raw) return;
-    try {
-      const parsed = JSON.parse(raw) as {
-        documentName?: string;
-        contentJson?: Record<string, unknown>;
-      };
-      const cj = parsed.contentJson ?? {};
-      const current = (form.getFieldValue('content') ?? {}) as Record<string, unknown>;
-      // 사용자 노출 textarea 에는 한글 요약 (UUID 등 ID 제외)
-      const summaryText = typeof cj.summaryText === 'string' ? cj.summaryText : '';
-      form.setFieldsValue({
-        content: {
-          ...current,
-          ...cj,
-          contentJsonText: summaryText,
-        },
-      });
-      personnelOrderPrefillAppliedRef.current = true;
-      message.success('조직 개편 시뮬 변경 사항을 결재 양식에 채웠습니다. 결재선만 지정해 신청하세요.');
-    } catch {
-      // ignore bad payload
-    } finally {
-      localStorage.removeItem(PERSONNEL_ORDER_PREFILL_STORAGE_KEY);
-    }
-  }, [composePhase, form, isEmbedComposeModal, message, selectedDocument, tab]);
-
-  // 챗봇 액션 prefill - sessionStorage 로 넘겨준 documentId+content 자동 입력
-  useEffect(() => {
-    if (tab !== 'compose' || composePhase !== 'fill') return;
-    const raw = sessionStorage.getItem(CHATBOT_ACTION_PREFILL_STORAGE_KEY);
-    if (!raw) return;
-    try {
-      const parsed = JSON.parse(raw) as {
-        documentId?: string;
-        content?: Record<string, unknown>;
-      };
-      if (!parsed.documentId || parsed.documentId !== selectedDocumentId) return;
-      if (!parsed.content || typeof parsed.content !== 'object' || Array.isArray(parsed.content)) return;
-      const current = (form.getFieldValue('content') ?? {}) as Record<string, unknown>;
-      form.setFieldsValue({
-        content: {
-          ...current,
-          ...parsed.content,
-        },
-      });
-      message.info('챗봇 제안값이 결재 양식에 자동 입력되었습니다.');
-      sessionStorage.removeItem(CHATBOT_ACTION_PREFILL_STORAGE_KEY);
-    } catch {
-      sessionStorage.removeItem(CHATBOT_ACTION_PREFILL_STORAGE_KEY);
-    }
-  }, [composePhase, form, message, selectedDocumentId, tab]);
 
   const toggleBookmark = useCallback((requestId: string) => {
     setBookmarkedRequestIds((prev) => {
@@ -4544,15 +4453,25 @@ export function ApprovalsPage() {
 
   const renderHomeApprovalFormsCard = () => {
     return (
-      <Card className={clsx(APPROVAL_HOME_COMPOSE_FORMS_CARD_CLASS, 'tw-h-full')} styles={{ body: { height: '100%' } }}>
-        <div className="tw-mb-3 tw-flex tw-items-center tw-justify-between tw-gap-2">
-          <Typography.Text strong className="tw-min-w-0">
+      <Card
+        className={clsx(
+          APPROVAL_HOME_COMPOSE_FORMS_CARD_CLASS,
+          'tw-flex tw-h-full tw-min-h-0 tw-w-full tw-flex-col',
+        )}
+        styles={{
+          body: { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 12 },
+        }}
+      >
+        <div className="tw-mb-1.5 tw-flex tw-shrink-0 tw-items-center tw-justify-between tw-gap-2">
+          <Typography.Text strong className="!tw-text-sm tw-min-w-0">
             Quick Menu
           </Typography.Text>
           <div className="tw-flex tw-items-center tw-gap-2">
             <Tooltip title="퀵 메뉴 설정">
               <Button
                 size="small"
+                type="text"
+                className="!tw-px-1"
                 icon={<SettingOutlined />}
                 onClick={() => {
                   setQuickHomeFormsDraft(quickHomeFormDocs.map((doc) => doc.documentId));
@@ -4563,48 +4482,57 @@ export function ApprovalsPage() {
           </div>
         </div>
         {docsLoading ? (
-          <div className="tw-flex tw-min-h-[6.5rem] tw-items-center tw-justify-center tw-py-2">
-            <Spin />
+          <div className="tw-flex tw-min-h-0 tw-flex-1 tw-items-center tw-justify-center">
+            <Spin size="small" />
           </div>
         ) : quickHomeFormDocs.length === 0 ? (
-          <div className="tw-flex tw-min-h-[6.5rem] tw-items-center tw-justify-center tw-py-2">
-            <Typography.Text type="secondary">사용 가능한 활성 양식이 없습니다.</Typography.Text>
+          <div className="tw-flex tw-min-h-0 tw-flex-1 tw-items-center tw-justify-center tw-px-1">
+            <Typography.Text type="secondary" className="!tw-text-xs">
+              사용 가능한 활성 양식이 없습니다.
+            </Typography.Text>
           </div>
         ) : (
-          <div className="tw-space-y-2">
-            {quickHomeFormDocs.map((doc) => {
-              return (
-                <button
-                  key={doc.documentId}
-                  type="button"
-                  className="tw-flex tw-w-full tw-items-center tw-justify-between tw-rounded-md tw-border tw-border-slate-200 tw-bg-white tw-px-3 tw-py-2 tw-text-left tw-transition-colors hover:tw-bg-slate-50 focus-visible:tw-ring-2 focus-visible:tw-ring-blue-400 focus-visible:tw-ring-offset-1"
-                  onClick={() => {
-                    setComposeFormSelectInitialId(doc.documentId);
-                    setComposeFormSelectModalOpen(true);
-                  }}
-                >
-                  <span className="tw-min-w-0">
-                    <span className="tw-block tw-truncate tw-text-sm tw-font-semibold tw-text-slate-900">
-                      {doc.documentName?.trim() || '—'}
-                    </span>
-                    <span className="tw-block tw-text-xs tw-text-slate-500">{approvalRequestTypeLabelKo(doc.requestType)}</span>
-                  </span>
-                  <PlusOutlined className="tw-text-slate-300" />
-                </button>
-              );
-            })}
+          <div className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-y-auto wf-scrollbar tw-pr-0.5">
+            <Space direction="vertical" size={6} className="tw-w-full">
+              {quickHomeFormDocs.map((doc) => {
+                return (
+                  <button
+                    key={doc.documentId}
+                    type="button"
+                    className="tw-flex tw-w-full tw-appearance-none tw-items-center tw-justify-between tw-gap-1.5 tw-rounded-lg tw-border tw-border-slate-200 tw-bg-slate-50/80 tw-px-2.5 tw-py-1 tw-text-left tw-shadow-none tw-transition-colors hover:tw-bg-white/60 focus-visible:tw-outline-none focus-visible:tw-ring-2 focus-visible:tw-ring-blue-400 focus-visible:tw-ring-offset-1"
+                    onClick={() => {
+                      setComposeFormSelectInitialId(doc.documentId);
+                      setComposeFormSelectModalOpen(true);
+                    }}
+                  >
+                    <div className="tw-min-w-0 tw-flex-1 tw-leading-tight">
+                      <Typography.Text strong className="!tw-mb-0 !tw-block !tw-text-[13px] !tw-leading-tight tw-truncate">
+                        {doc.documentName?.trim() || '—'}
+                      </Typography.Text>
+                      <Typography.Text
+                        type="secondary"
+                        className="!tw-mb-0 !tw-mt-0.5 !tw-block !tw-text-[11px] !tw-leading-tight tw-truncate"
+                      >
+                        {approvalRequestTypeLabelKo(doc.requestType)}
+                      </Typography.Text>
+                    </div>
+                    <PlusOutlined className="tw-shrink-0 tw-text-sm tw-text-slate-400" aria-hidden />
+                  </button>
+                );
+              })}
+            </Space>
           </div>
         )}
-        <div className="tw-mt-2 tw-flex tw-items-center tw-gap-1.5 tw-rounded-md tw-bg-slate-50 tw-px-2.5 tw-py-2 tw-text-xs tw-text-slate-500">
-          <InfoCircleOutlined />
-          <span>자주 사용하는 결재 양식을 설정하면 업무 효율을 높일 수 있습니다.</span>
-        </div>
       </Card>
     );
   };
 
   const renderComposeHomeDashboard = () => {
     const viewerMergedRows = mergeRequestsByRequestId([viewerCcRequests, viewerCirculationRequests]);
+    const composeInboxLineOpts = {
+      myMemberId: authMemberId,
+      myMemberPositionId: drafterProfile?.memberPositionId?.trim(),
+    };
 
     const composeHomePendingTable = (rows: ApprovalRequestDetail[]) => (
       <table className="tw-w-full tw-table-fixed tw-border-collapse tw-text-center">
@@ -4642,19 +4570,46 @@ export function ApprovalsPage() {
           {rows.length === 0 ? (
             <tr>
               <td colSpan={6} className="tw-border tw-border-dashed tw-border-slate-200 tw-bg-slate-50/50 tw-p-6 tw-text-center">
-                <Typography.Text type="secondary">결재 대기 문서가 없습니다.</Typography.Text>
+                <Typography.Text type="secondary">결재 대기·예정 문서가 없습니다.</Typography.Text>
               </td>
             </tr>
           ) : (
             rows.map((row) => {
-              const myLine = row.approvalLines.find((l) => String(l.approvalStatus).toUpperCase() === 'PENDING');
+              const myLine = findMyInboxApprovalLine(row, composeInboxLineOpts);
+              const inboxSt = String(myLine?.approvalStatus ?? '').toUpperCase();
+              const isMyTurnPending =
+                inboxSt === 'PENDING' &&
+                myLine != null &&
+                !isInlineSyntheticApprovalId(myLine.approvalId);
+              const showUpcomingTag = inboxSt === 'WAITING' || rowIsUpcomingForApprover(row, authMemberId);
+              const openPendingRowDetail = () => setSelectedRequestId(row.requestId);
               return (
-              <tr key={row.requestId} className="tw-border-b tw-border-slate-200 tw-bg-white">
+              <tr
+                key={row.requestId}
+                className="tw-cursor-pointer tw-border-b tw-border-slate-200 tw-bg-white tw-transition-colors hover:tw-bg-slate-50/90"
+                role="button"
+                tabIndex={0}
+                onClick={openPendingRowDetail}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    openPendingRowDetail();
+                  }
+                }}
+              >
                 <td className="tw-px-2 tw-py-2.5 tw-align-middle">
                   <div className="tw-flex tw-justify-center">
-                    <Tag color="gold" className="!tw-m-0">
-                      결재대기
-                    </Tag>
+                    {isMyTurnPending ? (
+                      <Tag color="gold" className="!tw-m-0">
+                        결재대기
+                      </Tag>
+                    ) : showUpcomingTag ? (
+                      <Tag color="processing" className="!tw-m-0">
+                        결재 예정
+                      </Tag>
+                    ) : (
+                      <Tag className="!tw-m-0">—</Tag>
+                    )}
                   </div>
                 </td>
                 <td className="tw-min-w-0 tw-px-2 tw-py-2.5 tw-align-middle">
@@ -4676,20 +4631,20 @@ export function ApprovalsPage() {
                   </Typography.Text>
                 </td>
                 <td className="tw-px-2 tw-py-2.5 tw-align-middle">
-                  <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-center tw-gap-2">
+                  <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-center tw-gap-2" onClick={(e) => e.stopPropagation()}>
                     <Button
                       type="primary"
                       size="small"
-                      disabled={!myLine}
+                      disabled={!isMyTurnPending || !myLine}
                       onClick={() => {
-                        if (!myLine) return;
+                        if (!isMyTurnPending || !myLine) return;
                         setApprovalAction({ approvalId: myLine.approvalId, mode: 'approve' });
                       }}
                     >
                       승인
                     </Button>
-                    <Button danger size="small" disabled={!myLine} onClick={() => {
-                        if (!myLine) return;
+                    <Button danger size="small" disabled={!isMyTurnPending || !myLine} onClick={() => {
+                        if (!isMyTurnPending || !myLine) return;
                         setApprovalAction({ approvalId: myLine.approvalId, mode: 'reject' });
                       }}>
                       반려
@@ -4705,38 +4660,44 @@ export function ApprovalsPage() {
     );
 
     return (
-      <div className="tw-space-y-4">
-        <div className="tw-grid tw-grid-cols-1 tw-gap-4 xl:tw-grid-cols-3">
-          <div className="tw-min-w-0 tw-w-full xl:tw-col-span-2">
+      <>
+      <div className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-gap-3 tw-overflow-hidden">
+        <div className="tw-grid tw-shrink-0 tw-grid-cols-1 tw-gap-4 xl:tw-grid-cols-3 xl:tw-items-stretch">
+          <div className="tw-flex tw-min-h-0 tw-w-full tw-min-w-0 xl:tw-col-span-2 xl:tw-h-[min(13.5rem,31vh)] xl:tw-max-h-[min(13.5rem,31vh)] xl:tw-overflow-hidden">
             <Card
-              className="tw-h-full tw-w-full tw-rounded-2xl tw-border tw-border-slate-200/90 tw-shadow-sm tw-shadow-slate-900/5"
-              styles={{ body: { height: '100%', display: 'flex', flexDirection: 'column' } }}
+              className="tw-flex tw-h-full tw-min-h-0 tw-w-full tw-flex-col tw-rounded-2xl tw-border tw-border-slate-200/90 tw-shadow-sm tw-shadow-slate-900/5"
+              styles={{
+                body: { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' },
+              }}
             >
-            <div className="tw-mb-3 tw-flex tw-items-center tw-justify-between">
-              <Typography.Text strong>결재 대기 문서 리스트</Typography.Text>
+            <div className="tw-mb-2 tw-flex tw-shrink-0 tw-items-center tw-justify-between">
+              <Typography.Text strong>결재 대기·예정 문서</Typography.Text>
               <Button
                 type="link"
                 size="small"
                 onClick={() =>
                   setComposeHomeMoreModal({
                     kind: 'pending-inbox',
-                    title: '결재 대기 문서 전체',
+                    title: '결재 대기·예정 문서 전체',
                   })
                 }
               >
                 전체
               </Button>
             </div>
-            <div className="tw-min-h-0 tw-flex-1 tw-overflow-y-auto wf-scrollbar tw-pr-1 [scrollbar-gutter:stable]">
-              {composeHomePendingTable(pendingRequests.slice(0, 20))}
+            <div className="tw-min-h-0 tw-flex-1 tw-basis-0 tw-overflow-y-auto wf-scrollbar tw-pr-1 [scrollbar-gutter:stable]">
+              <Spin spinning={pendingLoading || waitingLoading}>
+                {composeHomePendingTable(composeHubInboxPreviewRows.slice(0, 20))}
+              </Spin>
             </div>
             </Card>
           </div>
-          <div className="tw-min-w-0 tw-w-full xl:tw-col-span-1 xl:tw-shrink-0">
+          <div className="tw-flex tw-min-h-0 tw-w-full tw-min-w-0 xl:tw-col-span-1">
             {renderHomeApprovalFormsCard()}
           </div>
         </div>
 
+        <div className="tw-min-h-0 tw-flex-1 tw-overflow-hidden">
         <div className="tw-grid tw-grid-cols-1 tw-gap-4 md:tw-grid-cols-2 xl:tw-grid-cols-3">
           {renderHomeDocListCard('내 기안 문서함', myRequestsAllForSummary, '기안 문서가 없습니다.', {
             fullListEmbed: { panel: 'my-all' },
@@ -4882,9 +4843,17 @@ export function ApprovalsPage() {
             )}
           </Card>
         </div>
+        </div>
+      </div>
 
         <AppModal
-          title={composeHomeMoreModal?.kind === 'pending-inbox' ? composeHomeMoreModal.title : null}
+          title={
+            composeHomeMoreModal == null
+              ? undefined
+              : composeHomeMoreModal.kind === 'pending-inbox'
+                ? composeHomeMoreModal.title
+                : composeHomeEmbedPanelModalTitle(composeHomeMoreModal)
+          }
           open={composeHomeMoreModal != null}
           onCancel={() => setComposeHomeMoreModal(null)}
           footer={null}
@@ -5052,7 +5021,7 @@ export function ApprovalsPage() {
           )}
           </div>
         </AppDoubleActionModal>
-      </div>
+    </>
     );
   };
 
@@ -5063,62 +5032,19 @@ export function ApprovalsPage() {
         isEmbedComposeModal
           ? 'tw-flex tw-h-full tw-min-h-0 tw-flex-col tw-gap-4 tw-overflow-y-auto'
           : clsx(
-              'tw-flex tw-flex-col tw-gap-4',
+              'tw-flex tw-min-h-0 tw-flex-col',
+              isComposeHubEntry
+                ? 'tw-h-[calc(100dvh-11rem)] tw-max-h-[calc(100dvh-11rem)] tw-gap-3 tw-overflow-hidden sm:tw-h-[calc(100dvh-10.5rem)] sm:tw-max-h-[calc(100dvh-10.5rem)]'
+                : 'tw-gap-4',
               tab === 'admin' && canAdmin && 'tw-min-h-0 tw-flex-1 tw-overflow-hidden',
             ),
       )}
     >
-      {/* 허브 대시보드 밖(예: sideNav=workbench)에서도 동일 모달이 필요 — 챗봇 prefill 등 */}
-      {!isEmbedComposeModal ? (
-        <Modal
-          title={composeHomeMoreModal?.kind === 'pending-inbox' ? composeHomeMoreModal.title : null}
-          open={composeHomeMoreModal != null}
-          onCancel={() => setComposeHomeMoreModal(null)}
-          footer={null}
-          width={1120}
-          destroyOnHidden
-          style={{ top: 48 }}
-          styles={{
-            content: {
-              height: 820,
-              maxHeight: '90vh',
-              resize: 'both',
-              display: 'flex',
-              flexDirection: 'column',
-              padding: 0,
-              overflow: 'auto',
-            },
-            header: { flexShrink: 0, marginBottom: 0, padding: '12px 16px' },
-            body: { flex: 1, minHeight: 0, padding: 0, overflow: 'hidden' },
-          }}
-        >
-          {composeHomeMoreModal?.kind === 'pending-inbox' ? (
-            <PendingApprovalInboxModalContent
-              myMemberId={authMemberId}
-              myMemberPositionId={drafterProfile?.memberPositionId?.trim()}
-              onOpenDetail={(requestId) => setSelectedRequestId(requestId)}
-              onStartApprove={(approvalId) => setApprovalAction({ approvalId, mode: 'approve' })}
-              onStartReject={(approvalId) => setApprovalAction({ approvalId, mode: 'reject' })}
-            />
-          ) : composeHomeMoreModal?.kind === 'iframe' ? (
-            <iframe
-              key={`${composeHomeMoreModal.panel}-${composeHomeMoreModal.composeDraftId ?? ''}-${composeHomeMoreModal.prefillDocumentId ?? ''}`}
-              title="전자결재 문서함"
-              src={composeHomeEmbedPanelUrl(composeHomeMoreModal.panel, {
-                composeDraftId: composeHomeMoreModal.composeDraftId,
-                prefillDocumentId: composeHomeMoreModal.prefillDocumentId,
-              })}
-              className="tw-h-full tw-min-h-0 tw-w-full tw-border-0"
-            />
-          ) : null}
-        </Modal>
-      ) : null}
-
       {!isEmbedComposeModal ? (
         <div
           className={clsx(
             'tw-flex tw-items-center tw-justify-between tw-gap-3',
-            tab === 'admin' && canAdmin && 'tw-shrink-0',
+            (tab === 'admin' && canAdmin) || isComposeHubEntry ? 'tw-shrink-0' : undefined,
           )}
         >
           <div className="tw-flex tw-min-w-0 tw-items-start tw-gap-2">
@@ -5160,7 +5086,9 @@ export function ApprovalsPage() {
       ) : null}
 
       {tab === 'compose' && isComposeHubEntry ? (
-        renderComposeHomeDashboard()
+        <div className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-hidden">
+          {renderComposeHomeDashboard()}
+        </div>
       ) : tab === 'compose' ? (
               <Card
                 className={clsx(

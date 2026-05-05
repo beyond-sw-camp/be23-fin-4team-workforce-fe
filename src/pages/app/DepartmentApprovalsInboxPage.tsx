@@ -183,10 +183,10 @@ export function DepartmentApprovalsInboxPage() {
           : 'tw-mx-auto tw-max-w-6xl tw-space-y-4',
       )}
     >
-      <div className="tw-flex tw-flex-shrink-0 tw-flex-wrap tw-items-start tw-gap-3">
-        <div>
-          <div className="tw-flex tw-flex-nowrap tw-items-center tw-gap-2">
-            {!isEmbedModal ? (
+      {isEmbedModal ? null : (
+        <div className="tw-flex tw-flex-shrink-0 tw-flex-wrap tw-items-start tw-gap-3">
+          <div>
+            <div className="tw-flex tw-flex-nowrap tw-items-center tw-gap-2">
               <Button
                 type="text"
                 icon={<ArrowLeftOutlined />}
@@ -200,11 +200,9 @@ export function DepartmentApprovalsInboxPage() {
                   })
                 }
               />
-            ) : null}
-            <Typography.Title level={4} className="!tw-m-0 tw-whitespace-nowrap tw-leading-none">
-              부서 문서함
-            </Typography.Title>
-            {!isEmbedModal ? (
+              <Typography.Title level={4} className="!tw-m-0 tw-whitespace-nowrap tw-leading-none">
+                부서 문서함
+              </Typography.Title>
               <Button
                 type="default"
                 size="small"
@@ -219,17 +217,17 @@ export function DepartmentApprovalsInboxPage() {
               >
                 부서 문서 검색
               </Button>
-            ) : null}
+            </div>
+            <Typography.Paragraph type="secondary" className="!tw-mb-0 tw-text-sm">
+              {deptView === 'received'
+                ? '내 조직이 수신부서로 지정된 최종 승인 공문을 조회합니다.'
+                : deptView === 'sent'
+                  ? '내 조직에서 발송한 공문 문서를 조회합니다.'
+                  : '본인 소속 부서에서 열람 가능한 결재 문서를 조회합니다. 비공개로 상신한 문서는 부서원에게 제목·내용이 가려질 수 있습니다.'}
+            </Typography.Paragraph>
           </div>
-          <Typography.Paragraph type="secondary" className="!tw-mb-0 tw-text-sm">
-            {deptView === 'received'
-              ? '내 조직이 수신부서로 지정된 최종 승인 공문을 조회합니다.'
-              : deptView === 'sent'
-                ? '내 조직에서 발송한 공문 문서를 조회합니다.'
-              : '본인 소속 부서에서 열람 가능한 결재 문서를 조회합니다. 비공개로 상신한 문서는 부서원에게 제목·내용이 가려질 수 있습니다.'}
-          </Typography.Paragraph>
         </div>
-      </div>
+      )}
 
       <Card
         size="small"

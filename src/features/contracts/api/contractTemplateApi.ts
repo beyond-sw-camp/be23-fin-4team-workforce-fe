@@ -1,3 +1,4 @@
+import { logContractSendDebug } from '@/features/contracts/lib/contractSendDebug';
 import { httpClient } from '@/shared/api/httpClient';
 import { unwrapApiResponse } from '@/shared/api/response';
 
@@ -359,9 +360,19 @@ export const contractTemplateApi = {
   async sendContract(payload: {
     templateId: string;
     employeeMemberId: string;
-    adminInputJson?: string;
+    /** ADMIN_INPUT 필드 key와 일치하는 평면 객체. 비어 있으면 서버로 `{}` 전송(본문에서 null로 보이지 않게). */
+    adminInputJson?: Record<string, unknown>;
   }): Promise<ContractSendResult> {
-    const response = await httpClient.post('/contract/contracts/send', payload);
+    const raw = payload.adminInputJson;
+    const adminInputJson =
+      raw && typeof raw === 'object' && !Array.isArray(raw) && Object.keys(raw).length > 0 ? raw : {};
+    const body = {
+      templateId: payload.templateId,
+      employeeMemberId: payload.employeeMemberId,
+      adminInputJson,
+    };
+    logContractSendDebug('POST /contract/contracts/send body', { ...body });
+    const response = await httpClient.post('/contract/contracts/send', body);
     const normalized = normalizeContractSendResult(unwrapApiResponse<unknown>(response.data));
     if (!normalized) throw new Error('계약 발송 응답을 해석할 수 없습니다.');
     return normalized;
@@ -370,9 +381,21 @@ export const contractTemplateApi = {
   async sendContractBatch(payload: {
     templateId: string;
     batchName: string;
-    items: Array<{ employeeMemberId: string; adminInputJson?: string }>;
+    items: Array<{ employeeMemberId: string; adminInputJson?: Record<string, unknown> }>;
   }): Promise<ContractBatchSendResult> {
-    const response = await httpClient.post('/contract/contracts/send-batch', payload);
+    const items = payload.items.map((it) => {
+      const raw = it.adminInputJson;
+      const adminInputJson =
+        raw && typeof raw === 'object' && !Array.isArray(raw) && Object.keys(raw).length > 0 ? raw : {};
+      return { employeeMemberId: it.employeeMemberId, adminInputJson };
+    });
+    const batchBody = {
+      templateId: payload.templateId,
+      batchName: payload.batchName,
+      items,
+    };
+    logContractSendDebug('POST /contract/contracts/send-batch body', { ...batchBody, itemCount: items.length });
+    const response = await httpClient.post('/contract/contracts/send-batch', batchBody);
     const normalized = normalizeContractBatchSendResult(unwrapApiResponse<unknown>(response.data));
     if (!normalized) throw new Error('일괄 발송 응답을 해석할 수 없습니다.');
     return normalized;
@@ -451,9 +474,14 @@ export const contractTemplateApi = {
   /** REJECTED 또는 CANCELED 계약만, revision 5 미만 */
   async resendContract(
     contractId: string,
-    body: { adminInputJson?: string | null } = {},
+    body: { adminInputJson?: Record<string, unknown> | null } = {},
   ): Promise<ContractRecord> {
-    const response = await httpClient.post(`/contract/contracts/${encodeURIComponent(contractId)}/resend`, body);
+    const payload: { adminInputJson?: Record<string, unknown> } = {};
+    const adm = body.adminInputJson;
+    if (adm && typeof adm === 'object' && !Array.isArray(adm) && Object.keys(adm).length > 0) {
+      payload.adminInputJson = adm;
+    }
+    const response = await httpClient.post(`/contract/contracts/${encodeURIComponent(contractId)}/resend`, payload);
     const normalized = normalizeContractRecord(unwrapApiResponse<unknown>(response.data));
     if (!normalized) throw new Error('계약 재발송 응답을 해석할 수 없습니다.');
     return normalized;
@@ -463,10 +491,21 @@ export const contractTemplateApi = {
     batchId: string,
     body: {
       batchName: string;
-      items: Array<{ contractId: string; adminInputJson?: string | null }>;
+      items: Array<{ contractId: string; adminInputJson?: Record<string, unknown> | null }>;
     },
   ): Promise<ContractBatchSendResult> {
-    const response = await httpClient.post(`/contract/contracts/batches/${encodeURIComponent(batchId)}/resend`, body);
+    const items = body.items.map((it) => {
+      const row: { contractId: string; adminInputJson?: Record<string, unknown> } = { contractId: it.contractId };
+      const adm = it.adminInputJson;
+      if (adm && typeof adm === 'object' && !Array.isArray(adm) && Object.keys(adm).length > 0) {
+        row.adminInputJson = adm;
+      }
+      return row;
+    });
+    const response = await httpClient.post(`/contract/contracts/batches/${encodeURIComponent(batchId)}/resend`, {
+      batchName: body.batchName,
+      items,
+    });
     const normalized = normalizeContractBatchSendResult(unwrapApiResponse<unknown>(response.data));
     if (!normalized) throw new Error('배치 재발송 응답을 해석할 수 없습니다.');
     return normalized;

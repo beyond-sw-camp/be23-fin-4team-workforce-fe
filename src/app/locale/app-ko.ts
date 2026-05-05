@@ -8,9 +8,6 @@ export const APP_MENU_LABEL: Record<string, string> = {
   '/app/calendar': '일정',
   '/app/members': '구성원',
   '/app/organization': '조직',
-  '/app/organization/restructure': '조직 개편 시뮬',
-  '/app/personnel-order/my': '내 인사발령 이력',
-  '/app/personnel-order/admin': '회사 인사발령 이력',
   '/app/roles': '역할·권한',
   '/app/attendance': '내 근태',
   '/app/leave': '휴가 계획 관리',
@@ -55,7 +52,6 @@ export const APP_MENU_LABEL: Record<string, string> = {
   '/app/salary/settings': '급여 정책',
   '/app/salary/pay-grade-table': '호봉표 관리',
   '/app/salary/retirement-policy': '퇴직급여 정책',
-  '/app/salary/retirement-settlement': '퇴직 정산',
   '/app/salary/bonus-policy': '상여/성과금 정책',
 };
 

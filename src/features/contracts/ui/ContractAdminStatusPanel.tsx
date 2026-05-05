@@ -33,11 +33,16 @@ import {
   type ContractBatchSummary,
   type ContractRecord,
 } from '@/features/contracts/api/contractTemplateApi';
-import { compactAdminInputJson, parseContractFormSchema } from '@/features/contracts/lib/parseContractFormSchema';
+import {
+  coerceAdminInputInitialForForm,
+  collectContractAdminInputFromForm,
+  isContractAdminInputSource,
+  parseContractFormSchema,
+} from '@/features/contracts/lib/parseContractFormSchema';
 import { uploadSignaturePngForContract } from '@/features/contracts/lib/uploadSignaturePng';
 import { ApprovalFormPaperFieldRow, ApprovalFormPaperLayout } from '@/features/approvals/ui/ApprovalFormPaperLayout';
-import { CONTRACT_HUB_CARD_CLASS } from '@/features/contracts/ui/contractHubStyles';
 import { ContractAdminFormFieldInput } from '@/features/contracts/ui/ContractAdminFormFieldInput';
+import { CONTRACT_HUB_CARD_CLASS } from '@/features/contracts/ui/contractHubStyles';
 import { ContractPartySignaturesCard } from '@/features/contracts/ui/ContractPartySignaturesCard';
 import { ContractSignaturePad, type ContractSignaturePadHandle } from '@/features/contracts/ui/ContractSignaturePad';
 
@@ -215,7 +220,7 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
   });
 
   const resendContractM = useMutation({
-    mutationFn: (vars: { contractId: string; adminInputJson?: string | null }) =>
+    mutationFn: (vars: { contractId: string; adminInputJson?: Record<string, unknown> | null }) =>
       contractTemplateApi.resendContract(vars.contractId, { adminInputJson: vars.adminInputJson ?? null }),
     onSuccess: async (newContract) => {
       message.success('계약이 재발송되었습니다.');
@@ -238,7 +243,7 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
     mutationFn: (vars: {
       batchId: string;
       batchName: string;
-      items: Array<{ contractId: string; adminInputJson?: string | null }>;
+      items: Array<{ contractId: string; adminInputJson?: Record<string, unknown> | null }>;
     }) => contractTemplateApi.resendBatch(vars.batchId, { batchName: vars.batchName, items: vars.items }),
     onSuccess: async (batchResult) => {
       message.success('배치가 재발송되었습니다.');
@@ -432,34 +437,37 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
     if (!contractDetail) return [];
     const raw = resendTemplate?.formSchema ?? contractDetail.formSchemaSnapshot;
     const { fields, metaByName } = parseContractFormSchema(raw);
-    return fields.filter((f) => metaByName[f.name]?.source === 'ADMIN_INPUT');
+    return fields.filter((f) => isContractAdminInputSource(metaByName[f.name]?.source));
   }, [contractDetail, resendTemplate?.formSchema]);
 
   useEffect(() => {
     if (!resendModalOpen || !contractDetail) return;
     const { fields, metaByName } = parseContractFormSchema(contractDetail.formSchemaSnapshot);
-    const names = fields.filter((f) => metaByName[f.name]?.source === 'ADMIN_INPUT').map((f) => f.name);
-    resendForm.setFieldsValue({ adminInput: pickAdminFromContractContent(contractDetail, names) });
+    const adminFields = fields.filter((f) => isContractAdminInputSource(metaByName[f.name]?.source));
+    const names = adminFields.map((f) => f.name);
+    const picked = pickAdminFromContractContent(contractDetail, names);
+    resendForm.setFieldsValue({ adminInput: coerceAdminInputInitialForForm(picked, adminFields) });
   }, [resendModalOpen, contractDetail?.contractId, contractDetail?.formSchemaSnapshot, resendForm]);
 
   const batchResendAdminFieldDefs = useMemo(() => {
     if (resendableInBatch.length === 0) return [];
     const raw = resendTemplate?.formSchema ?? resendableInBatch[0].formSchemaSnapshot;
     const { fields, metaByName } = parseContractFormSchema(raw);
-    return fields.filter((f) => metaByName[f.name]?.source === 'ADMIN_INPUT');
+    return fields.filter((f) => isContractAdminInputSource(metaByName[f.name]?.source));
   }, [resendableInBatch, resendTemplate?.formSchema]);
 
   const openBatchResendModal = () => {
     if (!selectedBatch || resendableInBatch.length === 0) return;
     const raw = resendTemplate?.formSchema ?? resendableInBatch[0]?.formSchemaSnapshot ?? '{}';
     const { fields, metaByName } = parseContractFormSchema(raw);
-    const adminNames = fields.filter((f) => metaByName[f.name]?.source === 'ADMIN_INPUT').map((f) => f.name);
+    const adminFieldDefs = fields.filter((f) => isContractAdminInputSource(metaByName[f.name]?.source));
+    const adminNames = adminFieldDefs.map((f) => f.name);
     batchResendForm.setFieldsValue({
       batchName: `${selectedBatch.batchName || '배치'} 재발송`.trim(),
       items: resendableInBatch.map((c) => ({
         contractId: c.contractId,
         include: true,
-        adminInput: pickAdminFromContractContent(c, adminNames),
+        adminInput: coerceAdminInputInitialForForm(pickAdminFromContractContent(c, adminNames), adminFieldDefs),
       })),
     });
     setBatchResendModalOpen(true);
@@ -680,7 +688,7 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
           ) : null
         }
         width={920}
-        destroyOnClose
+        destroyOnHidden
       >
         <div className="tw-px-5 tw-py-4">
         {detailLoading || !contractDetail ? (
@@ -823,7 +831,7 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
         }}
         footer={null}
         width={980}
-        destroyOnClose
+        destroyOnHidden
       >
         <div className="tw-px-5 tw-py-4">
         <div className="tw-mb-3 tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2">
@@ -1004,11 +1012,12 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
         onConfirm={async () => {
           if (!contractDetail) return;
           try {
-            const v = await resendForm.validateFields();
-            const json = compactAdminInputJson(v.adminInput as Record<string, unknown> | undefined);
+            await resendForm.validateFields();
+            const adminKeys = singleResendAdminFields.map((f) => f.name);
+            const adminObj = collectContractAdminInputFromForm((path) => resendForm.getFieldValue(path), adminKeys);
             await resendContractM.mutateAsync({
               contractId: contractDetail.contractId,
-              adminInputJson: json ?? null,
+              adminInputJson: Object.keys(adminObj).length > 0 ? adminObj : null,
             });
           } catch {
             /* validation */
@@ -1114,11 +1123,20 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
           try {
             const v = await batchResendForm.validateFields();
             const rows = v.items ?? [];
+            const adminKeys = batchResendAdminFieldDefs.map((f) => f.name);
             const items = rows
-              .filter((row) => row.include !== false)
-              .map((row) => ({
+              .map((row, idx) => ({ row, idx }))
+              .filter(({ row }) => row.include !== false)
+              .map(({ row, idx }) => ({
                 contractId: row.contractId,
-                adminInputJson: compactAdminInputJson(row.adminInput as Record<string, unknown> | undefined) ?? null,
+                adminInputJson:
+                  adminKeys.length > 0
+                    ? collectContractAdminInputFromForm(
+                        (path) => batchResendForm.getFieldValue(path),
+                        adminKeys,
+                        ['items', idx],
+                      )
+                    : {},
               }));
             if (items.length === 0) {
               message.warning('재발송할 계약을 1건 이상 선택해 주세요.');
@@ -1193,7 +1211,7 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
         title="전자계약 서명"
         open={signModalContractId != null}
         onCancel={closeSignModal}
-        destroyOnClose
+        destroyOnHidden
         okText="서명"
         cancelText="취소"
         confirmLoading={signSubmitting || signM.isPending}

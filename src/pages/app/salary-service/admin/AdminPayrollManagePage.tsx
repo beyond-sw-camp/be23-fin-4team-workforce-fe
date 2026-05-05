@@ -520,7 +520,7 @@ export function AdminPayrollManagePage() {
           confirmLoading={addBonusM.isPending}
           okText="추가"
           cancelText="취소"
-          destroyOnClose
+          destroyOnHidden
         >
           <Form
             form={bonusForm}
@@ -552,7 +552,7 @@ export function AdminPayrollManagePage() {
           confirmLoading={addItemM.isPending}
           okText="추가"
           cancelText="취소"
-          destroyOnClose
+          destroyOnHidden
         >
           <Form
             form={addForm}

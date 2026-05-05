@@ -24,12 +24,14 @@ import {
 import type { FormFieldSchema } from '@/features/approvals/lib/approvalFormSchema';
 import { memberApi } from '@/features/member/api/memberApi';
 import {
-  compactAdminInputJson,
+  collectContractAdminInputFromForm,
   CONTRACT_FIELD_DEFAULT_SOURCE,
   CONTRACT_FIELD_STATIC_BLOCK_SOURCE,
+  isContractAdminInputSource,
   parseContractFormSchema,
   type ContractFieldMeta,
 } from '@/features/contracts/lib/parseContractFormSchema';
+import { notifyContractSendDebug } from '@/features/contracts/lib/contractSendDebug';
 import { ContractAdminFormFieldInput } from '@/features/contracts/ui/ContractAdminFormFieldInput';
 import { CONTRACT_HUB_CARD_CLASS } from '@/features/contracts/ui/contractHubStyles';
 import { ContractRecipientOrgChartModal } from '@/features/contracts/ui/ContractRecipientOrgChartModal';
@@ -135,12 +137,23 @@ export function ContractTemplatesAdminPanel({
   const [singleSendModalOpen, setSingleSendModalOpen] = useState(false);
   const [batchSendModalOpen, setBatchSendModalOpen] = useState(false);
 
-  const { data: templates = [], isFetching, refetch, error: templatesError } = useQuery({
+  const fullTemplatesQ = useQuery({
     queryKey: ['contract', 'templates'],
     queryFn: () => contractTemplateApi.list(),
-    enabled: canRead,
+    enabled: showTemplateSection && canRead,
     retry: false,
   });
+  const activeTemplatesQ = useQuery({
+    queryKey: ['contract', 'templates', 'active'],
+    queryFn: () => contractTemplateApi.listActive(),
+    enabled: showSendSection && !showTemplateSection && (canCreate || canRead),
+    retry: false,
+  });
+  const templates = fullTemplatesQ.data ?? [];
+  const isFetching = fullTemplatesQ.isFetching;
+  const templatesError = fullTemplatesQ.error;
+  const activeTemplatesFetchError = activeTemplatesQ.error;
+  const activeTemplatesLoading = activeTemplatesQ.isFetching;
   const { data: members = [] } = useQuery({
     queryKey: ['member', 'contract-send-list'],
     queryFn: () => memberApi.listMembersForApprovals(),
@@ -169,6 +182,7 @@ export function ContractTemplatesAdminPanel({
       setCreateMetaByName({});
       setCreateFormDescription('');
       void qc.invalidateQueries({ queryKey: ['contract', 'templates'] });
+      void qc.invalidateQueries({ queryKey: ['contract', 'templates', 'active'] });
     },
     onError: (e: Error) => message.error(parseApiError(e).message),
   });
@@ -187,6 +201,7 @@ export function ContractTemplatesAdminPanel({
       setEditMetaByName({});
       setEditFormDescription('');
       void qc.invalidateQueries({ queryKey: ['contract', 'templates'] });
+      void qc.invalidateQueries({ queryKey: ['contract', 'templates', 'active'] });
     },
     onError: (e: Error) => message.error(parseApiError(e).message),
   });
@@ -196,6 +211,7 @@ export function ContractTemplatesAdminPanel({
     onSuccess: () => {
       message.success('템플릿을 활성화했습니다.');
       void qc.invalidateQueries({ queryKey: ['contract', 'templates'] });
+      void qc.invalidateQueries({ queryKey: ['contract', 'templates', 'active'] });
     },
     onError: (e: Error) => message.error(parseApiError(e).message),
   });
@@ -205,6 +221,7 @@ export function ContractTemplatesAdminPanel({
     onSuccess: () => {
       message.success('템플릿을 비활성화했습니다.');
       void qc.invalidateQueries({ queryKey: ['contract', 'templates'] });
+      void qc.invalidateQueries({ queryKey: ['contract', 'templates', 'active'] });
     },
     onError: (e: Error) => message.error(parseApiError(e).message),
   });
@@ -212,7 +229,7 @@ export function ContractTemplatesAdminPanel({
     mutationFn: (payload: {
       templateId: string;
       employeeMemberId: string;
-      adminInputJson?: string;
+      adminInputJson: Record<string, unknown>;
     }) => contractTemplateApi.sendContract(payload),
     onSuccess: (res: ContractSendResult) => {
       message.success(`계약서를 발송했습니다. (계약 ID: ${res.contractId})`);
@@ -227,7 +244,7 @@ export function ContractTemplatesAdminPanel({
     mutationFn: (payload: {
       templateId: string;
       batchName: string;
-      items: Array<{ employeeMemberId: string; adminInputJson?: string }>;
+      items: Array<{ employeeMemberId: string; adminInputJson: Record<string, unknown> }>;
     }) => contractTemplateApi.sendContractBatch(payload),
     onSuccess: (res: ContractBatchSendResult) => {
       message.success(`일괄 발송 완료: ${res.totalCount}건 (배치: ${res.batchName || res.batchId})`);
@@ -275,7 +292,11 @@ export function ContractTemplatesAdminPanel({
       })),
     [members],
   );
-  const activeTemplates = useMemo(() => templates.filter((t) => t.isActiveYn === 'Y'), [templates]);
+  const activeTemplates = useMemo(() => {
+    if (showTemplateSection && canRead) return templates.filter((t) => t.isActiveYn === 'Y');
+    return activeTemplatesQ.data ?? [];
+  }, [showTemplateSection, canRead, templates, activeTemplatesQ.data]);
+  const templateSelectLoading = showTemplateSection && canRead ? isFetching : activeTemplatesLoading;
   const singleTemplateId = Form.useWatch('templateId', singleSendForm);
   const batchTemplateId = Form.useWatch('templateId', batchSendForm);
   const watchedBatchName = Form.useWatch('batchName', batchSendForm);
@@ -296,11 +317,17 @@ export function ContractTemplatesAdminPanel({
     [selectedBatchTemplate],
   );
   const singleAdminInputFields = useMemo(
-    () => singleTemplateParsed.fields.filter((f) => singleTemplateParsed.metaByName[f.name]?.source === 'ADMIN_INPUT'),
+    () =>
+      singleTemplateParsed.fields.filter((f) =>
+        isContractAdminInputSource(singleTemplateParsed.metaByName[f.name]?.source),
+      ),
     [singleTemplateParsed],
   );
   const batchAdminInputFields = useMemo(
-    () => batchTemplateParsed.fields.filter((f) => batchTemplateParsed.metaByName[f.name]?.source === 'ADMIN_INPUT'),
+    () =>
+      batchTemplateParsed.fields.filter((f) =>
+        isContractAdminInputSource(batchTemplateParsed.metaByName[f.name]?.source),
+      ),
     [batchTemplateParsed],
   );
   const autoBatchName = useMemo(() => {
@@ -327,6 +354,19 @@ export function ContractTemplatesAdminPanel({
     if (!autoBatchName) return;
     batchSendForm.setFieldValue('batchName', autoBatchName);
   }, [autoBatchName, batchSendForm, selectedBatchTemplate, watchedBatchName]);
+
+  useEffect(() => {
+    if (!singleTemplateId) return;
+    singleSendForm.setFieldsValue({ adminInput: {} });
+  }, [singleTemplateId, singleSendForm]);
+
+  useEffect(() => {
+    if (!batchTemplateId) return;
+    const items = batchSendForm.getFieldValue('items') as BatchSendForm['items'] | undefined;
+    if (!items?.length) return;
+    const cleared = items.map((row) => ({ ...row, adminInput: {} }));
+    batchSendForm.setFieldValue('items', cleared);
+  }, [batchTemplateId, batchSendForm]);
 
   const openCreate = () => {
     const initial = parseContractFormSchema(
@@ -392,42 +432,78 @@ export function ContractTemplatesAdminPanel({
       /* validation */
     }
   };
+  const formatContractSendCatchMessage = (err: unknown): string => {
+    if (err && typeof err === 'object' && 'errorFields' in err) {
+      const ef = (err as { errorFields?: Array<{ errors?: string[] }> }).errorFields;
+      const msg = ef?.find((f) => (f.errors?.length ?? 0) > 0)?.errors?.[0];
+      return msg?.trim() ? msg.trim() : '필수 입력을 확인해 주세요.';
+    }
+    return parseApiError(err as Error).message;
+  };
+
   const submitSingleSend = async () => {
+    console.log('★★★ submitSingleSend 호출됨');
+    console.info('[wf] submitSingleSend enter');
+    notifyContractSendDebug(message, '[DEBUG] submitSingleSend 진입 (try 전)');
     try {
-      const v = await singleSendForm.validateFields();
-      const adminJson = compactAdminInputJson(v.adminInput as Record<string, unknown> | undefined);
-      await sendSingleM.mutateAsync({
-        templateId: v.templateId,
-        employeeMemberId: v.employeeMemberId,
-        ...(adminJson ? { adminInputJson: adminJson } : {}),
+      await singleSendForm.validateFields();
+      const templateId = String(singleSendForm.getFieldValue('templateId') ?? '').trim();
+      const employeeMemberId = String(singleSendForm.getFieldValue('employeeMemberId') ?? '').trim();
+      const adminKeys = singleAdminInputFields.map((f) => f.name);
+
+      console.log('=== 계약 발송 디버그 ===');
+      console.log('1. adminKeys:', adminKeys);
+      console.log('2. 폼 전체 값:', singleSendForm.getFieldsValue(true));
+      adminKeys.forEach((key) => {
+        console.log(`3. getFieldValue(['adminInput', '${key}']):`, singleSendForm.getFieldValue(['adminInput', key]));
       });
-    } catch {
-      /* validation */
+
+      const adminObj = collectContractAdminInputFromForm(
+        (path) => singleSendForm.getFieldValue(path),
+        adminKeys,
+      );
+      console.log('4. 수집된 adminObj:', adminObj);
+
+      await sendSingleM.mutateAsync({
+        templateId,
+        employeeMemberId,
+        adminInputJson: adminObj,
+      });
+    } catch (err) {
+      console.error('★ submitSingleSend 에러:', err);
+      message.error(formatContractSendCatchMessage(err));
     }
   };
   const submitBatchSend = async () => {
     try {
-      const v = await batchSendForm.validateFields();
-      const items = (v.items ?? [])
-        .filter((item) => item.employeeMemberId?.trim())
-        .map((item) => {
-          const adminJson = compactAdminInputJson(item.adminInput as Record<string, unknown> | undefined);
-          return {
-            employeeMemberId: item.employeeMemberId,
-            ...(adminJson ? { adminInputJson: adminJson } : {}),
-          };
-        });
+      await batchSendForm.validateFields();
+      const templateId = String(batchSendForm.getFieldValue('templateId') ?? '').trim();
+      const batchName = String(batchSendForm.getFieldValue('batchName') ?? '').trim();
+      const rowCount = (batchSendForm.getFieldValue('items') as BatchSendForm['items'] | undefined)?.length ?? 0;
+      const adminKeys = batchAdminInputFields.map((f) => f.name);
+      const items: Array<{ employeeMemberId: string; adminInputJson: Record<string, unknown> }> = [];
+      for (let i = 0; i < rowCount; i += 1) {
+        const employeeMemberId = String(batchSendForm.getFieldValue(['items', i, 'employeeMemberId']) ?? '').trim();
+        if (!employeeMemberId) continue;
+        const adminObj = collectContractAdminInputFromForm(
+          (path) => batchSendForm.getFieldValue(path),
+          adminKeys,
+          ['items', i],
+        );
+        items.push({ employeeMemberId, adminInputJson: adminObj });
+      }
       if (items.length === 0) {
         message.warning('일괄 발송 대상 직원을 1명 이상 선택해 주세요.');
         return;
       }
       await sendBatchM.mutateAsync({
-        templateId: v.templateId,
-        batchName: v.batchName.trim(),
+        templateId,
+        batchName,
         items,
       });
-    } catch {
-      /* validation */
+    } catch (err) {
+      console.error('★ submitBatchSend 에러:', err);
+      message.error(formatContractSendCatchMessage(err));
     }
   };
   const handleAddSingleRecipientFromOrgChart = (memberIds: string[]) => {
@@ -439,15 +515,17 @@ export function ContractTemplatesAdminPanel({
     setSingleRecipientPickerOpen(false);
   };
   const handleAddBatchRecipientsFromOrgChart = (memberIds: string[]) => {
-    if (memberIds.length === 0) return;
+    const picked = memberIds.map((id) => String(id ?? '').trim()).filter(Boolean);
+    if (picked.length === 0) return;
     const current = batchSendForm.getFieldValue('items') as BatchSendForm['items'] | undefined;
     const existing = current ?? [];
-    const existingIds = new Set(existing.map((i) => String(i.employeeMemberId ?? '').trim()).filter(Boolean));
-    const appended = memberIds
+    // 직원이 선택되지 않은 빈 행(초기 placeholder 등)은 조직도로 추가할 때 합치지 않음 — 조직 노드만 대상처럼 남는 칸 방지
+    const existingFilled = existing.filter((i) => String(i.employeeMemberId ?? '').trim().length > 0);
+    const existingIds = new Set(existingFilled.map((i) => String(i.employeeMemberId ?? '').trim()));
+    const appended = picked
       .filter((id) => {
-        const normalized = id.trim();
-        if (!normalized || existingIds.has(normalized)) return false;
-        existingIds.add(normalized);
+        if (existingIds.has(id)) return false;
+        existingIds.add(id);
         return true;
       })
       .map((id) => ({ employeeMemberId: id, adminInput: {} as Record<string, unknown> }));
@@ -456,7 +534,7 @@ export function ContractTemplatesAdminPanel({
       setBatchRecipientPickerOpen(false);
       return;
     }
-    batchSendForm.setFieldValue('items', [...existing, ...appended]);
+    batchSendForm.setFieldValue('items', [...existingFilled, ...appended]);
     setBatchRecipientPickerOpen(false);
   };
 
@@ -488,7 +566,7 @@ export function ContractTemplatesAdminPanel({
             등록된 계약서 템플릿 {templates.length}개
           </Typography.Text>
           <Space wrap>
-            <Button icon={<ReloadOutlined />} onClick={() => void refetch()}>
+            <Button icon={<ReloadOutlined />} onClick={() => void fullTemplatesQ.refetch()}>
               새로고침
             </Button>
             {canCreate ? (
@@ -575,8 +653,18 @@ export function ContractTemplatesAdminPanel({
       </Card>
       ) : null}
       {showSendSection ? (
+        /* split: 개별·일괄 발송 제출 → AppDoubleActionModal onConfirm. stacked: 카드 안 primary Button onClick. (계약 발송 페이지는 ContractSendPage에서 sendLayout="split") */
         sendLayout === 'split' ? (
           <>
+            {showSendSection && !showTemplateSection && activeTemplatesFetchError ? (
+              <Alert
+                type="error"
+                showIcon
+                className="tw-mb-3"
+                message="활성 템플릿을 불러오지 못했습니다."
+                description={parseApiError(activeTemplatesFetchError).message}
+              />
+            ) : null}
             <div className="tw-grid tw-w-full tw-grid-cols-1 tw-gap-4 lg:tw-grid-cols-2">
               <Card className={`${CONTRACT_HUB_CARD_CLASS} tw-overflow-hidden`}>
                 <div className="tw-flex tw-gap-4">
@@ -616,11 +704,14 @@ export function ContractTemplatesAdminPanel({
               title="개별 발송"
               open={singleSendModalOpen}
               onClose={() => setSingleSendModalOpen(false)}
-              onConfirm={() => void submitSingleSend()}
+              onConfirm={() => {
+                notifyContractSendDebug(message, '[DEBUG] 모달 "계약서 발송" 클릭 → submitSingleSend 호출 직전');
+                void submitSingleSend();
+              }}
               confirmText="계약서 발송"
               cancelText="닫기"
               confirmLoading={sendSingleM.isPending}
-              destroyOnHidden
+              destroyOnHidden={false}
               width={700}
             >
               <div className="tw-px-5 tw-py-4">
@@ -629,6 +720,7 @@ export function ContractTemplatesAdminPanel({
                   <Select
                     showSearch
                     optionFilterProp="label"
+                    loading={templateSelectLoading}
                     placeholder="활성 템플릿 선택"
                     options={activeTemplates.map((t) => ({
                       value: t.templateId,
@@ -659,7 +751,7 @@ export function ContractTemplatesAdminPanel({
               confirmText="일괄 발송"
               cancelText="닫기"
               confirmLoading={sendBatchM.isPending}
-              destroyOnHidden
+              destroyOnHidden={false}
               width={820}
             >
               <div className="tw-px-5 tw-py-4">
@@ -673,6 +765,7 @@ export function ContractTemplatesAdminPanel({
                   <Select
                     showSearch
                     optionFilterProp="label"
+                    loading={templateSelectLoading}
                     placeholder="활성 템플릿 선택"
                     options={activeTemplates.map((t) => ({
                       value: t.templateId,
@@ -728,6 +821,15 @@ export function ContractTemplatesAdminPanel({
             <Typography.Paragraph type="secondary" className="!tw-mb-4 !tw-text-sm">
               활성 템플릿을 선택한 뒤 개별 또는 일괄 발송할 수 있습니다. AUTO 필드는 시스템이 채우고 ADMIN_INPUT만 입력해 발송합니다.
             </Typography.Paragraph>
+            {showSendSection && !showTemplateSection && activeTemplatesFetchError ? (
+              <Alert
+                type="error"
+                showIcon
+                className="tw-mb-4"
+                message="활성 템플릿을 불러오지 못했습니다."
+                description={parseApiError(activeTemplatesFetchError).message}
+              />
+            ) : null}
             <Space direction="vertical" className="tw-w-full" size={18}>
               <Card size="small" title="개별 발송" className="tw-border-slate-200/90">
                 <Form<SingleSendForm> form={singleSendForm} layout="vertical" className="tw-pt-1">
@@ -735,6 +837,7 @@ export function ContractTemplatesAdminPanel({
                     <Select
                       showSearch
                       optionFilterProp="label"
+                      loading={templateSelectLoading}
                       placeholder="활성 템플릿 선택"
                       options={activeTemplates.map((t) => ({
                         value: t.templateId,
@@ -772,6 +875,7 @@ export function ContractTemplatesAdminPanel({
                     <Select
                       showSearch
                       optionFilterProp="label"
+                      loading={templateSelectLoading}
                       placeholder="활성 템플릿 선택"
                       options={activeTemplates.map((t) => ({
                         value: t.templateId,
@@ -908,8 +1012,11 @@ export function ContractTemplatesAdminPanel({
       <ContractRecipientOrgChartModal
         open={singleRecipientPickerOpen}
         initialSelectedMemberIds={
-          singleSendForm.getFieldValue('employeeMemberId')
-            ? [String(singleSendForm.getFieldValue('employeeMemberId'))]
+          singleRecipientPickerOpen && (sendLayout !== 'split' || singleSendModalOpen)
+            ? (() => {
+                const id = singleSendForm.getFieldValue('employeeMemberId');
+                return id ? [String(id)] : [];
+              })()
             : []
         }
         onClose={() => setSingleRecipientPickerOpen(false)}
@@ -920,9 +1027,11 @@ export function ContractTemplatesAdminPanel({
       <ContractRecipientOrgChartModal
         open={batchRecipientPickerOpen}
         initialSelectedMemberIds={
-          (batchSendForm.getFieldValue('items') as Array<{ employeeMemberId?: string }> | undefined)?.map((item) =>
-            String(item.employeeMemberId ?? '').trim(),
-          ) ?? []
+          batchRecipientPickerOpen && (sendLayout !== 'split' || batchSendModalOpen)
+            ? (batchSendForm.getFieldValue('items') as Array<{ employeeMemberId?: string }> | undefined)
+                ?.map((item) => String(item.employeeMemberId ?? '').trim())
+                .filter(Boolean) ?? []
+            : []
         }
         onClose={() => setBatchRecipientPickerOpen(false)}
         onConfirm={handleAddBatchRecipientsFromOrgChart}

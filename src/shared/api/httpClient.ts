@@ -47,8 +47,9 @@ httpClient.interceptors.request.use((config) => {
     config.headers['X-User-CompanyId'] = cid;
   }
   const refreshIdentity = getRefreshIdentityHeaders();
-  if (refreshIdentity['X-User-UUID']) {
-    config.headers['X-User-UUID'] = refreshIdentity['X-User-UUID'];
+  const userUuid = refreshIdentity['X-User-UUID']?.trim() || tenant['X-Member-Id']?.trim();
+  if (userUuid) {
+    config.headers['X-User-UUID'] = userUuid;
   }
   if (refreshIdentity['X-User-MemberPositionId']) {
     config.headers['X-User-MemberPositionId'] = refreshIdentity['X-User-MemberPositionId'];

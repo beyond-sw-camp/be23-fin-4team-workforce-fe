@@ -33,7 +33,6 @@ import {
 } from '@/features/calendar/api/calendarApi';
 import type { OrganizationTreeNode } from '@/features/organization/api/organizationApi';
 import { organizationApi } from '@/features/organization/api/organizationApi';
-import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import { CALENDAR_PAGE_KO } from '@/app/locale/app-ko';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
@@ -523,40 +522,7 @@ export function CalendarPage() {
     queryFn: () => calendarApi.listMonth(weekHolidayMonthY, weekHolidayMonthM),
     enabled: viewMode === 'week',
   });
-  const weekLegalHolidays = weekMonthHolidaysQuery.data?.holidays ?? [];
-
-  /** 회사 공휴일 (임시 공휴일 포함) - 캘린더에 같이 표시 */
-  const companyHolidaysQuery = useQuery({
-    queryKey: ['attendance', 'company-holidays', 'all'],
-    queryFn: () => attendanceApi.companyHoliday.list(),
-    staleTime: 60_000,
-  });
-  const companyHolidaysAsCalendar: CalendarHoliday[] = useMemo(() => {
-    return (companyHolidaysQuery.data ?? [])
-      .filter((h) => h.holidayDate && h.holidayName)
-      .map((h) => ({
-        holidayDate: h.holidayDate!,
-        holidayName: h.holidayName!,
-      }));
-  }, [companyHolidaysQuery.data]);
-
-  /** 같은 날짜에 법정 + 회사 공휴일이 모두 있을 때 중복 제거 (이름 기준) */
-  function mergeHolidays(legal: CalendarHoliday[], company: CalendarHoliday[]) {
-    const seen = new Set<string>();
-    const result: CalendarHoliday[] = [];
-    for (const h of [...legal, ...company]) {
-      const key = `${h.holidayDate}|${h.holidayName}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      result.push(h);
-    }
-    return result;
-  }
-
-  const weekHolidays = useMemo(
-    () => mergeHolidays(weekLegalHolidays, companyHolidaysAsCalendar),
-    [weekLegalHolidays, companyHolidaysAsCalendar],
-  );
+  const weekHolidays = weekMonthHolidaysQuery.data?.holidays ?? [];
 
   const dayQuery = useQuery({
     queryKey: ['calendar', 'day', selectedDay.format('YYYY-MM-DD')],
@@ -571,11 +537,8 @@ export function CalendarPage() {
   }, [viewMode, monthQuery.data, weekQuery.data, dayQuery.data]);
 
   const monthHolidays = useMemo(
-    () => (viewMode === 'month'
-      ? mergeHolidays(monthQuery.data?.holidays ?? [], companyHolidaysAsCalendar)
-      : []),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [viewMode, monthQuery.data, companyHolidaysAsCalendar],
+    () => (viewMode === 'month' ? monthQuery.data?.holidays ?? [] : []),
+    [viewMode, monthQuery.data],
   );
 
   const filteredEvents = useMemo(

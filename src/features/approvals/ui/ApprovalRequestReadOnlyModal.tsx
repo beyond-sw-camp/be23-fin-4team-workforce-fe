@@ -369,7 +369,9 @@ export function ApprovalRequestReadOnlyModal({
 
   const myActionableApprovalLine = useMemo(() => {
     if (!selectedRequestDetail) return undefined;
-    if (String(selectedRequestDetail.requestStatus).toUpperCase() !== 'PENDING') return undefined;
+    const rs = String(selectedRequestDetail.requestStatus).toUpperCase();
+    /** 서버가 제출 직후·첫 결재 대기를 WAIT로 두는 경우가 있어 PENDING과 동일하게 처리 */
+    if (rs !== 'PENDING' && rs !== 'WAIT') return undefined;
     const line = findMyInboxApprovalLine(selectedRequestDetail, {
       myMemberId: authMemberId,
       myMemberPositionId,
@@ -880,44 +882,6 @@ export function ApprovalRequestReadOnlyModal({
               </>
             ) : null}
           </Descriptions>
-          {canActApproveReject ? (
-            <Alert
-              type="info"
-              showIcon
-              className="tw-border-blue-100 tw-bg-blue-50/60"
-              message={
-                <div className="tw-flex tw-min-h-0 tw-w-full tw-flex-wrap tw-items-center tw-justify-between tw-gap-3">
-                  <Typography.Text className="!tw-mb-0 tw-text-sm tw-text-slate-800">
-                    지금 회신 차례인 결재입니다. 승인 또는 반려를 선택하세요.
-                  </Typography.Text>
-                  <Space wrap>
-                    <Button
-                      type="primary"
-                      size="small"
-                      loading={approveM.isPending || rejectM.isPending}
-                      onClick={() =>
-                        myActionableApprovalLine &&
-                        setApprovalAction({ approvalId: myActionableApprovalLine.approvalId, mode: 'approve' })
-                      }
-                    >
-                      승인
-                    </Button>
-                    <Button
-                      danger
-                      size="small"
-                      loading={approveM.isPending || rejectM.isPending}
-                      onClick={() =>
-                        myActionableApprovalLine &&
-                        setApprovalAction({ approvalId: myActionableApprovalLine.approvalId, mode: 'reject' })
-                      }
-                    >
-                      반려
-                    </Button>
-                  </Space>
-                </div>
-              }
-            />
-          ) : null}
           {normalizeApprovalRequestType(selectedRequestDetail.requestType) === 'OFFICIAL' &&
           (selectedRequestDetail.recipients?.length ?? 0) > 0 ? (
             <Card size="small" title="수신 부서">

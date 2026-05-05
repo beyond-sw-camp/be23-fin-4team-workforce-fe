@@ -433,7 +433,7 @@ export function AdminOrgRestructurePage() {
         onOk={() => submitForm.submit()}
         okText="결재 작성으로 이동"
         cancelText="취소"
-        destroyOnClose
+        destroyOnHidden
         width={560}
       >
         <Form<{ effectiveDate: Dayjs; reason?: string }>
@@ -553,7 +553,7 @@ export function AdminOrgRestructurePage() {
         }}
         okText="적용"
         cancelText="취소"
-        destroyOnClose
+        destroyOnHidden
       >
         {editTarget && (
           <Form

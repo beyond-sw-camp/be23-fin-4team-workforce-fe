@@ -12,6 +12,7 @@ import {
 import {
   buildContractNotificationNavigate,
   isContractNotificationRoutable,
+  resolveContractNotificationTargetId,
 } from '@/features/notification/lib/contractNotificationRoute';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
@@ -214,7 +215,7 @@ export function NotificationsPage() {
     }
 
     if (isContractNotificationRoutable(item)) {
-      await navigate(buildContractNotificationNavigate(item.targetId));
+      await navigate(buildContractNotificationNavigate(resolveContractNotificationTargetId(item)));
       return;
     }
 
