@@ -3,8 +3,9 @@
  *  연도 선택 + KPI 4장 (총지급 / 총공제 / 실수령 / 정산 건수)
  *  + 월별 표 (1 ~ 12월 고정 12행)
  *  + 항목별 누적 표 (지급 / 공제 분리)
+ *  + 월별 실수령 차트 / 세전·세후 도넛 / PayrollType별 누적 (시각화 3종)
  */
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Alert,
@@ -19,11 +20,53 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs, { type Dayjs } from 'dayjs';
+import {
+  ArcElement,
+  BarElement,
+  CategoryScale,
+  Chart as ChartJS,
+  Legend,
+  LinearScale,
+  LineElement,
+  PointElement,
+  Tooltip as ChartTooltip,
+} from 'chart.js';
+import { Bar, Doughnut } from 'react-chartjs-2';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import type {
   AnnualSalaryItemBreakdown,
   AnnualSalaryMonthlyRow,
+  PayrollTypeCode,
 } from '@/features/salary-service/types';
+
+// chart.js 모듈 등록 (한 번만 호출)
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  LineElement,
+  PointElement,
+  ArcElement,
+  ChartTooltip,
+  Legend,
+);
+
+// 급여 종류 한글 라벨
+const PAYROLL_TYPE_KO: Record<string, string> = {
+  REGULAR_MONTHLY: '정기급여',
+  PERFORMANCE_BONUS: '성과급',
+  SPECIAL_BONUS: '특별상여',
+  RETROACTIVE: '소급분',
+  RETIREMENT_SETTLEMENT: '퇴직정산',
+};
+
+const PAYROLL_TYPE_COLOR: Record<string, string> = {
+  REGULAR_MONTHLY: '#2563EB',
+  PERFORMANCE_BONUS: '#16a34a',
+  SPECIAL_BONUS: '#d97706',
+  RETROACTIVE: '#7c3aed',
+  RETIREMENT_SETTLEMENT: '#dc2626',
+};
 
 const STATUS_KO: Record<string, string> = {
   DRAFT: '작성 중',
@@ -53,6 +96,57 @@ export function MyAnnualSalaryPage() {
   });
 
   const data = summaryQ.data;
+
+  // 월별 실수령 차트 데이터 - 0원인 달도 포함 (1~12월 트렌드 시각화)
+  const monthlyChartData = useMemo(() => {
+    const rows = data?.monthly ?? [];
+    return {
+      labels: rows.map((r) => `${r.month}월`),
+      datasets: [
+        {
+          label: '실수령',
+          data: rows.map((r) => r.netPay ?? 0),
+          backgroundColor: '#2563EB',
+          borderRadius: 4,
+        },
+      ],
+    };
+  }, [data?.monthly]);
+
+  // 세전(총지급) vs 세후(실수령) 도넛 - 본인 부담률 체감
+  const taxRatioData = useMemo(() => {
+    const total = data?.totalPayment ?? 0;
+    const net = data?.netPay ?? 0;
+    const deduction = Math.max(0, total - net);
+    return {
+      labels: ['실수령', '공제 (세금 + 4대보험)'],
+      datasets: [
+        {
+          data: [net, deduction],
+          backgroundColor: ['#2563EB', '#dc2626'],
+          borderWidth: 0,
+        },
+      ],
+    };
+  }, [data?.totalPayment, data?.netPay]);
+
+  // PayrollType별 누적 - 정기/성과/특별/소급/퇴직정산 분리
+  const payrollTypeBreakdown = useMemo(() => {
+    const map = new Map<PayrollTypeCode, number>();
+    (data?.monthly ?? []).forEach((r) => {
+      if (!r.payrollType || !r.totalPayment) return;
+      map.set(r.payrollType as PayrollTypeCode,
+              (map.get(r.payrollType as PayrollTypeCode) ?? 0) + r.totalPayment);
+    });
+    const entries = Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
+    return entries;
+  }, [data?.monthly]);
+
+  const totalPayment = data?.totalPayment ?? 0;
+  const netPay = data?.netPay ?? 0;
+  const deductionRate = totalPayment > 0
+    ? Math.round((1 - netPay / totalPayment) * 1000) / 10
+    : 0;
 
   const monthlyColumns: ColumnsType<AnnualSalaryMonthlyRow> = [
     {
@@ -186,6 +280,126 @@ export function MyAnnualSalaryPage() {
           </Typography.Text>
         </Card>
       </div>
+
+      {/* 시각화 3종 - 월별 실수령 차트 (좌, 2/3) + 세전/세후 도넛 (우, 1/3) */}
+      <div className="tw-grid tw-grid-cols-1 lg:tw-grid-cols-3 tw-gap-3">
+        <Card
+          size="small"
+          title={`${year}년 월별 실수령 추이`}
+          className="tw-border-slate-200/80 tw-shadow-sm lg:tw-col-span-2"
+          loading={summaryQ.isLoading}
+        >
+          <div style={{ height: 260 }}>
+            <Bar
+              data={monthlyChartData}
+              options={{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: { display: false },
+                  tooltip: {
+                    callbacks: {
+                      label: (ctx) => `${formatWon(Number(ctx.parsed.y))} 원`,
+                    },
+                  },
+                },
+                scales: {
+                  y: {
+                    beginAtZero: true,
+                    ticks: {
+                      callback: (v) => `${(Number(v) / 10000).toLocaleString()}만`,
+                    },
+                  },
+                },
+              }}
+            />
+          </div>
+        </Card>
+
+        <Card
+          size="small"
+          title="세전 / 세후 비율"
+          className="tw-border-slate-200/80 tw-shadow-sm"
+          loading={summaryQ.isLoading}
+        >
+          {totalPayment > 0 ? (
+            <>
+              <div style={{ height: 200, position: 'relative' }}>
+                <Doughnut
+                  data={taxRatioData}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '65%',
+                    plugins: {
+                      legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 11 } } },
+                      tooltip: {
+                        callbacks: {
+                          label: (ctx) => `${ctx.label}: ${formatWon(Number(ctx.parsed))} 원`,
+                        },
+                      },
+                    },
+                  }}
+                />
+              </div>
+              <div className="tw-text-center tw-mt-2">
+                <Typography.Text type="secondary" className="!tw-text-xs">
+                  공제율
+                </Typography.Text>
+                <Typography.Title level={4} className="!tw-m-0 !tw-text-rose-600">
+                  {deductionRate}%
+                </Typography.Title>
+              </div>
+            </>
+          ) : (
+            <Empty description="지급 내역이 없습니다" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          )}
+        </Card>
+      </div>
+
+      {/* PayrollType 별 누적 - 정기/성과/특별/소급/퇴직정산 */}
+      <Card
+        size="small"
+        title="급여 종류별 누적"
+        className="tw-border-slate-200/80 tw-shadow-sm"
+        loading={summaryQ.isLoading}
+      >
+        {payrollTypeBreakdown.length > 0 ? (
+          <div className="tw-grid tw-grid-cols-2 md:tw-grid-cols-5 tw-gap-3">
+            {payrollTypeBreakdown.map(([type, amount]) => {
+              const ratio = totalPayment > 0
+                ? Math.round((amount / totalPayment) * 1000) / 10
+                : 0;
+              const color = PAYROLL_TYPE_COLOR[type] ?? '#64748b';
+              return (
+                <div
+                  key={type}
+                  className="tw-rounded-lg tw-border tw-px-3 tw-py-2.5"
+                  style={{ borderColor: `${color}40`, backgroundColor: `${color}10` }}
+                >
+                  <div className="tw-flex tw-items-center tw-gap-1.5">
+                    <span
+                      className="tw-inline-block tw-w-2 tw-h-2 tw-rounded-full"
+                      style={{ backgroundColor: color }}
+                    />
+                    <Typography.Text type="secondary" className="!tw-text-xs">
+                      {PAYROLL_TYPE_KO[type] ?? type}
+                    </Typography.Text>
+                  </div>
+                  <div className="tw-mt-1 tw-text-base tw-font-bold" style={{ color }}>
+                    {formatWon(amount)} 원
+                  </div>
+                  <Typography.Text type="secondary" className="!tw-text-[11px]">
+                    전체의 {ratio}%
+                  </Typography.Text>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <Empty description="급여 종류 정보가 없습니다" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        )}
+      </Card>
 
       <Card
         title={`${year}년 월별 정산 내역`}
