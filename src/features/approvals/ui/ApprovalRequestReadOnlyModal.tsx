@@ -667,10 +667,21 @@ export function ApprovalRequestReadOnlyModal({
     [activeDocuments, selectedRequestDetail],
   );
 
-  const requestDetailSchema = useMemo(
-    () => (requestDetailDocument ? parseFormSchema(requestDetailDocument.formSchema) : { fields: [] }),
-    [requestDetailDocument],
-  );
+  // 양식 스키마 우선순위:
+  // 1. 활성 양식 list 매칭 (관리자 / 양식 활성 상태)
+  // 2. 결재 요청 자체에 들어있는 formSchemaSnapshot (상신 시점 스냅샷)
+  //    - 권한 필터로 list 에서 빠지거나 양식이 비활성화된 경우 (예: 인사발령품의서, 일반 사용자 결재자)
+  const requestDetailSchema = useMemo(() => {
+    if (requestDetailDocument) {
+      const fromActive = parseFormSchema(requestDetailDocument.formSchema);
+      if (fromActive.fields.length > 0) return fromActive;
+    }
+    const snapshot = selectedRequestDetail?.formSchemaSnapshot;
+    if (snapshot && snapshot.trim()) {
+      return parseFormSchema(snapshot);
+    }
+    return { fields: [] };
+  }, [requestDetailDocument, selectedRequestDetail]);
   const companyLeaveTypeNameById = useMemo(
     () => new Map(companyLeaveTypes.map((row) => [row.companyLeaveTypeId ?? '', row.name ?? ''])),
     [companyLeaveTypes],
@@ -904,11 +915,12 @@ export function ApprovalRequestReadOnlyModal({
             </Card>
           ) : null}
           <Card size="small" title="내용">
-            {requestDetailDocument && requestDetailSchema.fields.length > 0 ? (
+            {requestDetailSchema.fields.length > 0 ? (
               <div className="tw-max-h-[min(70vh,720px)] tw-overflow-auto">
                 {(() => {
                   const detail = selectedRequestDetail;
-                  const doc = requestDetailDocument;
+                  const docName = requestDetailDocument?.documentName ?? detail.documentName ?? '';
+                  const docRequestType = requestDetailDocument?.requestType ?? detail.requestType ?? '';
                   const content = parseDetailContentJson(detail);
                   const dName =
                     requestDetailDrafter?.name?.trim() || detail.requesterName?.trim() || '—';
@@ -936,9 +948,9 @@ export function ApprovalRequestReadOnlyModal({
                   });
                   return (
                     <ApprovalFormPaperLayout
-                      documentName={doc.documentName}
-                      categoryLabel={approvalRequestTypeLabelKo(doc.requestType)}
-                      requestTypeCode={normalizeApprovalRequestType(doc.requestType)}
+                      documentName={docName}
+                      categoryLabel={approvalRequestTypeLabelKo(docRequestType)}
+                      requestTypeCode={normalizeApprovalRequestType(docRequestType)}
                       drafterName={dName}
                       drafterOrg={dOrg}
                       drafterJobTitle={dTitle}

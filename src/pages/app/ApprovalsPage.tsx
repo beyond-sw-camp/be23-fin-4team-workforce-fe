@@ -2847,6 +2847,7 @@ export function ApprovalsPage() {
       const parsed = JSON.parse(raw) as {
         documentName?: string;
         contentJson?: Record<string, unknown>;
+        recipients?: { recipientOrganizationId: string; recipientOrganizationName: string }[];
       };
       const cj = parsed.contentJson ?? {};
       const current = (form.getFieldValue('content') ?? {}) as Record<string, unknown>;
@@ -2859,6 +2860,16 @@ export function ApprovalsPage() {
           contentJsonText: summaryText,
         },
       });
+      // 인사발령품의서 = OFFICIAL 양식. recipients (수신 부서) 자동 설정
+      // 결재 승인 후 기안자가 [발송] 누르면 회사 모든 부서 부서문서함에 노출
+      if (Array.isArray(parsed.recipients) && parsed.recipients.length > 0) {
+        setOfficialRecipients(
+          parsed.recipients.map((r) => ({
+            recipientOrganizationId: String(r.recipientOrganizationId ?? '').trim(),
+            recipientOrganizationName: String(r.recipientOrganizationName ?? '').trim(),
+          })).filter((r) => r.recipientOrganizationId),
+        );
+      }
       personnelOrderPrefillAppliedRef.current = true;
       message.success('조직 개편 시뮬 변경 사항을 결재 양식에 채웠습니다. 결재선만 지정해 신청하세요.');
     } catch {
