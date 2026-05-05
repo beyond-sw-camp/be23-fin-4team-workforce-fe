@@ -1,4 +1,4 @@
-import { Input, InputNumber } from 'antd';
+import { DatePicker, Input, InputNumber } from 'antd';
 import type { FormFieldSchema } from '@/features/approvals/lib/approvalFormSchema';
 import { isContractMoneyLikeNumberField } from '@/features/contracts/lib/contractMoneyLikeField';
 
@@ -6,11 +6,11 @@ export type ContractAdminFormFieldInputProps = {
   field: FormFieldSchema;
   /** Input.TextArea rows */
   textAreaRows?: number;
-};
+} & Record<string, unknown>;
 
-export function ContractAdminFormFieldInput({ field, textAreaRows = 3 }: ContractAdminFormFieldInputProps) {
+export function ContractAdminFormFieldInput({ field, textAreaRows = 3, ...rest }: ContractAdminFormFieldInputProps) {
   if (field.type === 'textarea') {
-    return <Input.TextArea rows={textAreaRows} />;
+    return <Input.TextArea rows={textAreaRows} {...rest} />;
   }
   if (field.type === 'number' && isContractMoneyLikeNumberField(field)) {
     return (
@@ -31,11 +31,18 @@ export function ContractAdminFormFieldInput({ field, textAreaRows = 3 }: Contrac
           const n = Number(cleaned);
           return Number.isFinite(n) ? n : (null as unknown as number);
         }}
+        {...rest}
       />
     );
   }
   if (field.type === 'number') {
-    return <Input type="number" />;
+    return <Input type="number" {...rest} />;
   }
-  return <Input />;
+  if (field.type === 'date') {
+    return <DatePicker className="tw-w-full" format="YYYY-MM-DD" allowClear {...rest} />;
+  }
+  if (field.type === 'datetime-local') {
+    return <DatePicker showTime className="tw-w-full" format="YYYY-MM-DD HH:mm" allowClear {...rest} />;
+  }
+  return <Input {...rest} />;
 }

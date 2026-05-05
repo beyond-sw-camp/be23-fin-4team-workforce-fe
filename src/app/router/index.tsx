@@ -42,6 +42,7 @@ import { ContractSendPage } from '@/pages/app/ContractSendPage';
 import { ContractsPage } from '@/pages/app/ContractsPage';
 import { AbsenceProxyPage } from '@/pages/app/AbsenceProxyPage';
 import { DepartmentApprovalSearchPage } from '@/pages/app/DepartmentApprovalSearchPage';
+import { DepartmentApprovalsInboxPage } from '@/pages/app/DepartmentApprovalsInboxPage';
 import { MyApprovalRequestsPage } from '@/pages/app/MyApprovalRequestsPage';
 import { GenericPage } from '@/pages/app/GenericPage';
 import { AiDocumentsAdminPage } from '@/pages/app/AiDocumentsAdminPage';
@@ -70,7 +71,6 @@ const AdminPayrollPageLazy = lazy(() =>
 );
 import { AdminPayrollTaxSummaryPage } from '@/pages/app/salary-service/admin/AdminPayrollTaxSummaryPage';
 import { AdminRetirementPolicyPage } from '@/pages/app/salary-service/admin/AdminRetirementPolicyPage';
-import { AdminRetirementSettlementPage } from '@/pages/app/salary-service/admin/AdminRetirementSettlementPage';
 import { AdminMemberAllowancePage } from '@/pages/app/salary-service/admin/AdminMemberAllowancePage';
 import { AdminSalaryNegotiationsPage } from '@/pages/app/salary-service/admin/AdminSalaryNegotiationsPage';
 // 큰 페이지(2000줄+) - 코드 스플릿
@@ -114,9 +114,6 @@ import { MyWorkTripsPage } from '@/pages/app/salary-service/my/MyWorkTripsPage';
 import { MyAllowancesPage } from '@/pages/app/salary-service/my/MyAllowancesPage';
 import { PayrollDetailPage } from '@/pages/app/salary-service/my/PayrollDetailPage';
 import { OrganizationPage } from '@/pages/app/OrganizationPage';
-import { AdminOrgRestructurePage } from '@/pages/app/organization/AdminOrgRestructurePage';
-import { MyPersonnelOrderHistoryPage } from '@/pages/app/personnel/MyPersonnelOrderHistoryPage';
-import { AdminPersonnelOrderHistoryPage } from '@/pages/app/personnel/AdminPersonnelOrderHistoryPage';
 import { MyProfilePage } from '@/pages/app/MyProfilePage';
 import { MyProfileEditPage } from '@/pages/app/MyProfileEditPage';
 import OnboardingStepperPage from '@/pages/app/OnboardingStepperPage';
@@ -357,10 +354,6 @@ const approvalsSearchSchema = z.object({
   compose: z.string().optional(),
   sideNav: z.string().optional(),
   docId: z.string().optional(),
-  /** 챗봇 액션 리다이렉트 호환 파라미터 (`docId`와 동일 의미) */
-  documentId: z.string().optional(),
-  /** 챗봇 prefill 자동 시작 플래그 */
-  prefill: z.union([z.string(), z.boolean()]).optional(),
   box: z.string().optional(),
   /** 전자결재 알림 라우팅: 작성 허브에서 전체보기 모달 자동 오픈 키 */
   approvalModal: z.string().optional(),
@@ -435,6 +428,23 @@ const departmentApprovalsInboxRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/approvals/department',
   validateSearch: departmentApprovalsSearchSchema,
+  component: DepartmentApprovalsInboxPage,
+});
+
+/** 부서 결재 문서 고급 검색(기존 `/approvals/department` 화면) */
+const departmentApprovalSearchRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/approvals/department-search',
+  validateSearch: z.object({
+    organizationId: z.string().optional(),
+    query: z.string().optional(),
+    status: z.string().optional(),
+    requestType: z.string().optional(),
+    page: z.number().optional(),
+    size: z.number().optional(),
+    fromHome: z.string().optional(),
+    embed: z.string().optional(),
+  }),
   component: DepartmentApprovalSearchPage,
 });
 
@@ -521,7 +531,7 @@ const myEvaluationResultsRoute = createRoute({
 });
 
 const organizationSearchSchema = z.object({
-  tab: z.enum(['structure', 'grades', 'titles', 'roles', 'restructure']).optional(),
+  tab: z.enum(['structure', 'grades', 'titles', 'roles']).optional(),
 });
 
 const organizationRoute = createRoute({
@@ -529,34 +539,6 @@ const organizationRoute = createRoute({
   path: '/organization',
   validateSearch: organizationSearchSchema,
   component: OrganizationPage,
-  beforeLoad: ({ context }) => {
-    if (!context.auth.user?.isSystemAdmin) {
-      throw redirect({ to: '/403' });
-    }
-  },
-});
-
-const orgRestructureRoute = createRoute({
-  getParentRoute: () => appBaseRoute,
-  path: '/organization/restructure',
-  component: AdminOrgRestructurePage,
-  beforeLoad: ({ context }) => {
-    if (!context.auth.user?.isSystemAdmin) {
-      throw redirect({ to: '/403' });
-    }
-  },
-});
-
-const myPersonnelOrderRoute = createRoute({
-  getParentRoute: () => appBaseRoute,
-  path: '/personnel-order/my',
-  component: MyPersonnelOrderHistoryPage,
-});
-
-const adminPersonnelOrderRoute = createRoute({
-  getParentRoute: () => appBaseRoute,
-  path: '/personnel-order/admin',
-  component: AdminPersonnelOrderHistoryPage,
   beforeLoad: ({ context }) => {
     if (!context.auth.user?.isSystemAdmin) {
       throw redirect({ to: '/403' });
@@ -813,11 +795,7 @@ const payrollAdminManageRoute = createRoute({
   component: withSuspense(AdminPayrollManagePageLazy),
   validateSearch: z.object({
     // 어느 탭에서 진입했는지 — 뒤로가기 시 동일 탭으로 복귀
-    tab: z.enum(['company', 'member', 'retirement', 'salary', 'allowances']).optional(),
-    // 월별 정산 결과 탭에서 진입한 경우 그 월 — 뒤로가기 시 동일 월로 복귀
-    ym: z.string().optional(),
-    // 퇴직 정산 메뉴에서 진입한 경우 - 뒤로가기 시 그 메뉴로 복귀 (현재는 탭으로 통합되어 from 사용 불필요)
-    from: z.enum(['retirement']).optional(),
+    tab: z.enum(['company', 'member', 'salary', 'allowances']).optional(),
   }),
   beforeLoad: ({ context }) => {
     if (!context.auth.user?.isSystemAdmin) {
@@ -831,14 +809,10 @@ const payrollAdminRoute = createRoute({
   path: '/payroll/admin',
   component: withSuspense(AdminPayrollPageLazy),
   validateSearch: z.object({
-    // 정산 화면 활성 탭: company(이번달) | member(월별 결과) | register(급여 등록) | bonus(상여 발행) | retirement(퇴직 정산) | salary(급여 변동 이력) | allowances(수당 관리)
-    tab: z.enum(['company', 'member', 'register', 'bonus', 'retirement', 'salary', 'allowances']).optional(),
+    // 정산 화면 활성 탭: company(이번달 정산) | member(월별 정산 결과) | register(급여 등록) | salary(급여 변동 이력) | allowances(수당 관리)
+    tab: z.enum(['company', 'member', 'register', 'salary', 'allowances']).optional(),
     // [salary 탭 전용] 직원 상세/직원 생성 직후 deep-link -> 해당 직원으로 prefill 한 [급여 등록] 모달 자동 오픈
     createForMemberId: z.string().optional(),
-    // [member 탭 전용] 월별 정산 결과 조회 월 — 상세 -> 목록 복귀 시 그 월로 복원
-    ym: z.string().optional(),
-    // [company 탭 전용] 이번달 정산 조회 월 - 상여 발행 후 해당 월로 이동 시 사용
-    month: z.string().optional(),
   }),
   beforeLoad: ({ context }) => {
     if (!context.auth.user?.isSystemAdmin) {
@@ -965,17 +939,6 @@ const adminRetirementPolicyRoute = createRoute({
   },
 });
 
-const adminRetirementSettlementRoute = createRoute({
-  getParentRoute: () => appBaseRoute,
-  path: '/salary/retirement-settlement',
-  component: AdminRetirementSettlementPage,
-  beforeLoad: ({ context }) => {
-    if (!context.auth.user?.isSystemAdmin) {
-      throw redirect({ to: '/app/payroll' });
-    }
-  },
-});
-
 const adminSalaryNegotiationsRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/salary/negotiations',
@@ -1048,15 +1011,13 @@ const routeTree = rootRoute.addChildren([
       myApprovalRequestsRoute,
       absenceProxyRoute,
       departmentApprovalsInboxRoute,
+      departmentApprovalSearchRoute,
       electronicContractsRoute,
       contractSendRoute,
       evaluationsRoute,
       evaluationSeasonDetailRoute,
       myEvaluationResultsRoute,
       organizationRoute,
-      orgRestructureRoute,
-      myPersonnelOrderRoute,
-      adminPersonnelOrderRoute,
       rolesRoute,
       meetingsRoute,
       meetingDetailRoute,
@@ -1097,7 +1058,6 @@ const routeTree = rootRoute.addChildren([
       adminPayGradeTableRoute,
       adminUnusedLeavePayoutRoute,
       adminRetirementPolicyRoute,
-      adminRetirementSettlementRoute,
       adminSalaryNegotiationsRoute,
       adminBonusPolicyRoute,
       ...genericRoutes,

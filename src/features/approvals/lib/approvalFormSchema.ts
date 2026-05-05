@@ -9,6 +9,8 @@ export const FORM_SCHEMA_FIELD_TYPES = [
   'datetime-local',
   'time',
   'hidden',
+  /** 인사팀 안내 — 항목 사이에 표시만, contentJson 에 저장하지 않음 */
+  'static_note',
   /** 회의록 등: 녹음 후 STT·요약, contentJson에는 포함하지 않음 */
   'ai_transcribe',
 ] as const;
@@ -34,6 +36,8 @@ export type FormFieldSchema = {
   /** source 가 지정되면 options 대신 런타임에 API 로 옵션 로드. 예: "companyLeaveType" */
   source?: FormFieldSource;
   placeholder?: string;
+  /** `static_note` 본문(줄바꿈 유지) */
+  staticText?: string;
   /** true면 양식 수정 API에서 삭제·라벨·타입·순서·잠금 해제 불가 */
   locked?: boolean;
   /** `ai_transcribe` 전용 */
@@ -42,6 +46,8 @@ export type FormFieldSchema = {
 
 export type FormSchema = {
   fields: FormFieldSchema[];
+  /** 인사팀이 기안자·서명자에게 보여 줄 안내(plain text) */
+  formDescription?: string;
 };
 
 /**
@@ -81,7 +87,7 @@ export function findApprovalFormFieldByLabel(
 
 export function parseFormSchema(raw: string): FormSchema {
   try {
-    const parsed = JSON.parse(raw) as { fields?: unknown };
+    const parsed = JSON.parse(raw) as { fields?: unknown; formDescription?: unknown };
     const fields = Array.isArray(parsed.fields)
       ? parsed.fields
           .map((item): FormFieldSchema | null => {
@@ -98,7 +104,19 @@ export function parseFormSchema(raw: string): FormSchema {
               : undefined;
             const source = typeof o.source === 'string' && o.source.trim() ? o.source.trim() : undefined;
             const placeholder = typeof o.placeholder === 'string' ? o.placeholder.trim() : undefined;
+            const staticTextRaw = typeof o.staticText === 'string' ? o.staticText.trim() : '';
             const locked = o.locked === true;
+            if (type === 'static_note') {
+              if (!name) return null;
+              if (!label && !staticTextRaw) return null;
+              return {
+                name,
+                label: label || '안내',
+                type: 'static_note',
+                ...(staticTextRaw ? { staticText: staticTextRaw } : {}),
+                ...(locked ? { locked: true } : {}),
+              };
+            }
             if (!name || !label) return null;
             let config: AiTranscribeFieldConfig | undefined;
             if (type === 'ai_transcribe' && o.config && typeof o.config === 'object') {
@@ -129,7 +147,9 @@ export function parseFormSchema(raw: string): FormSchema {
           })
           .filter((f): f is FormFieldSchema => f != null)
       : [];
-    return { fields };
+    const fd = parsed.formDescription;
+    const formDescription = typeof fd === 'string' && fd.trim() ? fd.trim() : undefined;
+    return { fields, ...(formDescription ? { formDescription } : {}) };
   } catch {
     return { fields: [] };
   }
@@ -167,12 +187,23 @@ export function omitOrganizationRecipientsFromContent(content: Record<string, un
   delete content[APPROVAL_CONTENT_ORG_RECIPIENTS_KEY];
 }
 
+/** `contentJson` 문자열만으로 기안 제목(`title`) 추출 — 검색 목록 등에서 사용 */
+export function getApprovalSubjectFromContentJson(contentJson: string | undefined | null): string {
+  const raw = contentJson?.trim();
+  if (!raw) return '';
+  try {
+    const v = JSON.parse(raw) as unknown;
+    const o = v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+    const t = o.title;
+    return typeof t === 'string' ? t.trim() : '';
+  } catch {
+    return '';
+  }
+}
+
 /** 기안 본문의 `title` 필드(양식 기본 '제목') — 없으면 빈 문자열 */
 export function getApprovalRequestSubjectLine(detail: ApprovalRequestDetail): string {
-  const c = parseDetailContentJson(detail);
-  const t = c.title;
-  if (typeof t === 'string' && t.trim()) return t.trim();
-  return '';
+  return getApprovalSubjectFromContentJson(detail.contentJson);
 }
 
 /** 제출용 contentJson에서 위젯 전용 필드 제거 (서버는 audio 등을 기대하지 않음) */
@@ -181,7 +212,7 @@ export function stripNonPersistedApprovalContentFields(
   fields: FormFieldSchema[],
 ): void {
   for (const f of fields) {
-    if (f.type === 'ai_transcribe') {
+    if (f.type === 'ai_transcribe' || f.type === 'static_note') {
       delete content[f.name];
     }
   }

@@ -8,9 +8,6 @@ export const APP_MENU_LABEL: Record<string, string> = {
   '/app/calendar': '일정',
   '/app/members': '구성원',
   '/app/organization': '조직',
-  '/app/organization/restructure': '조직 개편 시뮬',
-  '/app/personnel-order/my': '내 인사발령 이력',
-  '/app/personnel-order/admin': '회사 인사발령 이력',
   '/app/roles': '역할·권한',
   '/app/attendance': '내 근태',
   '/app/leave': '휴가 계획 관리',
@@ -18,6 +15,7 @@ export const APP_MENU_LABEL: Record<string, string> = {
   '/app/contracts/send': '계약 발송',
   '/app/contracts': '전자계약',
   '/app/approvals/department': '부서 문서함',
+  '/app/approvals/department-search': '부서 문서 검색',
   '/app/payroll': '급여 조회',
   '/app/payroll/annual': '연봉 조회',
   '/app/income': '소득관리',
@@ -54,7 +52,6 @@ export const APP_MENU_LABEL: Record<string, string> = {
   '/app/salary/settings': '급여 정책',
   '/app/salary/pay-grade-table': '호봉표 관리',
   '/app/salary/retirement-policy': '퇴직급여 정책',
-  '/app/salary/retirement-settlement': '퇴직 정산',
   '/app/salary/bonus-policy': '상여/성과금 정책',
 };
 
@@ -149,6 +146,7 @@ export function appHeaderTitleFromPath(
   if (/^\/app\/payroll\/[^/]+$/.test(pathname)) return '급여 명세';
   if (/^\/app\/members\/[^/]+$/.test(pathname)) return '구성원 상세';
   if (pathname === '/app/approvals/department') return '부서 문서함';
+  if (pathname === '/app/approvals/department-search') return '부서 문서 검색';
   if (pathname === '/app/contracts/send') return '계약 발송';
   if (pathname === '/app/contracts') return '전자계약';
   if (/^\/app\/meetings\/[^/]+$/.test(pathname)) return '면담 상세';

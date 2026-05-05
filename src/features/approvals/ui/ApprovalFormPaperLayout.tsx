@@ -16,7 +16,7 @@ export type ApprovalFormPaperLayoutProps = PropsWithChildren<{
   drafterName?: string;
   drafterOrg?: string;
   drafterJobTitle?: string;
-  /** 표시용 작성일 — 없으면 오늘 */
+  /** 표시용 기안일 — 없으면 오늘 */
   writtenDate?: string;
   /** 문서번호 — 없으면 안내 문구 표시 */
   documentNumber?: string;
@@ -25,7 +25,10 @@ export type ApprovalFormPaperLayoutProps = PropsWithChildren<{
 }>;
 
 const cellBorder = 'tw-border tw-border-solid tw-border-black';
-const labelBg = 'tw-bg-[#f2f2f2]';
+const labelBg = 'tw-bg-[#efefef]';
+/** 본문 칸 안 Ant 입력·선택 — 연한 실선 테두리, 각진 그룹웨어 입력란 */
+const paperFieldValueCellControls =
+  '[&_textarea.ant-input]:tw-rounded-none [&_textarea.ant-input]:tw-border-[#bfbfbf] [&_input.ant-input]:tw-rounded-none [&_input.ant-input]:tw-border-[#bfbfbf] [&_.ant-input-affix-wrapper]:tw-rounded-none [&_.ant-input-affix-wrapper]:tw-border-[#bfbfbf] [&_.ant-select_.ant-select-selector]:tw-rounded-none [&_.ant-select_.ant-select-selector]:tw-border-[#bfbfbf] [&_.ant-select_.ant-select-selector]:tw-shadow-none [&_.ant-picker]:tw-rounded-none [&_.ant-picker]:tw-border-[#bfbfbf] [&_.ant-picker]:tw-shadow-none';
 
 /**
  * 전자결재 기안서 본문 (그룹웨어 스타일: 좌측 문서표 + 우측 결재란).
@@ -34,7 +37,6 @@ export function ApprovalFormPaperLayout({
   documentName,
   drafterName = '—',
   drafterOrg = '—',
-  drafterJobTitle = '—',
   writtenDate,
   documentNumber,
   stampColumn,
@@ -44,7 +46,7 @@ export function ApprovalFormPaperLayout({
   const dateLine = `${dateD.format('YYYY-MM-DD')}(${dateD.format('ddd')})`;
 
   return (
-    <div className="tw-mb-2 tw-rounded-none tw-bg-white tw-px-3 tw-py-4 tw-shadow-[0_1px_8px_rgba(0,0,0,0.06)] sm:tw-px-6 sm:tw-py-5">
+    <div className="tw-mb-2 tw-rounded-none tw-border-0 tw-bg-white tw-px-3 tw-py-4 sm:tw-px-6 sm:tw-py-5">
       <header className="tw-mb-5 tw-text-center">
         <Typography.Title
           level={3}
@@ -67,45 +69,57 @@ export function ApprovalFormPaperLayout({
               <tr>
                 <th
                   scope="row"
-                  className={`tw-w-[38%] ${cellBorder} ${labelBg} tw-px-1.5 tw-py-1.5 tw-text-left tw-text-[11px] tw-font-semibold tw-text-black sm:tw-w-[34%] sm:tw-px-2 sm:tw-text-xs`}
+                  className={`tw-w-[38%] ${cellBorder} ${labelBg} tw-px-1.5 tw-py-1.5 tw-text-center tw-align-middle tw-text-[11px] tw-font-semibold tw-text-black sm:tw-w-[34%] sm:tw-px-2 sm:tw-text-xs`}
                 >
-                  문서번호
+                  기안자
                 </th>
-                <td className={`${cellBorder} tw-bg-white tw-px-1.5 tw-py-1.5 tw-text-[11px] tw-text-slate-700 sm:tw-px-2`} colSpan={3}>
-                  {documentNumber?.trim() || '(제출 시 부여)'}
+                <td
+                  className={`${cellBorder} tw-bg-white tw-px-1.5 tw-py-1.5 tw-text-left tw-align-middle tw-text-[11px] tw-text-black sm:tw-px-2`}
+                  colSpan={3}
+                >
+                  <span className="tw-whitespace-normal [word-break:keep-all]">{drafterName}</span>
                 </td>
               </tr>
               <tr>
                 <th
                   scope="row"
-                  className={`${cellBorder} ${labelBg} tw-px-1.5 tw-py-1.5 tw-text-left tw-text-[11px] tw-font-semibold tw-text-black sm:tw-px-2 sm:tw-text-xs`}
+                  className={`${cellBorder} ${labelBg} tw-px-1.5 tw-py-1.5 tw-text-center tw-align-middle tw-text-[11px] tw-font-semibold tw-text-black sm:tw-px-2 sm:tw-text-xs`}
                 >
-                  작성일자
+                  소속
                 </th>
-                <td className={`${cellBorder} tw-bg-white tw-px-1.5 tw-py-1.5 tw-text-[11px] tw-text-black sm:tw-px-2`} colSpan={3}>
-                  {dateLine}
-                </td>
-              </tr>
-              <tr>
-                <th
-                  scope="row"
-                  className={`${cellBorder} ${labelBg} tw-px-1.5 tw-py-1.5 tw-text-left tw-text-[11px] tw-font-semibold tw-text-black sm:tw-px-2 sm:tw-text-xs`}
+                <td
+                  className={`${cellBorder} tw-bg-white tw-px-1.5 tw-py-1.5 tw-text-left tw-align-middle tw-text-[11px] tw-text-black sm:tw-px-2`}
+                  colSpan={3}
                 >
-                  신청부서
-                </th>
-                <td className={`${cellBorder} tw-bg-white tw-px-1.5 tw-py-1.5 tw-text-[11px] tw-text-black sm:tw-px-2`} colSpan={3}>
                   {drafterOrg}
                 </td>
               </tr>
               <tr>
                 <th
                   scope="row"
-                  className={`${cellBorder} ${labelBg} tw-px-1.5 tw-py-1.5 tw-text-left tw-text-[11px] tw-font-semibold tw-text-black sm:tw-px-2 sm:tw-text-xs`}
+                  className={`${cellBorder} ${labelBg} tw-px-1.5 tw-py-1.5 tw-text-center tw-align-middle tw-text-[11px] tw-font-semibold tw-text-black sm:tw-px-2 sm:tw-text-xs`}
                 >
-                  신청자
+                  기안일
                 </th>
-                <td className={`${cellBorder} tw-bg-white tw-px-1.5 tw-py-1.5 tw-text-[11px] tw-text-black sm:tw-px-2`} colSpan={3}>
-                  <span className="tw-whitespace-normal [word-break:keep-all]">{drafterName}</span>
+                <td
+                  className={`${cellBorder} tw-bg-white tw-px-1.5 tw-py-1.5 tw-text-left tw-align-middle tw-text-[11px] tw-text-black sm:tw-px-2`}
+                  colSpan={3}
+                >
+                  {dateLine}
+                </td>
+              </tr>
+              <tr>
+                <th
+                  scope="row"
+                  className={`${cellBorder} ${labelBg} tw-px-1.5 tw-py-1.5 tw-text-center tw-align-middle tw-text-[11px] tw-font-semibold tw-text-black sm:tw-px-2 sm:tw-text-xs`}
+                >
+                  문서번호
+                </th>
+                <td
+                  className={`${cellBorder} tw-bg-white tw-px-1.5 tw-py-1.5 tw-text-left tw-align-middle tw-text-[11px] tw-text-black sm:tw-px-2`}
+                  colSpan={3}
+                >
+                  {documentNumber?.trim() || '(제출 시 부여)'}
                 </td>
               </tr>
             </tbody>
@@ -126,7 +140,7 @@ export function ApprovalFormPaperLayout({
 }
 
 const stampLine = cellBorder;
-const stampLabelBg = 'tw-bg-[#f2f2f2]';
+const stampLabelBg = labelBg;
 const stampVertLabelClass = `${stampLine} ${stampLabelBg} tw-w-[1.85rem] tw-min-w-[1.85rem] tw-max-w-[2rem] tw-px-0 tw-py-2 tw-text-center tw-align-middle tw-text-[11px] tw-font-semibold tw-text-black`;
 /** 신청·승인 공통: 데이터 열 넓이·행 높이 */
 const stampDataColW =
@@ -364,6 +378,63 @@ export function ApprovalFormStampColumn({
   );
 }
 
+/** 기안지·계약서 본문 표에서 조항·안내 문구(2열 통합, 입력란과 동일한 실선 표 스타일) */
+export function ApprovalFormPaperStaticNoteRow({
+  title,
+  body,
+  onActivate,
+  selected,
+}: {
+  title?: string;
+  body: string;
+  /** 미리보기 등에서 행 선택용 */
+  onActivate?: () => void;
+  selected?: boolean;
+}) {
+  const t = title?.trim();
+  const b = body.trim();
+  const interactive = Boolean(onActivate);
+  const empty = !t && !b;
+  return (
+    <tr>
+      <td
+        colSpan={2}
+        role={interactive ? 'button' : undefined}
+        tabIndex={interactive ? 0 : undefined}
+        onClick={interactive ? () => onActivate?.() : undefined}
+        onKeyDown={
+          interactive
+            ? (e) => {
+                if (e.key !== 'Enter' && e.key !== ' ') return;
+                e.preventDefault();
+                onActivate?.();
+              }
+            : undefined
+        }
+        className={`${cellBorder} tw-bg-white tw-px-2 tw-py-3 tw-align-top sm:tw-px-3 sm:tw-py-3.5 ${
+          interactive ? 'tw-cursor-pointer tw-outline-none hover:tw-bg-slate-50/90' : ''
+        } ${selected ? 'tw-ring-2 tw-ring-[#1e3a5f]/25 tw-ring-inset' : ''}`}
+      >
+        {t ? (
+          <Typography.Text
+            strong
+            className="!tw-mb-2 tw-block tw-text-left tw-text-sm tw-font-bold tw-leading-snug tw-tracking-tight tw-text-black sm:tw-text-[15px]"
+          >
+            {t}
+          </Typography.Text>
+        ) : null}
+        <Typography.Paragraph
+          className={`!tw-mb-0 tw-text-left tw-text-[13px] tw-font-normal tw-leading-[1.75] tw-text-black sm:tw-text-sm ${
+            b ? 'tw-whitespace-pre-wrap [word-break:keep-all]' : ''
+          } ${empty ? 'tw-text-slate-400' : ''}`}
+        >
+          {empty ? '(안내 문구 없음)' : b}
+        </Typography.Paragraph>
+      </td>
+    </tr>
+  );
+}
+
 export type ApprovalFormPaperFieldRowProps = {
   label: string;
   required?: boolean;
@@ -375,12 +446,16 @@ export function ApprovalFormPaperFieldRow({ label, required, children }: Approva
     <tr>
       <th
         scope="row"
-        className={`tw-w-[28%] ${cellBorder} ${labelBg} tw-px-2 tw-py-2.5 tw-text-left tw-align-top tw-text-xs tw-font-semibold tw-text-black sm:tw-w-[22%] sm:tw-px-3 sm:tw-text-sm`}
+        className={`tw-w-[28%] ${cellBorder} ${labelBg} tw-px-2 tw-py-2.5 tw-text-center tw-align-middle tw-text-xs tw-font-semibold tw-text-black sm:tw-w-[22%] sm:tw-px-3 sm:tw-text-sm`}
       >
         {required ? <span className="tw-text-red-600">* </span> : null}
-        {label}
+        <span className="tw-inline-block tw-text-center [word-break:keep-all]">{label}</span>
       </th>
-      <td className={`${cellBorder} tw-bg-white tw-px-2 tw-py-2 tw-align-top sm:tw-px-3`}>{children}</td>
+      <td
+        className={`${cellBorder} tw-bg-white tw-px-2 tw-py-2 tw-align-middle sm:tw-px-3 ${paperFieldValueCellControls}`}
+      >
+        {children}
+      </td>
     </tr>
   );
 }

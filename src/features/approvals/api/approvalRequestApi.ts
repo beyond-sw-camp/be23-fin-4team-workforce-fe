@@ -351,6 +351,14 @@ function normalizeApprovalLine(raw: unknown, syntheticRequestId?: string): Appro
   };
 }
 
+/** 검색·목록 응답 등에서 `approvalLines` 배열만 파싱할 때 사용 */
+export function parseApprovalLinesArray(linesRaw: unknown, requestId: string): ApprovalLine[] {
+  if (!Array.isArray(linesRaw)) return [];
+  return linesRaw
+    .map((v) => normalizeApprovalLine(v, requestId))
+    .filter((v): v is ApprovalLine => v != null);
+}
+
 function normalizeViewer(raw: unknown): ApprovalViewer | null {
   if (!raw || typeof raw !== 'object') return null;
   const o = raw as Record<string, unknown>;
@@ -436,11 +444,7 @@ function normalizeRequest(raw: unknown): ApprovalRequestDetail | null {
     cancelReason: asNullableText(o.cancelReason ?? o.cancel_reason),
     createdAt: asText(o.createdAt ?? o.created_at),
     updatedAt: asText(o.updatedAt ?? o.updated_at),
-    approvalLines: Array.isArray(linesRaw)
-      ? linesRaw
-          .map((v) => normalizeApprovalLine(v, requestId))
-          .filter((v): v is ApprovalLine => v != null)
-      : [],
+    approvalLines: parseApprovalLinesArray(linesRaw, requestId),
     viewers: Array.isArray(viewersRaw)
       ? viewersRaw.map((v) => normalizeViewer(v)).filter((v): v is ApprovalViewer => v != null)
       : [],

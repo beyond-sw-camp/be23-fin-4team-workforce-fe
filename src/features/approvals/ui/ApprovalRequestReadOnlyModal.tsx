@@ -23,6 +23,9 @@ import {
   approvalLineIsProxy,
   approvalRequestApi,
   canSendOfficialDocument,
+  findMyInboxApprovalLine,
+  isInlineSyntheticApprovalId,
+  requestIncludesMyProxyAct,
   type ApprovalLine,
   type ApprovalRequestStatus,
   type ApprovalViewer,
@@ -32,6 +35,7 @@ import {
   formatApprovalAttachmentBytes,
   type ApprovalAttachment,
 } from '@/features/approvals/api/approvalAttachmentsApi';
+import { syncApprovalQueryCachesAfterAct } from '@/features/approvals/lib/syncApprovalQueryCaches';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
 import { useAuth } from '@/features/auth/useAuth';
@@ -46,6 +50,7 @@ import {
 import {
   ApprovalFormPaperFieldRow,
   ApprovalFormPaperLayout,
+  ApprovalFormPaperStaticNoteRow,
   ApprovalFormStampColumn,
 } from '@/features/approvals/ui/ApprovalFormPaperLayout';
 import { memberApi } from '@/features/member/api/memberApi';
@@ -334,6 +339,9 @@ export function ApprovalRequestReadOnlyModal({
   // 공문 발송 취소는 별도 흐름이라 분리. 두 mutation 다 같은 API 호출하지만 UX 메시지/대상 상태 다름
   const [requestCancelOpen, setRequestCancelOpen] = useState(false);
   const [requestCancelReason, setRequestCancelReason] = useState('');
+  const [approvalAction, setApprovalAction] = useState<{ approvalId: string; mode: 'approve' | 'reject' } | null>(null);
+  const [approvalComment, setApprovalComment] = useState('');
+
   const cancelRequestM = useMutation({
     mutationFn: (reason: string) => approvalRequestApi.cancelRequest(requestId!, reason),
     onSuccess: async (detail) => {
@@ -357,16 +365,80 @@ export function ApprovalRequestReadOnlyModal({
     },
   });
 
+  const myMemberPositionId = getRefreshIdentityHeaders()['X-User-MemberPositionId']?.trim();
+
+  const myActionableApprovalLine = useMemo(() => {
+    if (!selectedRequestDetail) return undefined;
+    const rs = String(selectedRequestDetail.requestStatus).toUpperCase();
+    /** 서버가 제출 직후·첫 결재 대기를 WAIT로 두는 경우가 있어 PENDING과 동일하게 처리 */
+    if (rs !== 'PENDING' && rs !== 'WAIT') return undefined;
+    const line = findMyInboxApprovalLine(selectedRequestDetail, {
+      myMemberId: authMemberId,
+      myMemberPositionId,
+    });
+    if (!line || String(line.approvalStatus).toUpperCase() !== 'PENDING') return undefined;
+    if (isInlineSyntheticApprovalId(line.approvalId)) return undefined;
+    return line;
+  }, [selectedRequestDetail, authMemberId, myMemberPositionId]);
+
+  const canActApproveReject = Boolean(myActionableApprovalLine);
+
+  const approveM = useMutation({
+    mutationFn: ({ approvalId, comment }: { approvalId: string; comment?: string }) =>
+      approvalRequestApi.approve(approvalId, comment),
+    onSuccess: async (detail) => {
+      const pid = getRefreshIdentityHeaders()['X-User-MemberPositionId']?.trim();
+      syncApprovalQueryCachesAfterAct(qc, detail, {
+        myMemberId: authMemberId,
+        myMemberPositionId: pid,
+      });
+      const proxy = requestIncludesMyProxyAct(detail, {
+        myMemberId: authMemberId,
+        myMemberPositionId: pid,
+      });
+      message.success(proxy ? '대결로 승인 처리했습니다.' : '승인 처리했습니다.');
+      setApprovalAction(null);
+      setApprovalComment('');
+      await qc.invalidateQueries({ queryKey: ['approval', 'documents', 'active'] });
+    },
+    onError: (e: Error) => message.error(e.message || '승인 처리에 실패했습니다.'),
+  });
+
+  const rejectM = useMutation({
+    mutationFn: ({ approvalId, comment }: { approvalId: string; comment: string }) =>
+      approvalRequestApi.reject(approvalId, comment),
+    onSuccess: async (detail) => {
+      const pid = getRefreshIdentityHeaders()['X-User-MemberPositionId']?.trim();
+      syncApprovalQueryCachesAfterAct(qc, detail, {
+        myMemberId: authMemberId,
+        myMemberPositionId: pid,
+      });
+      const proxy = requestIncludesMyProxyAct(detail, {
+        myMemberId: authMemberId,
+        myMemberPositionId: pid,
+      });
+      message.success(proxy ? '대결로 반려 처리했습니다.' : '반려 처리했습니다.');
+      setApprovalAction(null);
+      setApprovalComment('');
+      await qc.invalidateQueries({ queryKey: ['approval', 'documents', 'active'] });
+    },
+    onError: (e: Error) => message.error(e.message || '반려 처리에 실패했습니다.'),
+  });
+
   useEffect(() => {
     if (!open) {
       setOfficialCancelOpen(false);
       setOfficialCancelReason('');
+      setApprovalAction(null);
+      setApprovalComment('');
     }
   }, [open]);
 
   useEffect(() => {
     setOfficialCancelOpen(false);
     setOfficialCancelReason('');
+    setApprovalAction(null);
+    setApprovalComment('');
   }, [requestId]);
 
   const markViewerReadM = useMutation({
@@ -698,6 +770,46 @@ export function ApprovalRequestReadOnlyModal({
     [canDeleteAttachments, deleteAttachmentM.isPending],
   );
 
+  const detailModalFooter =
+    canActApproveReject || canCancelRequest ? (
+      <div className="tw-flex tw-w-full tw-flex-wrap tw-items-center tw-justify-end tw-gap-2">
+        {canActApproveReject ? (
+          <>
+            <Button
+              type="primary"
+              loading={approveM.isPending || rejectM.isPending}
+              disabled={!myActionableApprovalLine}
+              onClick={() =>
+                myActionableApprovalLine &&
+                setApprovalAction({ approvalId: myActionableApprovalLine.approvalId, mode: 'approve' })
+              }
+            >
+              승인
+            </Button>
+            <Button
+              danger
+              loading={approveM.isPending || rejectM.isPending}
+              disabled={!myActionableApprovalLine}
+              onClick={() =>
+                myActionableApprovalLine &&
+                setApprovalAction({ approvalId: myActionableApprovalLine.approvalId, mode: 'reject' })
+              }
+            >
+              반려
+            </Button>
+          </>
+        ) : null}
+        {canCancelRequest ? (
+          <Button danger loading={cancelRequestM.isPending} onClick={() => setRequestCancelOpen(true)}>
+            결재 취소
+          </Button>
+        ) : null}
+        <Button type="primary" className="!tw-min-w-[6rem] !tw-rounded-xl !tw-bg-[#1e3a5f]" onClick={onClose}>
+          닫기
+        </Button>
+      </div>
+    ) : undefined;
+
   return (
     <>
     <AppSingleActionModal
@@ -706,21 +818,7 @@ export function ApprovalRequestReadOnlyModal({
       onClose={onClose}
       onSubmit={onClose}
       submitText="닫기"
-      onCancel={onClose}
-      footer={
-        canCancelRequest ? (
-          <Space>
-            <Button onClick={onClose}>닫기</Button>
-            <Button
-              danger
-              loading={cancelRequestM.isPending}
-              onClick={() => setRequestCancelOpen(true)}
-            >
-              결재 취소
-            </Button>
-          </Space>
-        ) : null
-      }
+      customFooter={detailModalFooter}
       width={920}
       destroyOnHidden
     >
@@ -857,6 +955,15 @@ export function ApprovalRequestReadOnlyModal({
                     >
                       {requestDetailSchema.fields.map((field) => {
                         if (field.type === 'ai_transcribe') return null;
+                        if (field.type === 'static_note') {
+                          return (
+                            <ApprovalFormPaperStaticNoteRow
+                              key={field.name}
+                              title={field.label?.trim() || undefined}
+                              body={field.staticText?.trim() ?? ''}
+                            />
+                          );
+                        }
                         if (shouldHideApprovalFormFieldInSelectModalPreview(field)) return null;
                         const text = displayStoredFieldValue(field, content[field.name], {
                           companyLeaveTypeNameById,
@@ -1107,6 +1214,44 @@ export function ApprovalRequestReadOnlyModal({
         showCount
       />
     </Modal>
+
+    <AppDoubleActionModal
+      title={approvalAction?.mode === 'approve' ? '승인 처리' : '반려 처리'}
+      open={approvalAction != null}
+      onClose={() => {
+        setApprovalAction(null);
+        setApprovalComment('');
+      }}
+      onConfirm={() => {
+        if (!approvalAction) return;
+        if (approvalAction.mode === 'approve') {
+          void approveM.mutateAsync({
+            approvalId: approvalAction.approvalId,
+            comment: approvalComment.trim() || undefined,
+          });
+          return;
+        }
+        if (!approvalComment.trim()) {
+          message.warning('반려 사유를 입력해 주세요.');
+          return;
+        }
+        void rejectM.mutateAsync({ approvalId: approvalAction.approvalId, comment: approvalComment.trim() });
+      }}
+      confirmText={approvalAction?.mode === 'approve' ? '승인' : '반려'}
+      cancelText="닫기"
+      confirmLoading={approveM.isPending || rejectM.isPending}
+      confirmDanger={approvalAction?.mode === 'reject'}
+      destroyOnHidden
+    >
+      <div className="tw-px-5 tw-py-4">
+        <Input.TextArea
+          rows={4}
+          value={approvalComment}
+          onChange={(e) => setApprovalComment(e.target.value)}
+          placeholder={approvalAction?.mode === 'approve' ? '승인 의견(선택)' : '반려 사유(필수)'}
+        />
+      </div>
+    </AppDoubleActionModal>
     </>
   );
 }

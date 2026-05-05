@@ -15,6 +15,7 @@ import { parseFormSchema, shouldHideApprovalFormFieldInSelectModalPreview } from
 import {
   ApprovalFormPaperFieldRow,
   ApprovalFormPaperLayout,
+  ApprovalFormPaperStaticNoteRow,
   ApprovalFormStampColumn,
 } from '@/features/approvals/ui/ApprovalFormPaperLayout';
 import { PRETTY_SCROLLBAR_CLASS } from '@/features/member-chat/ui/shared/prettyScrollbar';
@@ -276,19 +277,27 @@ export function ApprovalFormSelectModal({
                   >
                     {previewFields.length > 0 ? (
                       <>
-                        {previewFields.map((field) => (
-                          <ApprovalFormPaperFieldRow
-                            key={`${selectedDoc.documentId}-${field.name}`}
-                            label={field.label}
-                            required={field.locked === true}
-                          >
-                            <div className="tw-min-h-[28px] tw-whitespace-pre-wrap tw-text-sm tw-text-slate-500">
-                              {field.type === 'select' && field.options?.length
-                                ? `선택: ${field.options.join(' / ')}`
-                                : field.placeholder || '입력값'}
-                            </div>
-                          </ApprovalFormPaperFieldRow>
-                        ))}
+                        {previewFields.map((field) =>
+                          field.type === 'static_note' ? (
+                            <ApprovalFormPaperStaticNoteRow
+                              key={`${selectedDoc.documentId}-${field.name}`}
+                              title={field.label?.trim() || undefined}
+                              body={field.staticText?.trim() ?? ''}
+                            />
+                          ) : (
+                            <ApprovalFormPaperFieldRow
+                              key={`${selectedDoc.documentId}-${field.name}`}
+                              label={field.label}
+                              required={field.locked === true}
+                            >
+                              <div className="tw-min-h-[28px] tw-whitespace-pre-wrap tw-text-sm tw-text-slate-500">
+                                {field.type === 'select' && field.options?.length
+                                  ? `선택: ${field.options.join(' / ')}`
+                                  : field.placeholder || '입력값'}
+                              </div>
+                            </ApprovalFormPaperFieldRow>
+                          ),
+                        )}
                         {/* 휴가신청서 전용 - 작성 화면과 동일하게 "휴가 날짜" multi DatePicker 행 미리보기 */}
                         {isLeaveDocument && (
                           <ApprovalFormPaperFieldRow label="휴가 날짜" required>

@@ -33,9 +33,15 @@ import {
   type ContractBatchSummary,
   type ContractRecord,
 } from '@/features/contracts/api/contractTemplateApi';
-import { compactAdminInputJson, parseContractFormSchema } from '@/features/contracts/lib/parseContractFormSchema';
+import {
+  coerceAdminInputInitialForForm,
+  collectContractAdminInputFromForm,
+  isContractAdminInputSource,
+  parseContractFormSchema,
+} from '@/features/contracts/lib/parseContractFormSchema';
 import { uploadSignaturePngForContract } from '@/features/contracts/lib/uploadSignaturePng';
 import { ApprovalFormPaperFieldRow, ApprovalFormPaperLayout } from '@/features/approvals/ui/ApprovalFormPaperLayout';
+import { ContractAdminFormFieldInput } from '@/features/contracts/ui/ContractAdminFormFieldInput';
 import { CONTRACT_HUB_CARD_CLASS } from '@/features/contracts/ui/contractHubStyles';
 import { ContractPartySignaturesCard } from '@/features/contracts/ui/ContractPartySignaturesCard';
 import { ContractSignaturePad, type ContractSignaturePadHandle } from '@/features/contracts/ui/ContractSignaturePad';
@@ -214,7 +220,7 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
   });
 
   const resendContractM = useMutation({
-    mutationFn: (vars: { contractId: string; adminInputJson?: string | null }) =>
+    mutationFn: (vars: { contractId: string; adminInputJson?: Record<string, unknown> | null }) =>
       contractTemplateApi.resendContract(vars.contractId, { adminInputJson: vars.adminInputJson ?? null }),
     onSuccess: async (newContract) => {
       message.success('계약이 재발송되었습니다.');
@@ -237,7 +243,7 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
     mutationFn: (vars: {
       batchId: string;
       batchName: string;
-      items: Array<{ contractId: string; adminInputJson?: string | null }>;
+      items: Array<{ contractId: string; adminInputJson?: Record<string, unknown> | null }>;
     }) => contractTemplateApi.resendBatch(vars.batchId, { batchName: vars.batchName, items: vars.items }),
     onSuccess: async (batchResult) => {
       message.success('배치가 재발송되었습니다.');
@@ -427,38 +433,62 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
     return (contractDetail.revision ?? 1) > 1;
   }, [contractDetail]);
 
+  const detailSignCells = useMemo(() => {
+    const empty = { label: '—', imageUrl: '', signedAt: '' };
+    if (!contractDetail) return { employee: empty, company: empty };
+    const employee = contractDetail.parties?.find((p) => String(p.partyRole).toUpperCase() === 'EMPLOYEE');
+    const company = contractDetail.parties?.find((p) => String(p.partyRole).toUpperCase() === 'COMPANY');
+    const employeeImg = employee?.signatureImageUrl?.trim() || '';
+    const companyImg = company?.signatureImageUrl?.trim() || contractDetail.sealImageUrl?.trim() || '';
+    return {
+      employee: {
+        label: contractDetail.employeeName?.trim() || '직원',
+        imageUrl: employeeImg,
+        signedAt: employee?.signedAt ? formatDateTime(employee.signedAt) : '',
+      },
+      company: {
+        label: '회사',
+        imageUrl: companyImg,
+        signedAt: company?.signedAt ? formatDateTime(company.signedAt) : '',
+      },
+    };
+  }, [contractDetail]);
+
   const singleResendAdminFields = useMemo(() => {
     if (!contractDetail) return [];
     const raw = resendTemplate?.formSchema ?? contractDetail.formSchemaSnapshot;
     const { fields, metaByName } = parseContractFormSchema(raw);
-    return fields.filter((f) => metaByName[f.name]?.source === 'ADMIN_INPUT');
+    return fields.filter((f) => isContractAdminInputSource(metaByName[f.name]?.source));
   }, [contractDetail, resendTemplate?.formSchema]);
 
   useEffect(() => {
     if (!resendModalOpen || !contractDetail) return;
     const { fields, metaByName } = parseContractFormSchema(contractDetail.formSchemaSnapshot);
-    const names = fields.filter((f) => metaByName[f.name]?.source === 'ADMIN_INPUT').map((f) => f.name);
-    resendForm.setFieldsValue({ adminInput: pickAdminFromContractContent(contractDetail, names) });
+    const adminFields = fields.filter((f) => isContractAdminInputSource(metaByName[f.name]?.source));
+    const names = adminFields.map((f) => f.name);
+    const picked = pickAdminFromContractContent(contractDetail, names);
+    resendForm.setFieldsValue({ adminInput: coerceAdminInputInitialForForm(picked, adminFields) });
   }, [resendModalOpen, contractDetail?.contractId, contractDetail?.formSchemaSnapshot, resendForm]);
 
   const batchResendAdminFieldDefs = useMemo(() => {
     if (resendableInBatch.length === 0) return [];
     const raw = resendTemplate?.formSchema ?? resendableInBatch[0].formSchemaSnapshot;
     const { fields, metaByName } = parseContractFormSchema(raw);
-    return fields.filter((f) => metaByName[f.name]?.source === 'ADMIN_INPUT');
+    return fields.filter((f) => isContractAdminInputSource(metaByName[f.name]?.source));
   }, [resendableInBatch, resendTemplate?.formSchema]);
 
   const openBatchResendModal = () => {
     if (!selectedBatch || resendableInBatch.length === 0) return;
     const raw = resendTemplate?.formSchema ?? resendableInBatch[0]?.formSchemaSnapshot ?? '{}';
     const { fields, metaByName } = parseContractFormSchema(raw);
-    const adminNames = fields.filter((f) => metaByName[f.name]?.source === 'ADMIN_INPUT').map((f) => f.name);
+    const adminFieldDefs = fields.filter((f) => isContractAdminInputSource(metaByName[f.name]?.source));
+    const adminNames = adminFieldDefs.map((f) => f.name);
     batchResendForm.setFieldsValue({
       batchName: `${selectedBatch.batchName || '배치'} 재발송`.trim(),
       items: resendableInBatch.map((c) => ({
         contractId: c.contractId,
         include: true,
-        adminInput: pickAdminFromContractContent(c, adminNames),
+        adminInput: coerceAdminInputInitialForForm(pickAdminFromContractContent(c, adminNames), adminFieldDefs),
       })),
     });
     setBatchResendModalOpen(true);
@@ -679,66 +709,13 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
           ) : null
         }
         width={920}
-        destroyOnClose
+        destroyOnHidden
       >
         <div className="tw-px-5 tw-py-4">
         {detailLoading || !contractDetail ? (
           <Spin />
         ) : (
           <Space direction="vertical" className="tw-w-full" size={12}>
-            <Card size="small" title="기본 정보">
-              <div className="tw-grid tw-grid-cols-1 sm:tw-grid-cols-2 tw-gap-2 tw-text-sm">
-                <div><strong>템플릿</strong>: {contractDetail.templateName}</div>
-                <div><strong>문서번호</strong>: {contractDetail.contractNumber?.trim() || '—'}</div>
-                <div><strong>상태</strong>: {statusTag(contractDetail.contractStatus)}</div>
-                {contractDetail.sealImageUrl?.trim() ? (
-                  <div className="sm:tw-col-span-2 tw-flex tw-flex-wrap tw-items-center tw-gap-2">
-                    <strong className="tw-shrink-0">회사 직인</strong>
-                    <img
-                      src={contractDetail.sealImageUrl.trim()}
-                      alt="회사 직인"
-                      className="tw-max-h-24 tw-max-w-[200px] tw-rounded tw-border tw-border-slate-200 tw-object-contain tw-bg-white tw-p-1"
-                    />
-                  </div>
-                ) : null}
-                <div><strong>개정 차수</strong>: {contractDetail.revision ?? 1}</div>
-                <div>
-                  <strong>이전 계약</strong>:{' '}
-                  {contractDetail.previousContractId ? (
-                    <Button
-                      type="link"
-                      size="small"
-                      className="!tw-h-auto !tw-p-0"
-                      onClick={() => setSelectedContractId(contractDetail.previousContractId)}
-                    >
-                      이전 버전 보기
-                    </Button>
-                  ) : (
-                    '—'
-                  )}
-                </div>
-                <div><strong>직원명</strong>: {contractDetail.employeeName || '—'}</div>
-                <div><strong>사번</strong>: {contractDetail.employeeSabun || '—'}</div>
-                <div><strong>부서</strong>: {contractDetail.organizationName || '—'}</div>
-                <div><strong>직책</strong>: {contractDetail.jobTitleName || '—'}</div>
-                {String(contractDetail.contractStatus).toUpperCase() === 'CANCELED' && contractDetail.cancelReason?.trim() ? (
-                  <div className="sm:tw-col-span-2">
-                    <strong>회수 사유</strong>:{' '}
-                    <Typography.Paragraph className="!tw-mb-0 tw-inline tw-whitespace-pre-wrap">
-                      {contractDetail.cancelReason.trim()}
-                    </Typography.Paragraph>
-                  </div>
-                ) : null}
-                {String(contractDetail.contractStatus).toUpperCase() === 'REJECTED' && contractEffectiveRejectReason(contractDetail) ? (
-                  <div className="sm:tw-col-span-2">
-                    <strong>거절 사유</strong>:{' '}
-                    <Typography.Paragraph className="!tw-mb-0 tw-inline tw-whitespace-pre-wrap">
-                      {contractEffectiveRejectReason(contractDetail)}
-                    </Typography.Paragraph>
-                  </div>
-                ) : null}
-              </div>
-            </Card>
             {!detailLoading && contractDetail && canRecallContract && (contractDetail.revision ?? 1) >= 5 ? (
               <Alert
                 type="warning"
@@ -782,7 +759,6 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
                 </div>
               </Card>
             ) : null}
-            <ContractPartySignaturesCard parties={contractDetail.parties} />
             <Card size="small" title="계약서 내용">
               <ApprovalFormPaperLayout
                 documentName={contractDetail.templateName}
@@ -792,7 +768,89 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
                 drafterOrg={contractDetail.organizationName || '—'}
                 drafterJobTitle={contractDetail.jobTitleName || undefined}
                 writtenDate={dayjs(contractDetail.createdAt).isValid() ? dayjs(contractDetail.createdAt).format('YYYY-MM-DD') : contractDetail.createdAt}
+                documentNumber={contractDetail.contractNumber?.trim() || undefined}
+                stampColumn={
+                  <table className="tw-w-[14rem] tw-table-fixed tw-border-collapse tw-text-sm">
+                    <colgroup>
+                      <col className="tw-w-[2rem]" />
+                      <col className="tw-w-[6rem]" />
+                      <col className="tw-w-[6rem]" />
+                    </colgroup>
+                    <tbody>
+                      <tr>
+                        <td
+                          rowSpan={3}
+                          className="tw-border tw-border-solid tw-border-black tw-bg-[#efefef] tw-px-0 tw-py-2 tw-text-center tw-align-middle tw-text-[11px] tw-font-semibold tw-text-black"
+                          style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}
+                        >
+                          서명
+                        </td>
+                        <td className="tw-border tw-border-solid tw-border-black tw-bg-[#efefef] tw-px-2 tw-py-1 tw-text-center tw-text-xs tw-font-semibold">직원</td>
+                        <td className="tw-border tw-border-solid tw-border-black tw-bg-[#efefef] tw-px-2 tw-py-1 tw-text-center tw-text-xs tw-font-semibold">회사</td>
+                      </tr>
+                      <tr>
+                        <td className="tw-border tw-border-solid tw-border-black tw-bg-white tw-px-1 tw-py-1 tw-text-center tw-align-middle">
+                          <div className="tw-flex tw-min-h-[3.2rem] tw-flex-col tw-items-center tw-justify-center tw-gap-1">
+                            <span className="tw-text-[11px] tw-font-semibold">{detailSignCells.employee.label}</span>
+                            {detailSignCells.employee.imageUrl ? (
+                              <img src={detailSignCells.employee.imageUrl} alt="직원 서명" className="tw-max-h-8 tw-max-w-[3.25rem] tw-object-contain" />
+                            ) : null}
+                          </div>
+                        </td>
+                        <td className="tw-border tw-border-solid tw-border-black tw-bg-white tw-px-1 tw-py-1 tw-text-center tw-align-middle">
+                          <div className="tw-flex tw-min-h-[3.2rem] tw-flex-col tw-items-center tw-justify-center tw-gap-1">
+                            <span className="tw-text-[11px] tw-font-semibold">{detailSignCells.company.label}</span>
+                            {detailSignCells.company.imageUrl ? (
+                              <img src={detailSignCells.company.imageUrl} alt="회사 직인" className="tw-max-h-8 tw-max-w-[3.25rem] tw-object-contain" />
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="tw-border tw-border-solid tw-border-black tw-bg-white tw-px-1 tw-py-0.5 tw-text-center tw-text-[10px]">
+                          {detailSignCells.employee.signedAt || '\u00a0'}
+                        </td>
+                        <td className="tw-border tw-border-solid tw-border-black tw-bg-white tw-px-1 tw-py-0.5 tw-text-center tw-text-[10px]">
+                          {detailSignCells.company.signedAt || '\u00a0'}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                }
               >
+                <ApprovalFormPaperFieldRow label="문서번호">
+                  <Typography.Text>{contractDetail.contractNumber?.trim() || '—'}</Typography.Text>
+                </ApprovalFormPaperFieldRow>
+                <ApprovalFormPaperFieldRow label="상태">
+                  {statusTag(contractDetail.contractStatus)}
+                </ApprovalFormPaperFieldRow>
+                <ApprovalFormPaperFieldRow label="개정 차수">
+                  <Typography.Text>{contractDetail.revision ?? 1}</Typography.Text>
+                </ApprovalFormPaperFieldRow>
+                <ApprovalFormPaperFieldRow label="이전 계약">
+                  {contractDetail.previousContractId ? (
+                    <Button
+                      type="link"
+                      size="small"
+                      className="!tw-h-auto !tw-p-0"
+                      onClick={() => setSelectedContractId(contractDetail.previousContractId)}
+                    >
+                      이전 버전 보기
+                    </Button>
+                  ) : (
+                    <Typography.Text type="secondary">—</Typography.Text>
+                  )}
+                </ApprovalFormPaperFieldRow>
+                {String(contractDetail.contractStatus).toUpperCase() === 'CANCELED' && contractDetail.cancelReason?.trim() ? (
+                  <ApprovalFormPaperFieldRow label="회수 사유">
+                    <Typography.Text className="tw-whitespace-pre-wrap">{contractDetail.cancelReason.trim()}</Typography.Text>
+                  </ApprovalFormPaperFieldRow>
+                ) : null}
+                {String(contractDetail.contractStatus).toUpperCase() === 'REJECTED' && contractEffectiveRejectReason(contractDetail) ? (
+                  <ApprovalFormPaperFieldRow label="거절 사유">
+                    <Typography.Text className="tw-whitespace-pre-wrap">{contractEffectiveRejectReason(contractDetail)}</Typography.Text>
+                  </ApprovalFormPaperFieldRow>
+                ) : null}
                 {detailFields.length > 0 ? (
                   detailFields.map((field) => (
                     <ApprovalFormPaperFieldRow key={field.key} label={field.label}>
@@ -822,7 +880,7 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
         }}
         footer={null}
         width={980}
-        destroyOnClose
+        destroyOnHidden
       >
         <div className="tw-px-5 tw-py-4">
         <div className="tw-mb-3 tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2">
@@ -1003,11 +1061,12 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
         onConfirm={async () => {
           if (!contractDetail) return;
           try {
-            const v = await resendForm.validateFields();
-            const json = compactAdminInputJson(v.adminInput as Record<string, unknown> | undefined);
+            await resendForm.validateFields();
+            const adminKeys = singleResendAdminFields.map((f) => f.name);
+            const adminObj = collectContractAdminInputFromForm((path) => resendForm.getFieldValue(path), adminKeys);
             await resendContractM.mutateAsync({
               contractId: contractDetail.contractId,
-              adminInputJson: json ?? null,
+              adminInputJson: Object.keys(adminObj).length > 0 ? adminObj : null,
             });
           } catch {
             /* validation */
@@ -1026,11 +1085,7 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
           ) : (
             singleResendAdminFields.map((field) => (
               <Form.Item key={field.name} name={['adminInput', field.name]} label={field.label}>
-                {field.type === 'textarea' ? (
-                  <Input.TextArea rows={3} />
-                ) : (
-                  <Input type={field.type === 'number' ? 'number' : 'text'} />
-                )}
+                <ContractAdminFormFieldInput field={field} textAreaRows={3} />
               </Form.Item>
             ))
           )}
@@ -1117,11 +1172,20 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
           try {
             const v = await batchResendForm.validateFields();
             const rows = v.items ?? [];
+            const adminKeys = batchResendAdminFieldDefs.map((f) => f.name);
             const items = rows
-              .filter((row) => row.include !== false)
-              .map((row) => ({
+              .map((row, idx) => ({ row, idx }))
+              .filter(({ row }) => row.include !== false)
+              .map(({ row, idx }) => ({
                 contractId: row.contractId,
-                adminInputJson: compactAdminInputJson(row.adminInput as Record<string, unknown> | undefined) ?? null,
+                adminInputJson:
+                  adminKeys.length > 0
+                    ? collectContractAdminInputFromForm(
+                        (path) => batchResendForm.getFieldValue(path),
+                        adminKeys,
+                        ['items', idx],
+                      )
+                    : {},
               }));
             if (items.length === 0) {
               message.warning('재발송할 계약을 1건 이상 선택해 주세요.');
@@ -1178,11 +1242,7 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
                       ) : (
                         batchResendAdminFieldDefs.map((af) => (
                           <Form.Item key={`${field.key}-${af.name}`} name={[field.name, 'adminInput', af.name]} label={af.label}>
-                            {af.type === 'textarea' ? (
-                              <Input.TextArea rows={2} />
-                            ) : (
-                              <Input type={af.type === 'number' ? 'number' : 'text'} />
-                            )}
+                            <ContractAdminFormFieldInput field={af} textAreaRows={2} />
                           </Form.Item>
                         ))
                       )}
@@ -1200,7 +1260,7 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
         title="전자계약 서명"
         open={signModalContractId != null}
         onCancel={closeSignModal}
-        destroyOnClose
+        destroyOnHidden
         okText="서명"
         cancelText="취소"
         confirmLoading={signSubmitting || signM.isPending}
