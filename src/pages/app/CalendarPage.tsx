@@ -1029,20 +1029,36 @@ export function CalendarPage() {
 .wf-cal-month.ant-picker-calendar .ant-picker-content thead > tr > th:nth-child(${satCol}){color:#94a3b8!important;}
 ${showSixthMonthRow ? '' : '.wf-cal-month.ant-picker-calendar .ant-picker-content tbody > tr:nth-child(6){display:none!important;}'}
 /* 캘린더 사이드바: antd 5.29는 박스/체크가 .ant-checkbox-inner(+::after) — 바깥 .ant-checkbox만 줄이면 inner 16px이 겹침 */
+.wf-cal-sidebar-filter-row{
+  min-height:24px!important;
+}
 .wf-cal-sidebar-filter-row .ant-checkbox-wrapper{
+  display:inline-flex!important;
   align-items:center!important;
   flex:1 1 auto!important;
+  line-height:20px!important;
   min-width:0!important;
 }
-.wf-cal-sidebar-filter-row .ant-checkbox-inner{
-  width:14px!important;
-  height:14px!important;
-  border-radius:4px!important;
+.wf-cal-sidebar-filter-row .ant-checkbox{
+  top:0!important;
+  flex:0 0 16px!important;
+  width:16px!important;
+  height:16px!important;
+  line-height:16px!important;
 }
-/* 14px inner 기준 체크 크기만 축소 — scale+translate 조합은 시각적으로 우하단으로 밀림 */
+.wf-cal-sidebar-filter-row .ant-checkbox-input{
+  width:16px!important;
+  height:16px!important;
+}
+.wf-cal-sidebar-filter-row .ant-checkbox-inner{
+  width:16px!important;
+  height:16px!important;
+  border-radius:5px!important;
+}
+/* 월 뷰 기준 16px checkbox로 고정 — 뷰 전환 시 week/day 레이아웃의 line-height 영향을 받지 않게 함 */
 .wf-cal-sidebar-filter-row .ant-checkbox-inner::after{
-  width:5px!important;
-  height:8px!important;
+  width:5.5px!important;
+  height:9px!important;
   border-width:0 1.5px 1.5px 0!important;
   box-sizing:border-box!important;
 }
