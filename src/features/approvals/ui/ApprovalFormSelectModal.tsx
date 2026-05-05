@@ -144,9 +144,16 @@ export function ApprovalFormSelectModal({
   const selectedDoc = selectedId ? docById.get(selectedId) : undefined;
   const composeDoc = composeDocId ? docById.get(composeDocId) : undefined;
   const selectedSchema = useMemo(() => (selectedDoc ? parseFormSchema(selectedDoc.formSchema) : { fields: [] }), [selectedDoc]);
+  // 휴가신청서는 작성 화면에서 시작일/종료일을 숨기고 "휴가 날짜" multi DatePicker 한 칸으로 통합 처리
+  // 미리보기에도 같은 모양으로 노출되도록 startDate/endDate 필드를 미리보기에서 제외
+  const isLeaveDocument = selectedDoc?.documentName === '휴가신청서';
   const previewFields = useMemo(
-    () => selectedSchema.fields.filter((f) => !shouldHideApprovalFormFieldInSelectModalPreview(f)),
-    [selectedSchema.fields],
+    () => selectedSchema.fields.filter((f) => {
+      if (shouldHideApprovalFormFieldInSelectModalPreview(f)) return false;
+      if (isLeaveDocument && (f.name === 'startDate' || f.name === 'endDate')) return false;
+      return true;
+    }),
+    [selectedSchema.fields, isLeaveDocument],
   );
   const composeIframeSrc = useMemo(() => {
     if (!composeDocId) return '';
@@ -268,19 +275,29 @@ export function ApprovalFormSelectModal({
                     }
                   >
                     {previewFields.length > 0 ? (
-                      previewFields.map((field) => (
-                        <ApprovalFormPaperFieldRow
-                          key={`${selectedDoc.documentId}-${field.name}`}
-                          label={field.label}
-                          required={field.locked === true}
-                        >
-                          <div className="tw-min-h-[28px] tw-whitespace-pre-wrap tw-text-sm tw-text-slate-500">
-                            {field.type === 'select' && field.options?.length
-                              ? `선택: ${field.options.join(' / ')}`
-                              : field.placeholder || '입력값'}
-                          </div>
-                        </ApprovalFormPaperFieldRow>
-                      ))
+                      <>
+                        {previewFields.map((field) => (
+                          <ApprovalFormPaperFieldRow
+                            key={`${selectedDoc.documentId}-${field.name}`}
+                            label={field.label}
+                            required={field.locked === true}
+                          >
+                            <div className="tw-min-h-[28px] tw-whitespace-pre-wrap tw-text-sm tw-text-slate-500">
+                              {field.type === 'select' && field.options?.length
+                                ? `선택: ${field.options.join(' / ')}`
+                                : field.placeholder || '입력값'}
+                            </div>
+                          </ApprovalFormPaperFieldRow>
+                        ))}
+                        {/* 휴가신청서 전용 - 작성 화면과 동일하게 "휴가 날짜" multi DatePicker 행 미리보기 */}
+                        {isLeaveDocument && (
+                          <ApprovalFormPaperFieldRow label="휴가 날짜" required>
+                            <div className="tw-min-h-[28px] tw-text-sm tw-text-slate-500">
+                              휴가일을 클릭해 하나씩 선택 (연속/비연속 모두 가능)
+                            </div>
+                          </ApprovalFormPaperFieldRow>
+                        )}
+                      </>
                     ) : (
                       <ApprovalFormPaperFieldRow label="안내">
                         <Empty description="미리보기 가능한 양식 필드가 없습니다." />
