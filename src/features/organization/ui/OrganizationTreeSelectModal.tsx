@@ -1,9 +1,10 @@
-import { RightOutlined, SearchOutlined } from '@ant-design/icons';
-import { Input, Tree, Typography } from 'antd';
+import { RightOutlined } from '@ant-design/icons';
+import { Tree, Typography } from 'antd';
 import type { DataNode } from 'antd/es/tree';
 import { useMemo, useState } from 'react';
 import type { OrganizationFlatRow } from '@/features/organization/lib/flattenOrganizationTree';
 import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
+import { AppSearchBar } from '@/shared/ui';
 
 type Props = {
   open: boolean;
@@ -85,12 +86,12 @@ export function OrganizationTreeSelectModal({
       destroyOnHidden
     >
       <div className="tw-space-y-3 tw-px-5 tw-py-4">
-        <Input
-          allowClear
+        <AppSearchBar
           value={keyword}
-          onChange={(e) => setKeyword(e.target.value)}
+          onValueChange={setKeyword}
+          onSearch={setKeyword}
           placeholder="조직명 검색"
-          prefix={<SearchOutlined className="tw-text-slate-400" />}
+          ariaLabel="조직명 검색"
         />
         {treeData.length === 0 ? (
           <Typography.Text type="secondary">선택 가능한 조직이 없습니다.</Typography.Text>

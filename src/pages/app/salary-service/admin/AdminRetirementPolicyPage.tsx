@@ -20,6 +20,7 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
+import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import dayjs from 'dayjs';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import type {
@@ -188,18 +189,11 @@ export function AdminRetirementPolicyPage() {
 
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
-      <div>
-        <Typography.Title level={1} className="!tw-m-0 !tw-text-slate-900">
-          퇴직급여 정책
-        </Typography.Title>
-        <Typography.Paragraph
-          type="secondary"
-          className="!tw-mb-0 !tw-mt-1 !tw-text-sm"
-        >
-          회사가 운영하는 퇴직급여 제도 (법정 / DB형 / DC형) 를 관리합니다.
-          정책 변경 시 이전 활성 정책은 자동으로 마감됩니다.
-        </Typography.Paragraph>
-      </div>
+      <AppWorkspacePageTitle
+        eyebrow="PAYROLL"
+        title="퇴직급여 정책"
+        subtitle="회사가 운영하는 퇴직급여 제도(법정 / DB형 / DC형)를 관리합니다. 정책 변경 시 이전 활성 정책은 자동으로 마감됩니다."
+      />
 
       {activeQ.data ? (
         <Alert

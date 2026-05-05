@@ -212,6 +212,15 @@ export const calendarApi = {
     return fetchCalendarMonth(year, month, eventType);
   },
 
+  /** GET /calendar/upcoming?from=YYYY-MM-DD&limit=4[&eventType=] */
+  async listUpcoming(from: string, limit = 4, eventType?: CalendarListEventTypeParam) {
+    return fetchCalendarList('/calendar/upcoming', {
+      from,
+      limit,
+      ...listQueryParams(eventType),
+    });
+  },
+
   async detail(eventId: string) {
     const response = await httpClient.get(`/calendar/${encodeURIComponent(eventId)}`);
     const unwrapped = unwrapApiResponse<unknown>(response.data);

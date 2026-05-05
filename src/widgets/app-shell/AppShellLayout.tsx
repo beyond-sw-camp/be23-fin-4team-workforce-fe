@@ -1742,7 +1742,8 @@ function menuOpenKeysForPath(
     if (
         isSystemAdmin &&
         ((pathname.startsWith('/app/leave') &&
-            pathname !== '/app/leave/absence') ||
+            pathname !== '/app/leave/absence' &&
+            pathname !== '/app/leave/promotion-no-response') ||
             pathname === '/app/attendance/holidays')
     ) {
         keys.push(LEAVE_GROUP_KEY);
@@ -1862,6 +1863,9 @@ function AppShellLayout() {
             });
             const merged = new Set(prev);
             for (const k of pathKeys) merged.add(k);
+            if (pathname === '/app/leave/promotion-no-response') {
+                merged.delete(LEAVE_GROUP_KEY);
+            }
             return [...merged];
         });
     }, [pathname, search, siderCollapsed, isSystemAdmin, showSalaryNegotiationSubmenu]);

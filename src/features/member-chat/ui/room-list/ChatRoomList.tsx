@@ -1,8 +1,9 @@
-import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
-import { Input, List } from 'antd';
+import { PlusOutlined } from '@ant-design/icons';
+import { List } from 'antd';
 import type { MemberChatRoomSummary } from '@/features/member-chat/model/types';
 import { PRETTY_SCROLLBAR_CLASS } from '@/features/member-chat/ui/shared/prettyScrollbar';
 import { ChatRoomListItem } from '@/features/member-chat/ui/room-list/ChatRoomListItem';
+import { AppSearchBar } from '@/shared/ui';
 
 type Props = {
   rooms: readonly MemberChatRoomSummary[];
@@ -40,13 +41,14 @@ export function ChatRoomList({
           <PlusOutlined className="tw-text-[12px]" />
           <span>새 대화</span>
         </button>
-        <Input
-          allowClear
+        <AppSearchBar
           value={query}
-          onChange={(e) => onQueryChange(e.target.value)}
+          onValueChange={onQueryChange}
+          onSearch={onQueryChange}
           placeholder="검색"
-          prefix={<SearchOutlined className="tw-text-slate-400" />}
-          className="tw-rounded-xl"
+          ariaLabel="채팅방 검색"
+          className="tw-w-full"
+          buttonClassName="!tw-px-4"
         />
       </div>
       <div className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-hidden tw-px-1 tw-pb-2 tw-pt-2">

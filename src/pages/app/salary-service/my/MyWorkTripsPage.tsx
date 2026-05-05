@@ -26,6 +26,9 @@ type FormValues = {
   date: dayjs.Dayjs;
   workTripType: WorkTripTypeCode;
   destination?: string;
+  destinationLat?: number | null;
+  destinationLng?: number | null;
+  destinationRadiusMeters?: number | null;
   purpose?: string;
   expenseAmount?: number;
   expenseType?: ExpenseTypeCode;

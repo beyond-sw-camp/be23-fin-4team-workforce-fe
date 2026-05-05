@@ -19,7 +19,7 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Button, Input, Select, Space, Switch, Tag, Tooltip, Typography } from 'antd';
+import { Button, Input, Select, Space, Tag, Typography } from 'antd';
 import {
   createContext,
   useCallback,
@@ -510,36 +510,9 @@ export function ApprovalFormSchemaBuilder({
               popupMatchSelectWidth
               value={field.type}
               disabled={locked}
-              options={
-                field.type === 'ai_transcribe'
-                  ? [
-                      ...SCHEMA_BUILDER_FIELD_TYPES.map((t) => ({ value: t, label: TYPE_LABEL[t] })),
-                      { value: 'ai_transcribe' as FormFieldType, label: `${TYPE_LABEL.ai_transcribe} (기존)` },
-                    ]
-                  : SCHEMA_BUILDER_FIELD_TYPES.map((t) => ({ value: t, label: TYPE_LABEL[t] }))
-              }
+              options={SCHEMA_BUILDER_FIELD_TYPES.map((t) => ({ value: t, label: TYPE_LABEL[t] }))}
               onChange={(t) => updateAt(index, { type: t as FormFieldType })}
             />
-          </div>
-          <div className="tw-flex tw-min-w-0 tw-max-w-full tw-items-center tw-justify-between tw-gap-2 tw-rounded-lg tw-border tw-border-slate-200 tw-bg-slate-50 tw-px-3 tw-py-2.5">
-            <Typography.Text className="tw-min-w-0 tw-flex-1 tw-text-[11px] [overflow-wrap:anywhere]">
-              잠금(이후 양식 수정 시 제한)
-            </Typography.Text>
-            <Tooltip
-              title={
-                field.locked === true
-                  ? '끄면 항목 이름·형식·순서 등을 다시 바꿀 수 있습니다.'
-                  : '켜면 이후 양식 수정에서 이 항목의 삭제·이름·형식·순서 변경이 제한됩니다.'
-              }
-            >
-              <span className="tw-inline-flex tw-shrink-0">
-                <Switch
-                  size="small"
-                  checked={field.locked === true}
-                  onChange={(checked) => updateAt(index, { locked: checked ? true : false })}
-                />
-              </span>
-            </Tooltip>
           </div>
           {locked ? (
             <Typography.Text type="secondary" className="tw-block tw-break-all tw-text-[10px] tw-font-mono">
@@ -600,26 +573,6 @@ export function ApprovalFormSchemaBuilder({
               placeholder="예: 시작일과 종료일을 선택하세요"
               onChange={(e) => updateAt(index, { placeholder: e.target.value || undefined })}
             />
-          </div>
-          <div className="tw-flex tw-min-w-0 tw-max-w-full tw-items-center tw-justify-between tw-gap-2 tw-rounded-lg tw-border tw-border-slate-200 tw-bg-slate-50 tw-px-3 tw-py-2.5">
-            <Typography.Text className="tw-min-w-0 tw-flex-1 tw-text-[11px] [overflow-wrap:anywhere]">
-              잠금(이후 양식 수정 시 제한)
-            </Typography.Text>
-            <Tooltip
-              title={
-                field.locked === true
-                  ? '끄면 항목 이름·형식·순서 등을 다시 바꿀 수 있습니다.'
-                  : '켜면 이후 양식 수정에서 이 항목의 삭제·이름·형식·순서 변경이 제한됩니다.'
-              }
-            >
-              <span className="tw-inline-flex tw-shrink-0">
-              <Switch
-                size="small"
-                checked={field.locked === true}
-                onChange={(checked) => updateAt(index, { locked: checked ? true : false })}
-              />
-              </span>
-            </Tooltip>
           </div>
           {locked ? (
             <Typography.Text type="secondary" className="tw-block tw-break-all tw-text-[10px] tw-font-mono">

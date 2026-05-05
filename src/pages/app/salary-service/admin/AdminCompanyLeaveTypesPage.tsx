@@ -3,17 +3,36 @@
  * 시스템 기본 휴가(연차, 반차, 병가 등)는 이름/순서만 수정 가능, 삭제 불가.
  * 커스텀 휴가는 전 필드 수정/삭제 가능.
  */
-import { useEffect, useMemo, useState } from 'react';
+import {
+  useCallback,
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type HTMLAttributes,
+  type Key,
+} from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import {
   App,
   Button,
   Card,
   Checkbox,
   DatePicker,
-  Descriptions,
   Divider,
-  Drawer,
   Form,
   Input,
   InputNumber,
@@ -21,19 +40,19 @@ import {
   Select,
   Space,
   Table,
-  Tabs,
   Tag,
+  Tooltip,
   Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
-  ArrowDownOutlined,
-  ArrowUpOutlined,
-  HolderOutlined,
+  DeleteOutlined,
+  EditOutlined,
 } from '@ant-design/icons';
 import dayjs, { type Dayjs } from 'dayjs';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
+import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import { memberApi } from '@/features/member/api/memberApi';
 import { useAuth } from '@/features/auth/useAuth';
 import type {
@@ -135,6 +154,77 @@ const BALANCE_KO: Record<string, string> = {
 };
 
 const QK = ['salary', 'company-leave-types'] as const;
+const NAVY_BUTTON_CLASS =
+  '!tw-h-11 !tw-rounded-xl !tw-border-0 !tw-bg-[#1e3a5f] !tw-px-5 !tw-font-semibold !tw-text-white !tw-shadow-none hover:!tw-bg-[#152a45] disabled:!tw-border disabled:!tw-border-slate-200 disabled:!tw-bg-slate-100 disabled:!tw-text-slate-500';
+
+const getLeaveTypeRowKey = (row: CompanyLeaveType) =>
+  row.companyLeaveTypeId ?? `${row.name ?? 'leave'}-${row.displayOrder ?? 0}`;
+
+type SortableLeaveTypeRowContextValue = {
+  setActivatorNodeRef: (element: HTMLElement | null) => void;
+  listeners: ReturnType<typeof useSortable>['listeners'];
+  attributes: ReturnType<typeof useSortable>['attributes'];
+};
+
+const SortableLeaveTypeRowContext = createContext<SortableLeaveTypeRowContextValue | null>(null);
+
+function LeaveTypeDragHandle() {
+  const ctx = useContext(SortableLeaveTypeRowContext);
+  if (!ctx) return null;
+  return (
+    <span
+      ref={ctx.setActivatorNodeRef}
+      className="tw-inline-flex tw-cursor-grab tw-items-center tw-justify-center tw-rounded-md tw-p-1.5 tw-text-slate-400 hover:tw-bg-slate-100 hover:tw-text-slate-700 active:tw-cursor-grabbing"
+      title="드래그하여 순서 변경"
+      {...ctx.listeners}
+      {...ctx.attributes}
+    >
+      <span className="tw-inline-grid tw-grid-cols-2 tw-gap-[3px]" aria-hidden>
+        {Array.from({ length: 6 }).map((_, index) => (
+          <span key={index} className="tw-block tw-h-[3px] tw-w-[3px] tw-rounded-full tw-bg-current" />
+        ))}
+      </span>
+    </span>
+  );
+}
+
+type SortableLeaveTypeTableRowProps = HTMLAttributes<HTMLTableRowElement> & {
+  'data-row-key'?: Key;
+};
+
+function SortableLeaveTypeTableRow({ children, style, className, ...rest }: SortableLeaveTypeTableRowProps) {
+  const id = String(rest['data-row-key'] ?? '');
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+  });
+
+  const mergedStyle: CSSProperties = {
+    ...(style as CSSProperties),
+    transform: CSS.Transform.toString(transform),
+    transition,
+    ...(isDragging
+      ? {
+          position: 'relative',
+          zIndex: 1,
+          boxShadow: '0 8px 20px rgba(15,23,42,0.14)',
+          background: '#fff',
+        }
+      : {}),
+  };
+
+  const ctxValue = useMemo(
+    () => ({ setActivatorNodeRef, listeners, attributes }),
+    [setActivatorNodeRef, listeners, attributes],
+  );
+
+  return (
+    <SortableLeaveTypeRowContext.Provider value={ctxValue}>
+      <tr ref={setNodeRef} style={mergedStyle} className={className} {...rest}>
+        {children}
+      </tr>
+    </SortableLeaveTypeRowContext.Provider>
+  );
+}
 
 export function AdminCompanyLeaveTypesPage() {
   const { message } = App.useApp();
@@ -143,9 +233,8 @@ export function AdminCompanyLeaveTypesPage() {
   const [editing, setEditing] = useState<CompanyLeaveType | null>(null);
   const [open, setOpen] = useState(false);
   const [form] = Form.useForm<FormValues>();
-
-  // 행 클릭 시 우측 Drawer 에 표시할 상세 대상
-  const [detailTarget, setDetailTarget] = useState<CompanyLeaveType | null>(null);
+  const [listEditing, setListEditing] = useState(false);
+  const [draftRows, setDraftRows] = useState<CompanyLeaveType[]>([]);
 
   // [수동 휴가 부여] 모달 — 회사 직원에게 잔고를 직접 INSERT (배치 대기 없이 즉시 반영)
   const [grantOpen, setGrantOpen] = useState(false);
@@ -290,6 +379,7 @@ export function AdminCompanyLeaveTypesPage() {
     onSuccess: () => {
       message.success('휴가 종류가 생성되었습니다.');
       setOpen(false);
+      setListEditing(false);
       form.resetFields();
       void qc.invalidateQueries({ queryKey: QK });
     },
@@ -316,6 +406,7 @@ export function AdminCompanyLeaveTypesPage() {
     onSuccess: () => {
       message.success('휴가 종류가 수정되었습니다.');
       setOpen(false);
+      setListEditing(false);
       setEditing(null);
       form.resetFields();
       void qc.invalidateQueries({ queryKey: QK });
@@ -325,44 +416,16 @@ export function AdminCompanyLeaveTypesPage() {
 
   const deleteM = useMutation({
     mutationFn: (id: string) => attendanceApi.companyLeaveType.delete(id),
-    onSuccess: () => {
+    onSuccess: (_, id) => {
       message.success('삭제되었습니다.');
+      setDraftRows((prev) =>
+        prev
+          .filter((row) => row.companyLeaveTypeId !== id)
+          .map((row, index) => ({ ...row, displayOrder: index + 1 })),
+      );
       void qc.invalidateQueries({ queryKey: QK });
     },
     onError: (e: Error) => message.error(e.message || '삭제에 실패했습니다.'),
-  });
-
-  // 두 휴가의 displayOrder 를 swap 하여 순서 위/아래 이동
-  const swapM = useMutation({
-    mutationFn: async (input: { a: CompanyLeaveType; b: CompanyLeaveType }) => {
-      const { a, b } = input;
-      const orderA = a.displayOrder ?? 0;
-      const orderB = b.displayOrder ?? 0;
-      await Promise.all([
-        attendanceApi.companyLeaveType.update(a.companyLeaveTypeId!, {
-          name: a.name ?? '',
-          balanceType: a.balanceType ?? null,
-          daysPerUse: a.daysPerUse ?? 1,
-          isPaidYn: a.isPaidYn ?? 'Y',
-          maxDaysPerYear: a.maxDaysPerYear ?? null,
-          requireEvidenceYn: a.requireEvidenceYn ?? 'N',
-          displayOrder: orderB,
-        }),
-        attendanceApi.companyLeaveType.update(b.companyLeaveTypeId!, {
-          name: b.name ?? '',
-          balanceType: b.balanceType ?? null,
-          daysPerUse: b.daysPerUse ?? 1,
-          isPaidYn: b.isPaidYn ?? 'Y',
-          maxDaysPerYear: b.maxDaysPerYear ?? null,
-          requireEvidenceYn: b.requireEvidenceYn ?? 'N',
-          displayOrder: orderA,
-        }),
-      ]);
-    },
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: QK });
-    },
-    onError: (e: Error) => message.error(e.message || '순서 변경에 실패했습니다.'),
   });
 
   // displayOrder 오름차순 정렬된 행 ↑↓ 인접 swap 에 사용
@@ -374,25 +437,69 @@ export function AdminCompanyLeaveTypesPage() {
     [listQ.data],
   );
 
-  const moveUp = (record: CompanyLeaveType) => {
-    const idx = sortedRows.findIndex(
-      (r) => r.companyLeaveTypeId === record.companyLeaveTypeId,
-    );
-    if (idx <= 0) return;
-    const target = sortedRows[idx - 1];
-    if (!target) return;
-    swapM.mutate({ a: record, b: target });
+  useEffect(() => {
+    if (!listEditing) {
+      setDraftRows(sortedRows);
+    }
+  }, [listEditing, sortedRows]);
+
+  const displayedRows = listEditing ? draftRows : sortedRows;
+  const sortableRowIds = useMemo(() => displayedRows.map(getLeaveTypeRowKey), [displayedRows]);
+  const leaveTypeSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const saveOrderM = useMutation({
+    mutationFn: async (rows: CompanyLeaveType[]) => {
+      await Promise.all(
+        rows.map((row, index) => {
+          if (!row.companyLeaveTypeId) return Promise.resolve();
+          const nextOrder = index + 1;
+          return attendanceApi.companyLeaveType.update(row.companyLeaveTypeId, {
+            name: row.name ?? '',
+            balanceType: (row.balanceType as BalanceTypeCode | null) ?? null,
+            daysPerUse: row.daysPerUse ?? 1,
+            isPaidYn: row.isPaidYn ?? 'Y',
+            maxDaysPerYear: row.maxDaysPerYear ?? null,
+            requireEvidenceYn: row.requireEvidenceYn ?? 'N',
+            displayOrder: nextOrder,
+          });
+        }),
+      );
+    },
+    onSuccess: async () => {
+      message.success('휴가 종류 순서가 저장되었습니다.');
+      setListEditing(false);
+      await qc.invalidateQueries({ queryKey: QK });
+    },
+    onError: (e: Error) => message.error(e.message || '순서 저장에 실패했습니다.'),
+  });
+
+  const handleStartListEdit = () => {
+    setDraftRows(sortedRows.map((row, index) => ({ ...row, displayOrder: index + 1 })));
+    setListEditing(true);
   };
 
-  const moveDown = (record: CompanyLeaveType) => {
-    const idx = sortedRows.findIndex(
-      (r) => r.companyLeaveTypeId === record.companyLeaveTypeId,
-    );
-    if (idx === -1 || idx >= sortedRows.length - 1) return;
-    const target = sortedRows[idx + 1];
-    if (!target) return;
-    swapM.mutate({ a: record, b: target });
+  const handleCancelListEdit = () => {
+    setDraftRows(sortedRows);
+    setListEditing(false);
   };
+
+  const handleSaveListEdit = () => {
+    saveOrderM.mutate(draftRows.map((row, index) => ({ ...row, displayOrder: index + 1 })));
+  };
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setDraftRows((prev) => {
+      const oldIndex = prev.findIndex((row) => getLeaveTypeRowKey(row) === active.id);
+      const newIndex = prev.findIndex((row) => getLeaveTypeRowKey(row) === over.id);
+      if (oldIndex < 0 || newIndex < 0) return prev;
+      return arrayMove(prev, oldIndex, newIndex).map((row, index) => ({ ...row, displayOrder: index + 1 }));
+    });
+  }, []);
 
   const initDefaultsM = useMutation({
     mutationFn: async (codes: string[]) => {
@@ -452,26 +559,24 @@ export function AdminCompanyLeaveTypesPage() {
   };
 
   const columns = useMemo<ColumnsType<CompanyLeaveType>>(
-    () => [
-      {
-        // 좌측 drag handle 시각적 hint 실제 DnD 는 다음 단계 ↑↓ 버튼으로 정렬
-        title: '',
-        key: 'dragHandle',
-        width: 32,
-        align: 'center',
-        render: () => (
-          <span className="tw-text-slate-300 tw-cursor-grab">
-            <HolderOutlined />
-          </span>
-        ),
-      },
+    () => {
+      const baseColumns: ColumnsType<CompanyLeaveType> = [
       {
         title: '이름',
         dataIndex: 'name',
         key: 'name',
         render: (v: string, r) => (
-          <Space size={4}>
-            <Typography.Text>{v ?? '—'}</Typography.Text>
+          <Space size={6}>
+            <button
+              type="button"
+              className="tw-appearance-none tw-border-0 tw-bg-transparent tw-p-0 tw-text-left tw-text-sm tw-font-semibold tw-text-slate-900 hover:tw-text-[#1e3a5f] focus-visible:tw-rounded focus-visible:tw-outline-none focus-visible:tw-ring-2 focus-visible:tw-ring-blue-400"
+              onClick={(event) => {
+                event.stopPropagation();
+                openEdit(r);
+              }}
+            >
+              {v ?? '—'}
+            </button>
             {r.isSystemDefault ? <Tag color="blue">기본</Tag> : null}
           </Space>
         ),
@@ -504,40 +609,28 @@ export function AdminCompanyLeaveTypesPage() {
       {
         title: '작업',
         key: 'actions',
-        width: 220,
+        width: listEditing ? 90 : 64,
         align: 'center',
-        // 행 클릭 onClick 과 충돌 방지 위해 stopPropagation 처리
         render: (_, record) => {
-          const idx = sortedRows.findIndex(
-            (r) => r.companyLeaveTypeId === record.companyLeaveTypeId,
-          );
-          const isFirst = idx === 0;
-          const isLast = idx === sortedRows.length - 1;
-          const locked = isLocked(record);
           const deletable = canDelete(record);
+          if (!listEditing) {
+            return (
+              <Tooltip title="수정">
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<EditOutlined />}
+                  className="!tw-inline-flex !tw-h-8 !tw-w-8 !tw-items-center !tw-justify-center !tw-rounded-lg !tw-text-slate-500 hover:!tw-bg-slate-100 hover:!tw-text-slate-800"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openEdit(record);
+                  }}
+                />
+              </Tooltip>
+            );
+          }
           return (
             <Space size={4} onClick={(e) => e.stopPropagation()}>
-              <Button
-                size="small"
-                icon={<ArrowUpOutlined />}
-                disabled={isFirst}
-                loading={swapM.isPending}
-                onClick={() => moveUp(record)}
-              />
-              <Button
-                size="small"
-                icon={<ArrowDownOutlined />}
-                disabled={isLast}
-                loading={swapM.isPending}
-                onClick={() => moveDown(record)}
-              />
-              <Button
-                size="small"
-                disabled={locked}
-                onClick={() => openEdit(record)}
-              >
-                수정
-              </Button>
               {deletable ? (
                 <Popconfirm
                   title="정말 삭제하시겠어요?"
@@ -548,9 +641,15 @@ export function AdminCompanyLeaveTypesPage() {
                     record.companyLeaveTypeId && deleteM.mutate(record.companyLeaveTypeId)
                   }
                 >
-                  <Button size="small" danger>
-                    삭제
-                  </Button>
+                  <Tooltip title="삭제">
+                    <Button
+                      danger
+                      type="text"
+                      size="small"
+                      icon={<DeleteOutlined />}
+                      className="!tw-inline-flex !tw-h-8 !tw-w-8 !tw-items-center !tw-justify-center !tw-rounded-lg !tw-text-red-500 hover:!tw-bg-red-50"
+                    />
+                  </Tooltip>
                 </Popconfirm>
               ) : (
                 <Typography.Text type="secondary" className="tw-text-xs">
@@ -561,142 +660,97 @@ export function AdminCompanyLeaveTypesPage() {
           );
         },
       },
-    ],
-    [deleteM, sortedRows, swapM],
+    ];
+
+      if (!listEditing) return baseColumns;
+
+      return [
+        {
+          title: '',
+          key: 'dragHandle',
+          width: 48,
+          align: 'center',
+          render: () => <LeaveTypeDragHandle />,
+        },
+        ...baseColumns,
+      ];
+    },
+    [deleteM, listEditing],
   );
 
   return (
-    <Tabs
-      defaultActiveKey="types"
-      items={[
-        {
-          key: 'types',
-          label: '휴가 종류 관리',
-          children: (
-            <Space direction="vertical" className="tw-w-full" size={16}>
-      <div className="tw-flex tw-flex-wrap tw-items-end tw-justify-between tw-gap-3">
-        <div>
-          <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
-            휴가 관리
-          </Typography.Title>
-          <Typography.Text type="secondary" className="tw-text-xs">
-            직원이 휴가 신청 시 선택하는 휴가 종류를 관리합니다.
-          </Typography.Text>
-        </div>
-        <Space>
-          <Button onClick={onGrantOpen}>
-            수동 휴가 부여
-          </Button>
-          <Button loading={initDefaultsM.isPending} onClick={openInitModal}>
-            기본 휴가 불러오기
-          </Button>
-          <Button type="primary" onClick={openCreate}>
-            휴가 종류 추가
-          </Button>
+    <Space direction="vertical" className="tw-w-full" size={16}>
+      <div className="tw-flex tw-flex-wrap tw-justify-between tw-gap-3">
+        <AppWorkspacePageTitle
+          eyebrow="LEAVE"
+          title="휴가 관리"
+          subtitle="직원이 휴가 신청 시 선택하는 휴가 종류를 관리합니다."
+        />
+        <Space wrap className="tw-shrink-0">
+          {listEditing ? (
+            <>
+              <Button className="!tw-rounded-xl" onClick={openCreate}>
+                휴가 종류 추가
+              </Button>
+              <Button className="!tw-rounded-xl" onClick={handleCancelListEdit}>
+                취소
+              </Button>
+              <Button
+                type="primary"
+                className={NAVY_BUTTON_CLASS}
+                loading={saveOrderM.isPending}
+                onClick={handleSaveListEdit}
+              >
+                저장하기
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button onClick={onGrantOpen}>
+                수동 휴가 부여
+              </Button>
+              <Button loading={initDefaultsM.isPending} onClick={openInitModal}>
+                기본 휴가 불러오기
+              </Button>
+              <Button
+                type="primary"
+                className={NAVY_BUTTON_CLASS}
+                onClick={openCreate}
+              >
+                휴가 종류 추가
+              </Button>
+              <Button
+                type="primary"
+                icon={<EditOutlined />}
+                className={NAVY_BUTTON_CLASS}
+                onClick={handleStartListEdit}
+              >
+                수정하기
+              </Button>
+            </>
+          )}
         </Space>
       </div>
 
       <Card className="tw-border-slate-200/80 tw-shadow-sm">
-        <Table<CompanyLeaveType>
-          rowKey={(r) => r.companyLeaveTypeId ?? `${r.name}-${r.displayOrder}`}
-          loading={listQ.isLoading}
-          dataSource={sortedRows}
-          columns={columns}
-          pagination={false}
-          size="small"
-          locale={{ emptyText: '등록된 휴가 종류가 없습니다.' }}
-          onRow={(record) => ({
-            onClick: () => setDetailTarget(record),
-            style: { cursor: 'pointer' },
-          })}
-        />
+        <div className="tw-overflow-hidden tw-rounded-xl tw-border tw-border-slate-200">
+          <DndContext sensors={leaveTypeSensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={sortableRowIds} strategy={verticalListSortingStrategy}>
+              <Table<CompanyLeaveType>
+                rowKey={getLeaveTypeRowKey}
+                loading={listQ.isLoading}
+                dataSource={displayedRows}
+                columns={columns}
+                pagination={false}
+                size="small"
+                components={listEditing ? { body: { row: SortableLeaveTypeTableRow } } : undefined}
+                className="[&_.ant-table]:!tw-bg-white [&_.ant-table-thead>tr>th]:!tw-border-slate-200 [&_.ant-table-thead>tr>th]:!tw-bg-slate-50 [&_.ant-table-thead>tr>th]:!tw-px-4 [&_.ant-table-thead>tr>th]:!tw-py-3 [&_.ant-table-thead>tr>th]:!tw-text-xs [&_.ant-table-thead>tr>th]:!tw-font-semibold [&_.ant-table-thead>tr>th]:!tw-text-slate-600 [&_.ant-table-tbody>tr>td]:!tw-border-slate-100 [&_.ant-table-tbody>tr>td]:!tw-px-4 [&_.ant-table-tbody>tr>td]:!tw-py-4 [&_.ant-table-tbody>tr:hover>td]:!tw-bg-slate-50/70"
+                locale={{ emptyText: '등록된 휴가 종류가 없습니다.' }}
+              />
+            </SortableContext>
+          </DndContext>
+        </div>
       </Card>
-
-      {/* 우측 Drawer 행 클릭 시 증빙 사용기한 순서 등 상세 메타 표시 */}
-      <Drawer
-        open={!!detailTarget}
-        onClose={() => setDetailTarget(null)}
-        width={420}
-        title={
-          detailTarget ? (
-            <Space size={4}>
-              <span>{detailTarget.name ?? '—'}</span>
-              {detailTarget.isSystemDefault ? <Tag color="blue">기본</Tag> : null}
-            </Space>
-          ) : (
-            '휴가 상세'
-          )
-        }
-        extra={
-          detailTarget && (
-            <Button
-              type="primary"
-              onClick={() => {
-                openEdit(detailTarget);
-                setDetailTarget(null);
-              }}
-            >
-              수정
-            </Button>
-          )
-        }
-      >
-        {detailTarget && (
-          <Descriptions
-            column={1}
-            size="small"
-            bordered
-            labelStyle={{ width: '40%', backgroundColor: '#fafafa' }}
-            items={[
-              {
-                key: 'balanceType',
-                label: '잔고 유형',
-                children: detailTarget.balanceType
-                  ? BALANCE_KO[detailTarget.balanceType] ?? detailTarget.balanceType
-                  : '차감 없음',
-              },
-              {
-                key: 'isPaidYn',
-                label: '유급 여부',
-                children:
-                  detailTarget.isPaidYn === 'Y' ? (
-                    <Tag color="green">유급</Tag>
-                  ) : (
-                    <Tag>무급</Tag>
-                  ),
-              },
-              {
-                key: 'requireEvidenceYn',
-                label: '증빙 첨부',
-                children:
-                  detailTarget.requireEvidenceYn === 'Y' ? (
-                    <Tag color="orange">필수</Tag>
-                  ) : (
-                    <Tag>선택</Tag>
-                  ),
-              },
-              {
-                key: 'maxDaysPerYear',
-                label: '연간 한도',
-                children:
-                  detailTarget.maxDaysPerYear == null
-                    ? '제한 없음'
-                    : `${detailTarget.maxDaysPerYear}일`,
-              },
-              {
-                key: 'displayOrder',
-                label: '정렬 순서',
-                children: detailTarget.displayOrder ?? '—',
-              },
-              {
-                key: 'isSystemDefault',
-                label: '시스템 기본',
-                children: detailTarget.isSystemDefault ? '예 (삭제 불가)' : '아니오',
-              },
-            ]}
-          />
-        )}
-      </Drawer>
 
       {/* [수동 휴가 부여] — 시연용/누락 보정용 즉시 INSERT 모달 */}
       <AppDoubleActionModal
@@ -953,10 +1007,6 @@ export function AdminCompanyLeaveTypesPage() {
         </Form>
         </div>
       </AppDoubleActionModal>
-            </Space>
-          ),
-        },
-      ]}
-    />
+    </Space>
   );
 }

@@ -11,5 +11,5 @@ export const membersKeys = {
 export const membersListQueryOptions = (params: MembersSearch) =>
   queryOptions({
     queryKey: membersKeys.list(params),
-    queryFn: () => membersApi.list(params),
+    queryFn: () => (params.keyword?.trim() ? membersApi.search(params) : membersApi.list(params)),
   });

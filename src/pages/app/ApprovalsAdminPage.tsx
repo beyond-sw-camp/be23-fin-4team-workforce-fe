@@ -1,4 +1,15 @@
-import { DeleteOutlined, EyeOutlined, FormOutlined, PlusOutlined, ReloadOutlined, SaveOutlined, UploadOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EditOutlined, EyeOutlined, FormOutlined, PlusOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons';
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
@@ -16,13 +27,15 @@ import {
   Table,
   Tabs,
   Tag,
+  Tooltip,
   Typography,
 } from 'antd';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type HTMLAttributes, type Key } from 'react';
 import {
   APPROVAL_REQUEST_TYPES,
   approvalApi,
   type ApprovalDocument,
+  type ApprovalPolicyLine,
   type ApprovalRequestType,
 } from '@/features/approvals/api/approvalApi';
 import {
@@ -49,6 +62,7 @@ import {
 import { usePermissions } from '@/features/permissions/usePermissionsHook';
 import { ContractTemplatesAdminPanel } from '@/features/contracts/ui/ContractTemplatesAdminPanel';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
+import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
 
 type DocForm = {
   documentName: string;
@@ -163,6 +177,72 @@ function validatePolicyLines(rows: PolicyLineDraft[]) {
   return null;
 }
 
+type SortablePolicyLineRowContextValue = {
+  setActivatorNodeRef: (element: HTMLElement | null) => void;
+  listeners: ReturnType<typeof useSortable>['listeners'];
+  attributes: ReturnType<typeof useSortable>['attributes'];
+};
+
+const SortablePolicyLineRowContext = createContext<SortablePolicyLineRowContextValue | null>(null);
+
+function PolicyLineDragHandle() {
+  const ctx = useContext(SortablePolicyLineRowContext);
+  if (!ctx) return null;
+  return (
+    <span
+      ref={ctx.setActivatorNodeRef}
+      className="tw-inline-flex tw-cursor-grab tw-items-center tw-justify-center tw-rounded-md tw-p-1.5 tw-text-slate-400 hover:tw-bg-slate-100 hover:tw-text-slate-700 active:tw-cursor-grabbing"
+      title="드래그하여 순서 변경"
+      {...ctx.listeners}
+      {...ctx.attributes}
+    >
+      <span className="tw-inline-grid tw-grid-cols-2 tw-gap-[3px]" aria-hidden>
+        {Array.from({ length: 6 }).map((_, index) => (
+          <span key={index} className="tw-block tw-h-[3px] tw-w-[3px] tw-rounded-full tw-bg-current" />
+        ))}
+      </span>
+    </span>
+  );
+}
+
+type SortablePolicyLineTableRowProps = HTMLAttributes<HTMLTableRowElement> & {
+  'data-row-key'?: Key;
+};
+
+function SortablePolicyLineTableRow({ children, style, className, ...rest }: SortablePolicyLineTableRowProps) {
+  const id = String(rest['data-row-key'] ?? '');
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+  });
+
+  const mergedStyle: CSSProperties = {
+    ...(style as CSSProperties),
+    transform: CSS.Transform.toString(transform),
+    transition,
+    ...(isDragging
+      ? {
+          position: 'relative',
+          zIndex: 1,
+          boxShadow: '0 8px 20px rgba(15,23,42,0.14)',
+          background: '#fff',
+        }
+      : {}),
+  };
+
+  const ctxValue = useMemo(
+    () => ({ setActivatorNodeRef, listeners, attributes }),
+    [setActivatorNodeRef, listeners, attributes],
+  );
+
+  return (
+    <SortablePolicyLineRowContext.Provider value={ctxValue}>
+      <tr ref={setNodeRef} style={mergedStyle} className={className} {...rest}>
+        {children}
+      </tr>
+    </SortablePolicyLineRowContext.Provider>
+  );
+}
+
 export function ApprovalsAdminPage() {
   const { message } = App.useApp();
   const qc = useQueryClient();
@@ -173,6 +253,7 @@ export function ApprovalsAdminPage() {
   const [activeTab, setActiveTab] = useState<'documents' | 'policy-lines' | 'contract-templates' | 'seal-management'>('documents');
   const [selectedDocumentId, setSelectedDocumentId] = useState<string>('');
   const [policyDrafts, setPolicyDrafts] = useState<PolicyLineDraft[]>([]);
+  const [policyEditing, setPolicyEditing] = useState(false);
   const [sealFile, setSealFile] = useState<File | null>(null);
   const [sealPreviewUrl, setSealPreviewUrl] = useState<string | null>(null);
   const sealInputRef = useRef<HTMLInputElement | null>(null);
@@ -181,6 +262,7 @@ export function ApprovalsAdminPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [editingDocumentId, setEditingDocumentId] = useState<string | null>(null);
   const [editSchemaFields, setEditSchemaFields] = useState<FormFieldSchema[]>([]);
+  const [policyPreviewDocumentId, setPolicyPreviewDocumentId] = useState<string | null>(null);
 
   const [createCalVisible, setCreateCalVisible] = useState(false);
   const [createCalDisplayName, setCreateCalDisplayName] = useState('');
@@ -210,6 +292,7 @@ export function ApprovalsAdminPage() {
   const canCreate = isSystemAdmin || hasPermission(PERM.APPROVAL_AD_CREATE);
   const canUpdate = isSystemAdmin || hasPermission(PERM.APPROVAL_AD_UPDATE);
   const canDelete = isSystemAdmin || hasPermission(PERM.APPROVAL_AD_DELETE);
+  const canEditPolicyLines = canCreate || canUpdate;
 
   const { data: documents = [], isFetching: docsLoading } = useQuery({
     queryKey: ['approval', 'documents', 'all'],
@@ -260,6 +343,35 @@ export function ApprovalsAdminPage() {
     () => documents.find((doc) => doc.documentId === selectedDocumentId) ?? null,
     [documents, selectedDocumentId],
   );
+  const policyPreviewDocument = useMemo(
+    () => (policyPreviewDocumentId ? documents.find((doc) => doc.documentId === policyPreviewDocumentId) ?? null : null),
+    [documents, policyPreviewDocumentId],
+  );
+
+  const { data: policyPreviewLines = [], isFetching: policyPreviewLoading } = useQuery({
+    queryKey: ['approval', 'policy-lines', 'preview', policyPreviewDocumentId],
+    queryFn: () => approvalApi.getPolicyLines(policyPreviewDocumentId!),
+    enabled: canRead && Boolean(policyPreviewDocumentId),
+  });
+
+  const jobTitleLabelById = useMemo(
+    () => new Map(jobTitleOptions.map((item) => [item.value, item.label])),
+    [jobTitleOptions],
+  );
+  const orgLabelById = useMemo(
+    () => new Map(orgOptions.map((item) => [item.value, item.label.trim()])),
+    [orgOptions],
+  );
+  const sortedPolicyDrafts = useMemo(
+    () => [...policyDrafts].sort((a, b) => a.stepOrder - b.stepOrder),
+    [policyDrafts],
+  );
+  const policyLineSortableIds = useMemo(() => sortedPolicyDrafts.map((row) => row.key), [sortedPolicyDrafts]);
+  const policyLineSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
   useEffect(() => {
     if (!selectedDocumentId && documents.length > 0) {
       const firstDocument = documents[0];
@@ -278,6 +390,7 @@ export function ApprovalsAdminPage() {
         organizationId: line.organizationId,
       })),
     );
+    setPolicyEditing(false);
   }, [policyLines]);
 
   const refreshAll = async () => {
@@ -364,6 +477,7 @@ export function ApprovalsAdminPage() {
     mutationFn: approvalApi.savePolicyLines,
     onSuccess: async () => {
       message.success('정책라인을 저장했습니다.');
+      setPolicyEditing(false);
       await refreshAll();
     },
     onError: (e: Error) => message.error(e.message || '정책라인 저장에 실패했습니다.'),
@@ -375,6 +489,7 @@ export function ApprovalsAdminPage() {
       message.success('정책라인을 삭제했습니다.');
       await refreshAll();
       setPolicyDrafts([]);
+      setPolicyEditing(false);
     },
     onError: (e: Error) => message.error(e.message || '정책라인 삭제에 실패했습니다.'),
   });
@@ -599,12 +714,41 @@ export function ApprovalsAdminPage() {
     ]);
   };
 
+  const handleCancelPolicyEdit = () => {
+    setPolicyDrafts(
+      policyLines.map((line) => ({
+        key: line.policyLineId || `${line.documentId}-${line.stepOrder}`,
+        jobTitleId: line.jobTitleId,
+        stepOrder: line.stepOrder,
+        organizationId: line.organizationId,
+      })),
+    );
+    setPolicyEditing(false);
+  };
+
+  const handlePolicyLineDragEnd = ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id) return;
+    setPolicyDrafts((prev) => {
+      const sorted = [...prev].sort((a, b) => a.stepOrder - b.stepOrder);
+      const oldIndex = sorted.findIndex((row) => row.key === active.id);
+      const newIndex = sorted.findIndex((row) => row.key === over.id);
+      if (oldIndex < 0 || newIndex < 0) return prev;
+      return arrayMove(sorted, oldIndex, newIndex).map((row, index) => ({
+        ...row,
+        stepOrder: index + 1,
+      }));
+    });
+  };
+
   const handleSavePolicyLines = async () => {
     if (!selectedDocumentId) {
       message.warning('양식을 먼저 선택해 주세요.');
       return;
     }
-    const sorted = [...policyDrafts].sort((a, b) => a.stepOrder - b.stepOrder);
+    const sorted = [...policyDrafts].sort((a, b) => a.stepOrder - b.stepOrder).map((row, index) => ({
+      ...row,
+      stepOrder: index + 1,
+    }));
     const errorMessage = validatePolicyLines(sorted);
     if (errorMessage) {
       message.warning(errorMessage);
@@ -705,14 +849,12 @@ export function ApprovalsAdminPage() {
                           title: '양식명',
                           dataIndex: 'documentName',
                           key: 'documentName',
+                          width: 280,
                           render: (name: string, row) => (
                             <button
                               type="button"
-                              className="tw-border-0 tw-bg-transparent tw-p-0 tw-text-left tw-font-semibold tw-text-[#1e3a5f] hover:tw-underline"
-                              onClick={() => {
-                                setSelectedDocumentId(row.documentId);
-                                setActiveTab('policy-lines');
-                              }}
+                              className="tw-block tw-w-full tw-truncate tw-border-0 tw-bg-transparent tw-p-0 tw-text-left tw-font-semibold tw-text-[#1e3a5f] hover:tw-underline"
+                              onClick={() => handleOpenEdit(row)}
                             >
                               {name}
                             </button>
@@ -753,14 +895,14 @@ export function ApprovalsAdminPage() {
                         {
                           title: '작업',
                           key: 'actions',
-                          width: 240,
+                          width: 260,
                           render: (_, row) => (
-                            <Space size={8} wrap>
+                            <div className="tw-flex tw-items-center tw-gap-2 tw-whitespace-nowrap">
                               {canUpdate ? (
                                 <Button
                                   size="small"
                                   icon={<FormOutlined />}
-                                  className="!tw-h-8 !tw-rounded-lg !tw-border-slate-200 !tw-font-medium"
+                                  className="!tw-h-8 !tw-rounded-full !tw-border-slate-200 !tw-bg-white !tw-px-3 !tw-text-xs !tw-font-semibold !tw-text-slate-700 hover:!tw-border-[#1e3a5f]/30 hover:!tw-bg-slate-50 hover:!tw-text-[#1e3a5f]"
                                   onClick={() => handleOpenEdit(row)}
                                 >
                                   양식 수정
@@ -769,15 +911,12 @@ export function ApprovalsAdminPage() {
                               <Button
                                 size="small"
                                 icon={<EyeOutlined />}
-                                className="!tw-h-8 !tw-rounded-lg !tw-border-slate-200 !tw-font-medium"
-                                onClick={() => {
-                                  setSelectedDocumentId(row.documentId);
-                                  setActiveTab('policy-lines');
-                                }}
+                                className="!tw-h-8 !tw-rounded-full !tw-border-slate-200 !tw-bg-white !tw-px-3 !tw-text-xs !tw-font-semibold !tw-text-slate-700 hover:!tw-border-[#1e3a5f]/30 hover:!tw-bg-slate-50 hover:!tw-text-[#1e3a5f]"
+                                onClick={() => setPolicyPreviewDocumentId(row.documentId)}
                               >
                                 정책라인 확인
                               </Button>
-                            </Space>
+                            </div>
                           ),
                         },
                       ]}
@@ -802,6 +941,7 @@ export function ApprovalsAdminPage() {
                           value={selectedDocumentId || undefined}
                           onChange={(v) => {
                             setSelectedDocumentId(v);
+                            setPolicyEditing(false);
                           }}
                           placeholder="양식을 선택하세요"
                           className="tw-min-w-[320px]"
@@ -813,39 +953,55 @@ export function ApprovalsAdminPage() {
                       </div>
                     </div>
                     <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-end tw-gap-2">
-                        {canCreate ? (
-                          <Button icon={<PlusOutlined />} className="!tw-rounded-xl" onClick={handleAddPolicyLine}>
-                            결재선 등록
-                          </Button>
-                        ) : null}
-                        {canCreate ? (
+                        {policyEditing ? (
+                          <>
+                            {canEditPolicyLines ? (
+                              <Button icon={<PlusOutlined />} className="!tw-rounded-xl" onClick={handleAddPolicyLine}>
+                                결재선 등록
+                              </Button>
+                            ) : null}
+                            {canDelete ? (
+                              <Popconfirm
+                                title="선택 양식의 정책라인을 전부 삭제할까요?"
+                                okText="삭제"
+                                cancelText="취소"
+                                onConfirm={() => void handleDeletePolicyLines()}
+                              >
+                                <Button
+                                  danger
+                                  icon={<DeleteOutlined />}
+                                  className="!tw-rounded-xl !tw-font-semibold"
+                                  loading={deletePolicyLineM.isPending}
+                                >
+                                  전체 삭제
+                                </Button>
+                              </Popconfirm>
+                            ) : null}
+                            <Button className="!tw-rounded-xl" onClick={handleCancelPolicyEdit}>
+                              취소
+                            </Button>
+                            {canEditPolicyLines ? (
+                              <Button
+                                type="primary"
+                                className={NAVY_BUTTON_CLASS}
+                                loading={savePolicyLineM.isPending}
+                                onClick={() => void handleSavePolicyLines()}
+                              >
+                                저장하기
+                              </Button>
+                            ) : null}
+                          </>
+                        ) : (
                           <Button
                             type="primary"
-                            icon={<SaveOutlined />}
+                            icon={<EditOutlined />}
                             className={NAVY_BUTTON_CLASS}
-                            loading={savePolicyLineM.isPending}
-                            onClick={() => void handleSavePolicyLines()}
+                            disabled={!selectedDocumentId || !canEditPolicyLines}
+                            onClick={() => setPolicyEditing(true)}
                           >
-                            라인 저장
+                            수정하기
                           </Button>
-                        ) : null}
-                        {canDelete ? (
-                          <Popconfirm
-                            title="선택 양식의 정책라인을 전부 삭제할까요?"
-                            okText="삭제"
-                            cancelText="취소"
-                            onConfirm={() => void handleDeletePolicyLines()}
-                          >
-                            <Button
-                              danger
-                              icon={<DeleteOutlined />}
-                              className="!tw-rounded-xl !tw-font-semibold"
-                              loading={deletePolicyLineM.isPending}
-                            >
-                              전체 삭제
-                            </Button>
-                          </Popconfirm>
-                        ) : null}
+                        )}
                       </div>
                     </div>
 
@@ -868,31 +1024,28 @@ export function ApprovalsAdminPage() {
                     ) : null}
 
                   <div className="tw-overflow-hidden tw-rounded-xl tw-border tw-border-slate-200">
-                    <Table<PolicyLineDraft>
-                      rowKey="key"
-                      loading={policyLoading}
-                      dataSource={[...policyDrafts].sort((a, b) => a.stepOrder - b.stepOrder)}
-                      pagination={false}
-                      className="[&_.ant-table]:!tw-bg-white [&_.ant-table-thead>tr>th]:!tw-border-slate-200 [&_.ant-table-thead>tr>th]:!tw-bg-slate-50 [&_.ant-table-thead>tr>th]:!tw-px-4 [&_.ant-table-thead>tr>th]:!tw-py-3 [&_.ant-table-thead>tr>th]:!tw-text-xs [&_.ant-table-thead>tr>th]:!tw-font-semibold [&_.ant-table-thead>tr>th]:!tw-text-slate-600 [&_.ant-table-tbody>tr>td]:!tw-border-slate-100 [&_.ant-table-tbody>tr>td]:!tw-px-4 [&_.ant-table-tbody>tr>td]:!tw-py-4 [&_.ant-table-tbody>tr:hover>td]:!tw-bg-slate-50/70"
-                      columns={[
+                    <DndContext sensors={policyLineSensors} collisionDetection={closestCenter} onDragEnd={handlePolicyLineDragEnd}>
+                      <SortableContext items={policyLineSortableIds} strategy={verticalListSortingStrategy}>
+                        <Table<PolicyLineDraft>
+                          rowKey="key"
+                          loading={policyLoading}
+                          dataSource={sortedPolicyDrafts}
+                          pagination={false}
+                          components={policyEditing ? { body: { row: SortablePolicyLineTableRow } } : undefined}
+                          className="[&_.ant-table]:!tw-bg-white [&_.ant-table-thead>tr>th]:!tw-border-slate-200 [&_.ant-table-thead>tr>th]:!tw-bg-slate-50 [&_.ant-table-thead>tr>th]:!tw-px-4 [&_.ant-table-thead>tr>th]:!tw-py-3 [&_.ant-table-thead>tr>th]:!tw-text-xs [&_.ant-table-thead>tr>th]:!tw-font-semibold [&_.ant-table-thead>tr>th]:!tw-text-slate-600 [&_.ant-table-tbody>tr>td]:!tw-border-slate-100 [&_.ant-table-tbody>tr>td]:!tw-px-4 [&_.ant-table-tbody>tr>td]:!tw-py-4 [&_.ant-table-tbody>tr:hover>td]:!tw-bg-slate-50/70"
+                          columns={[
                         {
                           title: '순서',
                           dataIndex: 'stepOrder',
                           key: 'stepOrder',
                           width: 120,
                           render: (value: number, row) => (
-                            <InputNumber
-                              min={1}
-                              value={value}
-                              className="!tw-w-20"
-                              onChange={(next) => {
-                                setPolicyDrafts((prev) =>
-                                  prev.map((item) =>
-                                    item.key === row.key ? { ...item, stepOrder: Number(next) || 1 } : item,
-                                  ),
-                                );
-                              }}
-                            />
+                            <div className="tw-flex tw-items-center tw-gap-2">
+                              {policyEditing ? <PolicyLineDragHandle /> : null}
+                              <span className="tw-inline-flex tw-h-7 tw-min-w-7 tw-items-center tw-justify-center tw-rounded-lg tw-bg-slate-100 tw-px-2 tw-text-xs tw-font-semibold tw-text-slate-700">
+                                {value}
+                              </span>
+                            </div>
                           ),
                         },
                         {
@@ -900,17 +1053,23 @@ export function ApprovalsAdminPage() {
                           dataIndex: 'jobTitleId',
                           key: 'jobTitleId',
                           render: (value: string, row) => (
-                            <Select
-                              value={value || undefined}
-                              className="tw-min-w-[220px]"
-                              placeholder="직책 선택"
-                              options={jobTitleOptions}
-                              onChange={(next) =>
-                                setPolicyDrafts((prev) =>
-                                  prev.map((item) => (item.key === row.key ? { ...item, jobTitleId: next } : item)),
-                                )
-                              }
-                            />
+                            policyEditing ? (
+                              <Select
+                                value={value || undefined}
+                                className="tw-min-w-[220px]"
+                                placeholder="직책 선택"
+                                options={jobTitleOptions}
+                                onChange={(next) =>
+                                  setPolicyDrafts((prev) =>
+                                    prev.map((item) => (item.key === row.key ? { ...item, jobTitleId: next } : item)),
+                                  )
+                                }
+                              />
+                            ) : (
+                              <Typography.Text className="tw-text-sm tw-font-semibold tw-text-slate-900">
+                                {jobTitleLabelById.get(value) ?? value}
+                              </Typography.Text>
+                            )
                           ),
                         },
                         {
@@ -918,41 +1077,63 @@ export function ApprovalsAdminPage() {
                           dataIndex: 'organizationId',
                           key: 'organizationId',
                           render: (value: string | null, row) => (
-                            <Select
-                              allowClear
-                              value={value ?? undefined}
-                              className="tw-min-w-[250px]"
-                              placeholder="조직 제한 없음"
-                              options={orgOptions}
-                              onChange={(next) =>
-                                setPolicyDrafts((prev) =>
-                                  prev.map((item) =>
-                                    item.key === row.key ? { ...item, organizationId: next ?? null } : item,
-                                  ),
-                                )
-                              }
-                            />
+                            policyEditing ? (
+                              <Select
+                                allowClear
+                                value={value ?? undefined}
+                                className="tw-min-w-[250px]"
+                                placeholder="조직 제한 없음"
+                                options={orgOptions}
+                                onChange={(next) =>
+                                  setPolicyDrafts((prev) =>
+                                    prev.map((item) =>
+                                      item.key === row.key ? { ...item, organizationId: next ?? null } : item,
+                                    ),
+                                  )
+                                }
+                              />
+                            ) : value ? (
+                              <Typography.Text className="tw-text-sm tw-text-slate-700">
+                                {orgLabelById.get(value) ?? value}
+                              </Typography.Text>
+                            ) : (
+                              <Typography.Text type="secondary" className="tw-text-sm">
+                                전체 조직
+                              </Typography.Text>
+                            )
                           ),
                         },
                         {
                           title: '관리',
                           key: 'actions',
                           width: 90,
-                          render: (_, row) => (
-                            <Button
-                              danger
-                              size="small"
-                              className="!tw-h-8 !tw-rounded-lg !tw-border-slate-200 !tw-font-medium"
-                              disabled={!canCreate}
-                              onClick={() => setPolicyDrafts((prev) => prev.filter((item) => item.key !== row.key))}
-                            >
-                              삭제
-                            </Button>
-                          ),
+                          render: (_, row) =>
+                            policyEditing ? (
+                              <Tooltip title="삭제">
+                                <Button
+                                  danger
+                                  type="text"
+                                  size="small"
+                                  icon={<DeleteOutlined />}
+                                  className="!tw-inline-flex !tw-h-8 !tw-w-8 !tw-items-center !tw-justify-center !tw-rounded-lg !tw-text-red-500 hover:!tw-bg-red-50"
+                                  disabled={!canEditPolicyLines}
+                                  onClick={() =>
+                                    setPolicyDrafts((prev) =>
+                                      prev
+                                        .filter((item) => item.key !== row.key)
+                                        .sort((a, b) => a.stepOrder - b.stepOrder)
+                                        .map((item, index) => ({ ...item, stepOrder: index + 1 })),
+                                    )
+                                  }
+                                />
+                              </Tooltip>
+                            ) : null,
                         },
-                      ]}
-                      locale={{ emptyText: selectedDocumentId ? '정책라인이 없습니다.' : '양식을 먼저 선택하세요.' }}
-                    />
+                          ]}
+                          locale={{ emptyText: selectedDocumentId ? '정책라인이 없습니다.' : '양식을 먼저 선택하세요.' }}
+                        />
+                      </SortableContext>
+                    </DndContext>
                     </div>
                   </div>
               ),
@@ -1099,6 +1280,87 @@ export function ApprovalsAdminPage() {
           />
         </Card>
       )}
+
+      <AppSingleActionModal
+        title={policyPreviewDocument ? `정책라인 확인 - ${policyPreviewDocument.documentName}` : '정책라인 확인'}
+        open={Boolean(policyPreviewDocumentId)}
+        onClose={() => setPolicyPreviewDocumentId(null)}
+        onSubmit={() => setPolicyPreviewDocumentId(null)}
+        submitText="확인"
+        width={760}
+      >
+        <div className="tw-space-y-4 tw-px-6 tw-py-5">
+          {policyPreviewDocument ? (
+            <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2 tw-rounded-xl tw-border tw-border-slate-200 tw-bg-slate-50/70 tw-px-4 tw-py-3">
+              <span className="tw-text-xs tw-font-semibold tw-text-slate-500">양식</span>
+              <Typography.Text strong className="tw-text-slate-900">
+                {policyPreviewDocument.documentName}
+              </Typography.Text>
+              <Tag className="!tw-m-0 !tw-rounded-lg">
+                {approvalRequestTypeLabelKo(String(policyPreviewDocument.requestType))}
+              </Tag>
+              <Tag
+                color={policyPreviewDocument.isActiveYn === 'Y' ? 'success' : 'default'}
+                className="!tw-m-0 !tw-rounded-lg"
+              >
+                {policyPreviewDocument.isActiveYn === 'Y' ? '활성' : '비활성'}
+              </Tag>
+              <span className="tw-ml-auto tw-inline-flex tw-h-7 tw-items-center tw-rounded-full tw-bg-white tw-px-3 tw-text-xs tw-font-semibold tw-text-slate-600">
+                결재선 {policyPreviewLines.length}개
+              </span>
+            </div>
+          ) : null}
+
+          <div className="tw-overflow-hidden tw-rounded-xl tw-border tw-border-slate-200">
+            <Table<ApprovalPolicyLine>
+              rowKey="policyLineId"
+              loading={policyPreviewLoading}
+              dataSource={policyPreviewLines}
+              pagination={false}
+              className="[&_.ant-table]:!tw-bg-white [&_.ant-table-thead>tr>th]:!tw-border-slate-200 [&_.ant-table-thead>tr>th]:!tw-bg-slate-50 [&_.ant-table-thead>tr>th]:!tw-px-4 [&_.ant-table-thead>tr>th]:!tw-py-3 [&_.ant-table-thead>tr>th]:!tw-text-xs [&_.ant-table-thead>tr>th]:!tw-font-semibold [&_.ant-table-thead>tr>th]:!tw-text-slate-600 [&_.ant-table-tbody>tr>td]:!tw-border-slate-100 [&_.ant-table-tbody>tr>td]:!tw-px-4 [&_.ant-table-tbody>tr>td]:!tw-py-4 [&_.ant-table-tbody>tr:hover>td]:!tw-bg-slate-50/70"
+              columns={[
+                {
+                  title: '순서',
+                  dataIndex: 'stepOrder',
+                  key: 'stepOrder',
+                  width: 90,
+                  render: (value: number) => (
+                    <span className="tw-inline-flex tw-h-7 tw-min-w-7 tw-items-center tw-justify-center tw-rounded-lg tw-bg-slate-100 tw-px-2 tw-text-xs tw-font-semibold tw-text-slate-700">
+                      {value}
+                    </span>
+                  ),
+                },
+                {
+                  title: '직책',
+                  dataIndex: 'jobTitleId',
+                  key: 'jobTitleId',
+                  render: (value: string) => (
+                    <Typography.Text className="tw-text-sm tw-font-semibold tw-text-slate-900">
+                      {jobTitleLabelById.get(value) ?? value}
+                    </Typography.Text>
+                  ),
+                },
+                {
+                  title: '조직',
+                  dataIndex: 'organizationId',
+                  key: 'organizationId',
+                  render: (value: string | null) =>
+                    value ? (
+                      <Typography.Text className="tw-text-sm tw-text-slate-700">
+                        {orgLabelById.get(value) ?? value}
+                      </Typography.Text>
+                    ) : (
+                      <Typography.Text type="secondary" className="tw-text-sm">
+                        전체 조직
+                      </Typography.Text>
+                    ),
+                },
+              ]}
+              locale={{ emptyText: '등록된 정책라인이 없습니다.' }}
+            />
+          </div>
+        </div>
+      </AppSingleActionModal>
 
       <AppDoubleActionModal
         title="결재 양식 추가"

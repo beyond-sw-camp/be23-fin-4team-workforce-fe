@@ -37,6 +37,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { memberApi } from '@/features/member/api/memberApi';
 import { useMemberDisplayNames } from '@/features/members/hooks/useMemberDisplayNames';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
+import { AppSearchBar } from '@/shared/ui';
 import type {
   AllowanceApprovalStatusCode,
   MemberAllowance,
@@ -575,12 +576,13 @@ export function AdminMemberAllowancePage() {
             ]}
           />
           <Typography.Text type="secondary">직원:</Typography.Text>
-          <Input
+          <AppSearchBar
             placeholder="이름·부서 검색"
             value={memberKeyword}
-            onChange={(e) => setMemberKeyword(e.target.value)}
-            allowClear
-            style={{ width: 200 }}
+            onValueChange={setMemberKeyword}
+            onSearch={setMemberKeyword}
+            ariaLabel="수당 직원 검색"
+            className="tw-w-full tw-flex-none sm:tw-w-[280px]"
           />
           <Typography.Text type="secondary">
             {filteredAllowances.length}건 / 전체 {(listQ.data ?? []).length}건
@@ -669,7 +671,7 @@ export function AdminMemberAllowancePage() {
                                       <Button
                                         danger
                                         onClick={() => {
-                                          modal.destroyAll();
+                                          Modal.destroyAll();
                                           modal.confirm({
                                             title: '완전 삭제',
                                             content: `${g.label} - ${itemName}: 이력 없이 통째로 제거합니다. 되돌릴 수 없습니다.`,

@@ -1,6 +1,6 @@
-import { RightOutlined, SearchOutlined } from '@ant-design/icons';
+import { RightOutlined } from '@ant-design/icons';
 import { useEffect, useMemo, useState } from 'react';
-import { Checkbox, Input, Spin, Tree, Typography } from 'antd';
+import { Checkbox, Spin, Tree, Typography } from 'antd';
 import type { DataNode } from 'antd/es/tree';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -9,6 +9,7 @@ import {
   organizationApi,
 } from '@/features/organization/api/organizationApi';
 import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
+import { AppSearchBar } from '@/shared/ui';
 
 const KS = '\x1f';
 
@@ -337,13 +338,13 @@ export function ContractRecipientOrgChartModal({
       title={<span className="tw-text-base tw-font-semibold tw-text-slate-900">조직도에서 직원 선택</span>}
     >
       <div className="tw-flex tw-flex-col tw-gap-3 tw-px-5 tw-py-4 tw-pt-2">
-        <Input
-          allowClear
+        <AppSearchBar
           value={keyword}
-          onChange={(e) => setKeyword(e.target.value)}
+          onValueChange={setKeyword}
+          onSearch={setKeyword}
           placeholder="이름, 직급, 부서 검색"
-          prefix={<SearchOutlined className="tw-text-slate-400" />}
-          className="tw-rounded-xl tw-bg-slate-50 [&_.ant-input]:tw-bg-transparent"
+          ariaLabel="계약 수신자 검색"
+          className="tw-w-full"
         />
         <div>
           <div className="tw-mb-2 tw-text-xs tw-font-semibold tw-text-slate-500">조직도</div>

@@ -52,13 +52,17 @@ function displayChatUserQuestion(raw: string): string {
   const q = raw.trim();
   const bracket = q.match(/^\[버튼\s*:\s*([^\]]+)]\s*$/);
   if (bracket) {
-    const key = bracket[1].trim().toLowerCase();
-    if (CHAT_BUTTON_QUESTION_LABEL[key]) return CHAT_BUTTON_QUESTION_LABEL[key];
+    const matchedKey = bracket[1];
+    const key = matchedKey?.trim().toLowerCase();
+    const label = key ? CHAT_BUTTON_QUESTION_LABEL[key] : undefined;
+    if (label) return label;
   }
   const legacy = q.match(/^\[button\s*:\s*([^\]]+)]\s*$/i);
   if (legacy) {
-    const key = legacy[1].trim().toLowerCase();
-    if (CHAT_BUTTON_QUESTION_LABEL[key]) return CHAT_BUTTON_QUESTION_LABEL[key];
+    const matchedKey = legacy[1];
+    const key = matchedKey?.trim().toLowerCase();
+    const label = key ? CHAT_BUTTON_QUESTION_LABEL[key] : undefined;
+    if (label) return label;
   }
   return raw;
 }
@@ -114,7 +118,7 @@ function splitScreenNameDetail(screenNameRaw: string): { short: string; parenthe
   const t = screenNameRaw.trim();
   const m = t.match(/^(.+?)\s*\(([^)]+)\)\s*$/);
   if (m) {
-    return { short: m[1].trim(), parenthetical: m[2].trim() };
+    return { short: (m[1] ?? '').trim(), parenthetical: (m[2] ?? '').trim() };
   }
   return { short: t };
 }
@@ -166,8 +170,8 @@ function parseAnswerSegments(raw: string): AnswerSegment[] {
     mdChunks.push({
       start: mm.index,
       end: mm.index + mm[0].length,
-      label: mm[1],
-      href: mm[2],
+      label: mm[1] ?? '',
+      href: mm[2] ?? '',
     });
   }
   mdChunks.sort((a, b) => a.start - b.start);

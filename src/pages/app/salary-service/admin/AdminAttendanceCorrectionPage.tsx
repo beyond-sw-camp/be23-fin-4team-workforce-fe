@@ -112,9 +112,9 @@ export function AdminAttendanceCorrectionPage() {
           return (
             <Space size={4}>
               <Typography.Text strong>{m.name}</Typography.Text>
-              {m.employeeNumber && (
+              {m.sabun && (
                 <Typography.Text type="secondary" className="!tw-text-xs">
-                  ({m.employeeNumber})
+                  ({m.sabun})
                 </Typography.Text>
               )}
             </Space>
@@ -203,36 +203,39 @@ export function AdminAttendanceCorrectionPage() {
       <AppWorkspacePageTitle
         eyebrow="Attendance"
         title="출퇴근 정정 검토"
+        subtitleClassName="!tw-max-w-none !tw-whitespace-nowrap"
         subtitle={(
           <>
             직원이 신청한 출퇴근 정정을 검토합니다. <b>승인</b> 시 해당 일자 근태가 즉시 확정 처리되고, <b>반려</b> 시 신청 전 상태로 복구됩니다.
-            <br />
-            ※ 정정 검토 중인 근태 데이터는 자동 처리(익일 2시와 14시)대상이 아니므로 주의해서 처리하세요.
           </>
         )}
       />
 
-      <Card className="tw-border-slate-200/80 tw-shadow-sm" title="검토 대기 목록">
-        {pendingQ.isError && (
-          <Alert
-            type="error"
-            showIcon
-            className="tw-mb-3"
-            message="정정 검토 큐 조회에 실패했습니다."
-            description="잠시 후 다시 시도해 주세요."
+      <Card className="tw-border-slate-200/80 tw-shadow-sm [&_.ant-card-body]:!tw-p-6">
+        <div className="tw-space-y-4">
+          <Typography.Text className="tw-block !tw-text-sm !tw-font-medium !tw-text-slate-600">
+            ※ 정정 검토 중인 근태 데이터는 자동 처리(익일 2시와 14시)대상이 아니므로 주의해서 처리하세요.
+          </Typography.Text>
+          {pendingQ.isError && (
+            <Alert
+              type="error"
+              showIcon
+              message="정정 검토 큐 조회에 실패했습니다."
+              description="잠시 후 다시 시도해 주세요."
+            />
+          )}
+          <Table<AttendanceCorrectionPending>
+            rowKey={(r) => r.dailyAttendanceId}
+            loading={pendingQ.isLoading}
+            columns={columns}
+            dataSource={pendingQ.data ?? []}
+            size="small"
+            pagination={{ pageSize: 20 }}
+            locale={{
+              emptyText: <Empty description="검토 대기 중인 정정 신청이 없습니다." />,
+            }}
           />
-        )}
-        <Table<AttendanceCorrectionPending>
-          rowKey={(r) => r.dailyAttendanceId}
-          loading={pendingQ.isLoading}
-          columns={columns}
-          dataSource={pendingQ.data ?? []}
-          size="small"
-          pagination={{ pageSize: 20 }}
-          locale={{
-            emptyText: <Empty description="검토 대기 중인 정정 신청이 없습니다." />,
-          }}
-        />
+        </div>
       </Card>
 
       {/* 반려 사유 입력 모달 */}

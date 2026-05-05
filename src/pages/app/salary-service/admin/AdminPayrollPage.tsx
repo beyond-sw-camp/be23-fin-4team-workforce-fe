@@ -29,6 +29,8 @@ import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import React, { useMemo, useState } from 'react';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
+import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
+import { AppSearchBar } from '@/shared/ui';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import { memberApi } from '@/features/member/api/memberApi';
 import { SalaryTab } from '@/pages/app/salary-service/admin/AdminSalarySettingsPage';
@@ -61,6 +63,12 @@ const PAYROLL_TYPE_KO: Record<string, string> = {
   RETROACTIVE: '소급분',
   RETIREMENT_SETTLEMENT: '퇴직정산',
 };
+
+const PAYROLL_PANEL_CARD_CLASS =
+  'tw-overflow-hidden tw-rounded-2xl tw-border-slate-200/80 tw-bg-white tw-shadow-[0_1px_3px_rgba(15,23,42,0.06)] [&_.ant-card-body]:tw-px-5 [&_.ant-card-body]:tw-pb-8 [&_.ant-card-body]:tw-pt-6 sm:[&_.ant-card-body]:tw-px-7';
+
+const PAYROLL_TABS_CLASS =
+  '[&_.ant-tabs-nav]:tw-mb-4 [&_.ant-tabs-tab]:!tw-text-slate-600 [&_.ant-tabs-tab-active_.ant-tabs-tab-btn]:!tw-font-semibold [&_.ant-tabs-tab-active_.ant-tabs-tab-btn]:!tw-text-[#1e3a5f] [&_.ant-tabs-ink-bar]:!tw-bg-[#1e3a5f]';
 
 function formatWon(n: number | null | undefined) {
   if (n == null || Number.isNaN(n)) return '—';
@@ -457,60 +465,59 @@ export function AdminPayrollPage() {
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
       {/* 상단 헤더 */}
-      <div className="tw-flex tw-flex-wrap tw-items-start tw-justify-between tw-gap-3">
-        <div>
-          <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
-          급여 정산 관리
-          </Typography.Title>
-          <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-sm">
-            급여 검증과 지급처리를 하고, 등록, 정산 이력 확인을 합니다.
-          </Typography.Paragraph>
-        </div>
-        <Space wrap size="middle">
-          <DatePicker.MonthPicker
-            value={yearMonth}
-            onChange={(d) => d && setYearMonth(d)}
-            format="YYYY-MM"
-            allowClear={false}
-          />
-          <Button icon={<DownloadOutlined />} onClick={handleExport} loading={exporting}>
-            엑셀 다운로드
-          </Button>
-          <Button icon={<ReloadOutlined />} onClick={onRecalculateClick} loading={recalculateM.isPending}>
-            재계산
-          </Button>
-          <Button icon={<PlusOutlined />} onClick={() => {
-            createForm.resetFields();
-            createForm.setFieldsValue({ payrollYearMonthDay: dayjs() });
-            setCreateOpen(true);
-          }}>
-            누락 직원 추가
-          </Button>
-        </Space>
-      </div>
+      <AppWorkspacePageTitle
+        eyebrow="PAYROLL"
+        title="급여 정산 관리"
+        subtitle="급여 검증과 지급처리를 하고, 등록, 정산 이력 확인을 합니다."
+        extra={(
+          <Space wrap size="middle">
+            <DatePicker.MonthPicker
+              value={yearMonth}
+              onChange={(d) => d && setYearMonth(d)}
+              format="YYYY-MM"
+              allowClear={false}
+            />
+            <Button icon={<DownloadOutlined />} onClick={handleExport} loading={exporting}>
+              엑셀 다운로드
+            </Button>
+            <Button icon={<ReloadOutlined />} onClick={onRecalculateClick} loading={recalculateM.isPending}>
+              재계산
+            </Button>
+            <Button icon={<PlusOutlined />} onClick={() => {
+              createForm.resetFields();
+              createForm.setFieldsValue({ payrollYearMonthDay: dayjs() });
+              setCreateOpen(true);
+            }}>
+              누락 직원 추가
+            </Button>
+          </Space>
+        )}
+      />
 
       {/* 탭 */}
-      <Tabs
-        activeKey={activeTab}
-        onChange={setActiveTab}
-        items={[
+      <Card variant="borderless" className={PAYROLL_PANEL_CARD_CLASS}>
+        <Tabs
+          activeKey={activeTab}
+          onChange={setActiveTab}
+          className={PAYROLL_TABS_CLASS}
+          items={[
           {
             key: 'company',
             label: '이번달 정산',
             children: (
-              <Space direction="vertical" className="tw-w-full" size={12}>
+              <Space direction="vertical" className="tw-w-full" size={14}>
                 {/* 정산 가드 안내 Alert 제거 - KPI 카드만 노출 */}
 
                 {/* KPI 상태 4장 */}
                 <div className="tw-grid tw-grid-cols-2 md:tw-grid-cols-4 tw-gap-3">
-                  <Card size="small"><Statistic title="대상 직원" value={kpi.total} suffix="명" /></Card>
-                  <Card size="small"><Statistic title="작성중" value={kpi.draft} suffix="명" valueStyle={{ color: '#64748b' }} /></Card>
-                  <Card size="small"><Statistic title="확정 대기" value={kpi.confirmed} suffix="명" valueStyle={{ color: '#2563eb' }} /></Card>
-                  <Card size="small"><Statistic title="지급 완료" value={kpi.paid} suffix="명" valueStyle={{ color: '#16a34a' }} /></Card>
+                  <Card size="small" className="tw-rounded-xl tw-border-slate-200/80 tw-shadow-none"><Statistic title="대상 직원" value={kpi.total} suffix="명" /></Card>
+                  <Card size="small" className="tw-rounded-xl tw-border-slate-200/80 tw-shadow-none"><Statistic title="작성중" value={kpi.draft} suffix="명" valueStyle={{ color: '#64748b' }} /></Card>
+                  <Card size="small" className="tw-rounded-xl tw-border-slate-200/80 tw-shadow-none"><Statistic title="확정 대기" value={kpi.confirmed} suffix="명" valueStyle={{ color: '#2563eb' }} /></Card>
+                  <Card size="small" className="tw-rounded-xl tw-border-slate-200/80 tw-shadow-none"><Statistic title="지급 완료" value={kpi.paid} suffix="명" valueStyle={{ color: '#16a34a' }} /></Card>
                 </div>
 
                 {/* 급여구분별 합산 - 정기/퇴직/상여/성과 분리 + 총합 */}
-                <Card size="small">
+                <Card size="small" className="tw-rounded-xl tw-border-slate-200/80 tw-shadow-none">
                   <div className="tw-grid tw-grid-cols-2 md:tw-grid-cols-3 lg:tw-grid-cols-6 tw-gap-3">
                     <div className="tw-pr-3 tw-border-r tw-border-slate-200">
                       <Typography.Text type="secondary" className="!tw-text-xs">정기급여</Typography.Text>
@@ -562,16 +569,17 @@ export function AdminPayrollPage() {
                   </div>
                 </Card>
 
-                <Card>
+                <Card className="tw-rounded-xl tw-border-slate-200/80 tw-shadow-none [&_.ant-card-body]:tw-p-4">
                   {/* 필터 + 일괄 액션 */}
                   <Space wrap className="tw-mb-3 tw-w-full tw-justify-between">
                     <Space wrap>
-                      <Input.Search
+                      <AppSearchBar
                         placeholder="이름·사번·부서 검색"
                         value={keyword}
-                        onChange={(e) => setKeyword(e.target.value)}
-                        style={{ width: 240 }}
-                        allowClear
+                        onValueChange={setKeyword}
+                        onSearch={setKeyword}
+                        ariaLabel="급여대장 검색"
+                        className="tw-w-full tw-flex-none sm:tw-w-[300px]"
                       />
                       <Select
                         value={statusFilter}
@@ -692,8 +700,9 @@ export function AdminPayrollPage() {
             label: '수당 관리',
             children: <AdminMemberAllowancePage />,
           },
-        ]}
-      />
+          ]}
+        />
+      </Card>
 
       {/* 누락 직원 추가 모달 */}
       <AppDoubleActionModal
@@ -955,12 +964,13 @@ function CompanyHistoryTab() {
           format="YYYY-MM"
           style={{ width: 140 }}
         />
-        <Input.Search
+        <AppSearchBar
           placeholder="이름·사번·부서 검색"
           value={keyword}
-          onChange={(e) => setKeyword(e.target.value)}
-          style={{ width: 240 }}
-          allowClear
+          onValueChange={setKeyword}
+          onSearch={setKeyword}
+          ariaLabel="급여 이력 검색"
+          className="tw-w-full tw-flex-none sm:tw-w-[300px]"
         />
         <Select
           value={typeFilter}

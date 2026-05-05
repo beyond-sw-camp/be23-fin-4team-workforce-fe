@@ -666,11 +666,20 @@ export const memberApi = {
     size?: number;
   }): Promise<MemberLookupPage> {
     const kw = params.keyword?.trim() ?? '';
+    const fallbackPage: MemberLookupPage = {
+      content: [],
+      page: params.page ?? 0,
+      size: params.size ?? 30,
+      totalElements: 0,
+      totalPages: 0,
+      first: (params.page ?? 0) <= 0,
+      last: true,
+    };
     const response = await httpClient.get('/member/search', {
       params: { keyword: kw, page: params.page ?? 0, size: params.size ?? 30 },
     });
     const raw = unwrapApiResponse<unknown>(response.data);
-    if (!raw || typeof raw !== 'object') return [];
+    if (!raw || typeof raw !== 'object') return fallbackPage;
     const pageObj = raw as Record<string, unknown>;
     const content = Array.isArray(pageObj.content) ? pageObj.content : [];
     const out: MemberLookupRow[] = [];

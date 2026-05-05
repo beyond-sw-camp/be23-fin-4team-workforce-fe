@@ -10,6 +10,7 @@ export type AppWorkspacePageTitleProps = {
   extra?: ReactNode;
   className?: string;
   rowClassName?: string;
+  subtitleClassName?: string;
   titleLevel?: 1 | 2 | 3 | 4 | 5;
 };
 
@@ -20,6 +21,7 @@ export function AppWorkspacePageTitle({
   extra,
   className,
   rowClassName,
+  subtitleClassName,
   titleLevel = 3,
 }: AppWorkspacePageTitleProps) {
   const head = (
@@ -35,7 +37,14 @@ export function AppWorkspacePageTitle({
         {title}
       </Title>
       {subtitle ? (
-        <Paragraph className="!tw-mb-0 !tw-mt-2 !tw-max-w-2xl !tw-text-[15px] !tw-leading-relaxed !tw-text-slate-600">
+        <Paragraph
+          className={[
+            '!tw-mb-0 !tw-mt-2 !tw-max-w-2xl !tw-text-[15px] !tw-leading-relaxed !tw-text-slate-600',
+            subtitleClassName,
+          ]
+            .filter(Boolean)
+            .join(' ')}
+        >
           {subtitle}
         </Paragraph>
       ) : null}

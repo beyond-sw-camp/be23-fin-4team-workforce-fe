@@ -32,6 +32,7 @@ import { memberApi, type MemberListItemForApproval } from '@/features/member/api
 import { organizationApi } from '@/features/organization/api/organizationApi';
 import { parseApiError } from '@/shared/api/error-parser';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
+import { AppSearchBar } from '@/shared/ui';
 
 /** `toISOString()`은 UTC로 바뀌어 한국 등 로컬 '오늘'이 전날로 밀릴 수 있음 — LocalDateTime용 로컬 벽시각 */
 function toLocalDateTimePayload(d: Dayjs): string {
@@ -597,10 +598,12 @@ export function AbsenceProxyPage() {
             </Typography.Paragraph>
             <div className="tw-grid tw-grid-cols-1 tw-gap-4 lg:tw-grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
               <Card size="small" title="조직도" variant="borderless" className="tw-shadow-none tw-bg-transparent">
-                <Input
+                <AppSearchBar
                   value={substitutePickerKeyword}
-                  onChange={(e) => setSubstitutePickerKeyword(e.target.value)}
+                  onValueChange={setSubstitutePickerKeyword}
+                  onSearch={setSubstitutePickerKeyword}
                   placeholder="이름, 직위, 부서 검색"
+                  ariaLabel="대결자 검색"
                   className="tw-mb-2"
                 />
                 <div className="tw-max-h-[min(40vh,320px)] tw-overflow-auto tw-rounded-md tw-border tw-border-slate-100 tw-bg-white tw-p-1">

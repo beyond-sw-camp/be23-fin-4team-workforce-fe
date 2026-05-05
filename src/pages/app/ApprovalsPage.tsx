@@ -44,7 +44,6 @@ import {
   Empty,
   Form,
   Input,
-  Modal,
   Popconfirm,
   Progress,
   Select,
@@ -166,6 +165,7 @@ import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppModal } from '@/shared/ui/AppModal';
 import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
+import { AppSearchBar } from '@/shared/ui';
 
 async function maybeUploadApprovalAttachments(
   requestId: string,
@@ -562,6 +562,27 @@ const APPROVAL_HOME_GRID_DOC_CARD_CLASS =
 const APPROVAL_HOME_COMPOSE_FORMS_CARD_CLASS =
   'tw-rounded-2xl tw-border tw-border-slate-200/90 tw-shadow-sm tw-shadow-slate-900/5';
 
+const APPROVAL_FOLLOWUP_MODAL_HEIGHT = 'min(820px, calc(100dvh - 96px))';
+const APPROVAL_FOLLOWUP_MODAL_CONTENT_STYLE: CSSProperties = {
+  height: APPROVAL_FOLLOWUP_MODAL_HEIGHT,
+  maxHeight: APPROVAL_FOLLOWUP_MODAL_HEIGHT,
+  display: 'flex',
+  flexDirection: 'column',
+  padding: 0,
+  overflow: 'hidden',
+};
+const APPROVAL_FOLLOWUP_MODAL_HEADER_STYLE: CSSProperties = {
+  flexShrink: 0,
+  marginBottom: 0,
+  padding: '12px 16px',
+};
+const APPROVAL_FOLLOWUP_MODAL_BODY_STYLE: CSSProperties = {
+  flex: 1,
+  minHeight: 0,
+  padding: 0,
+  overflow: 'hidden',
+};
+
 const APPROVAL_EMBED_QUERY = 'compose-modal';
 const APPROVAL_HUB_REFRESH_ON_RETURN_KEY = 'wf:approval-hub-refresh-on-return';
 
@@ -607,7 +628,7 @@ const COMPOSE_HOME_EMBED_PANEL_TITLE: Record<ComposeHomeEmbedPanel, string> = {
 };
 
 function composeHomeEmbedPanelModalTitle(
-  modal: { kind: 'iframe'; panel: ComposeHomeEmbedPanel; composeDraftId?: string },
+  modal: { kind: 'iframe'; panel: ComposeHomeEmbedPanel; composeDraftId?: string; prefillDocumentId?: string },
 ): string {
   if (modal.panel === 'draft' && modal.composeDraftId?.trim()) {
     return '임시 저장 문서 이어쓰기';
@@ -617,7 +638,7 @@ function composeHomeEmbedPanelModalTitle(
 
 function composeHomeEmbedPanelUrl(
   panel: ComposeHomeEmbedPanel,
-  opts?: { composeDraftId?: string },
+  opts?: { composeDraftId?: string; prefillDocumentId?: string },
 ): string {
   switch (panel) {
     case 'my-all':
@@ -636,7 +657,13 @@ function composeHomeEmbedPanelUrl(
           composeDraftId: opts.composeDraftId,
         });
       }
-      return buildApprovalEmbedUrl('/app/approvals', { tab: 'my', box: 'per-draft' });
+      return buildApprovalEmbedUrl('/app/approvals', opts?.prefillDocumentId
+        ? {
+            tab: 'compose',
+            sideNav: APPROVAL_COMPOSE_WORKBENCH_SIDE_NAV,
+            docId: opts.prefillDocumentId,
+          }
+        : { tab: 'my', box: 'per-draft' });
     case 'absence':
       return buildApprovalEmbedUrl('/app/approvals/absence-proxy', {});
     default:
@@ -1482,7 +1509,7 @@ export function ApprovalsPage() {
   const [composeApprovalInfoModalOpen, setComposeApprovalInfoModalOpen] = useState(false);
   const [composePreviewOpen, setComposePreviewOpen] = useState(false);
   const [composeHomeMoreModal, setComposeHomeMoreModal] = useState<
-    | { kind: 'iframe'; panel: ComposeHomeEmbedPanel; composeDraftId?: string }
+    | { kind: 'iframe'; panel: ComposeHomeEmbedPanel; composeDraftId?: string; prefillDocumentId?: string }
     | { kind: 'pending-inbox'; title: string }
     | null
   >(null);
@@ -3845,10 +3872,12 @@ export function ApprovalsPage() {
 
   const renderOrgMemberPicker = () => (
     <Card size="small" title="조직도" variant="borderless" className={APPROVAL_COMPOSE_CARD_CLASS}>
-      <Input
+      <AppSearchBar
         value={memberKeyword}
-        onChange={(e) => setMemberKeyword(e.target.value)}
+        onValueChange={setMemberKeyword}
+        onSearch={setMemberKeyword}
         placeholder="이름, 직위, 부서 검색"
+        ariaLabel="결재 조직도 구성원 검색"
         className="tw-mb-2"
       />
       <div className="tw-max-h-[min(52vh,420px)] tw-overflow-auto tw-rounded-md tw-border tw-border-slate-100 tw-bg-white tw-p-1">
@@ -4636,22 +4665,27 @@ export function ApprovalsPage() {
       <Card
         className={clsx(
           APPROVAL_HOME_COMPOSE_FORMS_CARD_CLASS,
-          'tw-flex tw-h-full tw-min-h-0 tw-w-full tw-flex-col',
+          'tw-flex tw-w-full tw-flex-col',
         )}
         styles={{
-          body: { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 12 },
+          body: { display: 'flex', flexDirection: 'column', padding: 16 },
         }}
       >
-        <div className="tw-mb-1.5 tw-flex tw-shrink-0 tw-items-center tw-justify-between tw-gap-2">
-          <Typography.Text strong className="!tw-text-sm tw-min-w-0">
-            Quick Menu
-          </Typography.Text>
+        <div className="tw-mb-3 tw-flex tw-shrink-0 tw-items-start tw-justify-between tw-gap-3">
+          <div className="tw-min-w-0">
+            <Typography.Text strong className="!tw-block !tw-text-[15px] !tw-leading-5 !tw-text-slate-900">
+              빠른 기안
+            </Typography.Text>
+            <Typography.Text type="secondary" className="!tw-mt-0.5 !tw-block !tw-text-[11px] !tw-leading-4">
+              자주 쓰는 양식을 바로 작성합니다.
+            </Typography.Text>
+          </div>
           <div className="tw-flex tw-items-center tw-gap-2">
             <Tooltip title="퀵 메뉴 설정">
               <Button
                 size="small"
                 type="text"
-                className="!tw-px-1"
+                className="!tw-inline-flex !tw-size-8 !tw-items-center !tw-justify-center !tw-rounded-full !tw-bg-slate-50 !tw-p-0 !tw-text-slate-500 hover:!tw-bg-slate-100 hover:!tw-text-slate-800"
                 icon={<SettingOutlined />}
                 onClick={() => {
                   setQuickHomeFormsDraft(quickHomeFormDocs.map((doc) => doc.documentId));
@@ -4672,31 +4706,33 @@ export function ApprovalsPage() {
             </Typography.Text>
           </div>
         ) : (
-          <div className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-y-auto wf-scrollbar tw-pr-0.5">
-            <Space direction="vertical" size={6} className="tw-w-full">
+          <div className="tw-max-h-[min(16rem,38vh)] tw-overflow-y-auto wf-scrollbar tw-pr-0.5">
+            <Space direction="vertical" size={8} className="tw-w-full">
               {quickHomeFormDocs.map((doc) => {
                 return (
                   <button
                     key={doc.documentId}
                     type="button"
-                    className="tw-flex tw-w-full tw-appearance-none tw-items-center tw-justify-between tw-gap-1.5 tw-rounded-lg tw-border tw-border-slate-200 tw-bg-slate-50/80 tw-px-2.5 tw-py-1 tw-text-left tw-shadow-none tw-transition-colors hover:tw-bg-white/60 focus-visible:tw-outline-none focus-visible:tw-ring-2 focus-visible:tw-ring-blue-400 focus-visible:tw-ring-offset-1"
+                    className="tw-group tw-flex tw-w-full tw-appearance-none tw-items-center tw-justify-between tw-gap-3 tw-rounded-xl tw-border tw-border-blue-100/80 tw-bg-white tw-px-3 tw-py-2.5 tw-text-left tw-shadow-sm tw-shadow-blue-950/[0.03] tw-transition-colors hover:tw-border-blue-200 hover:tw-bg-blue-50/40 focus-visible:tw-outline-none focus-visible:tw-ring-2 focus-visible:tw-ring-blue-400 focus-visible:tw-ring-offset-1"
                     onClick={() => {
                       setComposeFormSelectInitialId(doc.documentId);
                       setComposeFormSelectModalOpen(true);
                     }}
                   >
                     <div className="tw-min-w-0 tw-flex-1 tw-leading-tight">
-                      <Typography.Text strong className="!tw-mb-0 !tw-block !tw-text-[13px] !tw-leading-tight tw-truncate">
+                      <Typography.Text strong className="!tw-mb-0 !tw-block !tw-text-[13px] !tw-leading-5 !tw-text-slate-900 tw-truncate">
                         {doc.documentName?.trim() || '—'}
                       </Typography.Text>
                       <Typography.Text
                         type="secondary"
-                        className="!tw-mb-0 !tw-mt-0.5 !tw-block !tw-text-[11px] !tw-leading-tight tw-truncate"
+                        className="!tw-mb-0 !tw-mt-0.5 !tw-block !tw-text-[11px] !tw-leading-4 tw-truncate"
                       >
                         {approvalRequestTypeLabelKo(doc.requestType)}
                       </Typography.Text>
                     </div>
-                    <PlusOutlined className="tw-shrink-0 tw-text-sm tw-text-slate-400" aria-hidden />
+                    <span className="tw-inline-flex tw-size-7 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-full tw-bg-slate-100 tw-text-slate-500 tw-transition-colors group-hover:tw-bg-[#1b365d] group-hover:tw-text-white">
+                      <PlusOutlined className="tw-text-xs" aria-hidden />
+                    </span>
                   </button>
                 );
               })}
@@ -4841,16 +4877,16 @@ export function ApprovalsPage() {
 
     return (
       <>
-      <div className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-gap-3 tw-overflow-hidden">
-        <div className="tw-grid tw-shrink-0 tw-grid-cols-1 tw-gap-4 xl:tw-grid-cols-3 xl:tw-items-stretch">
-          <div className="tw-flex tw-min-h-0 tw-w-full tw-min-w-0 xl:tw-col-span-2 xl:tw-h-[min(13.5rem,31vh)] xl:tw-max-h-[min(13.5rem,31vh)] xl:tw-overflow-hidden">
+      <div className="tw-flex tw-min-w-0 tw-flex-col tw-gap-4">
+        <div className="tw-grid tw-grid-cols-1 tw-gap-4 xl:tw-grid-cols-3 xl:tw-items-stretch">
+          <div className="tw-w-full tw-min-w-0 xl:tw-col-span-2">
             <Card
-              className="tw-flex tw-h-full tw-min-h-0 tw-w-full tw-flex-col tw-rounded-2xl tw-border tw-border-slate-200/90 tw-shadow-sm tw-shadow-slate-900/5"
+              className="tw-h-full tw-w-full tw-rounded-2xl tw-border tw-border-slate-200/90 tw-shadow-sm tw-shadow-slate-900/5"
               styles={{
-                body: { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' },
+                body: { display: 'flex', flexDirection: 'column', height: '100%' },
               }}
             >
-            <div className="tw-mb-2 tw-flex tw-shrink-0 tw-items-center tw-justify-between">
+            <div className="tw-mb-2 tw-flex tw-items-center tw-justify-between">
               <Typography.Text strong>결재 대기·예정 문서</Typography.Text>
               <Button
                 type="link"
@@ -4865,7 +4901,7 @@ export function ApprovalsPage() {
                 전체
               </Button>
             </div>
-            <div className="tw-min-h-0 tw-flex-1 tw-basis-0 tw-overflow-y-auto wf-scrollbar tw-pr-1 [scrollbar-gutter:stable]">
+            <div className="tw-max-h-[min(18rem,42vh)] tw-overflow-y-auto wf-scrollbar tw-pr-1 [scrollbar-gutter:stable]">
               <Spin spinning={pendingLoading || waitingLoading}>
                 {composeHomePendingTable(composeHubInboxPreviewRows.slice(0, 20))}
               </Spin>
@@ -4877,7 +4913,6 @@ export function ApprovalsPage() {
           </div>
         </div>
 
-        <div className="tw-min-h-0 tw-flex-1 tw-overflow-hidden">
         <div className="tw-grid tw-grid-cols-1 tw-gap-4 md:tw-grid-cols-2 xl:tw-grid-cols-3">
           {renderHomeDocListCard('내 기안 문서함', myRequestsAllForSummary, '기안 문서가 없습니다.', {
             fullListEmbed: { panel: 'my-all' },
@@ -5023,7 +5058,6 @@ export function ApprovalsPage() {
             )}
           </Card>
         </div>
-        </div>
       </div>
 
         <AppModal
@@ -5039,19 +5073,10 @@ export function ApprovalsPage() {
           footer={null}
           width={1120}
           destroyOnHidden
-          style={{ top: 48 }}
           styles={{
-            content: {
-              height: 820,
-              maxHeight: '90vh',
-              resize: 'both',
-              display: 'flex',
-              flexDirection: 'column',
-              padding: 0,
-              overflow: 'auto',
-            },
-            header: { flexShrink: 0, marginBottom: 0, padding: '12px 16px' },
-            body: { flex: 1, minHeight: 0, padding: 0, overflow: 'hidden' },
+            content: APPROVAL_FOLLOWUP_MODAL_CONTENT_STYLE,
+            header: APPROVAL_FOLLOWUP_MODAL_HEADER_STYLE,
+            body: APPROVAL_FOLLOWUP_MODAL_BODY_STYLE,
           }}
         >
           {composeHomeMoreModal?.kind === 'pending-inbox' ? (
@@ -5087,7 +5112,7 @@ export function ApprovalsPage() {
         />
 
         {/* 근태정정신청 자동 모달 - corrDate 진입 시 기존 결재 작성 모달 흐름과 동일한 모양으로 띄움 */}
-        <Modal
+        <AppModal
           title="전자결재"
           open={correctionEmbedSrc != null}
           onCancel={() => {
@@ -5102,19 +5127,10 @@ export function ApprovalsPage() {
           footer={null}
           width={1120}
           destroyOnHidden
-          style={{ top: 48 }}
           styles={{
-            content: {
-              height: 820,
-              maxHeight: '90vh',
-              resize: 'both',
-              display: 'flex',
-              flexDirection: 'column',
-              padding: 0,
-              overflow: 'auto',
-            },
-            header: { flexShrink: 0, marginBottom: 0, padding: '12px 16px' },
-            body: { flex: 1, minHeight: 0, padding: 0, overflow: 'hidden' },
+            content: APPROVAL_FOLLOWUP_MODAL_CONTENT_STYLE,
+            header: APPROVAL_FOLLOWUP_MODAL_HEADER_STYLE,
+            body: APPROVAL_FOLLOWUP_MODAL_BODY_STYLE,
           }}
         >
           {correctionEmbedSrc ? (
@@ -5125,7 +5141,7 @@ export function ApprovalsPage() {
               className="tw-h-full tw-min-h-0 tw-w-full tw-border-0"
             />
           ) : null}
-        </Modal>
+        </AppModal>
         <AppDoubleActionModal
           title="퀵 메뉴 설정"
           open={quickHomeFormsSettingOpen}
@@ -5211,37 +5227,23 @@ export function ApprovalsPage() {
         'tw-w-full',
         isEmbedComposeModal
           ? 'tw-flex tw-h-full tw-min-h-0 tw-flex-col tw-gap-4 tw-overflow-y-auto'
-          : clsx(
-              'tw-flex tw-min-h-0 tw-flex-col',
-              isComposeHubEntry
-                ? 'tw-h-[calc(100dvh-11rem)] tw-max-h-[calc(100dvh-11rem)] tw-gap-3 tw-overflow-hidden sm:tw-h-[calc(100dvh-10.5rem)] sm:tw-max-h-[calc(100dvh-10.5rem)]'
-                : 'tw-gap-4',
-            ),
+          : 'tw-flex tw-min-h-0 tw-flex-col tw-gap-4',
       )}
     >
       {/* 허브 대시보드 밖(예: sideNav=workbench)에서도 동일 모달이 필요 - 챗봇 prefill 등 */}
       {/* 허브 안(onComposeHub=true)에선 위쪽 그리드의 동일 모달이 뜨므로 중복 렌더 방지 위해 가드 */}
       {!isEmbedComposeModal && !onComposeHub ? (
-        <Modal
+        <AppModal
           title={composeHomeMoreModal?.kind === 'pending-inbox' ? composeHomeMoreModal.title : null}
           open={composeHomeMoreModal != null}
           onCancel={() => setComposeHomeMoreModal(null)}
           footer={null}
           width={1120}
           destroyOnHidden
-          style={{ top: 48 }}
           styles={{
-            content: {
-              height: 820,
-              maxHeight: '90vh',
-              resize: 'both',
-              display: 'flex',
-              flexDirection: 'column',
-              padding: 0,
-              overflow: 'auto',
-            },
-            header: { flexShrink: 0, marginBottom: 0, padding: '12px 16px' },
-            body: { flex: 1, minHeight: 0, padding: 0, overflow: 'hidden' },
+            content: APPROVAL_FOLLOWUP_MODAL_CONTENT_STYLE,
+            header: APPROVAL_FOLLOWUP_MODAL_HEADER_STYLE,
+            body: APPROVAL_FOLLOWUP_MODAL_BODY_STYLE,
           }}
         >
           {composeHomeMoreModal?.kind === 'pending-inbox' ? (
@@ -5263,7 +5265,7 @@ export function ApprovalsPage() {
               className="tw-h-full tw-min-h-0 tw-w-full tw-border-0"
             />
           ) : null}
-        </Modal>
+        </AppModal>
       ) : null}
 
       {!isEmbedComposeModal ? (
@@ -5300,7 +5302,7 @@ export function ApprovalsPage() {
                 setComposeFormSelectModalOpen(true);
               }}
             >
-              결재 생성
+              새 결재 진행
             </Button>
           ) : null}
         </div>
@@ -5312,7 +5314,7 @@ export function ApprovalsPage() {
       ) : null}
 
       {tab === 'compose' && isComposeHubEntry ? (
-        <div className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-hidden">
+        <div className="tw-flex tw-min-w-0 tw-flex-col">
           {renderComposeHomeDashboard()}
         </div>
       ) : tab === 'compose' ? (
@@ -6520,7 +6522,7 @@ export function ApprovalsPage() {
         destroyOnHidden={false}
         width={1000}
       >
-        <div className="tw-max-h-[min(72vh,640px)] tw-min-h-0 tw-overflow-y-auto tw-px-5 tw-py-2">
+        <div className="tw-px-5 tw-py-2">
         {selectedDocument ? renderComposeApprovalInfoContent({ stacked: false }) : null}
         </div>
       </AppDoubleActionModal>

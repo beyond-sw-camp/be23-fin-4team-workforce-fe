@@ -68,46 +68,47 @@ export function MembersPage() {
 
       <MemberCreateModal open={createOpen} onClose={() => setCreateOpen(false)} />
 
-      <section className="tw-space-y-4">
-        <MemberSearchForm
-          initialKeyword={params.keyword}
-          onSearch={setTableParams}
-          trailing={
-            hasMemberCreatePerm ? (
-              <Tooltip
-                title={
-                  policiesQ.isLoading
-                    ? '활성 급여정책 확인 중…'
-                    : !hasActivePolicy
-                      ? '활성 급여정책이 없어 직원을 생성할 수 없습니다. [급여 관리 → 급여 정책] 에서 정책을 먼저 등록해 주세요.'
-                      : ''
-                }
-              >
-                <Button
-                  type="primary"
-                  className={membersCtaButtonClass}
-                  onClick={handleClickCreate}
-                  disabled={policiesQ.isLoading || !hasActivePolicy}
-                >
-                  직원 계정 생성
-                </Button>
-              </Tooltip>
-            ) : undefined
-          }
-        />
-
+      <section>
         <Card
           className="tw-rounded-2xl tw-border tw-border-slate-200/90 tw-shadow-sm tw-shadow-slate-900/5"
-          styles={{ body: { padding: 4 } }}
+          styles={{ body: { padding: 16 } }}
         >
-          <MembersTable
-            rows={data.items}
-            loading={isFetching}
-            total={data.total}
-            page={params.page}
-            pageSize={params.pageSize}
-            onPageChange={(page, pageSize) => setTableParams({ page, pageSize })}
-          />
+          <div className="tw-space-y-4">
+            <MemberSearchForm
+              initialKeyword={params.keyword}
+              onSearch={setTableParams}
+              trailing={
+                hasMemberCreatePerm ? (
+                  <Tooltip
+                    title={
+                      policiesQ.isLoading
+                        ? '활성 급여정책 확인 중…'
+                        : !hasActivePolicy
+                          ? '활성 급여정책이 없어 직원을 생성할 수 없습니다. [급여 관리 → 급여 정책] 에서 정책을 먼저 등록해 주세요.'
+                          : ''
+                    }
+                  >
+                    <Button
+                      type="primary"
+                      className={membersCtaButtonClass}
+                      onClick={handleClickCreate}
+                      disabled={policiesQ.isLoading || !hasActivePolicy}
+                    >
+                      직원 계정 생성
+                    </Button>
+                  </Tooltip>
+                ) : undefined
+              }
+            />
+            <MembersTable
+              rows={data.items}
+              loading={isFetching}
+              total={data.total}
+              page={params.page}
+              pageSize={params.pageSize}
+              onPageChange={(page, pageSize) => setTableParams({ page, pageSize })}
+            />
+          </div>
         </Card>
       </section>
     </div>

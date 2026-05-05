@@ -104,7 +104,7 @@ export function MyApprovalRequestsPage() {
         error: listQuery.error,
         refetch: listQuery.refetch,
         status: listQuery.status,
-      }) as UseQueryResult<ApprovalSearchPage, Error>,
+      }) as unknown as UseQueryResult<ApprovalSearchPage, Error>,
     [derivedSearchPage, listQuery],
   );
 
