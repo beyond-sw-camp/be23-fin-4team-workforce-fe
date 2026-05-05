@@ -29,7 +29,6 @@ import { EsgHomePage } from '@/pages/app/esg/EsgHomePage';
 import { EsgShopPage } from '@/pages/app/esg/EsgShopPage';
 import { MembersPage } from '@/pages/app/MembersPage';
 import { MemberDetailPage } from '@/pages/app/MemberDetailPage';
-import { MemberEditPage } from '@/pages/app/MemberEditPage';
 import { NotificationsPage } from '@/pages/app/NotificationsPage';
 import EvaluationsHubPage from '@/pages/app/evaluations/EvaluationsHubPage';
 import EvaluationSeasonDetailPage from '@/pages/app/evaluations/EvaluationSeasonDetailPage';
@@ -87,7 +86,9 @@ function withSuspense(Comp: ComponentType) {
       <Suspense
         fallback={
           <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
-            <Spin size="large" tip="페이지 로딩 중..." />
+            <Spin size="large">
+              <span className="tw-sr-only">페이지 로딩 중...</span>
+            </Spin>
           </div>
         }
       >
@@ -293,14 +294,6 @@ const memberDetailRoute = createRoute({
   },
 });
 
-const memberEditRoute = createRoute({
-  getParentRoute: () => appBaseRoute,
-  path: '/members/$memberId/edit',
-  component: MemberEditPage,
-  beforeLoad: ({ context }) => {
-    requirePermissions(context, [PERM.MEMBER_UPDATE]);
-  },
-});
 const notificationsRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/notifications',
@@ -1000,7 +993,6 @@ const routeTree = rootRoute.addChildren([
       myProfileRoute,
       membersRoute,
       memberDetailRoute,
-      memberEditRoute,
       notificationsRoute,
       performanceRoute,
       // === 통합 워크플로우 라우트 ===

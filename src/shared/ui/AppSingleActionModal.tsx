@@ -63,7 +63,7 @@ export function AppSingleActionModal({
       title={title}
       onCancel={onClose}
       zIndex={zIndex}
-      footer={customFooter != null ? customFooter : defaultFooter}
+      footer={customFooter !== undefined ? customFooter : defaultFooter}
       width={width}
       destroyOnHidden={destroyOnHidden}
       maskClosable={false}

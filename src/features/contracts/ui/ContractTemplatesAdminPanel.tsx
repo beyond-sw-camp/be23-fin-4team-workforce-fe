@@ -1,6 +1,6 @@
-import { ArrowRightOutlined, PlusOutlined, ReloadOutlined, TeamOutlined, UserAddOutlined } from '@ant-design/icons';
+import { ArrowRightOutlined, EditOutlined, PlusOutlined, ReloadOutlined, TeamOutlined, UserAddOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Button, Card, Divider, Form, Input, Select, Space, Table, Tag, Typography } from 'antd';
+import { Alert, App, Button, Card, Divider, Form, Input, Select, Space, Switch, Table, Tag, Typography } from 'antd';
 import dayjs from 'dayjs';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -551,61 +551,90 @@ export function ContractTemplatesAdminPanel({
   return (
     <>
       {showTemplateSection ? (
-      <Card className="tw-border-slate-200/80 tw-shadow-sm">
+      <div className="tw-space-y-4">
         {templatesError ? (
           <Alert
             type="error"
             showIcon
-            className="tw-mb-4"
+            className="!tw-rounded-xl !tw-border-red-100 !tw-bg-red-50/70"
             message="전자계약 템플릿을 불러오지 못했습니다."
             description={parseApiError(templatesError).message}
           />
         ) : null}
-        <div className="tw-mb-4 tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-3">
-          <Typography.Text type="secondary" className="tw-text-sm">
-            등록된 계약서 템플릿 {templates.length}개
-          </Typography.Text>
-          <Space wrap>
-            <Button icon={<ReloadOutlined />} onClick={() => void fullTemplatesQ.refetch()}>
-              새로고침
-            </Button>
+        <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-3">
+          <div className="tw-min-w-0">
+            <Typography.Text type="secondary" className="tw-block tw-text-sm">
+              계약 유형과 필드 정의를 관리합니다. 발송 화면에는 활성 템플릿만 노출됩니다.
+            </Typography.Text>
+            <div className="tw-mt-2 tw-flex tw-flex-wrap tw-items-center tw-gap-2">
+              <span className="tw-inline-flex tw-h-7 tw-items-center tw-rounded-full tw-bg-slate-100 tw-px-3 tw-text-xs tw-font-semibold tw-text-slate-700">
+                전체 {templates.length}개
+              </span>
+              <span className="tw-inline-flex tw-h-7 tw-items-center tw-rounded-full tw-bg-blue-50 tw-px-3 tw-text-xs tw-font-semibold tw-text-blue-700">
+                활성 {templates.filter((row) => row.isActiveYn === 'Y').length}개
+              </span>
+            </div>
+          </div>
+          <Space wrap size={8}>
             {canCreate ? (
               <Button type="primary" icon={<PlusOutlined />} className={NAVY_BUTTON_CLASS} onClick={openCreate}>
                 새 계약서 양식
               </Button>
             ) : null}
+            <Button icon={<ReloadOutlined />} className="!tw-rounded-xl" onClick={() => void fullTemplatesQ.refetch()}>
+              새로고침
+            </Button>
           </Space>
         </div>
-        <Typography.Paragraph type="secondary" className="!tw-mb-4 !tw-text-sm">
-          계약 유형·필드 정의(formSchema)를 관리합니다. 발송 화면의 템플릿 선택은 활성 템플릿만 노출됩니다.
-        </Typography.Paragraph>
-        <div className="tw-pr-1">
+        <div className="tw-overflow-hidden tw-rounded-xl tw-border tw-border-slate-200">
           <Table<ContractTemplate>
             rowKey="templateId"
             loading={isFetching}
             dataSource={templates}
             pagination={false}
+            className="[&_.ant-table]:!tw-bg-white [&_.ant-table-thead>tr>th]:!tw-border-slate-200 [&_.ant-table-thead>tr>th]:!tw-bg-slate-50 [&_.ant-table-thead>tr>th]:!tw-px-4 [&_.ant-table-thead>tr>th]:!tw-py-3 [&_.ant-table-thead>tr>th]:!tw-text-xs [&_.ant-table-thead>tr>th]:!tw-font-semibold [&_.ant-table-thead>tr>th]:!tw-text-slate-600 [&_.ant-table-tbody>tr>td]:!tw-border-slate-100 [&_.ant-table-tbody>tr>td]:!tw-px-4 [&_.ant-table-tbody>tr>td]:!tw-py-4 [&_.ant-table-tbody>tr:hover>td]:!tw-bg-slate-50/70"
             columns={[
               {
                 title: '템플릿명',
                 dataIndex: 'templateName',
                 key: 'templateName',
                 ellipsis: true,
+                render: (name: string) => (
+                  <Typography.Text strong className="tw-text-[#1e3a5f]">
+                    {name}
+                  </Typography.Text>
+                ),
               },
               {
                 title: '계약 유형',
                 dataIndex: 'contractType',
                 key: 'contractType',
                 width: 200,
-                render: (t: string) => CONTRACT_TYPE_LABEL[t as ContractType] ?? t,
+                render: (t: string) => <Tag className="!tw-m-0 !tw-rounded-lg">{CONTRACT_TYPE_LABEL[t as ContractType] ?? t}</Tag>,
               },
               {
-                title: '상태',
+                title: '사용 상태',
                 dataIndex: 'isActiveYn',
                 key: 'isActiveYn',
-                width: 120,
-                render: (yn: 'Y' | 'N') => (
-                  <Tag color={yn === 'Y' ? 'success' : 'default'}>{yn === 'Y' ? '활성' : '비활성'}</Tag>
+                width: 150,
+                render: (yn: 'Y' | 'N', row) => (
+                  <Space size={8}>
+                    <Switch
+                      size="small"
+                      checked={yn === 'Y'}
+                      disabled={!canUpdate}
+                      loading={
+                        (activateM.isPending || deactivateM.isPending) &&
+                        (activateM.variables === row.templateId || deactivateM.variables === row.templateId)
+                      }
+                      onChange={(checked) =>
+                        checked ? activateM.mutate(row.templateId) : deactivateM.mutate(row.templateId)
+                      }
+                    />
+                    <Typography.Text className="tw-text-xs tw-font-semibold tw-text-slate-600">
+                      {yn === 'Y' ? '활성' : '비활성'}
+                    </Typography.Text>
+                  </Space>
                 ),
               },
               {
@@ -616,41 +645,26 @@ export function ContractTemplatesAdminPanel({
                 render: (v: string) => (v ? v.replace('T', ' ').slice(0, 19) : '—'),
               },
               {
-                title: '관리',
+                title: '작업',
                 key: 'actions',
-                width: 220,
+                width: 130,
                 render: (_, row) => (
-                  <Space size="small" wrap>
-                    {canUpdate ? (
-                      <Button type="link" size="small" onClick={() => openEdit(row)}>
-                        수정
-                      </Button>
-                    ) : null}
-                    {canUpdate ? (
-                      <Button
-                        size="small"
-                        type={row.isActiveYn === 'Y' ? 'primary' : 'default'}
-                        ghost={row.isActiveYn === 'Y'}
-                        onClick={() =>
-                          row.isActiveYn === 'Y'
-                            ? deactivateM.mutate(row.templateId)
-                            : activateM.mutate(row.templateId)
-                        }
-                        loading={
-                          (activateM.isPending || deactivateM.isPending) &&
-                          (activateM.variables === row.templateId || deactivateM.variables === row.templateId)
-                        }
-                      >
-                        {row.isActiveYn === 'Y' ? '비활성화' : '활성화'}
-                      </Button>
-                    ) : null}
-                  </Space>
+                  canUpdate ? (
+                    <Button
+                      size="small"
+                      icon={<EditOutlined />}
+                      className="!tw-h-8 !tw-rounded-lg !tw-border-slate-200 !tw-font-medium"
+                      onClick={() => openEdit(row)}
+                    >
+                      수정
+                    </Button>
+                  ) : null
                 ),
               },
             ]}
           />
         </div>
-      </Card>
+      </div>
       ) : null}
       {showSendSection ? (
         /* split: 개별·일괄 발송 제출 → AppDoubleActionModal onConfirm. stacked: 카드 안 primary Button onClick. (계약 발송 페이지는 ContractSendPage에서 sendLayout="split") */
@@ -660,42 +674,50 @@ export function ContractTemplatesAdminPanel({
               <Alert
                 type="error"
                 showIcon
-                className="tw-mb-3"
+                className="!tw-mb-3 !tw-rounded-xl !tw-border-red-100 !tw-bg-red-50/70"
                 message="활성 템플릿을 불러오지 못했습니다."
                 description={parseApiError(activeTemplatesFetchError).message}
               />
             ) : null}
-            <div className="tw-grid tw-w-full tw-grid-cols-1 tw-gap-4 lg:tw-grid-cols-2">
-              <Card className={`${CONTRACT_HUB_CARD_CLASS} tw-overflow-hidden`}>
-                <div className="tw-flex tw-gap-4">
-                  <div className="tw-flex tw-size-12 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-xl tw-bg-[#1e3a5f] tw-text-white">
-                    <UserAddOutlined className="tw-text-xl" />
+            <div className="tw-grid tw-w-full tw-grid-cols-1 tw-gap-3 lg:tw-grid-cols-2">
+              <Card className={`${CONTRACT_HUB_CARD_CLASS} tw-overflow-hidden [&_.ant-card-body]:tw-p-5`}>
+                <div className="tw-flex tw-h-full tw-flex-col tw-gap-4 md:tw-flex-row md:tw-items-center">
+                  <div className="tw-flex tw-size-10 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-xl tw-bg-slate-100 tw-text-[#1e3a5f]">
+                    <UserAddOutlined className="tw-text-lg" />
                   </div>
                   <div className="tw-min-w-0 tw-flex-1">
-                    <Typography.Title level={5} className="!tw-mb-2">개별 발송</Typography.Title>
-                    <Typography.Paragraph type="secondary" className="!tw-mb-3 !tw-text-sm">
+                    <Typography.Text className="tw-block tw-text-base tw-font-semibold tw-text-slate-900">개별 발송</Typography.Text>
+                    <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-2 !tw-text-sm">
                       특정 인원에게 맞춤형 계약서를 전송합니다. 수정 사항이 잦은 입사 계약이나 연봉 협상에 적합합니다.
                     </Typography.Paragraph>
-                    <Button type="link" className="!tw-px-0 !tw-font-semibold" onClick={() => setSingleSendModalOpen(true)}>
-                      바로 시작하기 <ArrowRightOutlined />
-                    </Button>
                   </div>
+                  <Button
+                    type="primary"
+                    className={`${NAVY_BUTTON_CLASS} tw-shrink-0 md:tw-ml-4`}
+                    onClick={() => setSingleSendModalOpen(true)}
+                  >
+                    개별 계약 발송 <ArrowRightOutlined />
+                  </Button>
                 </div>
               </Card>
-              <Card className={`${CONTRACT_HUB_CARD_CLASS} tw-overflow-hidden`}>
-                <div className="tw-flex tw-gap-4">
-                  <div className="tw-flex tw-size-12 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-xl tw-bg-[#0b63ce] tw-text-white">
-                    <TeamOutlined className="tw-text-xl" />
+              <Card className={`${CONTRACT_HUB_CARD_CLASS} tw-overflow-hidden [&_.ant-card-body]:tw-p-5`}>
+                <div className="tw-flex tw-h-full tw-flex-col tw-gap-4 md:tw-flex-row md:tw-items-center">
+                  <div className="tw-flex tw-size-10 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-xl tw-bg-blue-50 tw-text-blue-700">
+                    <TeamOutlined className="tw-text-lg" />
                   </div>
                   <div className="tw-min-w-0 tw-flex-1">
-                    <Typography.Title level={5} className="!tw-mb-2">일괄 발송</Typography.Title>
-                    <Typography.Paragraph type="secondary" className="!tw-mb-3 !tw-text-sm">
+                    <Typography.Text className="tw-block tw-text-base tw-font-semibold tw-text-slate-900">일괄 발송</Typography.Text>
+                    <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-2 !tw-text-sm">
                       대규모 인원에게 동일한 계약 서식을 일괄 전송합니다. 기업정보 처리 동의서나 전사 정책 안내 서명에 최적화되어 있습니다.
                     </Typography.Paragraph>
-                    <Button type="link" className="!tw-px-0 !tw-font-semibold" onClick={() => setBatchSendModalOpen(true)}>
-                      바로 시작하기 <ArrowRightOutlined />
-                    </Button>
                   </div>
+                  <Button
+                    type="primary"
+                    className={`${NAVY_BUTTON_CLASS} tw-shrink-0 md:tw-ml-4`}
+                    onClick={() => setBatchSendModalOpen(true)}
+                  >
+                    일괄 계약 발송 <ArrowRightOutlined />
+                  </Button>
                 </div>
               </Card>
             </div>
@@ -947,10 +969,10 @@ export function ContractTemplatesAdminPanel({
         cancelText="취소"
         confirmLoading={createM.isPending}
         destroyOnHidden
-        width={1040}
+        width={1120}
       >
-        <div className="tw-max-h-[min(82vh,900px)] tw-overflow-y-auto tw-px-5 tw-py-4">
-        <Form<CreateForm> form={createForm} layout="vertical" className="tw-pt-2">
+        <div className="tw-px-6 tw-py-5 sm:tw-px-7">
+        <Form<CreateForm> form={createForm} layout="vertical">
           <Form.Item
             label="양식 필드"
             extra="전자결재 양식과 동일한 방식으로 관리합니다. 기존 source/sourceField/editable 메타는 키 기준으로 유지됩니다."
@@ -1054,10 +1076,10 @@ export function ContractTemplatesAdminPanel({
         cancelText="취소"
         confirmLoading={updateM.isPending}
         destroyOnHidden
-        width={1040}
+        width={1120}
       >
-        <div className="tw-max-h-[min(82vh,900px)] tw-overflow-y-auto tw-px-5 tw-py-4">
-        <Form<EditForm> form={editForm} layout="vertical" className="tw-pt-2">
+        <div className="tw-px-6 tw-py-5 sm:tw-px-7">
+        <Form<EditForm> form={editForm} layout="vertical">
           <Form.Item
             label="양식 필드"
             extra="필드 키를 변경하면 기존 source/sourceField 메타 연결이 끊길 수 있습니다."

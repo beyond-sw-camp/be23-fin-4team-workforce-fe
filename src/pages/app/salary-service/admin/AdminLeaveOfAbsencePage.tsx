@@ -21,6 +21,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
+import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import { membersApi } from '@/features/members/api/membersApi';
 import type { Member } from '@/features/members/model/types';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
@@ -228,14 +229,11 @@ export function AdminLeaveOfAbsencePage() {
 
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
-      <div>
-        <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
-          휴직 관리
-        </Typography.Title>
-        <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-sm">
-          휴직 상태 조회와 조기 복직 처리만 수행 가능합니다.
-        </Typography.Paragraph>
-      </div>
+      <AppWorkspacePageTitle
+        eyebrow="Leave"
+        title="휴직 관리"
+        subtitle="휴직 상태 조회와 조기 복직 처리만 수행 가능합니다."
+      />
 
       <Card className="tw-border-slate-200/80 tw-shadow-sm">
         <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-3">

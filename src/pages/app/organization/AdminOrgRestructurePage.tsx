@@ -16,14 +16,11 @@ import {
   Alert,
   App,
   Button,
-  Card,
   DatePicker,
   Empty,
   Input,
-  Modal,
   Form,
   Select,
-  Space,
   Tag,
   Tree,
   Typography,
@@ -32,11 +29,14 @@ import dayjs, { type Dayjs } from 'dayjs';
 import type { TreeDataNode, TreeProps } from 'antd';
 import {
   ApartmentOutlined,
+  ReloadOutlined,
+  SendOutlined,
   UserOutlined,
 } from '@ant-design/icons';
 import { organizationApi } from '@/features/organization/api/organizationApi';
 import type { OrgChartOrgNode, OrgChartMember } from '@/features/organization/api/organizationApi';
 import { approvalApi } from '@/features/approvals/api/approvalApi';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 
 type SimMember = {
   memberId: string;
@@ -367,64 +367,94 @@ export function AdminOrgRestructurePage() {
     REGULAR: '정기 인사발령',
   };
 
+  const panelClass = 'tw-rounded-xl tw-border tw-border-slate-200/90 tw-bg-white';
+  const panelHeaderClass =
+    'tw-flex tw-min-h-12 tw-items-center tw-justify-between tw-gap-3 tw-border-b tw-border-slate-100 tw-bg-slate-50/80 tw-px-4 tw-py-3';
+  const toolbarPrimaryBtn =
+    '!tw-h-10 !tw-min-h-10 !tw-rounded-xl !tw-border-0 !tw-bg-[#1e3a5f] !tw-font-semibold !tw-shadow-none hover:!tw-bg-[#152a45] disabled:!tw-border disabled:!tw-border-slate-300 disabled:!tw-bg-slate-100 disabled:!tw-text-slate-500 disabled:!tw-shadow-none disabled:hover:!tw-bg-slate-100';
+  const toolbarSecondaryBtn =
+    '!tw-h-10 !tw-min-h-10 !tw-rounded-xl !tw-border !tw-border-slate-200 !tw-bg-white !tw-font-medium !tw-text-slate-700 hover:!tw-border-slate-300 hover:!tw-bg-slate-50';
+
   return (
-    <Space direction="vertical" className="tw-w-full" size={16}>
-      <div>
-        <Typography.Title level={4} className="!tw-m-0">
-          조직 개편 시뮬레이션
-        </Typography.Title>
-        <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-sm">
-          좌측 현재 조직도 ↔ 우측 시뮬 트리. 우측에서 직원을 드래그해 다른 부서로 이동하거나 노드를
-          클릭해 직급을 변경하세요. <b>실제 발령은 [전자결재로 올리기]</b>로 결재 통과 시 적용됩니다 (Phase 2).
-        </Typography.Paragraph>
+    <div className="tw-w-full tw-space-y-4">
+      <div className="tw-flex tw-items-start tw-justify-between tw-gap-4">
+        <div className="tw-min-w-0 tw-flex-1">
+          <Typography.Text className="tw-block tw-text-sm tw-text-slate-500">
+            우측 시뮬 트리에서 직원을 드래그해 부서를 이동하거나 직원을 클릭해 직급을 변경합니다.<br/>
+            실제 발령은 전자결재 상신 후 결재 완료 시 반영됩니다.
+          </Typography.Text>
+        </div>
+        <div className="tw-flex tw-flex-none tw-items-center tw-gap-2">
+          <Button icon={<ReloadOutlined />} onClick={initSim} className={toolbarSecondaryBtn}>
+            초기화
+          </Button>
+          <Button
+            type="primary"
+            icon={<SendOutlined />}
+            disabled={changes.length === 0}
+            className={toolbarPrimaryBtn}
+            onClick={() => {
+              submitForm.setFieldsValue({
+                effectiveDate: dayjs().add(7, 'day'),
+                reason: '',
+              });
+              setSubmitOpen(true);
+            }}
+          >
+            전자결재로 올리기 ({changes.length}건)
+          </Button>
+        </div>
       </div>
 
-      <Space wrap>
-        <Button onClick={initSim}>시뮬 초기화 (현재 상태로 리셋)</Button>
-        <Button
-          type="primary"
-          disabled={changes.length === 0}
-          onClick={() => {
-            submitForm.setFieldsValue({
-              effectiveDate: dayjs().add(7, 'day'),
-              reason: '',
-            });
-            setSubmitOpen(true);
-          }}
-        >
-          전자결재로 올리기 ({changes.length}건)
-        </Button>
-      </Space>
-
-      <div className="tw-grid tw-grid-cols-1 lg:tw-grid-cols-2 tw-gap-3">
-        <Card title="현재 조직도" size="small" loading={orgChartQ.isLoading}>
-          {leftTreeData.length === 0 ? (
-            <Empty description="조직 데이터 없음" />
-          ) : (
-            <Tree
-              treeData={leftTreeData}
-              defaultExpandAll
-              selectable={false}
-              showIcon={false}
-              blockNode
-            />
-          )}
-        </Card>
-        <Card title="시뮬 트리 (drag-drop / 클릭하여 직급 변경)" size="small">
-          {rightTreeData.length === 0 ? (
-            <Empty description="조직 데이터 없음" />
-          ) : (
-            <Tree
-              treeData={rightTreeData}
-              defaultExpandAll
-              draggable
-              blockNode
-              onDrop={onDrop}
-              onSelect={onSelect}
-              showIcon={false}
-            />
-          )}
-        </Card>
+      <div className="tw-grid tw-grid-cols-1 tw-gap-3 lg:tw-grid-cols-2">
+        <section className={panelClass}>
+          <div className={panelHeaderClass}>
+            <div>
+              <Typography.Text className="tw-text-sm tw-font-semibold tw-text-slate-800">현재 조직도</Typography.Text>
+              <Typography.Text className="tw-ml-2 tw-text-xs tw-text-slate-500">조회 전용</Typography.Text>
+            </div>
+          </div>
+          <div className="tw-p-4">
+            {orgChartQ.isLoading ? (
+              <Typography.Text type="secondary" className="tw-text-sm">불러오는 중...</Typography.Text>
+            ) : leftTreeData.length === 0 ? (
+              <Empty description="조직 데이터 없음" />
+            ) : (
+              <Tree
+                treeData={leftTreeData}
+                defaultExpandAll
+                selectable={false}
+                showIcon={false}
+                blockNode
+                className="tw-bg-transparent [&_.ant-tree-node-content-wrapper]:tw-rounded-md [&_.ant-tree-node-content-wrapper]:tw-py-1"
+              />
+            )}
+          </div>
+        </section>
+        <section className={panelClass}>
+          <div className={panelHeaderClass}>
+            <div>
+              <Typography.Text className="tw-text-sm tw-font-semibold tw-text-slate-800">시뮬 트리</Typography.Text>
+              <Typography.Text className="tw-ml-2 tw-text-xs tw-text-slate-500">드래그 이동 · 클릭 직급 변경</Typography.Text>
+            </div>
+          </div>
+          <div className="tw-p-4">
+            {rightTreeData.length === 0 ? (
+              <Empty description="조직 데이터 없음" />
+            ) : (
+              <Tree
+                treeData={rightTreeData}
+                defaultExpandAll
+                draggable
+                blockNode
+                onDrop={onDrop}
+                onSelect={onSelect}
+                showIcon={false}
+                className="tw-bg-transparent [&_.ant-tree-node-content-wrapper]:tw-rounded-md [&_.ant-tree-node-content-wrapper]:tw-py-1"
+              />
+            )}
+          </div>
+        </section>
       </div>
 
       <Card title={`변경 사항 (${changes.length}건)`} size="small">
@@ -465,12 +495,12 @@ export function AdminOrgRestructurePage() {
       </Card>
 
       {/* 전자결재 신청 모달 - 효력일 + 사유 입력 후 결재 페이지로 prefill 데이터와 함께 이동 */}
-      <Modal
+      <AppDoubleActionModal
         open={submitOpen}
         title="인사발령 전자결재 신청"
-        onCancel={() => setSubmitOpen(false)}
-        onOk={() => submitForm.submit()}
-        okText="결재 작성으로 이동"
+        onClose={() => setSubmitOpen(false)}
+        onConfirm={() => submitForm.submit()}
+        confirmText="결재 작성으로 이동"
         cancelText="취소"
         destroyOnHidden
         width={560}
@@ -478,6 +508,7 @@ export function AdminOrgRestructurePage() {
         <Form<{ effectiveDate: Dayjs; reason?: string }>
           form={submitForm}
           layout="vertical"
+          className="tw-px-5 tw-py-5"
           onFinish={(v) => {
             // 변경 사항 -> 인사발령품의서 contentJson items 로 packing
             // items 는 BE cascade 용 (memberId 등 ID 포함, 사용자에게는 노출 X)
@@ -575,38 +606,41 @@ export function AdminOrgRestructurePage() {
           <Alert
             type="info"
             showIcon
-            className="!tw-mb-3"
+            className="!tw-mb-4 !tw-rounded-xl"
             message={`${changes.length}명에 대한 [인사발령품의서 - ${orderCategoryLabel[resolveOrderCategory()]}] 결재 신청합니다.`}
             description="양식은 [인사발령품의서] 1개를 사용하며, 종류(전보/승진/강등/복합/정기)는 결재 내용에 자동 기록됩니다. 결재 통과 시 직원 부서/직급/직책이 변경되고 발령 이력이 누적됩니다."
           />
-          <Form.Item
-            label="효력 시작일"
-            name="effectiveDate"
-            rules={[{ required: true, message: '효력일을 선택하세요.' }]}
-          >
-            <DatePicker style={{ width: '100%' }} format="YYYY-MM-DD" />
-          </Form.Item>
-          <Form.Item label="발령 사유 / 비고 (선택)" name="reason">
-            <Input.TextArea
-              rows={3}
-              maxLength={500}
-              placeholder="예: 2026 상반기 조직개편에 따른 인사이동"
-            />
-          </Form.Item>
+          <div className="tw-rounded-xl tw-border tw-border-slate-200 tw-bg-slate-50/70 tw-p-4">
+            <Form.Item
+              label="효력 시작일"
+              name="effectiveDate"
+              rules={[{ required: true, message: '효력일을 선택하세요.' }]}
+            >
+              <DatePicker className="tw-w-full" format="YYYY-MM-DD" />
+            </Form.Item>
+            <Form.Item label="발령 사유 / 비고 (선택)" name="reason" className="!tw-mb-0">
+              <Input.TextArea
+                rows={3}
+                maxLength={500}
+                placeholder="예: 2026 상반기 조직개편에 따른 인사이동"
+              />
+            </Form.Item>
+          </div>
         </Form>
-      </Modal>
+      </AppDoubleActionModal>
 
       {/* 직급 변경 모달 */}
-      <Modal
+      <AppDoubleActionModal
         open={editTarget !== null}
         title={editTarget ? `${editTarget.name} 정보 변경` : ''}
-        onCancel={() => setEditTarget(null)}
-        onOk={() => {
+        onClose={() => setEditTarget(null)}
+        onConfirm={() => {
           editForm.submit();
         }}
-        okText="적용"
+        confirmText="적용"
         cancelText="취소"
         destroyOnHidden
+        width={520}
       >
         {editTarget && (
           <Form
@@ -616,6 +650,7 @@ export function AdminOrgRestructurePage() {
               jobGradeName: editTarget.jobGradeName,
               jobTitleName: editTarget.jobTitleName || null,
             }}
+            className="tw-px-5 tw-py-5"
             onFinish={(v) => {
               const newTitle = (v.jobTitleName ?? '').trim();
               setSimMembers((prev) =>
@@ -632,17 +667,22 @@ export function AdminOrgRestructurePage() {
               message.success(`${editTarget.name} 직급 → ${v.jobGradeName}${titleNote}`);
             }}
           >
-            <Form.Item
-              label={`현재 부서: ${orgNameById.get(editTarget.currentOrgId) ?? '—'}`}
-            >
-              <Typography.Text type="secondary" className="!tw-text-xs">
-                부서 이동은 트리에서 드래그로 처리하세요.
+            <div className="tw-mb-4 tw-rounded-xl tw-border tw-border-slate-200 tw-bg-slate-50/70 tw-p-4">
+              <Typography.Text className="tw-block tw-text-sm tw-font-semibold tw-text-slate-800">
+                현재 부서
               </Typography.Text>
-            </Form.Item>
+              <Typography.Text className="tw-mt-1 tw-block tw-text-sm tw-text-slate-600">
+                {orgNameById.get(editTarget.currentOrgId) ?? '-'}
+              </Typography.Text>
+              <Typography.Text type="secondary" className="tw-mt-2 tw-block !tw-text-xs">
+                부서 이동은 시뮬 트리에서 드래그로 처리하세요.
+              </Typography.Text>
+            </div>
             <Form.Item
               label="직급"
               name="jobGradeName"
               rules={[{ required: true, message: '직급을 선택하세요.' }]}
+              className="!tw-mb-0"
             >
               <Select options={jobGradeOptions} placeholder="직급 선택" allowClear />
             </Form.Item>
@@ -659,7 +699,7 @@ export function AdminOrgRestructurePage() {
             </Form.Item>
           </Form>
         )}
-      </Modal>
-    </Space>
+      </AppDoubleActionModal>
+    </div>
   );
 }

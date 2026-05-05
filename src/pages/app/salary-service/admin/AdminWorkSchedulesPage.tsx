@@ -26,6 +26,7 @@ import { membersApi } from '@/features/members/api/membersApi';
 import type { Member } from '@/features/members/model/types';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
+import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import type { WorkSchedule, WorkTypeCode } from '@/features/salary-service/types';
 
 type FormValues = {
@@ -340,52 +341,48 @@ export function AdminWorkSchedulesPage() {
 
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
-      <div className="tw-flex tw-items-end tw-justify-between">
-        <div>
-          <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
-            근무 스케줄 관리
-          </Typography.Title>
-          <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-sm">
-            회사 전체에 공통으로 적용되는 기본 근무 스케줄을 등록·수정합니다. 적용 기간, 근무 유형, 출퇴근 시각을
-            설정하면 이후 일일 근태에 반영됩니다.
-          </Typography.Paragraph>
-        </div>
-        <Space>
-          <Button
-            onClick={() => {
-              void navigate({ to: '/app/attendance/flexible-slots' });
-            }}
-            disabled={!hasFlexibleSchedule}
-          >
-            시차 출퇴근 시간대 관리
-          </Button>
-          <Button
-            type="primary"
-            onClick={() => {
-              setEditing(null);
-              form.resetFields();
-              const defaultTimeRange: [dayjs.Dayjs, dayjs.Dayjs] = [
-                dayjs('1970-01-01T09:00:00'),
-                dayjs('1970-01-01T18:00:00'),
-              ];
-              const defaultBreakRange: [dayjs.Dayjs, dayjs.Dayjs] = [
-                dayjs(`1970-01-01T${DEFAULT_BREAK_START}`),
-                dayjs(`1970-01-01T${DEFAULT_BREAK_END}`),
-              ];
-              form.setFieldsValue({
-                workType: 'FIXED',
-                timeRange: defaultTimeRange,
-                breakRange: defaultBreakRange,
-                workMinutes: calcNetWorkMinutes(defaultTimeRange, defaultBreakRange),
-                effectiveRange: [dayjs(), null],
-              });
-              setOpen(true);
-            }}
-          >
-            스케줄 추가
-          </Button>
-        </Space>
-      </div>
+      <AppWorkspacePageTitle
+        eyebrow="Attendance"
+        title="근무 스케줄 관리"
+        subtitle="회사 전체에 공통으로 적용되는 기본 근무 스케줄을 등록·수정합니다. 적용 기간, 근무 유형, 출퇴근 시각을 설정하면 이후 일일 근태에 반영됩니다."
+        extra={(
+          <Space>
+            <Button
+              onClick={() => {
+                void navigate({ to: '/app/attendance/flexible-slots' });
+              }}
+              disabled={!hasFlexibleSchedule}
+            >
+              시차 출퇴근 시간대 관리
+            </Button>
+            <Button
+              type="primary"
+              onClick={() => {
+                setEditing(null);
+                form.resetFields();
+                const defaultTimeRange: [dayjs.Dayjs, dayjs.Dayjs] = [
+                  dayjs('1970-01-01T09:00:00'),
+                  dayjs('1970-01-01T18:00:00'),
+                ];
+                const defaultBreakRange: [dayjs.Dayjs, dayjs.Dayjs] = [
+                  dayjs(`1970-01-01T${DEFAULT_BREAK_START}`),
+                  dayjs(`1970-01-01T${DEFAULT_BREAK_END}`),
+                ];
+                form.setFieldsValue({
+                  workType: 'FIXED',
+                  timeRange: defaultTimeRange,
+                  breakRange: defaultBreakRange,
+                  workMinutes: calcNetWorkMinutes(defaultTimeRange, defaultBreakRange),
+                  effectiveRange: [dayjs(), null],
+                });
+                setOpen(true);
+              }}
+            >
+              스케줄 추가
+            </Button>
+          </Space>
+        )}
+      />
       {!hasFlexibleSchedule ? (
         <Typography.Text type="secondary">
           유연근무(시차출퇴근제) 스케줄을 먼저 생성하면 시차 출퇴근 시간대 관리 버튼이 활성화됩니다.

@@ -5216,7 +5216,6 @@ export function ApprovalsPage() {
               isComposeHubEntry
                 ? 'tw-h-[calc(100dvh-11rem)] tw-max-h-[calc(100dvh-11rem)] tw-gap-3 tw-overflow-hidden sm:tw-h-[calc(100dvh-10.5rem)] sm:tw-max-h-[calc(100dvh-10.5rem)]'
                 : 'tw-gap-4',
-              tab === 'admin' && canAdmin && 'tw-min-h-0 tw-flex-1 tw-overflow-hidden',
             ),
       )}
     >
@@ -6497,14 +6496,16 @@ export function ApprovalsPage() {
         submitText="닫기"
         width={720}
       >
-        <div className="tw-px-5 tw-py-4">
-        <Typography.Paragraph className="!tw-mb-2">
-          <strong>{selectedDocument?.documentName}</strong>
-        </Typography.Paragraph>
-        <pre className="tw-max-h-[min(60vh,480px)] tw-overflow-auto tw-rounded-lg tw-border tw-border-slate-200 tw-bg-slate-50 tw-p-3 tw-text-xs tw-leading-relaxed">
-          {JSON.stringify(form.getFieldsValue(), null, 2)}
-        </pre>
-        </div>
+        {composePreviewOpen && composePhaseView === 'fill' && selectedDocument != null && tab === 'compose' ? (
+          <div className="tw-px-5 tw-py-4">
+            <Typography.Paragraph className="!tw-mb-2">
+              <strong>{selectedDocument.documentName}</strong>
+            </Typography.Paragraph>
+            <pre className="tw-max-h-[min(60vh,480px)] tw-overflow-auto tw-rounded-lg tw-border tw-border-slate-200 tw-bg-slate-50 tw-p-3 tw-text-xs tw-leading-relaxed">
+              {JSON.stringify(form.getFieldsValue(), null, 2)}
+            </pre>
+          </div>
+        ) : null}
       </AppSingleActionModal>
 
       <AppDoubleActionModal

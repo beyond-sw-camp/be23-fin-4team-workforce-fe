@@ -24,6 +24,7 @@ import dayjs from 'dayjs';
 import { membersApi } from '@/features/members/api/membersApi';
 import type { Member } from '@/features/members/model/types';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
+import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import type {
   LeavePromotionHistory,
   LeavePromotionNoResponse,
@@ -400,36 +401,30 @@ export function AdminLeavePromotionNoResponsePage() {
 
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
-      <div className="tw-flex tw-flex-wrap tw-items-start tw-justify-between tw-gap-3">
-        <div>
-          <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
-            촉진 알림 현황
-          </Typography.Title>
-          <Typography.Paragraph
-            type="secondary"
-            className="!tw-mb-0 !tw-mt-1 !tw-text-sm"
-          >
-            근로기준법 61조 연차 사용 촉진 알림 현황 (매일 06:30 자동 배치)
-          </Typography.Paragraph>
-        </div>
-        <Space>
-          <DatePicker
-            value={triggerDate}
-            allowClear={false}
-            format="YYYY-MM-DD"
-            onChange={(d) => d && setTriggerDate(d)}
-          />
-          <Tooltip title="시연·점검용 — 선택한 일자 기준으로 만료 임박 잔고를 찾아 통보 발송">
-            <Button
-              type="primary"
-              loading={triggerM.isPending}
-              onClick={() => triggerM.mutate(triggerDate.format('YYYY-MM-DD'))}
-            >
-              촉진 배치 실행
-            </Button>
-          </Tooltip>
-        </Space>
-      </div>
+      <AppWorkspacePageTitle
+        eyebrow="Leave"
+        title="촉진 알림 현황"
+        subtitle="근로기준법 61조 연차 사용 촉진 알림 현황 (매일 06:30 자동 배치)"
+        extra={(
+          <Space>
+            <DatePicker
+              value={triggerDate}
+              allowClear={false}
+              format="YYYY-MM-DD"
+              onChange={(d) => d && setTriggerDate(d)}
+            />
+            <Tooltip title="시연·점검용 — 선택한 일자 기준으로 만료 임박 잔고를 찾아 통보 발송">
+              <Button
+                type="primary"
+                loading={triggerM.isPending}
+                onClick={() => triggerM.mutate(triggerDate.format('YYYY-MM-DD'))}
+              >
+                촉진 배치 실행
+              </Button>
+            </Tooltip>
+          </Space>
+        )}
+      />
 
       <Tabs
         defaultActiveKey="no-response"

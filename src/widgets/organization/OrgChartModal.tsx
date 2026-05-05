@@ -78,6 +78,7 @@ export function OrgChartModal({ open, onClose }: { open: boolean; onClose: () =>
       onSubmit={onClose}
       submitText="닫기"
       width="min(1120px, 98vw)"
+      customFooter={null}
       destroyOnHidden
     >
       <div className="tw-flex tw-max-h-[min(78vh,720px)] tw-min-h-[min(52vh,420px)] tw-gap-0 tw-overflow-hidden tw-px-5 tw-pb-4 tw-pt-3">
