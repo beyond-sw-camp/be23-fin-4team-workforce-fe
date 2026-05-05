@@ -18,7 +18,7 @@ import {
   Tag,
   Typography,
 } from 'antd';
-import { ReloadOutlined } from '@ant-design/icons';
+import { LeftOutlined, ReloadOutlined, RightOutlined } from '@ant-design/icons';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import type { CalendarProps } from 'antd';
 import clsx from 'clsx';
@@ -172,7 +172,7 @@ export function AdminCompanyHolidaysPage() {
     onError: (e: unknown) => message.error(apiErrorMessage(e) || '법정 공휴일 새로고침에 실패했습니다.'),
   });
 
-const dayHolidays = useMemo(() => holidaysOnDay(holidays, selectedDay), [holidays, selectedDay]);
+  const dayHolidays = useMemo(() => holidaysOnDay(holidays, selectedDay), [holidays, selectedDay]);
 
   const openCreateForDay = (d: Dayjs) => {
     setEditing(null);
@@ -357,29 +357,55 @@ const dayHolidays = useMemo(() => holidaysOnDay(holidays, selectedDay), [holiday
               cellRender={cellRender}
               headerRender={({ value, onChange }) => (
                 <div className="tw-mb-4 tw-space-y-3 tw-border-b tw-border-slate-100 tw-pb-3">
-                  <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2">
-                    <Typography.Text strong className="tw-text-base tw-text-slate-900">
-                      {value.format('YYYY년 M월')}
-                    </Typography.Text>
-                    <Space wrap size="small">
+                  <div className="tw-grid tw-w-full tw-grid-cols-1 tw-items-center tw-gap-3 sm:tw-grid-cols-[1fr_auto_1fr]">
+                    <div className="tw-hidden sm:tw-block" />
+                    <div className="tw-flex tw-justify-center tw-justify-self-center">
+                      <div className="tw-flex tw-items-center tw-gap-2 md:tw-gap-3">
+                        <Button
+                          type="text"
+                          size="middle"
+                          icon={<LeftOutlined className="tw-text-lg tw-text-slate-600" />}
+                          aria-label="이전 달"
+                          onClick={() => {
+                            const next = value.subtract(1, 'month').startOf('month');
+                            onChange(next);
+                            setSelectedDay(next);
+                          }}
+                          className="!tw-flex !tw-size-10 !tw-items-center !tw-justify-center"
+                        />
+                        <Button
+                          type="text"
+                          size="middle"
+                          className="!tw-min-h-10 !tw-min-w-[8.5rem] !tw-rounded-lg !tw-px-4 !tw-text-base !tw-font-semibold !tw-text-slate-800 hover:!tw-bg-slate-100"
+                        >
+                          {value.format('YYYY.MM')}
+                        </Button>
+                        <Button
+                          type="text"
+                          size="middle"
+                          icon={<RightOutlined className="tw-text-lg tw-text-slate-600" />}
+                          aria-label="다음 달"
+                          onClick={() => {
+                            const next = value.add(1, 'month').startOf('month');
+                            onChange(next);
+                            setSelectedDay(next);
+                          }}
+                          className="!tw-flex !tw-size-10 !tw-items-center !tw-justify-center"
+                        />
+                      </div>
+                    </div>
+                    <div className="tw-justify-self-start sm:tw-justify-self-end">
                       <Button
-                        size="small"
-                        className="!tw-rounded-lg"
+                        className="!tw-h-11 !tw-rounded-xl !tw-border-slate-200 !tw-bg-white !tw-px-5 !tw-font-semibold !tw-text-slate-700 !tw-shadow-sm hover:!tw-border-blue-200 hover:!tw-text-blue-600"
                         onClick={() => {
-                          const t = dayjs();
-                          onChange(t);
-                          setSelectedDay(t);
+                          const today = dayjs();
+                          onChange(today);
+                          setSelectedDay(today);
                         }}
                       >
                         오늘
                       </Button>
-                      <Button size="small" className="!tw-rounded-lg" onClick={() => onChange(value.subtract(1, 'month').startOf('month'))}>
-                        이전 달
-                      </Button>
-                      <Button size="small" className="!tw-rounded-lg" onClick={() => onChange(value.add(1, 'month').startOf('month'))}>
-                        다음 달
-                      </Button>
-                    </Space>
+                    </div>
                   </div>
                   <div className="tw-grid tw-grid-cols-7 tw-gap-1 tw-text-center tw-text-xs tw-font-medium tw-text-slate-500">
                     {WEEKDAY_KO.map((wd) => (
