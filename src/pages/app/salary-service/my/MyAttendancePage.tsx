@@ -180,6 +180,8 @@ export function MyAttendancePage() {
         size: 45,
       }),
     enabled: activeView === 'weekly',
+    // 같은 월 재방문 시 5분간 캐시 HIT
+    staleTime: 5 * 60_000,
   });
   const visDailyMap = useMemo(() => {
     const map = new Map<string, DailyAttendance>();
@@ -190,11 +192,11 @@ export function MyAttendancePage() {
     return map;
   }, [visDailyQ.data]);
 
-  // 회사 공휴일 - 히트맵 셀 + 일자별 표 휴일 태그에 표시
+  // 회사 공휴일 - 히트맵 셀 + 일자별 표 휴일 태그에 표시 (마스터 데이터, 길게 캐시)
   const holidaysQ = useQuery({
     queryKey: ['attendance', 'company-holidays', 'all'],
     queryFn: () => attendanceApi.companyHoliday.list(),
-    staleTime: 60_000,
+    staleTime: 10 * 60_000,
   });
   const holidayMap = useMemo(() => {
     const m = new Map<string, string>();
@@ -224,6 +226,7 @@ export function MyAttendancePage() {
   }, [activeSchedule]);
 
   // 월별 일자별 근태 목록 - 정정 결재 진입용
+  // staleTime 60s: 같은 월 페이지 이동 / 다른 탭 갔다와도 60초 내는 캐시 HIT
   const monthlyQ = useQuery({
     queryKey: ['salary', 'attendance', 'my', 'monthly', monthFrom, monthTo, page, pageSize],
     queryFn: () =>
@@ -233,6 +236,7 @@ export function MyAttendancePage() {
         page,
         size: pageSize,
       }),
+    staleTime: 60_000,
   });
 
   // 휴가 잔여 - 발생/사용/잔여 카드용 (촉진 대상은 휴가 계획 관리 페이지에 둠)

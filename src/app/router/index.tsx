@@ -19,6 +19,8 @@ import { ChangePasswordPage } from '@/pages/public/ChangePasswordPage';
 import { ResetPasswordPage } from '@/pages/public/ResetPasswordPage';
 import { VerifyEmailPage } from '@/pages/public/VerifyEmailPage';
 import { CompanyOnboardingPage } from '@/pages/public/CompanyOnboardingPage';
+import { lazy, Suspense, type ComponentType } from 'react';
+import { Spin } from 'antd';
 import { CalendarPage } from '@/pages/app/CalendarPage';
 import { DashboardPage } from '@/pages/app/DashboardPage';
 import { HrInsightsPage } from '@/pages/app/HrInsightsPage';
@@ -32,7 +34,10 @@ import { NotificationsPage } from '@/pages/app/NotificationsPage';
 import EvaluationsHubPage from '@/pages/app/evaluations/EvaluationsHubPage';
 import EvaluationSeasonDetailPage from '@/pages/app/evaluations/EvaluationSeasonDetailPage';
 import PerformancePage from '@/pages/app/PerformancePage';
-import { ApprovalsPage } from '@/pages/app/ApprovalsPage';
+// 큰 페이지(6000줄+) - 코드 스플릿으로 초기 번들에서 분리
+const ApprovalsPageLazy = lazy(() =>
+  import('@/pages/app/ApprovalsPage').then((m) => ({ default: m.ApprovalsPage })),
+);
 import { ContractSendPage } from '@/pages/app/ContractSendPage';
 import { ContractsPage } from '@/pages/app/ContractsPage';
 import { AbsenceProxyPage } from '@/pages/app/AbsenceProxyPage';
@@ -52,14 +57,45 @@ import { AdminLeaveOfAbsencePage } from '@/pages/app/salary-service/admin/AdminL
 import { AdminPayGradeTablePage } from '@/pages/app/salary-service/admin/AdminPayGradeTablePage';
 import { AdminLeavePoliciesPage } from '@/pages/app/salary-service/admin/AdminLeavePoliciesPage';
 import { AdminOvertimePoliciesPage } from '@/pages/app/salary-service/admin/AdminOvertimePoliciesPage';
-import { AdminPayrollManagePage } from '@/pages/app/salary-service/admin/AdminPayrollManagePage';
-import { AdminPayrollPage } from '@/pages/app/salary-service/admin/AdminPayrollPage';
+// 큰 관리자 급여 페이지 - 코드 스플릿
+const AdminPayrollManagePageLazy = lazy(() =>
+  import('@/pages/app/salary-service/admin/AdminPayrollManagePage').then((m) => ({
+    default: m.AdminPayrollManagePage,
+  })),
+);
+const AdminPayrollPageLazy = lazy(() =>
+  import('@/pages/app/salary-service/admin/AdminPayrollPage').then((m) => ({
+    default: m.AdminPayrollPage,
+  })),
+);
 import { AdminPayrollTaxSummaryPage } from '@/pages/app/salary-service/admin/AdminPayrollTaxSummaryPage';
 import { AdminRetirementPolicyPage } from '@/pages/app/salary-service/admin/AdminRetirementPolicyPage';
 import { AdminRetirementSettlementPage } from '@/pages/app/salary-service/admin/AdminRetirementSettlementPage';
 import { AdminMemberAllowancePage } from '@/pages/app/salary-service/admin/AdminMemberAllowancePage';
 import { AdminSalaryNegotiationsPage } from '@/pages/app/salary-service/admin/AdminSalaryNegotiationsPage';
-import { AdminSalarySettingsPage } from '@/pages/app/salary-service/admin/AdminSalarySettingsPage';
+// 큰 페이지(2000줄+) - 코드 스플릿
+const AdminSalarySettingsPageLazy = lazy(() =>
+  import('@/pages/app/salary-service/admin/AdminSalarySettingsPage').then((m) => ({
+    default: m.AdminSalarySettingsPage,
+  })),
+);
+
+// 코드 스플릿된 페이지 공통 Suspense 래퍼 (로딩 스피너)
+function withSuspense(Comp: ComponentType) {
+  return function SuspenseBoundary() {
+    return (
+      <Suspense
+        fallback={
+          <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
+            <Spin size="large" tip="페이지 로딩 중..." />
+          </div>
+        }
+      >
+        <Comp />
+      </Suspense>
+    );
+  };
+}
 import { AdminUnusedLeavePayoutPage } from '@/pages/app/salary-service/admin/AdminUnusedLeavePayoutPage';
 import { AdminWorkSchedulesPage } from '@/pages/app/salary-service/admin/AdminWorkSchedulesPage';
 import { MyAttendanceMonthlyPage } from '@/pages/app/salary-service/my/MyAttendanceMonthlyPage';
@@ -365,7 +401,7 @@ const approvalsAdminRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/approvals',
   validateSearch: approvalsSearchSchema,
-  component: ApprovalsPage,
+  component: withSuspense(ApprovalsPageLazy),
 });
 
 const myApprovalRequestsRoute = createRoute({
@@ -774,7 +810,7 @@ const myWorkTripsRoute = createRoute({
 const payrollAdminManageRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/payroll/admin/$payrollId',
-  component: AdminPayrollManagePage,
+  component: withSuspense(AdminPayrollManagePageLazy),
   validateSearch: z.object({
     // 어느 탭에서 진입했는지 — 뒤로가기 시 동일 탭으로 복귀
     tab: z.enum(['company', 'member', 'retirement', 'salary', 'allowances']).optional(),
@@ -793,7 +829,7 @@ const payrollAdminManageRoute = createRoute({
 const payrollAdminRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/payroll/admin',
-  component: AdminPayrollPage,
+  component: withSuspense(AdminPayrollPageLazy),
   validateSearch: z.object({
     // 정산 화면 활성 탭: company(이번달) | member(월별 결과) | register(급여 등록) | bonus(상여 발행) | retirement(퇴직 정산) | salary(급여 변동 이력) | allowances(수당 관리)
     tab: z.enum(['company', 'member', 'register', 'bonus', 'retirement', 'salary', 'allowances']).optional(),
@@ -871,7 +907,7 @@ const myNegotiationHistoryRoute = createRoute({
 const adminSalarySettingsRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/salary/settings',
-  component: AdminSalarySettingsPage,
+  component: withSuspense(AdminSalarySettingsPageLazy),
   beforeLoad: ({ context }) => {
     if (!context.auth.user?.isSystemAdmin) {
       throw redirect({ to: '/app/payroll' });
