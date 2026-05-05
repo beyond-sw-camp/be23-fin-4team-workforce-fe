@@ -1,4 +1,4 @@
-import { DeleteOutlined, EyeOutlined, FormOutlined, PlusOutlined, ReloadOutlined, SaveOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EyeOutlined, FormOutlined, PlusOutlined, ReloadOutlined, SaveOutlined, UploadOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
@@ -17,7 +17,7 @@ import {
   Tag,
   Typography,
 } from 'antd';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   APPROVAL_REQUEST_TYPES,
   approvalApi,
@@ -38,6 +38,7 @@ import { parseFormSchema, type FormFieldSchema } from '@/features/approvals/lib/
 import { parseApiError } from '@/shared/api/error-parser';
 import { flattenOrganizationsWithMeta } from '@/features/organization/lib/flattenOrganizationTree';
 import { organizationApi } from '@/features/organization/api/organizationApi';
+import { companyApi } from '@/features/organization/api/companyApi';
 import { useAuth } from '@/features/auth/useAuth';
 import { PERM } from '@/features/permissions/backend-permissions';
 import {
@@ -87,7 +88,7 @@ const CAL_FIELD_NONE = '__none__';
 function buildSchemaFieldOptions(fields: FormFieldSchema[]) {
   return fields.map((f) => ({
     value: f.name,
-    label: `${f.label} (${f.name})`,
+    label: `${f.type === 'static_note' ? f.label.trim() || '안내 문구' : f.label} (${f.name})`,
   }));
 }
 
@@ -164,9 +165,12 @@ export function ApprovalsAdminPage() {
   const { user } = useAuth();
   const isSystemAdmin = user?.isSystemAdmin === true;
   const [createOpen, setCreateOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'documents' | 'policy-lines' | 'contract-templates'>('documents');
+  const [activeTab, setActiveTab] = useState<'documents' | 'policy-lines' | 'contract-templates' | 'seal-management'>('documents');
   const [selectedDocumentId, setSelectedDocumentId] = useState<string>('');
   const [policyDrafts, setPolicyDrafts] = useState<PolicyLineDraft[]>([]);
+  const [sealFile, setSealFile] = useState<File | null>(null);
+  const [sealPreviewUrl, setSealPreviewUrl] = useState<string | null>(null);
+  const sealInputRef = useRef<HTMLInputElement | null>(null);
   const [schemaFields, setSchemaFields] = useState<FormFieldSchema[]>(() => defaultSchemaFields());
   const [form] = Form.useForm<DocForm>();
   const [editOpen, setEditOpen] = useState(false);
@@ -185,6 +189,18 @@ export function ApprovalsAdminPage() {
   const [editCalEndField, setEditCalEndField] = useState<string>(CAL_FIELD_NONE);
   const [editCalTitleField, setEditCalTitleField] = useState<string>(CAL_FIELD_NONE);
 
+  useEffect(() => {
+    if (!sealFile) {
+      setSealPreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(sealFile);
+    setSealPreviewUrl(url);
+    return () => {
+      URL.revokeObjectURL(url);
+    };
+  }, [sealFile]);
+
   const canRead = isSystemAdmin || hasPermission(PERM.APPROVAL_AD_READ);
   const canCreate = isSystemAdmin || hasPermission(PERM.APPROVAL_AD_CREATE);
   const canUpdate = isSystemAdmin || hasPermission(PERM.APPROVAL_AD_UPDATE);
@@ -199,6 +215,13 @@ export function ApprovalsAdminPage() {
   const { data: activeDocuments = [] } = useQuery({
     queryKey: ['approval', 'documents', 'active'],
     queryFn: () => approvalApi.listActiveDocuments(),
+  });
+
+  const { data: companyInfo, isFetching: companyInfoLoading } = useQuery({
+    queryKey: ['company', 'info'],
+    queryFn: () => companyApi.getCompanyInfo(),
+    enabled: canRead,
+    staleTime: 30_000,
   });
 
   const { data: jobTitleRaw = [] } = useQuery({
@@ -349,6 +372,16 @@ export function ApprovalsAdminPage() {
       setPolicyDrafts([]);
     },
     onError: (e: Error) => message.error(e.message || '정책라인 삭제에 실패했습니다.'),
+  });
+
+  const updateSealM = useMutation({
+    mutationFn: (file: File) => companyApi.updateSeal(file),
+    onSuccess: async () => {
+      message.success('회사 인감이 등록되었습니다.');
+      setSealFile(null);
+      await qc.invalidateQueries({ queryKey: ['company', 'info'] });
+    },
+    onError: (e: Error) => message.error(e.message || '회사 인감 등록에 실패했습니다.'),
   });
 
   const handleOpenCreate = () => {
@@ -587,6 +620,32 @@ export function ApprovalsAdminPage() {
     await deletePolicyLineM.mutateAsync(selectedDocumentId);
   };
 
+  const currentSealUrl = sealPreviewUrl || companyInfo?.sealImageUrl || '';
+  const currentSealIsImage =
+    Boolean(sealFile?.type.startsWith('image/')) ||
+    /\.(png|jpe?g|gif|webp|svg)(\?.*)?$/i.test(currentSealUrl);
+
+  const handleSealFilePicked = (file: File | null) => {
+    if (!file) return;
+    const allowedMime = new Set([
+      'image/png',
+      'image/jpeg',
+      'image/jpg',
+      'image/gif',
+      'application/pdf',
+    ]);
+    const maxBytes = 5 * 1024 * 1024;
+    if (!allowedMime.has(file.type)) {
+      message.warning('PNG, JPG, JPEG, GIF, PDF 파일만 업로드할 수 있습니다.');
+      return;
+    }
+    if (file.size > maxBytes) {
+      message.warning('파일 크기는 5MB 이하여야 합니다.');
+      return;
+    }
+    setSealFile(file);
+  };
+
   return (
     <div className="tw-flex tw-h-full tw-min-h-0 tw-flex-1 tw-w-full tw-flex-col tw-gap-4 tw-overflow-hidden">
       {!canRead ? (
@@ -594,7 +653,7 @@ export function ApprovalsAdminPage() {
       ) : (
         <Tabs
           activeKey={activeTab}
-          onChange={(key) => setActiveTab(key as 'documents' | 'policy-lines' | 'contract-templates')}
+          onChange={(key) => setActiveTab(key as 'documents' | 'policy-lines' | 'contract-templates' | 'seal-management')}
           className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-hidden [&_.ant-tabs-nav]:tw-mb-0 [&_.ant-tabs-nav]:tw-shrink-0 [&_.ant-tabs-content-holder]:tw-min-h-0 [&_.ant-tabs-content-holder]:tw-flex-1 [&_.ant-tabs-content-holder]:tw-overflow-hidden [&_.ant-tabs-content]:tw-flex tw-min-h-0 tw-flex-1 [&_.ant-tabs-tabpane]:tw-m-0 [&_.ant-tabs-tabpane-active]:tw-flex tw-h-full tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-hidden"
           items={[
             {
@@ -712,20 +771,57 @@ export function ApprovalsAdminPage() {
                   styles={{ body: { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' } }}
                 >
                   <div className="tw-flex tw-min-h-0 tw-w-full tw-flex-1 tw-flex-col tw-gap-3 tw-overflow-hidden">
-                    <div className="tw-flex tw-shrink-0 tw-flex-wrap tw-items-center tw-gap-2">
-                      <Typography.Text className="tw-min-w-20">양식 선택</Typography.Text>
-                      <Select
-                        value={selectedDocumentId || undefined}
-                        onChange={(v) => {
-                          setSelectedDocumentId(v);
-                        }}
-                        placeholder="양식을 선택하세요"
-                        style={{ minWidth: 320 }}
-                        options={documents.map((doc) => ({
-                          value: doc.documentId,
-                          label: `${doc.documentName} (${approvalRequestTypeLabelKo(String(doc.requestType))})`,
-                        }))}
-                      />
+                    <div className="tw-flex tw-shrink-0 tw-flex-wrap tw-items-center tw-justify-between tw-gap-2">
+                      <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
+                        <Typography.Text className="tw-min-w-20">양식 선택</Typography.Text>
+                        <Select
+                          value={selectedDocumentId || undefined}
+                          onChange={(v) => {
+                            setSelectedDocumentId(v);
+                          }}
+                          placeholder="양식을 선택하세요"
+                          style={{ minWidth: 320 }}
+                          options={documents.map((doc) => ({
+                            value: doc.documentId,
+                            label: `${doc.documentName} (${approvalRequestTypeLabelKo(String(doc.requestType))})`,
+                          }))}
+                        />
+                      </div>
+                      <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-end tw-gap-2">
+                        {canCreate ? (
+                          <Button size="small" icon={<PlusOutlined />} onClick={handleAddPolicyLine}>
+                            결재선 등록
+                          </Button>
+                        ) : null}
+                        {canCreate ? (
+                          <Button
+                            size="small"
+                            type="primary"
+                            icon={<SaveOutlined />}
+                            loading={savePolicyLineM.isPending}
+                            onClick={() => void handleSavePolicyLines()}
+                          >
+                            라인 저장
+                          </Button>
+                        ) : null}
+                        {canDelete ? (
+                          <Popconfirm
+                            title="선택 양식의 정책라인을 전부 삭제할까요?"
+                            okText="삭제"
+                            cancelText="취소"
+                            onConfirm={() => void handleDeletePolicyLines()}
+                          >
+                            <Button
+                              size="small"
+                              danger
+                              icon={<DeleteOutlined />}
+                              loading={deletePolicyLineM.isPending}
+                            >
+                              전체 삭제
+                            </Button>
+                          </Popconfirm>
+                        ) : null}
+                      </div>
                     </div>
                     <Typography.Text type="secondary" className="tw-shrink-0 tw-text-sm">
                       관리자는 직책과 결재 순서만 설정합니다. 저장 시 기존 정책라인은 전체 교체됩니다.
@@ -740,40 +836,6 @@ export function ApprovalsAdminPage() {
                         </Space>
                       </Card>
                     ) : null}
-                    <div className="tw-flex tw-shrink-0 tw-flex-wrap tw-items-center tw-gap-2">
-                      {canCreate ? (
-                        <Button icon={<PlusOutlined />} onClick={handleAddPolicyLine}>
-                          라인 추가
-                        </Button>
-                      ) : null}
-                      {canCreate ? (
-                        <Button
-                          type="primary"
-                          icon={<SaveOutlined />}
-                          loading={savePolicyLineM.isPending}
-                          onClick={() => void handleSavePolicyLines()}
-                        >
-                          라인 저장
-                        </Button>
-                      ) : null}
-                      {canDelete ? (
-                        <Popconfirm
-                          title="선택 양식의 정책라인을 전부 삭제할까요?"
-                          okText="삭제"
-                          cancelText="취소"
-                          onConfirm={() => void handleDeletePolicyLines()}
-                        >
-                          <Button
-                            danger
-                            icon={<DeleteOutlined />}
-                            loading={deletePolicyLineM.isPending}
-                          >
-                            전체 삭제
-                          </Button>
-                        </Popconfirm>
-                      ) : null}
-                    </div>
-
                     <div className="tw-min-h-0 tw-flex-1 tw-overflow-hidden">
                     <Table<PolicyLineDraft>
                       rowKey="key"
@@ -872,6 +934,109 @@ export function ApprovalsAdminPage() {
                 <div className="tw-min-h-0 tw-flex-1 tw-overflow-y-auto wf-scrollbar">
                   <ContractTemplatesAdminPanel showTemplateSection showSendSection={false} />
                 </div>
+              ),
+            },
+            {
+              key: 'seal-management',
+              label: '인감 관리',
+              children: (
+                <Card className="tw-border-slate-200/80 tw-shadow-sm">
+                  <div className="tw-flex tw-flex-col tw-gap-3 tw-px-5 tw-py-4 tw-pt-2">
+                    <Typography.Text className="tw-text-[22px] tw-font-semibold tw-text-[#1e3a5f]">
+                      회사 인감 관리
+                    </Typography.Text>
+                    <Typography.Text type="secondary" className="tw-text-sm">
+                      결재 및 계약 문서에 사용할 공식 인감을 등록하고 관리합니다.
+                    </Typography.Text>
+
+                    <div className="tw-rounded-2xl tw-border tw-border-dashed tw-border-sky-200 tw-bg-white tw-p-4">
+                      <div className="tw-flex tw-flex-wrap tw-gap-4">
+                        <div className="tw-flex tw-h-36 tw-w-36 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-xl tw-border tw-border-slate-200 tw-bg-slate-50">
+                          {currentSealUrl && currentSealIsImage ? (
+                            <img src={currentSealUrl} alt="회사 인감" className="tw-h-full tw-w-full tw-rounded-xl tw-object-contain" />
+                          ) : (
+                            <div className="tw-text-center">
+                              <div className="tw-text-xs tw-text-slate-300">NO PREVIEW</div>
+                              <Typography.Text type="secondary" className="tw-text-xs">
+                                {currentSealUrl ? '미리보기 없음' : '인감 이미지'}
+                              </Typography.Text>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="tw-flex tw-min-w-[260px] tw-flex-1 tw-flex-col tw-gap-3">
+                          <Typography.Text strong className="tw-text-xl tw-text-[#1e3a5f]">
+                            인감 이미지 업로드
+                          </Typography.Text>
+                          <Typography.Text type="secondary" className="tw-text-sm">
+                            투명 배경 PNG 또는 JPG 파일을 권장합니다. (최대 5MB, PDF 업로드 지원)
+                          </Typography.Text>
+                          <Typography.Text type="secondary" className="tw-text-xs">
+                            삭제 API는 아직 없어 신규 업로드 시 기존 인감이 덮어써집니다.
+                          </Typography.Text>
+
+                          <input
+                            ref={sealInputRef}
+                            type="file"
+                            accept=".png,.jpg,.jpeg,.gif,.pdf,image/png,image/jpeg,image/gif,application/pdf"
+                            className="tw-hidden"
+                            onChange={(e) => {
+                              const next = e.target.files?.[0] ?? null;
+                              handleSealFilePicked(next);
+                              e.currentTarget.value = '';
+                            }}
+                          />
+
+                          <Space wrap>
+                            <Button
+                              size="large"
+                              type="primary"
+                              icon={<UploadOutlined />}
+                              onClick={() => sealInputRef.current?.click()}
+                            >
+                              변경
+                            </Button>
+                            <Button
+                              size="large"
+                              danger
+                              onClick={() => {
+                                if (sealFile) {
+                                  setSealFile(null);
+                                  return;
+                                }
+                                message.info('삭제 API는 아직 제공되지 않아 파일 교체 방식만 지원합니다.');
+                              }}
+                            >
+                              삭제
+                            </Button>
+                            <Button
+                              size="large"
+                              type="default"
+                              loading={updateSealM.isPending}
+                              disabled={!sealFile}
+                              onClick={() => {
+                                if (!sealFile) {
+                                  message.info('먼저 업로드할 인감 파일을 선택해 주세요.');
+                                  return;
+                                }
+                                void updateSealM.mutateAsync(sealFile);
+                              }}
+                            >
+                              저장
+                            </Button>
+                          </Space>
+                        </div>
+                      </div>
+                    </div>
+                    <Typography.Text type="secondary" className="tw-text-xs">
+                      {companyInfoLoading
+                        ? '회사 인감 정보를 불러오는 중입니다.'
+                        : companyInfo?.sealImageUrl
+                          ? '현재 인감이 등록되어 있습니다.'
+                          : '현재 등록된 인감이 없습니다.'}
+                    </Typography.Text>
+                  </div>
+                </Card>
               ),
             },
           ]}

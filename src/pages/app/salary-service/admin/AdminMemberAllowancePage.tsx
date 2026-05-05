@@ -762,7 +762,7 @@ export function AdminMemberAllowancePage() {
         confirmLoading={bulkSubmitting}
         okText="일괄 부여"
         cancelText="취소"
-        destroyOnClose
+        destroyOnHidden
         width={1100}
       >
         <Form

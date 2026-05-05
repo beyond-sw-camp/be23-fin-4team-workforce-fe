@@ -431,7 +431,7 @@ export function EsgHomePage() {
         footer={null}
         width={modal === 'activities' ? 1100 : 880}
         styles={{ body: { maxHeight: '72vh', overflowY: 'auto', paddingTop: 12 } }}
-        destroyOnClose
+        destroyOnHidden
       >
         {modal === 'subjects' && (
           <Table<EsgSubject>

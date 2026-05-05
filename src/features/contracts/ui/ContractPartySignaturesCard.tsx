@@ -29,9 +29,10 @@ function formatSignedAt(iso: string | null): string {
 
 type Props = {
   parties: ContractParty[];
+  embedded?: boolean;
 };
 
-export function ContractPartySignaturesCard({ parties }: Props) {
+export function ContractPartySignaturesCard({ parties, embedded = false }: Props) {
   const ordered = useMemo(() => {
     const rank = (role: string) => {
       const r = role.toUpperCase();
@@ -43,16 +44,17 @@ export function ContractPartySignaturesCard({ parties }: Props) {
   }, [parties]);
 
   if (!ordered.length) {
-    return (
+    return embedded ? (
+      <Typography.Text type="secondary">당사자(서명) 정보가 없습니다.</Typography.Text>
+    ) : (
       <Card size="small" title="서명">
         <Typography.Text type="secondary">당사자(서명) 정보가 없습니다.</Typography.Text>
       </Card>
     );
   }
 
-  return (
-    <Card size="small" title="서명">
-      <div className="tw-space-y-5">
+  const content = (
+    <div className="tw-space-y-5">
         {ordered.map((p) => (
           <div
             key={p.partyId}
@@ -88,6 +90,8 @@ export function ContractPartySignaturesCard({ parties }: Props) {
           </div>
         ))}
       </div>
-    </Card>
   );
+
+  if (embedded) return content;
+  return <Card size="small" title="서명">{content}</Card>;
 }

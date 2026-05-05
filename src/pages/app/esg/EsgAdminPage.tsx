@@ -780,7 +780,7 @@ export function EsgAdminPage() {
         onCancel={() => setDashboardModal(null)}
         footer={null}
         width={520}
-        destroyOnClose
+        destroyOnHidden
         styles={{ body: modalBodyPadding }}
       >
         <Card className="tw-border-slate-200/80 tw-shadow-sm" size="small">
@@ -819,7 +819,7 @@ export function EsgAdminPage() {
         onCancel={() => setDashboardModal(null)}
         footer={null}
         width={960}
-        destroyOnClose
+        destroyOnHidden
         styles={{ body: modalBodyPadding }}
       >
         <Card
@@ -876,7 +876,7 @@ export function EsgAdminPage() {
         onCancel={() => setDashboardModal(null)}
         footer={null}
         width={1120}
-        destroyOnClose
+        destroyOnHidden
         styles={{ body: { ...modalBodyPadding, maxHeight: '78vh', overflowY: 'auto' } }}
       >
         <Space direction="vertical" className="tw-w-full" size={16}>
@@ -1082,7 +1082,7 @@ export function EsgAdminPage() {
         onCancel={() => setDashboardModal(null)}
         footer={null}
         width={920}
-        destroyOnClose
+        destroyOnHidden
         styles={{ body: { ...modalBodyPadding, maxHeight: '78vh', overflowY: 'auto' } }}
       >
         <Typography.Paragraph type="secondary" className="!tw-mb-3 !tw-text-xs">
@@ -1116,7 +1116,7 @@ export function EsgAdminPage() {
         onCancel={() => setDashboardModal(null)}
         footer={null}
         width={560}
-        destroyOnClose
+        destroyOnHidden
         styles={{ body: { ...modalBodyPadding, maxHeight: '78vh', overflowY: 'auto' } }}
       >
         <Typography.Paragraph type="secondary" className="!tw-mb-3 !tw-text-xs">
@@ -1157,7 +1157,7 @@ export function EsgAdminPage() {
         onCancel={() => setDashboardModal(null)}
         footer={null}
         width={960}
-        destroyOnClose
+        destroyOnHidden
         styles={{ body: { ...modalBodyPadding, maxHeight: '78vh', overflowY: 'auto' } }}
       >
         <Typography.Paragraph type="secondary" className="!tw-mb-3 !tw-text-xs">
@@ -1195,7 +1195,7 @@ export function EsgAdminPage() {
         onCancel={() => setDashboardModal(null)}
         footer={null}
         width={880}
-        destroyOnClose
+        destroyOnHidden
         styles={{ body: { ...modalBodyPadding, maxHeight: '78vh', overflowY: 'auto' } }}
       >
         <Space direction="vertical" className="tw-w-full" size={16}>

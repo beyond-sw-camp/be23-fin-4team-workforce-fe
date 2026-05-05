@@ -7,6 +7,7 @@ export type CompanyInfo = {
   companyName?: string;
   companyDomain?: string;
   logoUrl?: string | null;
+  sealImageUrl?: string | null;
 };
 
 function pickStr(r: Record<string, unknown>, keys: string[]): string | undefined {
@@ -30,8 +31,15 @@ function normalizeCompanyInfo(raw: unknown): CompanyInfo | null {
       : logoRaw === null
         ? null
         : undefined;
-  if (!companyId && !companyName && !companyDomain && logoUrl === undefined) return null;
-  return { companyId, companyName, companyDomain, logoUrl: logoUrl ?? undefined };
+  const sealRaw = r.sealImageUrl ?? r.seal_image_url;
+  const sealImageUrl =
+    typeof sealRaw === 'string' && sealRaw.trim()
+      ? sealRaw.trim()
+      : sealRaw === null
+        ? null
+        : undefined;
+  if (!companyId && !companyName && !companyDomain && logoUrl === undefined && sealImageUrl === undefined) return null;
+  return { companyId, companyName, companyDomain, logoUrl: logoUrl ?? undefined, sealImageUrl: sealImageUrl ?? undefined };
 }
 
 export type CheckBusinessNumberResponse = {
@@ -145,6 +153,13 @@ export const companyApi = {
     const fd = new FormData();
     fd.append('logo', logo);
     await httpClient.patch('/company/logo', fd);
+  },
+
+  /** 회사 인감(직인) — multipart part name: `seal` */
+  async updateSeal(seal: File) {
+    const fd = new FormData();
+    fd.append('seal', seal);
+    await httpClient.patch('/company/seal', fd);
   },
 
   /** 로그인 후 회사명·도메인·로고 URL — `X-User-UUID` 헤더 */

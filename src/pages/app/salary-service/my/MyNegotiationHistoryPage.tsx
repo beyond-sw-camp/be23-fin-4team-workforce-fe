@@ -311,7 +311,7 @@ export function MyNegotiationHistoryPage() {
           if (!rejectTarget?.negotiationId || !rejectReason.trim()) return;
           rejectM.mutate({ id: rejectTarget.negotiationId, reason: rejectReason.trim() });
         }}
-        destroyOnClose
+        destroyOnHidden
       >
         {rejectTarget && (
           <Space direction="vertical" className="tw-w-full" size="middle">
