@@ -14,6 +14,7 @@ import {
   Select,
   Space,
   Table,
+  Tabs,
   Tag,
   Typography,
 } from 'antd';
@@ -262,7 +263,7 @@ function ScheduleWeeklyTable({
     return `${trimSeconds(start)}~${trimSeconds(end)}`;
   };
 
-  const cellBase = 'tw-border tw-border-slate-200 tw-px-2 tw-py-1.5 tw-text-xs tw-text-center tw-align-middle';
+  const cellBase = '!tw-border !tw-border-solid !tw-border-slate-300 tw-px-2 tw-py-1.5 tw-text-xs tw-text-center tw-align-middle';
   const headerBase = 'tw-bg-slate-50 tw-font-semibold tw-text-slate-700';
   // 요일/주/구분 컬럼 헤더 - 흰색 배경
   const topHeaderBase = 'tw-bg-white tw-font-semibold tw-text-slate-700';
@@ -377,7 +378,7 @@ function ScheduleWeeklyTable({
                     </td>
                   ))}
                   <td className={`${cellBase} ${summaryColBase} tw-whitespace-nowrap`}>
-                    {summary.deductionMin > 0 ? `-${toDecimalH(summary.deductionMin)}` : '-'}
+                    {summary.deductionMin > 0 ? `-${toDecimalH(summary.deductionMin)}` : '0H'}
                   </td>
                 </tr>
 
@@ -390,7 +391,7 @@ function ScheduleWeeklyTable({
                     </td>
                   ))}
                   <td className={`${cellBase} ${summaryColBase} tw-whitespace-nowrap`}>
-                    {summary.overtimeMin > 0 ? toDecimalH(summary.overtimeMin) : '-'}
+                    {summary.overtimeMin > 0 ? toDecimalH(summary.overtimeMin) : '0H'}
                   </td>
                 </tr>
               </Fragment>
@@ -409,6 +410,7 @@ export function MyScheduleSelectionsPage() {
   const [form] = Form.useForm<FormValues>();
   const [openApplyModal, setOpenApplyModal] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => dayjs().startOf('month'));
+  const [scheduleTab, setScheduleTab] = useState<'schedule' | 'history'>('schedule');
   const yearMonth = calendarMonth.format('YYYY-MM');
   // 달력 그리드 전체 범위 (이전달 말일 ~ 다음달 초일까지 포함) - 월 경계 빈 칸에도 근태 표시
   const monthFrom = calendarMonth.startOf('month').startOf('week').format('YYYY-MM-DD');
@@ -759,63 +761,86 @@ export function MyScheduleSelectionsPage() {
         />
       )}
 
-      <Card title="개인 근무 스케줄" className="tw-border-slate-200/80 tw-shadow-sm" loading={monthlyQ.isLoading}>
-        {/* 월 이동 */}
-        <div className="tw-mb-3 tw-flex tw-items-center tw-justify-center tw-gap-3">
-          <Button
-            size="small"
-            onClick={() => setCalendarMonth(calendarMonth.subtract(1, 'month').startOf('month'))}
-          >
-            이전
-          </Button>
-          <Typography.Text className="tw-text-lg tw-font-semibold tw-text-slate-800">
-            {calendarMonth.format('YYYY년 M월')}
-          </Typography.Text>
-          <Button
-            size="small"
-            onClick={() => setCalendarMonth(calendarMonth.add(1, 'month').startOf('month'))}
-          >
-            다음
-          </Button>
-        </div>
+      <Card className="tw-border-slate-200/80 tw-shadow-sm" loading={monthlyQ.isLoading}>
+        <Tabs
+          activeKey={scheduleTab}
+          onChange={(k) => setScheduleTab(k as 'schedule' | 'history')}
+          items={[
+            {
+              key: 'schedule',
+              label: '개인 근무 스케줄',
+              children: (
+                <>
+                  {/* 월 이동 */}
+                  <div className="tw-mb-3 tw-flex tw-items-center tw-justify-center tw-gap-3">
+                    <Button
+                      size="small"
+                      onClick={() => setCalendarMonth(calendarMonth.subtract(1, 'month').startOf('month'))}
+                    >
+                      이전
+                    </Button>
+                    <Typography.Text className="tw-text-lg tw-font-semibold tw-text-slate-800">
+                      {calendarMonth.format('YYYY년 M월')}
+                    </Typography.Text>
+                    <Button
+                      size="small"
+                      onClick={() => setCalendarMonth(calendarMonth.add(1, 'month').startOf('month'))}
+                    >
+                      다음
+                    </Button>
+                  </div>
 
-        {/* 주간 행 테이블 — 5주 × 7일 × (일자/점심/근태/초과근무) + 합계 + 1주 근로시간 */}
-        <ScheduleWeeklyTable
-          calendarMonth={calendarMonth}
-          dailyMap={dailyMap}
-          scheduleMap={scheduleMap}
-          defaultScheduleTimeLabel={defaultScheduleTimeLabel}
-          fallbackTime={latestSlotLabel !== '-' ? latestSlotLabel : defaultSlotTime}
-          fallbackBreakRange={(() => {
-            // 우선순위: 신청에 박힌 점심 → 신청 슬롯의 점심 → 기본 슬롯의 점심.
-            // 신규 직원처럼 신청 이력이 없어도 기본 슬롯의 점심이 자동으로 적용된다.
-            const fromSelection =
-              latestAppliedSelection?.breakStart && latestAppliedSelection?.breakEnd
-                ? { start: latestAppliedSelection.breakStart, end: latestAppliedSelection.breakEnd }
-                : null;
-            if (fromSelection) return fromSelection;
-            const fromSelectedSlot = allSlotsMap.get(latestAppliedSelection?.slotId ?? '');
-            if (fromSelectedSlot?.breakStart && fromSelectedSlot?.breakEnd) {
-              return { start: fromSelectedSlot.breakStart, end: fromSelectedSlot.breakEnd };
-            }
-            if (defaultFlexibleSlot?.breakStart && defaultFlexibleSlot?.breakEnd) {
-              return { start: defaultFlexibleSlot.breakStart, end: defaultFlexibleSlot.breakEnd };
-            }
-            return null;
-          })()}
-          holidaySet={holidaySet}
-          holidayNameMap={holidayNameMap}
-        />
-      </Card>
-
-      <Card title="변경 신청 이력" className="tw-border-slate-200/80 tw-shadow-sm" loading={historyQ.isLoading}>
-        <Table<MemberScheduleSelection>
-          rowKey={(r) => r.selectionId ?? `${r.targetYearMonth}-${r.createdAt}`}
-          dataSource={historyQ.data ?? []}
-          columns={columns}
-          pagination={{ pageSize: 10 }}
-          scroll={{ x: 860 }}
-          locale={{ emptyText: '신청/이력 데이터가 없습니다.' }}
+                  {/* 주간 행 테이블 — 5주 × 7일 × (일자/점심/근태/초과근무) + 합계 + 1주 근로시간 */}
+                  <ScheduleWeeklyTable
+                    calendarMonth={calendarMonth}
+                    dailyMap={dailyMap}
+                    scheduleMap={scheduleMap}
+                    defaultScheduleTimeLabel={defaultScheduleTimeLabel}
+                    fallbackTime={latestSlotLabel !== '-' ? latestSlotLabel : defaultSlotTime}
+                    fallbackBreakRange={(() => {
+                      const fromSelection =
+                        latestAppliedSelection?.breakStart && latestAppliedSelection?.breakEnd
+                          ? { start: latestAppliedSelection.breakStart, end: latestAppliedSelection.breakEnd }
+                          : null;
+                      if (fromSelection) return fromSelection;
+                      const fromSelectedSlot = allSlotsMap.get(latestAppliedSelection?.slotId ?? '');
+                      if (fromSelectedSlot?.breakStart && fromSelectedSlot?.breakEnd) {
+                        return { start: fromSelectedSlot.breakStart, end: fromSelectedSlot.breakEnd };
+                      }
+                      if (defaultFlexibleSlot?.breakStart && defaultFlexibleSlot?.breakEnd) {
+                        return { start: defaultFlexibleSlot.breakStart, end: defaultFlexibleSlot.breakEnd };
+                      }
+                      return null;
+                    })()}
+                    holidaySet={holidaySet}
+                    holidayNameMap={holidayNameMap}
+                  />
+                </>
+              ),
+            },
+            {
+              key: 'history',
+              label: '변경 신청 이력',
+              children: (
+                <>
+                  <div className="tw-mb-3 tw-flex tw-justify-end">
+                    <Button size="small" onClick={() => setScheduleTab('schedule')}>
+                      ‹ 근무 스케줄로 돌아가기
+                    </Button>
+                  </div>
+                  <Table<MemberScheduleSelection>
+                    rowKey={(r) => r.selectionId ?? `${r.targetYearMonth}-${r.createdAt}`}
+                    dataSource={historyQ.data ?? []}
+                    columns={columns}
+                    pagination={{ pageSize: 10 }}
+                    scroll={{ x: 860 }}
+                    locale={{ emptyText: '신청/이력 데이터가 없습니다.' }}
+                    loading={historyQ.isLoading}
+                  />
+                </>
+              ),
+            },
+          ]}
         />
       </Card>
 

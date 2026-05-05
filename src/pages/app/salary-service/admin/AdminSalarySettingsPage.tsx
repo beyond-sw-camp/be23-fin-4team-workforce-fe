@@ -13,6 +13,7 @@ import {
   InputNumber,
   Popconfirm,
   Row,
+  Segmented,
   Select,
   Space,
   Switch,
@@ -1087,23 +1088,27 @@ function SalaryPolicyTab() {
             </Col>
           </Row>
 
-          {/* 4행: 월 소정근로시간 + 일할계산 방식 */}
+          {/* 4행: 월 소정근로시간 + 일할계산 방식 - 옵셔널 (미입력 시 한국 표준 209h / DAYS_IN_MONTH 자동 적용) */}
           <Row gutter={12}>
             <Col span={8}>
               <Form.Item
                 label="월 소정근로시간"
                 name="monthlyOrdinaryHours"
-                rules={[
-                  { required: true, message: '입력하세요.' },
-                  { type: 'number', min: 1, max: 300, message: '1 ~ 300' },
-                ]}
+                tooltip="시급 환산 기준 (OT/야간/휴일 가산수당 계산의 분모). 미입력 시 한국 표준 209시간 자동 적용"
+                rules={[{ type: 'number', min: 1, max: 300, message: '1 ~ 300' }]}
               >
-                <InputNumber min={1} max={300} style={{ width: '100%' }} addonAfter="시간" />
+                <InputNumber min={1} max={300} style={{ width: '100%' }} addonAfter="시간" placeholder="기본 209" />
               </Form.Item>
             </Col>
             <Col span={16}>
-              <Form.Item label="일할계산 방식" name="prorationMethod" rules={[{ required: true }]}>
+              <Form.Item
+                label="일할계산 방식"
+                name="prorationMethod"
+                tooltip="월중 입사/퇴사/급여변경 시 일할 계산 분모. 미입력 시 '해당 월 일수' 자동 적용"
+              >
                 <Select
+                  allowClear
+                  placeholder="기본: 해당 월 일수"
                   options={[
                     { value: 'DAYS_IN_MONTH', label: PRORATION_METHOD_KO.DAYS_IN_MONTH },
                     { value: 'FIXED_30', label: PRORATION_METHOD_KO.FIXED_30 },
@@ -1631,8 +1636,20 @@ function SalaryItemTemplateTab() {
  * ====================================================================== */
 
 export function ComprehensiveOvertimeTab() {
+  // 검색 모드 - 기준일(특정일) vs 월(말일 기준)
+  const [searchMode, setSearchMode] = useState<'date' | 'month'>('date');
   const [baseDate, setBaseDate] = useState<dayjs.Dayjs>(() => dayjs());
-  const iso = baseDate.format('YYYY-MM-DD');
+  const [baseMonth, setBaseMonth] = useState<dayjs.Dayjs>(() => dayjs());
+  // 이름 검색 - 클라이언트 필터
+  const [nameKeyword, setNameKeyword] = useState<string>('');
+  // 사용률 임계 필터 - 50%/80%/100% 이상
+  const [thresholdPct, setThresholdPct] = useState<number>(0);
+
+  // 월 모드면 해당 월의 말일을 baseDate 로 사용 (월간 누적 OT 가 같이 보이도록)
+  const effectiveDate = searchMode === 'month'
+    ? baseMonth.endOf('month')
+    : baseDate;
+  const iso = effectiveDate.format('YYYY-MM-DD');
   const formatMinutes = (v?: number | null) =>
     v == null ? '—' : `${v.toLocaleString()}분 (${(v / 60).toFixed(1)}h)`;
 
@@ -1645,6 +1662,29 @@ export function ComprehensiveOvertimeTab() {
     queryKey: ['salary', 'attendance', 'overtime-policy', 'current', iso],
     queryFn: () => attendanceApi.overtimePolicy.getCurrent(),
   });
+
+  const filteredRows = useMemo(() => {
+    const all = listQ.data ?? [];
+    const kw = nameKeyword.trim().toLowerCase();
+    return all.filter((r) => {
+      if (kw && !(r.name ?? '').toLowerCase().includes(kw)) return false;
+      if (thresholdPct > 0 && (r.usagePercent ?? 0) < thresholdPct) return false;
+      return true;
+    });
+  }, [listQ.data, nameKeyword, thresholdPct]);
+
+  // 요약 - 위험/주의/정상 카운트
+  const summary = useMemo(() => {
+    const list = listQ.data ?? [];
+    let danger = 0, warn = 0, normal = 0;
+    list.forEach((r) => {
+      const p = r.usagePercent ?? 0;
+      if (p >= 100) danger++;
+      else if (p >= 80) warn++;
+      else normal++;
+    });
+    return { total: list.length, danger, warn, normal };
+  }, [listQ.data]);
 
   const cols = useMemo<ColumnsType<ComprehensiveOvertimeStatus>>(() => [
     { title: '구성원', dataIndex: 'name', key: 'name', render: (v) => v ?? '—' },
@@ -1717,45 +1757,135 @@ export function ComprehensiveOvertimeTab() {
       <Alert
         type="info"
         showIcon
-        message="직원들의 이번 달 누적 초과 근무 현황입니다."
-        description="사용률 50% 이상만 표시됩니다. 고정 한도와 함께 회사 커스텀 일/월 연장근로 한도도 같이 확인할 수 있습니다."
+        message="포괄임금제 직원의 누적 초과 근무 현황 모니터링"
+        description="사용률 50% 이상부터 자동 집계됩니다. 기준일/월 토글로 시점 선택, 이름·임계치로 빠르게 좁혀 볼 수 있습니다."
       />
-      <div className="tw-grid tw-grid-cols-1 md:tw-grid-cols-2 tw-gap-3">
+
+      {/* 한도 카드 + 요약 카드 */}
+      <div className="tw-grid tw-grid-cols-2 md:tw-grid-cols-5 tw-gap-3">
         <Card size="small" className="tw-border-slate-200/80 tw-shadow-sm">
           <Typography.Text type="secondary" className="tw-text-xs">
-            회사 커스텀 일 연장근로 한도
+            회사 일 연장근로 한도
           </Typography.Text>
-          <div className="tw-mt-1 tw-text-xl tw-font-semibold tw-text-slate-900">
+          <div className="tw-mt-1 tw-text-base tw-font-semibold tw-text-slate-900">
             {formatMinutes(policyQ.data?.dailyOvertimeLimitMinutes)}
           </div>
         </Card>
         <Card size="small" className="tw-border-slate-200/80 tw-shadow-sm">
           <Typography.Text type="secondary" className="tw-text-xs">
-            회사 커스텀 월 연장근로 한도
+            회사 월 연장근로 한도
           </Typography.Text>
-          <div className="tw-mt-1 tw-text-xl tw-font-semibold tw-text-slate-900">
+          <div className="tw-mt-1 tw-text-base tw-font-semibold tw-text-slate-900">
             {formatMinutes(policyQ.data?.monthlyOvertimeLimitMinutes)}
           </div>
         </Card>
+        <Card size="small" className="tw-border-rose-200 tw-bg-rose-50/40 tw-shadow-sm">
+          <Typography.Text type="secondary" className="tw-text-xs">
+            한도 초과 (≥100%)
+          </Typography.Text>
+          <div className="tw-mt-1 tw-text-base tw-font-semibold tw-text-rose-600">
+            {summary.danger}명
+          </div>
+        </Card>
+        <Card size="small" className="tw-border-amber-200 tw-bg-amber-50/40 tw-shadow-sm">
+          <Typography.Text type="secondary" className="tw-text-xs">
+            임박 (80~99%)
+          </Typography.Text>
+          <div className="tw-mt-1 tw-text-base tw-font-semibold tw-text-amber-600">
+            {summary.warn}명
+          </div>
+        </Card>
+        <Card size="small" className="tw-border-slate-200/80 tw-shadow-sm">
+          <Typography.Text type="secondary" className="tw-text-xs">
+            관찰 대상 합계
+          </Typography.Text>
+          <div className="tw-mt-1 tw-text-base tw-font-semibold tw-text-slate-900">
+            {summary.total}명
+          </div>
+        </Card>
       </div>
-      <div className="tw-flex tw-items-center tw-gap-3">
-        <Typography.Text type="secondary" className="!tw-text-sm">
-          기준일
-        </Typography.Text>
-        <DatePicker
-          value={baseDate}
-          onChange={(d) => d && setBaseDate(d)}
-          allowClear={false}
-          format="YYYY-MM-DD"
-        />
-      </div>
+
+      {/* 검색 필터 바 */}
+      <Card size="small" className="tw-border-slate-200/80 tw-shadow-sm">
+        <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-3">
+          <Space size={4}>
+            <Typography.Text type="secondary" className="!tw-text-xs">기준</Typography.Text>
+            <Segmented
+              size="small"
+              value={searchMode}
+              onChange={(v) => setSearchMode(v as 'date' | 'month')}
+              options={[
+                { label: '기준일', value: 'date' },
+                { label: '월 단위', value: 'month' },
+              ]}
+            />
+          </Space>
+          {searchMode === 'date' ? (
+            <DatePicker
+              value={baseDate}
+              onChange={(d) => d && setBaseDate(d)}
+              allowClear={false}
+              format="YYYY-MM-DD"
+              size="small"
+            />
+          ) : (
+            <DatePicker
+              picker="month"
+              value={baseMonth}
+              onChange={(d) => d && setBaseMonth(d)}
+              allowClear={false}
+              format="YYYY-MM"
+              size="small"
+            />
+          )}
+          <span className="tw-text-xs tw-text-slate-400">
+            적용 시점: {iso}
+          </span>
+          <div className="tw-mx-2 tw-h-5 tw-border-l tw-border-slate-200" />
+          <Input
+            allowClear
+            placeholder="이름 검색"
+            value={nameKeyword}
+            onChange={(e) => setNameKeyword(e.target.value)}
+            size="small"
+            style={{ width: 160 }}
+          />
+          <Space size={4}>
+            <Typography.Text type="secondary" className="!tw-text-xs">사용률</Typography.Text>
+            <Segmented
+              size="small"
+              value={thresholdPct}
+              onChange={(v) => setThresholdPct(Number(v))}
+              options={[
+                { label: '전체', value: 0 },
+                { label: '≥50%', value: 50 },
+                { label: '≥80%', value: 80 },
+                { label: '≥100%', value: 100 },
+              ]}
+            />
+          </Space>
+          <span className="tw-ml-auto tw-text-xs tw-text-slate-500">
+            {filteredRows.length} / {summary.total}건
+          </span>
+        </div>
+      </Card>
+
       <Table<ComprehensiveOvertimeStatus>
         rowKey={(r) => r.memberId ?? `${r.name}-${r.approvedMinutes}`}
         loading={listQ.isLoading}
-        dataSource={listQ.data ?? []}
+        dataSource={filteredRows}
         columns={cols}
-        pagination={{ pageSize: 20 }}
-        locale={{ emptyText: '포괄임금제 초과(또는 임박) 대상이 없습니다.' }}
+        pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: [10, 20, 50] }}
+        locale={{
+          emptyText: (
+            <div className="tw-py-6 tw-text-slate-500">
+              <div className="tw-text-sm tw-font-medium">표시할 대상이 없습니다</div>
+              <div className="tw-mt-1 tw-text-xs">
+                선택 시점({iso})에 사용률 {Math.max(50, thresholdPct)}% 이상 직원이 없거나, 검색 조건에 맞지 않습니다.
+              </div>
+            </div>
+          ),
+        }}
       />
     </Space>
   );

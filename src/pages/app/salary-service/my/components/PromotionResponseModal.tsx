@@ -117,50 +117,59 @@ export function PromotionResponseModal({
       cancelText="취소"
       confirmDisabled={picked.length === 0 || overLimit}
       confirmLoading={confirmLoading}
-      onCancel={onCancel}
-      onOk={submit}
+      onClose={onCancel}
+      onConfirm={submit}
       destroyOnHidden
-      width={560}
+      width={760}
     >
       {target ? (
-        <Space direction="vertical" className="tw-w-full" size="middle">
-          {/* 잔여/만료 요약 */}
-          <div className="tw-rounded-md tw-bg-slate-50 tw-p-3 tw-text-sm tw-flex tw-flex-wrap tw-items-center tw-gap-x-4 tw-gap-y-1">
-            <div>
-              <Typography.Text type="secondary">잔여 연차 </Typography.Text>
-              <Typography.Text strong>{remaining}일</Typography.Text>
-            </div>
-            <div>
-              <Typography.Text type="secondary">만료일 </Typography.Text>
-              <Typography.Text strong>
-                {expirationDayjs ? expirationDayjs.format('YYYY-MM-DD') : '—'}
-              </Typography.Text>
-              {expirationDayjs ? (
-                <Tag className="tw-ml-2" color="orange">
-                  D-{expirationDayjs.diff(dayjs(), 'day')}
-                </Tag>
-              ) : null}
+        <div className="tw-px-6 tw-py-5">
+        <Space direction="vertical" className="tw-w-full" size={20}>
+          {/* 잔여/만료 요약 - 더 큰 카드 */}
+          <div className="tw-rounded-lg tw-bg-gradient-to-r tw-from-blue-50 tw-to-slate-50 tw-border tw-border-blue-100 tw-px-5 tw-py-4">
+            <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-x-8 tw-gap-y-2">
+              <div className="tw-flex tw-items-baseline tw-gap-2">
+                <Typography.Text type="secondary" className="!tw-text-xs">잔여 연차</Typography.Text>
+                <Typography.Text strong className="!tw-text-2xl !tw-text-blue-600">{remaining}</Typography.Text>
+                <Typography.Text type="secondary" className="!tw-text-sm">일</Typography.Text>
+              </div>
+              <div className="tw-w-px tw-h-8 tw-bg-slate-200" />
+              <div className="tw-flex tw-items-baseline tw-gap-2">
+                <Typography.Text type="secondary" className="!tw-text-xs">만료일</Typography.Text>
+                <Typography.Text strong className="!tw-text-base">
+                  {expirationDayjs ? expirationDayjs.format('YYYY-MM-DD') : '—'}
+                </Typography.Text>
+                {expirationDayjs ? (
+                  <Tag color="orange" className="!tw-ml-1">
+                    D-{expirationDayjs.diff(dayjs(), 'day')}
+                  </Tag>
+                ) : null}
+              </div>
             </div>
           </div>
 
           <Alert
-            type="warning"
+            type="info"
             showIcon
-            message="입력 날짜는 참고용 계획입니다"
-            description="실제 휴가는 평소처럼 별도 신청해주세요. 회신만으로도 회사 촉진 의무가 완료됩니다. 주말·공휴일·기존 휴가일은 자동 제외됩니다."
+            message={
+              <span className="tw-text-xs">
+                참고용 계획입니다. 실제 휴가는 [휴가신청] 결재로 별도 진행하세요.
+              </span>
+            }
           />
 
           {/* 날짜 선택 */}
           <div>
-            <Typography.Text strong>사용 예정 날짜</Typography.Text>
+            <Typography.Text strong className="!tw-text-sm">사용 예정 날짜 선택</Typography.Text>
             <DatePicker
               multiple
+              size="large"
               value={picked}
               onChange={(v) => setPicked(Array.isArray(v) ? v : v ? [v] : [])}
               disabledDate={disabledDate}
               className="tw-mt-2 tw-w-full"
-              placeholder="달력에서 평일 날짜 선택"
-              format="YYYY-MM-DD"
+              placeholder="달력 클릭 → 평일 다중 선택"
+              format="YYYY-MM-DD (ddd)"
               open={calendarOpen}
               onOpenChange={setCalendarOpen}
               renderExtraFooter={() => (
@@ -174,17 +183,14 @@ export function PromotionResponseModal({
                 </div>
               )}
             />
-            <Typography.Text type="secondary" className="!tw-text-xs tw-block tw-mt-1">
-              차단: 주말 · 회사 공휴일 · 본인 기존 휴가 · 만료일 이후
-            </Typography.Text>
           </div>
 
-          {/* 선택 결과 */}
+          {/* 선택 결과 - 카드 형태로 시각적 분리 */}
           {sortedPicked.length > 0 && (
-            <div className="tw-rounded-md tw-border tw-border-slate-200 tw-p-2.5">
-              <div className="tw-flex tw-items-center tw-justify-between tw-mb-2">
+            <div className={`tw-rounded-lg tw-border tw-px-4 tw-py-3 ${overLimit ? 'tw-border-red-300 tw-bg-red-50' : 'tw-border-blue-200 tw-bg-blue-50/40'}`}>
+              <div className="tw-flex tw-items-center tw-justify-between tw-mb-2.5">
                 <Typography.Text strong className="!tw-text-sm">
-                  선택 {sortedPicked.length}일
+                  선택 <span className={`!tw-text-base ${overLimit ? '!tw-text-red-600' : '!tw-text-blue-600'}`}>{sortedPicked.length}</span>일
                   <span className={`tw-ml-2 tw-text-xs ${overLimit ? 'tw-text-red-500' : 'tw-text-slate-500'}`}>
                     / 잔여 {remaining}일
                   </span>
@@ -193,19 +199,20 @@ export function PromotionResponseModal({
                   전체 지우기
                 </Button>
               </div>
-              <Space wrap size={[6, 6]}>
+              <Space wrap size={[8, 8]}>
                 {sortedPicked.map((d) => {
                   const iso = d.format('YYYY-MM-DD');
                   return (
                     <Tag
                       key={iso}
+                      color={overLimit ? 'red' : 'blue'}
                       closable
                       closeIcon={<CloseOutlined />}
                       onClose={(e) => {
                         e.preventDefault();
                         removeOne(iso);
                       }}
-                      className="!tw-py-1"
+                      className="!tw-py-1 !tw-px-2 !tw-text-sm"
                     >
                       {iso} ({['일', '월', '화', '수', '목', '금', '토'][d.day()]})
                     </Tag>
@@ -213,13 +220,14 @@ export function PromotionResponseModal({
                 })}
               </Space>
               {overLimit && (
-                <Typography.Text type="danger" className="!tw-text-xs tw-block tw-mt-1">
-                  선택 일수가 잔여를 초과합니다 (최대 {remaining}일)
+                <Typography.Text type="danger" className="!tw-text-xs tw-block tw-mt-2">
+                  선택 일수가 잔여 연차를 초과했습니다. 최대 {remaining}일까지 선택 가능합니다.
                 </Typography.Text>
               )}
             </div>
           )}
         </Space>
+        </div>
       ) : null}
     </AppDoubleActionModal>
   );

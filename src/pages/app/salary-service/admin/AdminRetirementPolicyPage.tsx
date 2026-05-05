@@ -201,7 +201,7 @@ export function AdminRetirementPolicyPage() {
         </Typography.Paragraph>
       </div>
 
-      {activeQ.data && (
+      {activeQ.data ? (
         <Alert
           type="info"
           showIcon
@@ -229,7 +229,14 @@ export function AdminRetirementPolicyPage() {
             </span>
           }
         />
-      )}
+      ) : !activeQ.isLoading ? (
+        <Alert
+          type="warning"
+          showIcon
+          message="등록된 활성 퇴직급여 정책이 없습니다"
+          description="우측 [정책 등록] 버튼으로 회사 퇴직급여 제도를 먼저 설정해 주세요. (LEGAL: 법정 퇴직금 / DB: 확정급여형 / DC: 확정기여형)"
+        />
+      ) : null}
 
       <Card>
         <div className="tw-flex tw-justify-end tw-mb-3">

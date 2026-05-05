@@ -147,8 +147,6 @@ export type OvertimePolicy = {
   weeklyTotalLimitMinutes?: number | null;
   dailyOvertimeLimitMinutes?: number | null;
   monthlyOvertimeLimitMinutes?: number | null;
-  nightStartTime?: string | null;
-  nightEndTime?: string | null;
   holidayWorkRequiresApproval?: boolean | null;
   effectiveFrom?: string | null;
   effectiveTo?: string | null;
@@ -162,8 +160,6 @@ export type OvertimePolicyCreatePayload = {
   weeklyTotalLimitMinutes?: number | null;
   dailyOvertimeLimitMinutes?: number | null;
   monthlyOvertimeLimitMinutes?: number | null;
-  nightStartTime?: string | null;
-  nightEndTime?: string | null;
   holidayWorkRequiresApproval?: boolean | null;
   effectiveFrom: string;
   effectiveTo?: string | null;
@@ -1182,6 +1178,8 @@ export type LeaveRequest = {
   startDate?: string;
   endDate?: string;
   usageDays?: number | null;
+  /** 비연속 사용 날짜 - 채워지면 그 날짜만 사용, 비면 startDate~endDate 연속 범위 */
+  plannedDates?: string[] | null;
   reason?: string | null;
   evidenceFileUrl?: string | null;
   deductedBalanceType?: BalanceTypeCode | null;
@@ -1199,6 +1197,8 @@ export type LeaveRequestSubmitPayload = {
   endDate: string;
   reason: string;
   evidenceFileUrl?: string | null;
+  /** 비연속 사용 날짜 - 채워지면 startDate~endDate 무시하고 이 날짜들만 카운트 */
+  plannedDates?: string[];
 };
 
 /** 포괄임금 고정 OT 한도 대비 월간 현황 (50% 이상 사용자만) */

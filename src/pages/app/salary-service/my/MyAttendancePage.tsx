@@ -6,7 +6,7 @@
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { LoginOutlined, LogoutOutlined, RedoOutlined } from '@ant-design/icons';
-import { Alert, App, Button, Card, DatePicker, Progress, Space, Statistic, Table, Tabs, Tag, Typography } from 'antd';
+import { Alert, App, Button, Card, DatePicker, Empty, Modal, Progress, Space, Statistic, Table, Tabs, Tag, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useEffect, useMemo, useState } from 'react';
@@ -18,6 +18,7 @@ import { normalizeSpringPage } from '@/features/salary-service/lib/normalizePage
 import type {
   CorrectionStateCode,
   DailyAttendance,
+  LeaveRequest,
   WorkSchedule,
 } from '@/features/salary-service/types';
 import { AttendanceStatusTag } from '@/features/salary-service/ui/AttendanceStatusTag';
@@ -92,6 +93,26 @@ export function MyAttendancePage() {
   const activeView: 'daily' | 'weekly' = routeSearch.view === 'weekly' ? 'weekly' : 'daily';
 
   // 주간/월간 탭 - 기간 기준일 (해당 일자가 속한 주의 요약을 조회)
+  // 휴가 이력 모달 (내 휴가 신청 결재 이력 - LeaveRequest 전체)
+  const [leaveHistoryOpen, setLeaveHistoryOpen] = useState(false);
+  const leaveHistoryQ = useQuery({
+    queryKey: ['salary', 'leave-requests', 'my', 'history-modal'],
+    queryFn: () => attendanceApi.leaveRequest.listMyHistory({ page: 0, size: 200 }),
+    enabled: leaveHistoryOpen,
+  });
+  const leaveTypesQ = useQuery({
+    queryKey: ['attendance', 'company-leave-types'],
+    queryFn: () => attendanceApi.companyLeaveType.list(),
+    enabled: leaveHistoryOpen,
+  });
+  const leaveTypeNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    (leaveTypesQ.data ?? []).forEach((t) => {
+      if (t.companyLeaveTypeId) m.set(t.companyLeaveTypeId, t.name ?? '-');
+    });
+    return m;
+  }, [leaveTypesQ.data]);
+
   const [weekAnchor, setWeekAnchor] = useState<Dayjs>(() => dayjs());
   const weekAnchorIso = weekAnchor.format('YYYY-MM-DD');
 
@@ -169,12 +190,11 @@ export function MyAttendancePage() {
     return map;
   }, [visDailyQ.data]);
 
-  // 회사 공휴일 - 히트맵 셀에 표시
+  // 회사 공휴일 - 히트맵 셀 + 일자별 표 휴일 태그에 표시
   const holidaysQ = useQuery({
     queryKey: ['attendance', 'company-holidays', 'all'],
     queryFn: () => attendanceApi.companyHoliday.list(),
     staleTime: 60_000,
-    enabled: activeView === 'weekly',
   });
   const holidayMap = useMemo(() => {
     const m = new Map<string, string>();
@@ -336,7 +356,37 @@ export function MyAttendancePage() {
   // 월별 일자별 표 컬럼 - 결재양식 작성 진입점 포함
   const monthlyColumns: ColumnsType<DailyAttendance> = useMemo(
     () => [
-      { title: '일자', dataIndex: 'attendanceDate', key: 'attendanceDate' },
+      {
+        title: '일자',
+        dataIndex: 'attendanceDate',
+        key: 'attendanceDate',
+        render: (v?: string | null) => {
+          if (!v) return '—';
+          const dj = dayjs(v);
+          const dow = dj.day();
+          const isWeekend = dow === 0 || dow === 6;
+          const holidayName = holidayMap.get(v);
+          if (holidayName) {
+            return (
+              <Space size={6}>
+                <span>{v}</span>
+                <Tag color="red" className="!tw-m-0">{holidayName}</Tag>
+              </Space>
+            );
+          }
+          if (isWeekend) {
+            return (
+              <Space size={6}>
+                <span>{v}</span>
+                <Tag color={dow === 0 ? 'red' : 'blue'} className="!tw-m-0">
+                  {dow === 0 ? '일' : '토'}
+                </Tag>
+              </Space>
+            );
+          }
+          return v;
+        },
+      },
       {
         title: '상태',
         key: 'status',
@@ -483,7 +533,7 @@ export function MyAttendancePage() {
         },
       },
     ],
-    [navigate, correctionDocId, overtimeDocId, overtimeByDate],
+    [navigate, correctionDocId, overtimeDocId, overtimeByDate, holidayMap, activeSchedule],
   );
 
   const daily = dailyQ.data;
@@ -724,10 +774,10 @@ export function MyAttendancePage() {
         </Card>
       </div>
 
-      {/* 상단 1번 row - 좌: 근태 현황(출근/퇴근 + 휴가 현황) - 도넛/주간 요약은 [초과근무 관리]로 이동 */}
-      <div className="tw-grid tw-grid-cols-1 lg:tw-grid-cols-2 tw-gap-3">
+      {/* 상단 1번 row - 근태 현황 1 : 휴가 현황 2 비율로 분할 */}
+      <div className="tw-grid tw-grid-cols-1 lg:tw-grid-cols-3 tw-gap-3">
       <Card
-        className="tw-border-slate-200/80 tw-shadow-sm"
+        className="tw-border-slate-200/80 tw-shadow-sm lg:tw-col-span-1"
         size="small"
         title={
           <div className="tw-flex tw-items-center tw-justify-between">
@@ -738,15 +788,16 @@ export function MyAttendancePage() {
           </div>
         }
       >
-        <Space direction="vertical" size={16} className="tw-w-full">
-          <div className="tw-flex tw-gap-2">
+        <div className="tw-flex tw-items-center tw-gap-3">
+          {/* 좌측: 출근/퇴근 버튼을 좌우로 배치 (위아래 X - 오타 방지). 폭은 좁게 (max-w 제한) */}
+          <div className="tw-flex tw-gap-2 tw-flex-1 tw-min-w-0">
             <Button
               size="large"
               type="primary"
               loading={busy}
               icon={<LoginOutlined />}
               onClick={() => clockInM.mutate()}
-              className="tw-flex-1"
+              className="tw-flex-1 !tw-max-w-[180px]"
             >
               출근하기
             </Button>
@@ -759,7 +810,7 @@ export function MyAttendancePage() {
                 loading={busy}
                 danger
                 icon={<LogoutOutlined />}
-                className="tw-flex-1"
+                className="tw-flex-1 !tw-max-w-[180px]"
                 onClick={() => {
                   modal.confirm({
                     title: '퇴근을 취소하시겠습니까?',
@@ -789,26 +840,36 @@ export function MyAttendancePage() {
                     onOk: () => clockOutM.mutateAsync(),
                   });
                 }}
-                className="tw-flex-1"
+                className="tw-flex-1 !tw-max-w-[180px]"
               >
                 퇴근하기
               </Button>
             )}
           </div>
 
-        </Space>
+          {/* 우측: 하루 스케줄 도넛 - 출근~현재(또는 퇴근) 진행률 */}
+          <DailyScheduleDonut
+            firstClockIn={daily?.firstClockIn ?? null}
+            lastClockOut={daily?.lastClockOut ?? null}
+            scheduleStartTime={activeSchedule?.startTime ?? null}
+            scheduleEndTime={activeSchedule?.endTime ?? null}
+            scheduledMinutes={activeSchedule?.workMinutes ?? null}
+            workedMinutes={daily?.workedMinutes ?? null}
+            breakMinutes={activeSchedule?.breakMinutes ?? 0}
+          />
+        </div>
       </Card>
 
       {/* 우측 - 휴가 현황 카드 */}
 
-      {/* 휴가 현황 - 근태 현황과 같은 row, 연차/사용/잔여 3 메트릭 inline 표시 */}
+      {/* 휴가 현황 - 근태 현황과 같은 row (2/3 폭), 연차/사용/잔여/이력 4 메트릭 inline 표시 */}
       <Card
-        className="tw-border-slate-200/80 tw-shadow-sm"
+        className="tw-border-slate-200/80 tw-shadow-sm lg:tw-col-span-2"
         size="small"
         title="휴가 현황"
         loading={balanceQ.isLoading}
       >
-        <div className="tw-grid tw-grid-cols-3 tw-gap-3">
+        <div className="tw-grid tw-grid-cols-4 tw-gap-3">
           <div className="tw-flex tw-flex-col tw-items-center tw-gap-1">
             <Typography.Text type="secondary" className="!tw-text-xs">
               연차휴가
@@ -833,6 +894,19 @@ export function MyAttendancePage() {
               {totalRemaining.toLocaleString('ko-KR')}일
             </Typography.Title>
           </div>
+          <div className="tw-flex tw-flex-col tw-items-center tw-gap-1">
+            <Typography.Text type="secondary" className="!tw-text-xs">
+              휴가 이력
+            </Typography.Text>
+            <Button
+              type="primary"
+              ghost
+              onClick={() => setLeaveHistoryOpen(true)}
+              className="!tw-mt-1"
+            >
+              전체 보기
+            </Button>
+          </div>
         </div>
       </Card>
 
@@ -845,17 +919,6 @@ export function MyAttendancePage() {
           <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2">
             <span>일자별 근태</span>
             <Space>
-              {/* 결재 승인/반려 직후 즉시 반영 확인용 - Kafka consumer 처리 후 캐시 갱신 */}
-              <Button
-                size="small"
-                onClick={() => {
-                  void monthlyQ.refetch();
-                  void qc.invalidateQueries({ queryKey: ['salary', 'attendance', 'overtime', 'my'] });
-                }}
-                loading={monthlyQ.isFetching}
-              >
-                새로고침
-              </Button>
               <DatePicker
                 picker="month"
                 value={month}
@@ -897,7 +960,201 @@ export function MyAttendancePage() {
       </Card>
       </>
       )}
+
+      {/* 휴가 이력 모달 - 내가 신청한 LeaveRequest 전체 (대기/승인/반려/취소) */}
+      <Modal
+        open={leaveHistoryOpen}
+        onCancel={() => setLeaveHistoryOpen(false)}
+        title="내 휴가 신청 이력"
+        footer={null}
+        width={920}
+      >
+        <Table<LeaveRequest>
+          rowKey={(r) => r.leaveRequestId ?? `${r.startDate}-${r.requestedAt}`}
+          loading={leaveHistoryQ.isLoading || leaveTypesQ.isLoading}
+          dataSource={leaveHistoryQ.data?.content ?? []}
+          pagination={{ pageSize: 15 }}
+          size="small"
+          locale={{ emptyText: <Empty description="휴가 신청 이력이 없습니다" /> }}
+          columns={[
+            {
+              title: '신청일',
+              dataIndex: 'requestedAt',
+              key: 'requestedAt',
+              width: 130,
+              render: (v?: string | null) => (v ? dayjs(v).format('YYYY-MM-DD') : '-'),
+            },
+            {
+              title: '휴가 종류',
+              dataIndex: 'companyLeaveTypeId',
+              key: 'leaveType',
+              width: 120,
+              render: (id?: string) => leaveTypeNameById.get(id ?? '') ?? '-',
+            },
+            {
+              title: '기간 / 사용 날짜',
+              key: 'range',
+              render: (_: unknown, r: LeaveRequest) => {
+                const planned = Array.isArray(r.plannedDates) && r.plannedDates.length > 0
+                  ? [...r.plannedDates].sort()
+                  : null;
+                if (planned) {
+                  const text = planned
+                    .map((d) => {
+                      const dj = dayjs(d);
+                      return dj.isValid() ? dj.format('M/D') : d;
+                    })
+                    .join(', ');
+                  return <Tooltip title={planned.join(', ')}>{text}</Tooltip>;
+                }
+                if (!r.startDate) return '-';
+                if (!r.endDate || r.startDate === r.endDate) return r.startDate;
+                return `${r.startDate} ~ ${r.endDate}`;
+              },
+            },
+            {
+              title: '일수',
+              dataIndex: 'usageDays',
+              key: 'usageDays',
+              width: 70,
+              align: 'right',
+              render: (v?: number | null) => (v != null ? `${v}일` : '-'),
+            },
+            {
+              title: '상태',
+              dataIndex: 'approvalStatus',
+              key: 'status',
+              width: 90,
+              align: 'center',
+              render: (v?: string) => {
+                const code = v ?? '';
+                const colorMap: Record<string, string> = {
+                  PENDING: 'gold',
+                  APPROVED: 'green',
+                  REJECTED: 'red',
+                  CANCELLED: 'default',
+                };
+                const labelMap: Record<string, string> = {
+                  PENDING: '대기',
+                  APPROVED: '승인',
+                  REJECTED: '반려',
+                  CANCELLED: '취소',
+                };
+                return <Tag color={colorMap[code] ?? 'default'}>{labelMap[code] ?? code}</Tag>;
+              },
+            },
+            {
+              title: '사유',
+              dataIndex: 'reason',
+              key: 'reason',
+              ellipsis: true,
+              render: (v?: string | null) => v || '-',
+            },
+          ]}
+        />
+      </Modal>
     </Space>
+  );
+}
+
+/** 하루 스케줄 도넛 - 출근~퇴근(또는 현재) 진행률 */
+function DailyScheduleDonut({
+  firstClockIn,
+  lastClockOut,
+  scheduleStartTime,
+  scheduleEndTime,
+  scheduledMinutes,
+  workedMinutes,
+  breakMinutes,
+}: {
+  firstClockIn: string | null;
+  lastClockOut: string | null;
+  scheduleStartTime: string | null;
+  scheduleEndTime: string | null;
+  scheduledMinutes: number | null;
+  workedMinutes: number | null;
+  breakMinutes: number;
+}) {
+  // 정규 근무시간 (스케줄), 기본 8시간
+  const targetMinutes = scheduledMinutes && scheduledMinutes > 0
+    ? scheduledMinutes
+    : 480;
+
+  // 진행 분 계산 - 퇴근 했으면 workedMinutes(서버), 안 했으면 (현재 - 출근 - 점심)
+  const elapsedMinutes = (() => {
+    if (workedMinutes != null && workedMinutes > 0) return workedMinutes;
+    if (!firstClockIn) return 0;
+    const start = dayjs(firstClockIn);
+    if (!start.isValid()) return 0;
+    const end = lastClockOut ? dayjs(lastClockOut) : dayjs();
+    const stay = end.diff(start, 'minute');
+    return Math.max(0, stay - (breakMinutes ?? 0));
+  })();
+
+  const percent = Math.min(100, Math.round((elapsedMinutes / targetMinutes) * 100));
+  const radius = 38;
+  const circumference = 2 * Math.PI * radius;
+  const dashOffset = circumference * (1 - percent / 100);
+  const ringColor = percent >= 100 ? '#16a34a' : percent >= 75 ? '#2563EB' : '#3b82f6';
+
+  const statusText = (() => {
+    if (!firstClockIn) return '미출근';
+    if (lastClockOut) return '퇴근 완료';
+    return '근무 중';
+  })();
+
+  const tooltipContent = (
+    <div className="tw-text-xs tw-leading-5">
+      <div>스케줄: {scheduleStartTime?.slice(0, 5) ?? '-'} ~ {scheduleEndTime?.slice(0, 5) ?? '-'}</div>
+      <div>정규 근무: {Math.floor(targetMinutes / 60)}시간 {targetMinutes % 60}분</div>
+      <div>진행: {Math.floor(elapsedMinutes / 60)}시간 {elapsedMinutes % 60}분 ({percent}%)</div>
+      {firstClockIn && <div>출근: {dayjs(firstClockIn).format('HH:mm')}</div>}
+      {lastClockOut && <div>퇴근: {dayjs(lastClockOut).format('HH:mm')}</div>}
+    </div>
+  );
+
+  return (
+    <Tooltip title={tooltipContent} placement="left">
+      <div className="tw-flex tw-flex-col tw-items-center tw-justify-center tw-shrink-0">
+        <svg width="100" height="100" viewBox="0 0 100 100">
+          <circle cx="50" cy="50" r={radius} fill="none" stroke="#f1f5f9" strokeWidth="9" />
+          <circle
+            cx="50"
+            cy="50"
+            r={radius}
+            fill="none"
+            stroke={ringColor}
+            strokeWidth="9"
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={dashOffset}
+            transform="rotate(-90 50 50)"
+            style={{ transition: 'stroke-dashoffset 0.4s ease' }}
+          />
+          <text
+            x="50"
+            y="46"
+            textAnchor="middle"
+            dy="0.35em"
+            fontSize="18"
+            fontWeight="700"
+            fill="#0f172a"
+          >
+            {percent}%
+          </text>
+          <text
+            x="50"
+            y="64"
+            textAnchor="middle"
+            dy="0.35em"
+            fontSize="10"
+            fill="#64748b"
+          >
+            {statusText}
+          </text>
+        </svg>
+      </div>
+    </Tooltip>
   );
 }
 
