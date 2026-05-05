@@ -38,6 +38,13 @@ const QK = ['salary', 'company-holidays'] as const;
 
 const WEEKDAY_KO = ['일', '월', '화', '수', '목', '금', '토'] as const;
 
+const PANEL_CARD_CLASS =
+  'tw-overflow-hidden tw-rounded-2xl tw-border-slate-200/80 tw-bg-white tw-shadow-[0_1px_3px_rgba(15,23,42,0.06)]';
+const PRIMARY_BUTTON_CLASS =
+  '!tw-h-11 !tw-rounded-xl !tw-border-0 !tw-bg-[#1e3a5f] !tw-px-5 !tw-font-semibold !tw-text-white !tw-shadow-none hover:!tw-bg-[#172f4f]';
+const SECONDARY_BUTTON_CLASS =
+  '!tw-h-10 !tw-rounded-xl !tw-border-slate-200 !tw-bg-white !tw-px-4 !tw-font-semibold !tw-text-slate-700 !tw-shadow-none hover:!tw-border-[#1e3a5f] hover:!tw-text-[#1e3a5f]';
+
 function sortHolidaysByDate(list: CompanyHoliday[]): CompanyHoliday[] {
   return [...list].sort((a, b) => (a.holidayDate ?? '').localeCompare(b.holidayDate ?? ''));
 }
@@ -255,66 +262,75 @@ const dayHolidays = useMemo(() => holidaysOnDay(holidays, selectedDay), [holiday
   const calendarLoading = listQ.isLoading || listQ.isFetching;
 
   return (
-    <Space direction="vertical" className="tw-w-full" size={16}>
+    <Space direction="vertical" className="tw-w-full" size={18}>
       <AppWorkspacePageTitle
         eyebrow="Attendance"
         title="회사 공휴일 관리"
         subtitle="월별 달력에서 공휴일을 확인합니다. 직접 등록한 휴일은 법정 공휴일만 다시 불러와도 유지됩니다."
         extra={(
-          <Button type="primary" onClick={() => openCreateForDay(selectedDay)}>
+          <Button type="primary" className={PRIMARY_BUTTON_CLASS} onClick={() => openCreateForDay(selectedDay)}>
             공휴일 추가
           </Button>
         )}
       />
 
-      <Card
-        size="small"
-        className="tw-border-indigo-200/80 tw-bg-indigo-50/40 tw-shadow-sm"
-        title={
-          <Space size={8}>
-            <span className="tw-text-sm tw-font-semibold tw-text-indigo-950">법정 공휴일 불러오기</span>
-            <Tag color="blue" className="tw-m-0">
-              API 연동
-            </Tag>
-          </Space>
-        }
-      >
-        <Typography.Paragraph type="secondary" className="!tw-mb-3 !tw-mt-0 !tw-text-xs">
-          아래 연도는{' '}
-          <Typography.Text strong className="tw-text-slate-700">
-            법정 공휴일만
-          </Typography.Text>
-          {' '}
-          다시 수집할 때만 사용됩니다. 달력에서 보는 월과는 별도로, 가져올 연도를 지정한 뒤 새로고침하세요.
-        </Typography.Paragraph>
-        <Space wrap className="tw-w-full" align="center" size="middle">
-          <Space align="center" size={8}>
-            <Typography.Text className="tw-text-xs tw-font-medium tw-text-slate-600">법정 공휴일 대상 연도</Typography.Text>
-            <InputNumber
-              value={refreshYear}
-              min={2020}
-              max={dayjs().year() + 1}
-              onChange={(v) => setRefreshYear(typeof v === 'number' ? v : dayjs().year())}
-              style={{ width: 120 }}
-              addonAfter="년"
-            />
-          </Space>
-          <Popconfirm
-            title={`${refreshYear}년 법정 공휴일을 새로 불러올까요?`}
-            description="직접 등록한 회사 휴일은 유지되고, 법정 공휴일만 해당 연도 기준으로 갱신됩니다."
-            okText="새로고침"
-            cancelText="취소"
-            onConfirm={() => refreshLegalM.mutate(refreshYear)}
-          >
-            <Button icon={<ReloadOutlined />} loading={refreshLegalM.isPending} type="default" className="tw-border-indigo-300 tw-bg-white">
-              법정 공휴일 새로고침
-            </Button>
-          </Popconfirm>
-        </Space>
+      <Card className={PANEL_CARD_CLASS} styles={{ body: { padding: 24 } }}>
+        <div className="tw-flex tw-flex-col tw-gap-4">
+          <div className="tw-flex tw-flex-wrap tw-items-start tw-justify-between tw-gap-3">
+            <div className="tw-min-w-0">
+              <div className="tw-flex tw-items-center tw-gap-2">
+                <Typography.Text className="tw-text-sm tw-font-semibold tw-text-slate-950">
+                  법정 공휴일 불러오기
+                </Typography.Text>
+                <Tag className="tw-m-0 !tw-rounded-full !tw-border-blue-100 !tw-bg-blue-50 !tw-px-2.5 !tw-text-blue-700">
+                  API 연동
+                </Tag>
+              </div>
+              <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-2 !tw-text-xs">
+                아래 연도는{' '}
+                <Typography.Text strong className="tw-text-slate-700">
+                  법정 공휴일만
+                </Typography.Text>
+                {' '}
+                다시 수집할 때만 사용됩니다. 달력에서 보는 월과는 별도로, 가져올 연도를 지정한 뒤 새로고침하세요.
+              </Typography.Paragraph>
+            </div>
+          </div>
+          <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-3 tw-rounded-xl tw-bg-slate-50 tw-p-4">
+            <Space align="center" size={8}>
+              <Typography.Text className="tw-text-xs tw-font-medium tw-text-slate-600">법정 공휴일 대상 연도</Typography.Text>
+              <InputNumber
+                value={refreshYear}
+                min={2020}
+                max={dayjs().year() + 1}
+                onChange={(v) => setRefreshYear(typeof v === 'number' ? v : dayjs().year())}
+                style={{ width: 120 }}
+                addonAfter="년"
+              />
+            </Space>
+            <Popconfirm
+              title={`${refreshYear}년 법정 공휴일을 새로 불러올까요?`}
+              description="직접 등록한 회사 휴일은 유지되고, 법정 공휴일만 해당 연도 기준으로 갱신됩니다."
+              okText="새로고침"
+              cancelText="취소"
+              onConfirm={() => refreshLegalM.mutate(refreshYear)}
+            >
+              <Button
+                icon={<ReloadOutlined />}
+                loading={refreshLegalM.isPending}
+                type="default"
+                className={SECONDARY_BUTTON_CLASS}
+              >
+                법정 공휴일 새로고침
+              </Button>
+            </Popconfirm>
+          </div>
+        </div>
       </Card>
 
       {listQ.isError ? (
         <Alert
+          className="tw-rounded-xl"
           type="error"
           showIcon
           message="공휴일 목록을 불러오지 못했습니다."
@@ -322,11 +338,11 @@ const dayHolidays = useMemo(() => holidaysOnDay(holidays, selectedDay), [holiday
         />
       ) : null}
 
-      <div className="tw-grid tw-min-h-0 tw-flex-1 tw-gap-4 lg:tw-grid-cols-[1fr_min(100%,380px)]">
-        <Card className="tw-border-slate-200/80 tw-shadow-sm" styles={{ body: { padding: 12 } }}>
+      <div className="tw-grid tw-min-h-0 tw-flex-1 tw-gap-5 lg:tw-grid-cols-[1fr_min(100%,380px)]">
+        <Card className={PANEL_CARD_CLASS} styles={{ body: { padding: 24 } }}>
           <Spin spinning={calendarLoading}>
             <Calendar
-              className="[&_.ant-picker-calendar-date-value]:tw-hidden [&_.ant-picker-content_td]:tw-px-1 [&_.ant-picker-cell-inner]:tw-min-h-[120px] [&_.ant-picker-calendar-date]:tw-w-full [&_.ant-picker-cell-selected::before]:!tw-border-0 [&_.ant-picker-cell-selected_.ant-picker-calendar-date]:!tw-bg-transparent [&_.ant-picker-cell-selected_.ant-picker-calendar-date]:!tw-shadow-none [&_.ant-picker-cell-today_.ant-picker-calendar-date]:!tw-bg-transparent [&_.ant-picker-cell-today_.ant-picker-calendar-date]:!tw-shadow-none"
+              className="[&_.ant-picker-calendar-date-value]:tw-hidden [&_.ant-picker-content_td]:tw-px-1 [&_.ant-picker-cell-inner]:tw-min-h-[116px] [&_.ant-picker-calendar-date]:tw-w-full [&_.ant-picker-cell-selected::before]:!tw-border-0 [&_.ant-picker-cell-selected_.ant-picker-calendar-date]:!tw-bg-transparent [&_.ant-picker-cell-selected_.ant-picker-calendar-date]:!tw-shadow-none [&_.ant-picker-cell-today_.ant-picker-calendar-date]:!tw-bg-transparent [&_.ant-picker-cell-today_.ant-picker-calendar-date]:!tw-shadow-none"
               fullscreen={false}
               value={panelMonth}
               onChange={(d) => {
@@ -340,14 +356,15 @@ const dayHolidays = useMemo(() => holidaysOnDay(holidays, selectedDay), [holiday
               }}
               cellRender={cellRender}
               headerRender={({ value, onChange }) => (
-                <div className="tw-mb-3 tw-space-y-2">
+                <div className="tw-mb-4 tw-space-y-3 tw-border-b tw-border-slate-100 tw-pb-3">
                   <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2">
-                    <Typography.Text strong className="tw-text-slate-800">
+                    <Typography.Text strong className="tw-text-base tw-text-slate-900">
                       {value.format('YYYY년 M월')}
                     </Typography.Text>
                     <Space wrap size="small">
                       <Button
                         size="small"
+                        className="!tw-rounded-lg"
                         onClick={() => {
                           const t = dayjs();
                           onChange(t);
@@ -356,10 +373,10 @@ const dayHolidays = useMemo(() => holidaysOnDay(holidays, selectedDay), [holiday
                       >
                         오늘
                       </Button>
-                      <Button size="small" onClick={() => onChange(value.subtract(1, 'month').startOf('month'))}>
+                      <Button size="small" className="!tw-rounded-lg" onClick={() => onChange(value.subtract(1, 'month').startOf('month'))}>
                         이전 달
                       </Button>
-                      <Button size="small" onClick={() => onChange(value.add(1, 'month').startOf('month'))}>
+                      <Button size="small" className="!tw-rounded-lg" onClick={() => onChange(value.add(1, 'month').startOf('month'))}>
                         다음 달
                       </Button>
                     </Space>
@@ -376,28 +393,38 @@ const dayHolidays = useMemo(() => holidaysOnDay(holidays, selectedDay), [holiday
             />
           </Spin>
           {!calendarLoading && holidays.length === 0 ? (
-            <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-3 !tw-text-center !tw-text-xs">
+            <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-4 !tw-rounded-xl !tw-bg-slate-50 !tw-px-4 !tw-py-3 !tw-text-center !tw-text-xs">
               등록된 공휴일이 없습니다. 상단에서 추가하거나 법정 공휴일을 불러오세요.
             </Typography.Paragraph>
           ) : null}
         </Card>
 
-        <Card className="tw-h-fit tw-border-slate-200/80 tw-shadow-sm" title="선택한 날짜">
-          <Space direction="vertical" className="tw-w-full" size={12}>
-            <Typography.Text className="tw-text-base tw-font-semibold tw-text-slate-900">
-              {selectedDay.format('YYYY년 M월 D일')} ({WEEKDAY_KO[selectedDay.day()]})
-            </Typography.Text>
-            <Button type="primary" block onClick={() => openCreateForDay(selectedDay)}>
+        <Card className={clsx(PANEL_CARD_CLASS, 'tw-h-fit')} styles={{ body: { padding: 24 } }}>
+          <Space direction="vertical" className="tw-w-full" size={16}>
+            <div className="tw-space-y-1">
+              <Typography.Text className="tw-block tw-text-sm tw-font-semibold tw-text-slate-900">
+                선택한 날짜
+              </Typography.Text>
+              <Typography.Text className="tw-block tw-text-lg tw-font-semibold tw-text-slate-950">
+                {selectedDay.format('YYYY년 M월 D일')} ({WEEKDAY_KO[selectedDay.day()]})
+              </Typography.Text>
+            </div>
+            <Button type="primary" block className={PRIMARY_BUTTON_CLASS} onClick={() => openCreateForDay(selectedDay)}>
               이 날짜에 공휴일 추가
             </Button>
             {dayHolidays.length === 0 ? (
-              <Typography.Text type="secondary" className="tw-text-sm">
-                이 날짜에 등록된 공휴일이 없습니다.
-              </Typography.Text>
+              <div className="tw-rounded-xl tw-bg-slate-50 tw-px-4 tw-py-5 tw-text-center">
+                <Typography.Text type="secondary" className="tw-text-sm">
+                  이 날짜에 등록된 공휴일이 없습니다.
+                </Typography.Text>
+              </div>
             ) : (
-              <ul className="tw-m-0 tw-list-none tw-divide-y tw-divide-slate-100 tw-p-0">
+              <ul className="tw-m-0 tw-list-none tw-space-y-2 tw-p-0">
                 {dayHolidays.map((h) => (
-                  <li key={h.companyHolidayId ?? `${h.holidayDate}-${h.holidayName}`} className="tw-py-3 first:tw-pt-0">
+                  <li
+                    key={h.companyHolidayId ?? `${h.holidayDate}-${h.holidayName}`}
+                    className="tw-rounded-xl tw-border tw-border-slate-100 tw-bg-slate-50/70 tw-p-3"
+                  >
                     <div className="tw-flex tw-items-start tw-justify-between tw-gap-2">
                       <div className="tw-min-w-0 tw-flex-1">
                         <div className="tw-font-medium tw-text-slate-900">{h.holidayName}</div>
