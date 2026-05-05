@@ -47,6 +47,11 @@ const CONTRACT_TYPE_LABEL: Record<ContractType, string> = {
   PRIVACY_CONSENT: '개인정보 수집·이용 동의서',
 };
 
+const getContractTypeLabel = (type?: string | null) => {
+  if (type && type in CONTRACT_TYPE_LABEL) return CONTRACT_TYPE_LABEL[type as ContractType];
+  return type?.trim() || '—';
+};
+
 type CreateForm = { templateName: string; contractType: ContractType; formSchema: string };
 type EditForm = { templateName: string; formSchema: string };
 type SingleSendForm = {
@@ -266,9 +271,7 @@ export function ContractTemplatesAdminPanel({
   const createContractPaperMeta = useMemo(
     () => ({
       documentName: String(createWatchTemplateName ?? '').trim() || '—',
-      categoryLabel: createWatchContractType
-        ? CONTRACT_TYPE_LABEL[createWatchContractType as ContractType] ?? String(createWatchContractType)
-        : '—',
+      categoryLabel: getContractTypeLabel(createWatchContractType ? String(createWatchContractType) : undefined),
       requestTypeCode: createWatchContractType ? String(createWatchContractType) : 'CONTRACT',
     }),
     [createWatchTemplateName, createWatchContractType],
@@ -278,7 +281,7 @@ export function ContractTemplatesAdminPanel({
   const editContractPaperMeta = useMemo(
     () => ({
       documentName: String(editWatchTemplateName ?? editing?.templateName ?? '').trim() || '—',
-      categoryLabel: editing ? CONTRACT_TYPE_LABEL[editing.contractType] : '—',
+      categoryLabel: getContractTypeLabel(editing?.contractType),
       requestTypeCode: editing?.contractType ?? '—',
     }),
     [editWatchTemplateName, editing],
@@ -1098,7 +1101,7 @@ export function ContractTemplatesAdminPanel({
                         계약 유형
                       </Typography.Text>
                       <Typography.Text className="tw-text-sm tw-text-slate-900">
-                        {CONTRACT_TYPE_LABEL[editing.contractType]} ({editing.contractType})
+                        {getContractTypeLabel(editing.contractType)} ({editing.contractType})
                       </Typography.Text>
                     </div>
                   ) : null}

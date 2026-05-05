@@ -1,5 +1,6 @@
-import { CloseOutlined, ExpandOutlined, FileAddOutlined, FileTextOutlined, FolderOutlined, SearchOutlined, ShrinkOutlined } from '@ant-design/icons';
-import { Button, Empty, Input, Spin, Tooltip, Tree, Typography } from 'antd';
+import { CloseOutlined, ExpandOutlined, FileAddOutlined, FileTextOutlined, FolderOutlined, ShrinkOutlined } from '@ant-design/icons';
+import { Button, Empty, Spin, Tooltip, Tree, Typography } from 'antd';
+import { AppSearchBar } from '@/shared/ui';
 import { AppModal } from '@/shared/ui/AppModal';
 import type { TreeProps } from 'antd';
 import type { DataNode } from 'antd/es/tree';
@@ -36,6 +37,9 @@ const REQUEST_TYPE_FOLDER_ORDER: readonly ApprovalRequestType[] = [
   'HR',
   'BUSINESS_TRIP',
 ] as const;
+
+const FORM_SELECT_MODAL_NORMAL_HEIGHT = 'min(820px, calc(100dvh - 96px))';
+const FORM_SELECT_MODAL_MAXIMIZED_HEIGHT = 'calc(100dvh - 32px)';
 
 export type ApprovalFormSelectModalProps = {
   open: boolean;
@@ -212,11 +216,12 @@ export function ApprovalFormSelectModal({
       footer={null}
       width={isMaximized ? 'calc(100vw - 32px)' : 1120}
       destroyOnHidden
-      style={{ top: isMaximized ? 16 : 48 }}
+      centered={!isMaximized}
+      style={isMaximized ? { top: 16 } : undefined}
       styles={{
         content: {
-          height: isMaximized ? 'calc(100vh - 32px)' : 820,
-          maxHeight: isMaximized ? 'calc(100vh - 32px)' : '90vh',
+          height: isMaximized ? FORM_SELECT_MODAL_MAXIMIZED_HEIGHT : FORM_SELECT_MODAL_NORMAL_HEIGHT,
+          maxHeight: isMaximized ? FORM_SELECT_MODAL_MAXIMIZED_HEIGHT : FORM_SELECT_MODAL_NORMAL_HEIGHT,
           display: 'flex',
           flexDirection: 'column',
           padding: 0,
@@ -352,12 +357,12 @@ export function ApprovalFormSelectModal({
           }`}
         >
           <div className="tw-shrink-0 tw-border-b tw-border-slate-100 tw-p-3">
-            <Input
-              allowClear
+            <AppSearchBar
               placeholder="양식제목"
-              prefix={<SearchOutlined className="tw-text-slate-400" />}
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onValueChange={setSearch}
+              onSearch={setSearch}
+              className="tw-w-full"
             />
           </div>
           <div className={`tw-min-h-0 tw-flex-1 tw-overflow-auto tw-p-2 ${PRETTY_SCROLLBAR_CLASS}`}>

@@ -19,10 +19,11 @@ import {
   Typography,
 } from 'antd';
 import type { FormInstance } from 'antd';
-import { CheckCircleTwoTone, CloseCircleTwoTone, WarningOutlined } from '@ant-design/icons';
+import { CheckCircleTwoTone, CloseCircleTwoTone, DeleteOutlined, EditOutlined, WarningOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
+import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import type { AccrualBaseCode, LeavePolicy } from '@/features/salary-service/types';
 
 type FormValues = {
@@ -43,6 +44,10 @@ type FormValues = {
 };
 
 const QK = ['salary', 'leave-policies'] as const;
+const NAVY_BUTTON_CLASS =
+  '!tw-h-11 !tw-rounded-xl !tw-border-0 !tw-bg-[#1e3a5f] !tw-px-5 !tw-font-semibold !tw-text-white !tw-shadow-none hover:!tw-bg-[#152a45] disabled:!tw-border disabled:!tw-border-slate-200 disabled:!tw-bg-slate-100 disabled:!tw-text-slate-500';
+const TABLE_ACTION_BUTTON_CLASS =
+  '!tw-inline-flex !tw-size-8 !tw-items-center !tw-justify-center !tw-rounded-lg !tw-border-0 !tw-shadow-none';
 
 function apiErrorMessage(e: unknown): string {
   if (typeof e === 'object' && e !== null && 'message' in e) {
@@ -172,11 +177,17 @@ export function AdminLeavePoliciesPage() {
       {
         title: '액션',
         key: 'actions',
-        width: 160,
+        width: 96,
+        align: 'center',
         render: (_, r) => (
-          <Space>
+          <Space size={4}>
             <Button
+              type="text"
               size="small"
+              title="수정"
+              aria-label="연차 정책 수정"
+              icon={<EditOutlined />}
+              className={`${TABLE_ACTION_BUTTON_CLASS} !tw-text-slate-500 hover:!tw-bg-slate-100 hover:!tw-text-slate-900`}
               onClick={() => {
                 setEditing(r);
                 setOpen(true);
@@ -195,18 +206,22 @@ export function AdminLeavePoliciesPage() {
                   isPayoutYn: yn(r.isPayoutYn),
                 });
               }}
-            >
-              수정
-            </Button>
+            />
             <Popconfirm
               title="삭제하시겠어요?"
               okText="삭제"
               cancelText="취소"
               onConfirm={() => r.policyId && deleteM.mutate(r.policyId)}
             >
-              <Button size="small" danger>
-                삭제
-              </Button>
+              <Button
+                type="text"
+                size="small"
+                danger
+                title="삭제"
+                aria-label="연차 정책 삭제"
+                icon={<DeleteOutlined />}
+                className={`${TABLE_ACTION_BUTTON_CLASS} hover:!tw-bg-red-50`}
+              />
             </Popconfirm>
           </Space>
         ),
@@ -260,48 +275,46 @@ export function AdminLeavePoliciesPage() {
 
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
-      <div className="tw-flex tw-flex-wrap tw-items-end tw-justify-between tw-gap-3">
-        <div>
-          <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
-            연차 정책 관리
-          </Typography.Title>
-          <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-sm">
-            연차 발생 기준, 촉진제도, 이월, 미사용 연차 수당 정책을 관리합니다.
-          </Typography.Paragraph>
-        </div>
-        <Space wrap className="tw-shrink-0">
-          {leavePromotionEnabled ? (
-            <Link to="/app/leave/promotion-no-response">
-              <Button type="default">연차 통보 미응답자 관리</Button>
-            </Link>
-          ) : null}
-          <Button
-            type="primary"
-            onClick={() => {
-              setEditing(null);
-              form.resetFields();
-              form.setFieldsValue({
-                accrualBase: 'FISCAL',
-                defaultAnnualDays: 15,
-                extraDaysPerInterval: 1,
-                extraIntervalYears: 2,
-                maxAnnualDays: 25,
-                isPromotionYn: false,
-                // 신규 정책 등록 시 표준 기본값 - 근로기준법 권고 기준치
-                promotion1stBeforeDays: 180,
-                promotion2ndBeforeDays: 60,
-                isCarryoverYn: false,
-                carryoverDays: 5,
-                isCarryoverConsentYn: false,
-                isPayoutYn: false,
-              });
-              setOpen(true);
-            }}
-          >
-            정책 추가
-          </Button>
-        </Space>
-      </div>
+      <AppWorkspacePageTitle
+        eyebrow="LEAVE"
+        title="연차 정책 관리"
+        subtitle="연차 발생 기준, 촉진제도, 이월, 미사용 연차 수당 정책을 관리합니다."
+        extra={
+          <Space wrap>
+            {leavePromotionEnabled ? (
+              <Link to="/app/leave/promotion-no-response">
+                <Button type="default">연차 통보 미응답자 관리</Button>
+              </Link>
+            ) : null}
+            <Button
+              type="primary"
+              className={NAVY_BUTTON_CLASS}
+              onClick={() => {
+                setEditing(null);
+                form.resetFields();
+                form.setFieldsValue({
+                  accrualBase: 'FISCAL',
+                  defaultAnnualDays: 15,
+                  extraDaysPerInterval: 1,
+                  extraIntervalYears: 2,
+                  maxAnnualDays: 25,
+                  isPromotionYn: false,
+                  // 신규 정책 등록 시 표준 기본값 - 근로기준법 권고 기준치
+                  promotion1stBeforeDays: 180,
+                  promotion2ndBeforeDays: 60,
+                  isCarryoverYn: false,
+                  carryoverDays: 5,
+                  isCarryoverConsentYn: false,
+                  isPayoutYn: false,
+                });
+                setOpen(true);
+              }}
+            >
+              정책 추가
+            </Button>
+          </Space>
+        }
+      />
 
       {listQ.isError ? (
         <Alert
@@ -338,13 +351,6 @@ export function AdminLeavePoliciesPage() {
         title={editing ? '연차 정책 수정' : '연차 정책 등록'}
         destroyOnHidden
         width="min(96vw, 1180px)"
-        styles={{
-          body: {
-            maxHeight: 'calc(100vh - 180px)',
-            overflowY: 'auto',
-            paddingRight: 12,
-          },
-        }}
       >
         <div className="tw-px-5 tw-py-4">
         <PolicyForm form={form} />

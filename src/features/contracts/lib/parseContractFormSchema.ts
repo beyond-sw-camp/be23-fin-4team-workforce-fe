@@ -91,7 +91,13 @@ export function coerceAdminInputInitialForForm(
   return next;
 }
 
-function isDayjsLike(value: unknown): value is { isValid: () => boolean; format: (f: string) => string; hour: () => number } {
+function isDayjsLike(value: unknown): value is {
+  isValid: () => boolean;
+  format: (f: string) => string;
+  hour?: () => number;
+  minute?: () => number;
+  second?: () => number;
+} {
   return (
     !!value &&
     typeof value === 'object' &&
@@ -110,11 +116,9 @@ export function normalizeAdminScalarForApi(value: unknown): unknown {
   }
   if (isDayjsLike(value)) {
     if (!value.isValid()) return undefined;
-    const hour = typeof value.hour === 'function' ? value.hour() : 0;
-    const minute =
-      typeof (value as { minute?: () => number }).minute === 'function' ? (value as { minute: () => number }).minute() : 0;
-    const second =
-      typeof (value as { second?: () => number }).second === 'function' ? (value as { second: () => number }).second() : 0;
+    const hour = value.hour?.() ?? 0;
+    const minute = value.minute?.() ?? 0;
+    const second = value.second?.() ?? 0;
     if (hour === 0 && minute === 0 && second === 0) return value.format('YYYY-MM-DD');
     return value.format('YYYY-MM-DD HH:mm');
   }

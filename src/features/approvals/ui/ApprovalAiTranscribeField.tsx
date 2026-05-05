@@ -165,6 +165,7 @@ export function ApprovalAiTranscribeField({ field, onPendingAudioBlobChange }: A
         let interim = '';
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const row = event.results[i];
+          if (!row) continue;
           const piece = row?.[0]?.transcript ?? '';
           if (row.isFinal) deltaFinal += piece;
           else interim += piece;

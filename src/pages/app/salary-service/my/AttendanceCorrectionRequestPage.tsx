@@ -243,7 +243,7 @@ export function AttendanceCorrectionRequestPage() {
         <ApprovalLinePicker
           value={approvalLines}
           onChange={setApprovalLines}
-          excludeMemberId={user?.memberId ?? undefined}
+                excludeMemberId={user?.id ?? undefined}
         />
       </Card>
     </Space>

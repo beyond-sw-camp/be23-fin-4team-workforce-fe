@@ -19,6 +19,7 @@ import type { ColumnsType } from 'antd/es/table';
 import dayjs, { type Dayjs } from 'dayjs';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import type { TaxSummary } from '@/features/salary-service/types';
+import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 
 function formatKrw(n: number | null | undefined) {
   if (typeof n !== 'number' || !Number.isFinite(n)) return '0';
@@ -142,51 +143,45 @@ export function AdminPayrollTaxSummaryPage() {
 
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
-      <div className="tw-flex tw-flex-wrap tw-items-end tw-justify-between tw-gap-3">
-        <div>
-          <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
-            세금 · 4대보험 집계
-          </Typography.Title>
-          <Typography.Paragraph
-            type="secondary"
-            className="!tw-mb-0 !tw-mt-1 !tw-text-sm"
-          >
-            선택한 월의 4대보험·원천세 집계입니다. 직원 부담은 실제 공제값, 회사 부담은 요율 기반 추정값입니다.
-          </Typography.Paragraph>
-        </div>
-        <Space wrap size={8}>
-          <Button
-            size="small"
-            type={isLastMonth ? 'primary' : 'default'}
-            onClick={() => setMonth(dayjs().subtract(1, 'month'))}
-          >
-            지난달
-          </Button>
-          <Button
-            size="small"
-            type={isCurrentMonth ? 'primary' : 'default'}
-            onClick={() => setMonth(dayjs())}
-          >
-            이번달
-          </Button>
-          <DatePicker
-            picker="month"
-            value={month}
-            onChange={(d) => d && setMonth(d)}
-            allowClear={false}
-            disabledDate={(d) => d.isAfter(dayjs(), 'month')}
-          />
-          <Button
-            type="primary"
-            icon={<DownloadOutlined />}
-            onClick={handleExport}
-            loading={exporting}
-            disabled={isEmpty}
-          >
-            신고용 엑셀
-          </Button>
-        </Space>
-      </div>
+      <AppWorkspacePageTitle
+        eyebrow="PAYROLL"
+        title="세금 · 4대보험 집계"
+        subtitle="선택한 월의 4대보험·원천세 집계입니다. 직원 부담은 실제 공제값, 회사 부담은 요율 기반 추정값입니다."
+        extra={(
+          <Space wrap size={8}>
+            <Button
+              size="small"
+              type={isLastMonth ? 'primary' : 'default'}
+              onClick={() => setMonth(dayjs().subtract(1, 'month'))}
+            >
+              지난달
+            </Button>
+            <Button
+              size="small"
+              type={isCurrentMonth ? 'primary' : 'default'}
+              onClick={() => setMonth(dayjs())}
+            >
+              이번달
+            </Button>
+            <DatePicker
+              picker="month"
+              value={month}
+              onChange={(d) => d && setMonth(d)}
+              allowClear={false}
+              disabledDate={(d) => d.isAfter(dayjs(), 'month')}
+            />
+            <Button
+              type="primary"
+              icon={<DownloadOutlined />}
+              onClick={handleExport}
+              loading={exporting}
+              disabled={isEmpty}
+            >
+              신고용 엑셀
+            </Button>
+          </Space>
+        )}
+      />
 
       <Alert
         type="warning"

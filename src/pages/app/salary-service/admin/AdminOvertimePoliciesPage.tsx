@@ -5,6 +5,7 @@ import { Alert, App, Button, Card, Col, DatePicker, Form, InputNumber, Row, Sele
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
+import { AppButton } from '@/shared/ui/AppButton';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import type { OvertimePolicy } from '@/features/salary-service/types';
@@ -224,7 +225,7 @@ export function AdminOvertimePoliciesPage() {
         title="연장근로 정책"
         subtitle="연장근로 계산 단위와 일/주/월 최대 근무시간 기준을 관리합니다."
         extra={(
-          <Button
+          <AppButton
             type="primary"
             onClick={() => {
               setEditing(null);
@@ -243,10 +244,10 @@ export function AdminOvertimePoliciesPage() {
             }}
           >
             정책 등록
-          </Button>
+          </AppButton>
         )}
       />
-      <Card className="tw-border-slate-200/80 tw-shadow-sm" loading={listQ.isLoading}>
+      <Card className="tw-border-slate-200/80 tw-shadow-sm [&_.ant-card-body]:!tw-p-6" loading={listQ.isLoading}>
         <Table<OvertimePolicy>
           rowKey={(r) => r.overtimePolicyId ?? `${r.effectiveFrom}-${r.effectiveTo}`}
           dataSource={rows}

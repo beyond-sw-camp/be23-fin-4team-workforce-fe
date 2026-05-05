@@ -1,16 +1,10 @@
 import { EllipsisOutlined } from '@ant-design/icons';
-import { Button, Dropdown, Typography } from 'antd';
+import { Button, Dropdown } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { MEMBER_STATUS_KO } from '@/app/locale/app-ko';
 import { AppDataTable } from '@/shared/ui/AppDataTable';
 import type { Member } from '@/features/members/model/types';
-
-const { Text } = Typography;
-
-const colTitle = (label: string) => (
-  <span className="tw-text-xs tw-font-medium tw-uppercase tw-tracking-wide tw-text-slate-500">{label}</span>
-);
 
 function statusPill(status: Member['status']) {
   const u = status.toUpperCase();
@@ -45,21 +39,18 @@ export function MembersTable({ rows, loading, total, page, pageSize, onPageChang
 
   const columns: ColumnsType<Member> = [
     {
-      title: colTitle('이름'),
+      title: '이름',
       dataIndex: 'name',
       key: 'name',
+      width: 220,
       ellipsis: true,
       onCell: (record) => ({
         onClick: () => goDetail(record.id),
       }),
-      render: (v: string) => (
-        <Text strong className="tw-text-[15px] tw-text-slate-900">
-          {v}
-        </Text>
-      ),
+      render: (v: string) => <span className="tw-text-sm tw-font-semibold tw-text-slate-900">{v}</span>,
     },
     {
-      title: colTitle('이메일'),
+      title: '이메일',
       dataIndex: 'email',
       key: 'email',
       ellipsis: true,
@@ -69,7 +60,7 @@ export function MembersTable({ rows, loading, total, page, pageSize, onPageChang
       render: (v: string) => <span className="tw-text-sm tw-text-slate-600">{v}</span>,
     },
     {
-      title: colTitle('부서'),
+      title: '부서',
       dataIndex: 'department',
       key: 'department',
       ellipsis: true,
@@ -79,7 +70,7 @@ export function MembersTable({ rows, loading, total, page, pageSize, onPageChang
       render: (v: string) => <span className="tw-text-sm tw-text-slate-700">{v}</span>,
     },
     {
-      title: colTitle('상태'),
+      title: '상태',
       dataIndex: 'status',
       key: 'status',
       width: 120,

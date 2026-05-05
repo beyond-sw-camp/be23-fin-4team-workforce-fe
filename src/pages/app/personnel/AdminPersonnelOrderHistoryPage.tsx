@@ -1,7 +1,7 @@
 /** /app/personnel-order/admin - 회사 인사발령 이력 (관리자) */
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Card, DatePicker, Empty, Input, Select, Space, Table, Tag, Typography } from 'antd';
+import { Card, DatePicker, Empty, Select, Space, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs, { type Dayjs } from 'dayjs';
 import {
@@ -9,6 +9,7 @@ import {
   type PersonnelOrder,
   type PersonnelOrderType,
 } from '@/features/personnel/api/personnelOrderApi';
+import { AppSearchBar } from '@/shared/ui';
 
 const TYPE_KO: Record<PersonnelOrderType, string> = {
   TRANSFER: '부서 이동',
@@ -131,12 +132,13 @@ export function AdminPersonnelOrderHistoryPage() {
       </div>
       <Card size="small">
         <Space wrap className="tw-mb-3">
-          <Input.Search
+          <AppSearchBar
             placeholder="부서·직급·사유 검색"
             value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            style={{ width: 240 }}
-            allowClear
+            onValueChange={setKeyword}
+            onSearch={setKeyword}
+            ariaLabel="인사발령 이력 검색"
+            className="tw-w-full tw-flex-none sm:tw-w-[300px]"
           />
           <Select
             value={typeFilter}

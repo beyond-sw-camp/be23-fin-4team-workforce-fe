@@ -30,6 +30,7 @@ import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import { memberApi } from '@/features/member/api/memberApi';
 import { AdminPayGradeTablePage } from '@/pages/app/salary-service/admin/AdminPayGradeTablePage';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
+import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import type {
   OvertimeUsage,
   Salary,
@@ -685,8 +686,8 @@ export function SalaryTab({
                 className="!tw-mb-3"
                 message={
                   <Typography.Text className="!tw-text-sm">
-                    적용 급여 정책: <Typography.Text strong>{activePolicies[0].policyName}</Typography.Text>
-                    {activePolicies[0].usePayGradeYn === 'Y' ? (
+                    적용 급여 정책: <Typography.Text strong>{activePolicies[0]?.policyName}</Typography.Text>
+                    {activePolicies[0]?.usePayGradeYn === 'Y' ? (
                       <Tag color="blue" className="!tw-ml-2">호봉제</Tag>
                     ) : (
                       <Tag color="purple" className="!tw-ml-2">연봉제</Tag>
@@ -769,13 +770,13 @@ export function SalaryTab({
                   rules={[{ required: true, message: '기본급을 입력하세요.' }, { type: 'number', min: 0 }]}
                   extra="만원 단위 권장. 연봉제는 월 기본급을 입력합니다."
                 >
-                  <InputNumber
+                  <InputNumber<number>
                     min={0}
                     step={100000}
                     style={{ width: '100%' }}
                     placeholder="예: 3,500,000"
                     formatter={(v) => (v ? `${Number(v).toLocaleString('ko-KR')}` : '')}
-                    parser={(v) => Number(String(v ?? '').replace(/[^\d]/g, '')) as 0 | number}
+                    parser={(v) => Number(String(v ?? '').replace(/[^\d]/g, ''))}
                   />
                 </Form.Item>
               );
@@ -1637,13 +1638,13 @@ function SalaryItemTemplateTab() {
             </Col>
             <Col span={12}>
               <Form.Item label="수당 금액 (월, 원)" name="defaultAmount">
-                <InputNumber
+                <InputNumber<number>
                   min={0}
                   step={10000}
                   style={{ width: '100%' }}
                   placeholder="예: 200000"
                   formatter={(v) => (v ? `${Number(v).toLocaleString('ko-KR')}` : '')}
-                  parser={(v) => Number(String(v ?? '').replace(/[^\d]/g, '')) as 0 | number}
+                  parser={(v) => Number(String(v ?? '').replace(/[^\d]/g, ''))}
                 />
               </Form.Item>
             </Col>
@@ -2113,14 +2114,11 @@ export function AdminSalarySettingsPage() {
 
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
-      <div>
-        <Typography.Title level={1} className="!tw-m-0 !tw-text-slate-900">
-          급여 정책
-        </Typography.Title>
-        <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-sm">
-          회사 단위 급여 정책, 세율, 항목을 관리합니다.
-        </Typography.Paragraph>
-      </div>
+      <AppWorkspacePageTitle
+        eyebrow="PAYROLL"
+        title="급여 정책"
+        subtitle="회사 단위 급여 정책, 세율, 항목을 관리합니다."
+      />
       <Card>
         <Tabs defaultActiveKey="policy" items={tabItems} />
       </Card>

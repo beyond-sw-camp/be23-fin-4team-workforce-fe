@@ -24,6 +24,7 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
+import { AppSearchBar } from '@/shared/ui';
 import dayjs, { type Dayjs } from 'dayjs';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import { memberApi, type MemberLookupRow } from '@/features/member/api/memberApi';
@@ -823,12 +824,13 @@ function BulkCreateModal({
           <Typography.Text strong>대상 직원 추가</Typography.Text>
           <div className="tw-mt-2 tw-space-y-2">
             <Space wrap className="tw-w-full">
-              <Input
+              <AppSearchBar
                 value={memberKeyword}
-                onChange={(e) => setMemberKeyword(e.target.value)}
+                onValueChange={setMemberKeyword}
+                onSearch={setMemberKeyword}
                 placeholder="이름·이메일·사번 검색 (비워두면 전체)"
-                style={{ width: 260 }}
-                allowClear
+                ariaLabel="연봉 협상 대상 직원 검색"
+                className="tw-w-full tw-flex-none sm:tw-w-[340px]"
               />
               <Select
                 value={memberOrgFilter}

@@ -1,8 +1,6 @@
-import { Button, Form } from 'antd';
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import type { MembersSearch } from '@/features/members/model/types';
-import { membersCtaButtonClass } from '@/features/members/ui/membersCtaButtonClass';
-import { AppSearchField } from '@/shared/ui/AppSearchField';
+import { AppSearchBar } from '@/shared/ui/AppSearchBar';
 
 type Props = {
   initialKeyword?: string;
@@ -12,23 +10,22 @@ type Props = {
 };
 
 export function MemberSearchForm({ initialKeyword, onSearch, trailing }: Props) {
+  const [keyword, setKeyword] = useState(initialKeyword ?? '');
+
+  useEffect(() => {
+    setKeyword(initialKeyword ?? '');
+  }, [initialKeyword]);
+
   return (
     <div className="tw-flex tw-w-full tw-flex-col tw-gap-2 md:tw-flex-row md:tw-items-center md:tw-gap-3">
-      <Form
-        layout="inline"
-        className="tw-flex tw-min-w-0 tw-flex-1 tw-flex-wrap tw-items-center tw-gap-2 [&_.ant-form-item]:!tw-mb-0 [&_.ant-form-item]:!tw-mr-0"
-        initialValues={{ keyword: initialKeyword }}
-        onFinish={(values: { keyword?: string }) => onSearch({ keyword: values.keyword, page: 1 })}
-      >
-        <Form.Item name="keyword" className="!tw-mb-0 !tw-mr-0 tw-min-w-0 tw-flex-1 md:tw-max-w-3xl">
-          <AppSearchField allowClear placeholder="이름·이메일·부서로 검색" aria-label="구성원 검색" />
-        </Form.Item>
-        <Form.Item className="!tw-mb-0">
-          <Button type="primary" htmlType="submit" className={membersCtaButtonClass}>
-            검색
-          </Button>
-        </Form.Item>
-      </Form>
+      <AppSearchBar
+        value={keyword}
+        onValueChange={setKeyword}
+        onSearch={(nextKeyword) => onSearch({ keyword: nextKeyword || undefined, page: 1 })}
+        placeholder="이름·이메일·부서로 검색"
+        ariaLabel="구성원 검색"
+        className="md:tw-max-w-3xl"
+      />
       {trailing ? <div className="tw-flex tw-shrink-0 tw-items-center md:tw-ml-auto">{trailing}</div> : null}
     </div>
   );

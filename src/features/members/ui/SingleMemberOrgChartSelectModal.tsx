@@ -1,6 +1,6 @@
-import { RightOutlined, SearchOutlined } from '@ant-design/icons';
+import { RightOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { Input, Spin, Tree, Typography } from 'antd';
+import { Spin, Tree, Typography } from 'antd';
 import type { DataNode } from 'antd/es/tree';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -10,6 +10,7 @@ import {
   organizationApi,
 } from '@/features/organization/api/organizationApi';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
+import { AppSearchBar } from '@/shared/ui';
 
 const MEMBER_KEY_PREFIX = 'm:';
 
@@ -145,12 +146,12 @@ export function SingleMemberOrgChartSelectModal({
       destroyOnHidden
     >
       <div className="tw-space-y-3 tw-px-5 tw-py-4">
-        <Input
-          allowClear
+        <AppSearchBar
           value={keyword}
-          onChange={(e) => setKeyword(e.target.value)}
+          onValueChange={setKeyword}
+          onSearch={setKeyword}
           placeholder="이름/직급/조직명 검색"
-          prefix={<SearchOutlined className="tw-text-slate-400" />}
+          ariaLabel="구성원 조직도 검색"
         />
         <Spin spinning={isLoading}>
           {isError ? (
@@ -184,4 +185,3 @@ export function SingleMemberOrgChartSelectModal({
     </AppDoubleActionModal>
   );
 }
-

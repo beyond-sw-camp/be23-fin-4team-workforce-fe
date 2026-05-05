@@ -1,4 +1,4 @@
-import { RightOutlined, SearchOutlined } from '@ant-design/icons';
+import { RightOutlined } from '@ant-design/icons';
 import { Avatar, Empty, Input, List, Skeleton, Spin, Tag, Tree, Typography, message } from 'antd';
 import type { DataNode } from 'antd/es/tree';
 import { useEffect, useMemo, useState } from 'react';
@@ -14,6 +14,7 @@ import {
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppModal } from '@/shared/ui/AppModal';
+import { AppSearchBar } from '@/shared/ui';
 
 /**
  * 단체 채팅방 참여자 목록 — 방 제목 클릭 시 뜨는 중앙 팝업(Modal).
@@ -290,12 +291,12 @@ export function GroupParticipantsDrawer({
       >
         <div className="tw-px-5 tw-py-4">
         <div className="tw-flex tw-flex-col tw-gap-3">
-          <Input
-            allowClear
+          <AppSearchBar
             value={inviteKeyword}
-            onChange={(e) => setInviteKeyword(e.target.value)}
+            onValueChange={setInviteKeyword}
+            onSearch={setInviteKeyword}
             placeholder="이름, 직급, 부서 검색"
-            prefix={<SearchOutlined className="tw-text-slate-400" />}
+            ariaLabel="초대 구성원 검색"
           />
           <Spin spinning={loadingOrgChart}>
             <div className="tw-max-h-[min(52vh,440px)] tw-overflow-auto tw-rounded-xl tw-border tw-border-slate-200 tw-bg-white tw-p-2">

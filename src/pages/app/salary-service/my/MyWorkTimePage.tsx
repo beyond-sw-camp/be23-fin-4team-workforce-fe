@@ -56,7 +56,8 @@ export function MyWorkTimePage() {
 
   const highest = useMemo<Severity>(() => {
     const order: Severity[] = ['normal', 'warning', 'critical', 'exceeded'];
-    return order[Math.max(order.indexOf(totalSev), order.indexOf(otSev))];
+    const index = Math.max(order.indexOf(totalSev), order.indexOf(otSev), 0);
+    return order[index] ?? 'normal';
   }, [totalSev, otSev]);
 
   const alertConfig = useMemo(() => {

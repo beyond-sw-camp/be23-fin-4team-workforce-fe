@@ -360,6 +360,7 @@ export type AnnualSalaryMonthlyRow = {
   month: number;
   payrollId?: string | null;
   payrollYearMonthDay?: string | null;
+  payrollType?: string | null;
   /** 정산 대상 월 (YYYY-MM) - 어느 월분 급여 */
   targetYearMonth?: string | null;
   payrollStatus?: PayrollStatusCode | null;
@@ -654,6 +655,9 @@ export type WorkTrip = {
   memberId?: string;
   workTripType?: WorkTripTypeCode;
   destination?: string | null;
+  destinationLat?: number | null;
+  destinationLng?: number | null;
+  destinationRadiusMeters?: number | null;
   purpose?: string | null;
   expenseAmount?: number | null;
   expenseType?: ExpenseTypeCode | null;
@@ -665,6 +669,9 @@ export type WorkTripCreatePayload = {
   date: string;
   workTripType: WorkTripTypeCode;
   destination?: string | null;
+  destinationLat?: number | null;
+  destinationLng?: number | null;
+  destinationRadiusMeters?: number | null;
   purpose?: string | null;
   expenseAmount?: number | null;
   expenseType?: ExpenseTypeCode | null;
@@ -673,6 +680,9 @@ export type WorkTripCreatePayload = {
 export type WorkTripUpdatePayload = {
   workTripType?: WorkTripTypeCode;
   destination?: string | null;
+  destinationLat?: number | null;
+  destinationLng?: number | null;
+  destinationRadiusMeters?: number | null;
   purpose?: string | null;
   expenseAmount?: number | null;
   expenseType?: ExpenseTypeCode | null;
@@ -1378,6 +1388,7 @@ export type BonusPolicy = {
 
   // 공통
   eligibilityScope?: BonusEligibilityScopeCode;
+  minTenureMonths?: number | null;
   effectiveFrom?: string;
   effectiveTo?: string | null;
   memo?: string | null;
