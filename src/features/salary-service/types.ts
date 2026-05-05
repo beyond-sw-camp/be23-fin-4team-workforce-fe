@@ -1220,6 +1220,8 @@ export type OvertimeUsage = {
   fixedLimit?: number | null;
   usagePercent?: number | null;
   exceedMinutes?: number | null;
+  /** 기간 총 근무시간 분 (정규 + 초과) */
+  totalWorkMinutes?: number | null;
 };
 
 /** 호봉표 (PayGradeTable), 호봉 → 기본급 (직급 무관) */

@@ -50,6 +50,7 @@ export const APP_MENU_LABEL: Record<string, string> = {
   '/app/payroll/retirement': '퇴직금 조회',
   '/app/salary/unused-leave': '연차수당 정산',
   '/app/salary/settings': '급여 정책',
+  '/app/admin/batch-schedule': '자동 작업 관리',
   '/app/salary/pay-grade-table': '호봉표 관리',
   '/app/salary/retirement-policy': '퇴직급여 정책',
   '/app/salary/bonus-policy': '상여/성과금 정책',

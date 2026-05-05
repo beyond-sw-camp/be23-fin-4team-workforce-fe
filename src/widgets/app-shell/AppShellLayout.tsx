@@ -521,6 +521,12 @@ function buildAppShellMenuItems(
                             title: APP_MENU_LABEL['/app/salary/settings'],
                         },
                         {
+                            key: '/app/admin/batch-schedule',
+                            icon: <ScheduleOutlined className="tw-text-lg"/>,
+                            label: APP_MENU_LABEL['/app/admin/batch-schedule'],
+                            title: APP_MENU_LABEL['/app/admin/batch-schedule'],
+                        },
+                        {
                             key: '/app/salary/retirement-policy',
                             icon: <BankOutlined className="tw-text-lg"/>,
                             label: APP_MENU_LABEL['/app/salary/retirement-policy'],

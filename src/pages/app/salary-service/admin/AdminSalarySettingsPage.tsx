@@ -1170,7 +1170,8 @@ type TaxFormValues = {
   incomeFloor?: number | null;
 };
 
-function TaxRateTab() {
+// readOnly: 회사 관리자 화면용. 등록/수정/삭제/표준불러오기 숨기고 조회만
+function TaxRateTab({ readOnly = false }: { readOnly?: boolean } = {}) {
   const { message } = App.useApp();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -1209,45 +1210,51 @@ function TaxRateTab() {
 
   const taxTypeOpts = Object.entries(TAX_TYPE_KO).map(([value, label]) => ({ value, label: `${label} (${value})` }));
 
-  const cols = useMemo<ColumnsType<TaxRate>>(() => [
-    { title: '세금 유형', dataIndex: 'taxType', key: 'taxType', render: (v) => <Tag>{TAX_TYPE_KO[v] ?? v}</Tag> },
-    { title: '적용 연도', dataIndex: 'applyYear', key: 'applyYear', width: 100 },
-    { title: '근로자 부담률', dataIndex: 'rate', key: 'rate', width: 120, render: (v) => v != null ? `${(Number(v) * 100).toFixed(2)}%` : '-' },
-    { title: '회사 부담률', dataIndex: 'employerRate', key: 'employerRate', width: 120, render: (v) => v != null ? `${(Number(v) * 100).toFixed(2)}%` : '-' },
-    {
-      title: '기준소득 상한',
-      dataIndex: 'incomeCeiling',
-      key: 'incomeCeiling',
-      width: 150,
-      render: (v) => v != null ? `${Number(v).toLocaleString('ko-KR')}원` : '-',
-    },
-    {
-      title: '기준소득 하한',
-      dataIndex: 'incomeFloor',
-      key: 'incomeFloor',
-      width: 150,
-      render: (v) => v != null ? `${Number(v).toLocaleString('ko-KR')}원` : '-',
-    },
-    {
-      title: '액션', key: 'a', width: 140,
-      render: (_, r) => (
-        <Space>
-          <Button size="small" onClick={() => {
-            setEditing(r); setOpen(true);
-            form.setFieldsValue({
-              taxType: r.taxType as TaxTypeCode,
-              rate: Number(r.rate ?? 0),
-              applyYear: r.applyYear ?? dayjs().year(),
-              employerRate: r.employerRate != null ? Number(r.employerRate) : undefined,
-              incomeCeiling: r.incomeCeiling != null ? Number(r.incomeCeiling) : undefined,
-              incomeFloor: r.incomeFloor != null ? Number(r.incomeFloor) : undefined,
-            });
-          }}>수정</Button>
-          <Popconfirm title="삭제?" okText="삭제" cancelText="취소" onConfirm={() => r.taxRateId && deleteM.mutate(r.taxRateId)}><Button size="small" danger>삭제</Button></Popconfirm>
-        </Space>
-      ),
-    },
-  ], [deleteM, form]);
+  const cols = useMemo<ColumnsType<TaxRate>>(() => {
+    const baseCols: ColumnsType<TaxRate> = [
+      { title: '세금 유형', dataIndex: 'taxType', key: 'taxType', render: (v) => <Tag>{TAX_TYPE_KO[v] ?? v}</Tag> },
+      { title: '적용 연도', dataIndex: 'applyYear', key: 'applyYear', width: 100 },
+      { title: '근로자 부담률', dataIndex: 'rate', key: 'rate', width: 120, render: (v) => v != null ? `${(Number(v) * 100).toFixed(2)}%` : '-' },
+      { title: '회사 부담률', dataIndex: 'employerRate', key: 'employerRate', width: 120, render: (v) => v != null ? `${(Number(v) * 100).toFixed(2)}%` : '-' },
+      {
+        title: '기준소득 상한',
+        dataIndex: 'incomeCeiling',
+        key: 'incomeCeiling',
+        width: 150,
+        render: (v) => v != null ? `${Number(v).toLocaleString('ko-KR')}원` : '-',
+      },
+      {
+        title: '기준소득 하한',
+        dataIndex: 'incomeFloor',
+        key: 'incomeFloor',
+        width: 150,
+        render: (v) => v != null ? `${Number(v).toLocaleString('ko-KR')}원` : '-',
+      },
+    ];
+    if (readOnly) return baseCols;
+    return [
+      ...baseCols,
+      {
+        title: '액션', key: 'a', width: 140,
+        render: (_, r) => (
+          <Space>
+            <Button size="small" onClick={() => {
+              setEditing(r); setOpen(true);
+              form.setFieldsValue({
+                taxType: r.taxType as TaxTypeCode,
+                rate: Number(r.rate ?? 0),
+                applyYear: r.applyYear ?? dayjs().year(),
+                employerRate: r.employerRate != null ? Number(r.employerRate) : undefined,
+                incomeCeiling: r.incomeCeiling != null ? Number(r.incomeCeiling) : undefined,
+                incomeFloor: r.incomeFloor != null ? Number(r.incomeFloor) : undefined,
+              });
+            }}>수정</Button>
+            <Popconfirm title="삭제?" okText="삭제" cancelText="취소" onConfirm={() => r.taxRateId && deleteM.mutate(r.taxRateId)}><Button size="small" danger>삭제</Button></Popconfirm>
+          </Space>
+        ),
+      },
+    ];
+  }, [deleteM, form, readOnly]);
 
   const yearSelectOptions = useMemo(
     () =>
@@ -1272,28 +1279,30 @@ function TaxRateTab() {
             options={yearSelectOptions}
           />
         </Space>
-        <Space>
-          <Popconfirm
-            title={`${listYear}년 표준 세율을 불러올까요?`}
-            description="이미 등록된 세율은 유지되고, 없는 유형만 추가됩니다."
-            okText="불러오기"
-            cancelText="취소"
-            onConfirm={() => initDefaultsM.mutate(listYear)}
-          >
-            <Button loading={initDefaultsM.isPending}>표준 세율 불러오기</Button>
-          </Popconfirm>
-          <Button
-            type="primary"
-            onClick={() => {
-              setEditing(null);
-              form.resetFields();
-              form.setFieldsValue({ applyYear: listYear, rate: 0 });
-              setOpen(true);
-            }}
-          >
-            세율 등록
-          </Button>
-        </Space>
+        {readOnly ? null : (
+          <Space>
+            <Popconfirm
+              title={`${listYear}년 표준 세율을 불러올까요?`}
+              description="이미 등록된 세율은 유지되고, 없는 유형만 추가됩니다."
+              okText="불러오기"
+              cancelText="취소"
+              onConfirm={() => initDefaultsM.mutate(listYear)}
+            >
+              <Button loading={initDefaultsM.isPending}>표준 세율 불러오기</Button>
+            </Popconfirm>
+            <Button
+              type="primary"
+              onClick={() => {
+                setEditing(null);
+                form.resetFields();
+                form.setFieldsValue({ applyYear: listYear, rate: 0 });
+                setOpen(true);
+              }}
+            >
+              세율 등록
+            </Button>
+          </Space>
+        )}
       </div>
       <Table<TaxRate> rowKey={(r) => r.taxRateId ?? Math.random().toString()} loading={listQ.isLoading} dataSource={listQ.data ?? []} columns={cols} pagination={{ pageSize: 20 }} locale={{ emptyText: '등록된 세율이 없습니다.' }} />
       <AppDoubleActionModal
@@ -1663,6 +1672,8 @@ export function OvertimeUsageTab() {
   const [searchMode, setSearchMode] = useState<'date' | 'month'>('date');
   const [baseDate, setBaseDate] = useState<dayjs.Dayjs>(() => dayjs());
   const [baseMonth, setBaseMonth] = useState<dayjs.Dayjs>(() => dayjs());
+  // 누적 기간 단위 - 주 / 월
+  const [periodMode, setPeriodMode] = useState<'WEEK' | 'MONTH'>('MONTH');
   // 이름 검색 - 클라이언트 필터
   const [nameKeyword, setNameKeyword] = useState<string>('');
   // 사용률 임계 필터 - 50%/80%/100% 이상
@@ -1677,8 +1688,8 @@ export function OvertimeUsageTab() {
     v == null ? '—' : `${v.toLocaleString()}분 (${(v / 60).toFixed(1)}h)`;
 
   const listQ = useQuery({
-    queryKey: ['salary', 'overtime-usage', iso],
-    queryFn: () => attendanceApi.overtimeUsage.getStatus(iso),
+    queryKey: ['salary', 'overtime-usage', iso, periodMode],
+    queryFn: () => attendanceApi.overtimeUsage.getStatus(iso, periodMode),
   });
 
   const policyQ = useQuery({
@@ -1709,66 +1720,76 @@ export function OvertimeUsageTab() {
     return { total: list.length, danger, warn, normal };
   }, [listQ.data]);
 
+  const periodLabel = periodMode === 'WEEK' ? '이번 주' : '이번 달';
   const cols = useMemo<ColumnsType<OvertimeUsage>>(() => [
-    { title: '구성원', dataIndex: 'name', key: 'name', render: (v) => v ?? '—' },
     {
-      title: '실측 OT',
+      title: '구성원',
+      dataIndex: 'name',
+      key: 'name',
+      width: 160,
+      ellipsis: true,
+      render: (v) => <span className="tw-text-sm tw-font-medium">{v ?? '—'}</span>,
+    },
+    {
+      title: `${periodLabel} 총 근무시간`,
+      dataIndex: 'totalWorkMinutes',
+      key: 'totalWorkMinutes',
+      width: 170,
+      align: 'right',
+      render: (v: number | null) => <span className="tw-text-sm">{formatMinutes(v)}</span>,
+      sorter: (a, b) => (a.totalWorkMinutes ?? 0) - (b.totalWorkMinutes ?? 0),
+    },
+    {
+      title: '초과근무시간',
       dataIndex: 'actualOvertimeMinutes',
       key: 'actualOvertimeMinutes',
-      width: 140,
+      width: 150,
       align: 'right',
-      render: (v: number | null) => formatMinutes(v),
+      render: (v: number | null) => <span className="tw-text-sm">{formatMinutes(v)}</span>,
       sorter: (a, b) => (a.actualOvertimeMinutes ?? 0) - (b.actualOvertimeMinutes ?? 0),
     },
     {
-      title: '승인 OT',
+      title: '승인된 연장근무',
       dataIndex: 'approvedMinutes',
       key: 'approvedMinutes',
-      width: 140,
+      width: 150,
       align: 'right',
-      render: (v: number | null) => formatMinutes(v),
+      render: (v: number | null) => <span className="tw-text-sm">{formatMinutes(v)}</span>,
     },
     {
-      title: '회사 월 한도',
-      dataIndex: 'fixedLimit',
-      key: 'fixedLimit',
-      width: 130,
-      align: 'right',
-      render: (v: number | null) => formatMinutes(v),
-    },
-    {
-      title: '사용률 (실측/한도)',
+      title: '한도 대비',
       dataIndex: 'usagePercent',
       key: 'usagePercent',
-      width: 140,
+      width: 120,
       align: 'right',
       render: (v: number | null) => {
         if (v == null) return '—';
-        if (v >= 100) return <Tag color="red">{v.toFixed(1)}%</Tag>;
-        if (v >= 80) return <Tag color="orange">{v.toFixed(1)}%</Tag>;
-        return <Tag>{v.toFixed(1)}%</Tag>;
+        if (v >= 100) return <Tag color="red" className="!tw-text-sm">{v.toFixed(1)}%</Tag>;
+        if (v >= 80) return <Tag color="orange" className="!tw-text-sm">{v.toFixed(1)}%</Tag>;
+        return <Tag className="!tw-text-sm">{v.toFixed(1)}%</Tag>;
       },
       sorter: (a, b) => (a.usagePercent ?? 0) - (b.usagePercent ?? 0),
       defaultSortOrder: 'descend',
     },
     {
-      title: '초과분',
+      title: '한도 초과분',
       dataIndex: 'exceedMinutes',
       key: 'exceedMinutes',
-      width: 120,
+      width: 130,
       align: 'right',
       render: (v: number | null) =>
-        !v ? <Typography.Text type="secondary">—</Typography.Text> : <Tag color="red">{v}분</Tag>,
+        !v ? <Typography.Text type="secondary" className="tw-text-sm">—</Typography.Text>
+            : <Tag color="red" className="!tw-text-sm">{v}분</Tag>,
     },
-  ], []);
+  ], [periodLabel]);
 
   return (
     <Space direction="vertical" className="tw-w-full" size={12}>
       <Alert
         type="info"
         showIcon
-        message="전 직원 누적 초과 근무 현황 모니터링 (주52시간/월한도)"
-        description="실측 OT(출퇴근 기록 기반)와 승인 OT(연장근로 신청 결재 기준)를 함께 표시합니다. 사용률은 실측 ÷ 회사 월 한도 기준."
+        message="이번 달 전 직원 초과근무 현황"
+        description="초과근무시간은 출퇴근 기록 기반 실제 초과근무이고, 승인된 연장근무는 결재 완료 기준이에요. 한도 대비 80% 이상은 주의(주황), 100% 이상은 위험(빨강)으로 표시됩니다."
       />
 
       {/* 한도 카드 + 요약 카드 */}
@@ -1818,15 +1839,25 @@ export function OvertimeUsageTab() {
       {/* 검색 필터 바 */}
       <Card size="small" className="tw-border-slate-200/80 tw-shadow-sm">
         <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-3">
-          <Space size={4}>
-            <Typography.Text type="secondary" className="!tw-text-xs">기준</Typography.Text>
+          <Space size={6}>
+            <Typography.Text type="secondary" className="!tw-text-sm">집계 기간</Typography.Text>
             <Segmented
-              size="small"
+              value={periodMode}
+              onChange={(v) => setPeriodMode(v as 'WEEK' | 'MONTH')}
+              options={[
+                { label: '주 단위', value: 'WEEK' },
+                { label: '월 단위', value: 'MONTH' },
+              ]}
+            />
+          </Space>
+          <Space size={6}>
+            <Typography.Text type="secondary" className="!tw-text-sm">기준일</Typography.Text>
+            <Segmented
               value={searchMode}
               onChange={(v) => setSearchMode(v as 'date' | 'month')}
               options={[
-                { label: '기준일', value: 'date' },
-                { label: '월 단위', value: 'month' },
+                { label: '특정일', value: 'date' },
+                { label: '월 말일', value: 'month' },
               ]}
             />
           </Space>
@@ -1906,7 +1937,8 @@ export function OvertimeUsageTab() {
  * 매년 1월 새 표 등록 시 다음 달 급여 계산부터 정확한 소득세 적용
  * ====================================================================== */
 
-function SimplifiedTaxTableTab() {
+// readOnly: 회사 관리자 화면용. 업로드 영역 숨기고 등록 현황만
+function SimplifiedTaxTableTab({ readOnly = false }: { readOnly?: boolean } = {}) {
   const { message } = App.useApp();
   const qc = useQueryClient();
   const [year, setYear] = useState<number>(() => dayjs().year());
@@ -1958,50 +1990,65 @@ function SimplifiedTaxTableTab() {
       <Alert
         type="info"
         showIcon
-        message="간이세액표는 국세청 홈택스에서 매년 고시됩니다."
+        message={
+          readOnly
+            ? '간이세액표는 국세청 고시 기준이며 SaaS 운영자가 매년 일괄 등록해요.'
+            : '간이세액표는 국세청 홈택스에서 매년 고시됩니다.'
+        }
         description={
-          <span className="tw-text-xs">
-            홈택스 → 「세무업무별 서비스」 → 「원천징수」 → 「근로소득간이세액표」 에서 엑셀 다운로드 후 업로드하세요.
-            같은 연도 재업로드 시 기존 행은 자동 갱신됩니다.
-          </span>
+          readOnly ? null : (
+            <span className="tw-text-xs">
+              홈택스 -&gt; 세무업무별 서비스 -&gt; 원천징수 -&gt; 근로소득간이세액표 에서 엑셀 다운로드 후 업로드하세요.
+              같은 연도 재업로드 시 기존 행은 자동 갱신됩니다.
+            </span>
+          )
         }
       />
 
-      <Card title="신규 업로드">
-        <Space direction="vertical" className="tw-w-full" size={12}>
+      {readOnly ? (
+        <Card title="조회 연도">
           <Space wrap>
-            <span className="tw-text-sm">적용 연도</span>
-            <Select
-              value={year}
-              onChange={setYear}
-              options={yearOptions}
-              style={{ width: 140 }}
-            />
+            <span className="tw-text-sm">연도</span>
+            <Select value={year} onChange={setYear} options={yearOptions} style={{ width: 140 }} />
           </Space>
+        </Card>
+      ) : (
+        <Card title="신규 업로드">
+          <Space direction="vertical" className="tw-w-full" size={12}>
+            <Space wrap>
+              <span className="tw-text-sm">적용 연도</span>
+              <Select
+                value={year}
+                onChange={setYear}
+                options={yearOptions}
+                style={{ width: 140 }}
+              />
+            </Space>
 
-          <Space wrap>
-            <input
-              type="file"
-              accept=".xlsx,.xls"
-              onChange={(e) => {
-                const f = e.target.files?.[0] ?? null;
-                setPickedFile(f);
-                setFileName(f?.name ?? null);
-              }}
-            />
-            {fileName && <span className="tw-text-xs tw-text-slate-500">{fileName}</span>}
+            <Space wrap>
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={(e) => {
+                  const f = e.target.files?.[0] ?? null;
+                  setPickedFile(f);
+                  setFileName(f?.name ?? null);
+                }}
+              />
+              {fileName && <span className="tw-text-xs tw-text-slate-500">{fileName}</span>}
+            </Space>
+
+            <Button
+              type="primary"
+              onClick={handleUpload}
+              loading={uploading}
+              disabled={!pickedFile}
+            >
+              업로드
+            </Button>
           </Space>
-
-          <Button
-            type="primary"
-            onClick={handleUpload}
-            loading={uploading}
-            disabled={!pickedFile}
-          >
-            업로드
-          </Button>
-        </Space>
-      </Card>
+        </Card>
+      )}
 
       <Card title="등록 현황">
         <Space direction="vertical" className="tw-w-full" size={8}>
@@ -2026,11 +2073,13 @@ function SimplifiedTaxTableTab() {
         </Space>
       </Card>
 
-      <Alert
-        type="warning"
-        showIcon
-        message="간이세액표가 등록되지 않은 연도는 소득세가 0원으로 계산됩니다."
-      />
+      {readOnly ? null : (
+        <Alert
+          type="warning"
+          showIcon
+          message="간이세액표가 등록되지 않은 연도는 소득세가 0원으로 계산됩니다."
+        />
+      )}
     </Space>
   );
 }
@@ -2049,15 +2098,16 @@ export function AdminSalarySettingsPage() {
     [salaryPoliciesQ.data],
   );
 
+  // 세율 / 간이세액표는 SaaS 운영자가 전 회사 공통 관리, 회사 관리자에겐 읽기 전용으로 노출
   const tabItems = useMemo(
     () => [
       { key: 'policy', label: '급여 정책', children: <SalaryPolicyTab /> },
       ...(hasPayGradePolicy
         ? [{ key: 'pay-grade-table', label: '호봉표 관리', children: <AdminPayGradeTablePage embedded /> }]
         : []),
-      { key: 'tax', label: '세율', children: <TaxRateTab /> },
       { key: 'template', label: '지급 항목(수당)', children: <SalaryItemTemplateTab /> },
-      { key: 'simplified-tax', label: '간이세액표', children: <SimplifiedTaxTableTab /> },
+      { key: 'tax', label: '세율 (조회)', children: <TaxRateTab readOnly /> },
+      { key: 'simplified-tax', label: '간이세액표 (조회)', children: <SimplifiedTaxTableTab readOnly /> },
     ],
     [hasPayGradePolicy],
   );
