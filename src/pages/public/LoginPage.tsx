@@ -4,6 +4,8 @@ import { useNavigate } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
 import { APP_POST_LOGIN_PATH } from '@/app/config/paths';
 import { useAuth } from '@/features/auth/useAuth';
+import { decodeJwtPayload } from '@/shared/auth/jwtTenantClaims';
+import { getAccessToken } from '@/shared/stores/authTokenStore';
 import brandLogo from '@/shared/assets/brand/logo.png';
 import { AppButton } from '@/shared/ui/AppButton';
 
@@ -57,6 +59,16 @@ function LoginPage({ embedded = false }: LoginPageProps) {
         password: values.password,
       });
       persistSavedLoginEmail(values.email, values.rememberSaveId);
+
+      // SaaS 운영자 분기 - actor_type=OPERATOR 면 운영자 콘솔로
+      void session;
+      const tokenPayload = decodeJwtPayload(getAccessToken());
+      const actorType = (tokenPayload?.actor_type ?? tokenPayload?.actorType) as string | undefined;
+      if (actorType === 'OPERATOR') {
+        void navigate({ to: '/saas/dashboard', replace: true });
+        return;
+      }
+
       if (session.user.flags?.mustChangePassword) {
         void navigate({ to: '/change-password', search: { forced: true } });
         return;

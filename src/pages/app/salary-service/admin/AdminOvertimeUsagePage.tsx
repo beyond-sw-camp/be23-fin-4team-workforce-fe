@@ -14,10 +14,10 @@ export function AdminOvertimeUsagePage() {
       <div className="tw-flex tw-flex-wrap tw-items-start tw-justify-between tw-gap-3">
         <div>
           <Typography.Title level={1} className="!tw-m-0 !tw-text-slate-900">
-            초과 근무 현황
+            초과근무 현황
           </Typography.Title>
           <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-sm">
-            직원들의 이번 달 실측/승인 초과 근무 시간과 회사 월 한도(주52시간/월한도) 대비 사용률을 확인합니다.
+            이번 달 직원별 초과근무시간과 월 한도 대비 비율을 확인할 수 있어요.
           </Typography.Paragraph>
         </div>
         <Button onClick={() => navigate({ to: '/app/attendance/company' })}>

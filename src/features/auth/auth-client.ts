@@ -521,8 +521,24 @@ export const authClient: AuthClient = {
       return currentSession;
     }
 
-    if (!getAccessToken()) {
+    const token = getAccessToken();
+    if (!token) {
       return null;
+    }
+
+    // SaaS 운영자 토큰은 일반 멤버 API(/member/me/permissions 등) 호출 시 403 -> me 호출 skip
+    const payload = decodeJwtPayload(token);
+    const actorType = (payload?.actor_type ?? payload?.actorType) as string | undefined;
+    if (actorType === 'OPERATOR') {
+      const operatorMe = {
+        memberId: '',
+        name: (payload?.name as string) ?? 'SaaS 운영자',
+        email: (payload?.sub as string) ?? '',
+        permissions: [],
+        flags: { mustChangePassword: false, onboardingRequired: false, emailVerificationRequired: false },
+      } as unknown as Me;
+      currentSession = { user: operatorMe };
+      return currentSession;
     }
 
     try {

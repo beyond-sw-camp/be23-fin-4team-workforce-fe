@@ -712,10 +712,13 @@ export const attendanceApi = {
 
   /** /attendance/overtime-usage - 직원 월별 OT 누적 vs 회사 월 한도 현황 */
   overtimeUsage: {
-    // 관리자 전체 현황 (사용률 내림차순)
-    async getStatus(baseDate?: string): Promise<OvertimeUsage[]> {
+    // 관리자 전체 현황 (사용률 내림차순). mode: 'WEEK' | 'MONTH' (default MONTH)
+    async getStatus(baseDate?: string, mode?: 'WEEK' | 'MONTH'): Promise<OvertimeUsage[]> {
+      const params: Record<string, string> = {};
+      if (baseDate) params.baseDate = baseDate;
+      if (mode) params.mode = mode;
       const { data } = await httpClient.get(`${BASE}/attendance/overtime-usage/status`, {
-        params: baseDate ? { baseDate } : undefined,
+        params: Object.keys(params).length ? params : undefined,
       });
       const unwrapped = unwrapApiResponse<OvertimeUsage[] | null>(data);
       return Array.isArray(unwrapped) ? unwrapped : [];

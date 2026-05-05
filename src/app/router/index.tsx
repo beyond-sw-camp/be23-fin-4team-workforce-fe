@@ -8,12 +8,18 @@ import {
 import { z } from 'zod';
 import type { AppRouterContext } from '@/app/router/types';
 import { requireAuth, requireMemberDirectoryAccess, requirePermissions } from '@/app/router/guards';
+import { decodeJwtPayload } from '@/shared/auth/jwtTenantClaims';
+import { getAccessToken } from '@/shared/stores/authTokenStore';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import { hasActiveNegotiationSalaryPolicy } from '@/features/salary-service/lib/salaryPolicyAccess';
 import { PERM, canManageOrganizationScopedGoals } from '@/features/permissions/backend-permissions';
 import { HomePublicLayout } from '@/pages/public/HomePublicLayout';
 import { LandingHomePage } from '@/pages/public/LandingHomePage';
 import LoginPage from '@/pages/public/LoginPage';
+import SaasDashboardPage from '@/pages/saas/SaasDashboardPage';
+import SaasSchedulesPage from '@/pages/saas/SaasSchedulesPage';
+import SaasTaxTablePage from '@/pages/saas/SaasTaxTablePage';
+import SaasTaxRatePage from '@/pages/saas/SaasTaxRatePage';
 import { FindPasswordPage } from '@/pages/public/FindPasswordPage';
 import { ChangePasswordPage } from '@/pages/public/ChangePasswordPage';
 import { ResetPasswordPage } from '@/pages/public/ResetPasswordPage';
@@ -144,6 +150,13 @@ const appLayoutRoute = createRoute({
   component: AppShellLayout,
   beforeLoad: ({ context }) => {
     requireAuth(context);
+    // SaaS 운영자는 일반 앱 영역 접근 차단 -> 운영자 콘솔로 redirect
+    const token = getAccessToken();
+    const payload = decodeJwtPayload(token);
+    const actorType = (payload?.actor_type ?? payload?.actorType) as string | undefined;
+    if (actorType === 'OPERATOR') {
+      throw redirect({ to: '/saas/dashboard' });
+    }
   },
 });
 
@@ -882,6 +895,19 @@ const adminSalarySettingsRoute = createRoute({
   },
 });
 
+// 회사 관리자용 자동 작업 관리 페이지
+const AdminBatchSchedulePageLazy = lazy(() => import('@/pages/app/salary-service/admin/AdminBatchSchedulePage'));
+const adminBatchScheduleRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/admin/batch-schedule',
+  component: withSuspense(AdminBatchSchedulePageLazy),
+  beforeLoad: ({ context }) => {
+    if (!context.auth.user?.isSystemAdmin) {
+      throw redirect({ to: '/app/payroll' });
+    }
+  },
+});
+
 // 수당 관리는 월 급여대장 탭으로 통합 — 기존 URL 진입 시 탭으로 redirect
 const adminMemberAllowanceRoute = createRoute({
   getParentRoute: () => appBaseRoute,
@@ -972,6 +998,39 @@ const genericRoutes = genericPaths.map((path) => {
 const forbiddenRoute = createRoute({ getParentRoute: () => rootRoute, path: '/403', component: ForbiddenPage });
 const notFoundRoute = createRoute({ getParentRoute: () => rootRoute, path: '/404', component: NotFoundPage });
 
+// SaaS 운영자 - 일반 layout 무관 단독 라우트 (로그인은 일반 /login 통합)
+function requireOperator() {
+  const payload = decodeJwtPayload(getAccessToken());
+  const actorType = (payload?.actor_type ?? payload?.actorType) as string | undefined;
+  if (actorType !== 'OPERATOR') {
+    throw redirect({ to: '/login' });
+  }
+}
+const saasDashboardRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/saas/dashboard',
+  beforeLoad: () => requireOperator(),
+  component: SaasDashboardPage,
+});
+const saasSchedulesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/saas/schedules',
+  beforeLoad: () => requireOperator(),
+  component: SaasSchedulesPage,
+});
+const saasTaxTableRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/saas/tax-table',
+  beforeLoad: () => requireOperator(),
+  component: SaasTaxTablePage,
+});
+const saasTaxRateRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/saas/tax-rate',
+  beforeLoad: () => requireOperator(),
+  component: SaasTaxRatePage,
+});
+
 const routeTree = rootRoute.addChildren([
   publicLayoutRoute.addChildren([
     homeRoute.addChildren([homeIndexRoute, loginRoute, companyOnboardingRoute]),
@@ -1047,6 +1106,7 @@ const routeTree = rootRoute.addChildren([
       myRetirementInquiryRoute,
       myNegotiationHistoryRoute,
       adminSalarySettingsRoute,
+      adminBatchScheduleRoute,
       adminPayGradeTableRoute,
       adminUnusedLeavePayoutRoute,
       adminRetirementPolicyRoute,
@@ -1055,6 +1115,10 @@ const routeTree = rootRoute.addChildren([
       ...genericRoutes,
     ]),
   ]),
+  saasDashboardRoute,
+  saasSchedulesRoute,
+  saasTaxTableRoute,
+  saasTaxRateRoute,
   forbiddenRoute,
   notFoundRoute,
 ]);
