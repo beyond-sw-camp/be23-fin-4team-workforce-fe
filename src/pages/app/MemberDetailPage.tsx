@@ -1,11 +1,9 @@
 import {
   BankOutlined,
   CalendarOutlined,
-  CarryOutOutlined,
   DollarOutlined,
   EditOutlined,
   HistoryOutlined,
-  IdcardOutlined,
   MailOutlined,
   PauseCircleOutlined,
   RiseOutlined,
@@ -14,7 +12,7 @@ import {
   UnlockOutlined,
 } from '@ant-design/icons';
 import { Alert, Avatar, Card, Modal, Spin, Table, Tag, Typography } from 'antd';
-import { Link, useNavigate, useParams } from '@tanstack/react-router';
+import { useNavigate, useParams } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import type { ReactNode } from 'react';
@@ -36,6 +34,7 @@ import { PermissionGuard } from '@/features/permissions/permission-guard';
 import { usePermissions } from '@/features/permissions/usePermissionsHook';
 import { AppButton } from '@/shared/ui/AppButton';
 import { twMerge } from 'tailwind-merge';
+import { MemberHrEditModal } from '@/features/members/ui/MemberHrEditModal';
 
 function memberStatusLabel(code: string | undefined): string {
   if (!code?.trim()) return '—';
@@ -76,7 +75,7 @@ function ProfileInfoRow({
   valueTitle?: string;
 }) {
   return (
-    <div className="tw-flex tw-items-start tw-justify-between tw-gap-4 tw-py-2.5 tw-text-sm">
+    <div className="tw-grid tw-grid-cols-[112px_minmax(0,1fr)] tw-items-start tw-gap-4 tw-py-2.5 tw-text-sm">
       <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2.5 tw-text-slate-500">
         <span className="tw-flex tw-size-4 tw-shrink-0 tw-items-center tw-justify-center tw-text-[15px] tw-leading-none tw-text-slate-400">
           {icon}
@@ -84,7 +83,7 @@ function ProfileInfoRow({
         <span className="tw-shrink-0">{label}</span>
       </div>
       <div
-        className="tw-min-w-0 tw-max-w-[70%] tw-break-words tw-text-right tw-text-sm tw-font-semibold tw-text-slate-900"
+        className="tw-min-w-0 tw-break-words tw-text-right tw-text-sm tw-font-semibold tw-text-slate-900"
         title={valueTitle}
       >
         {value}
@@ -95,9 +94,11 @@ function ProfileInfoRow({
 
 function SectionBlock({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="tw-pt-1">
-      <div className="tw-mb-2 tw-text-xs tw-font-bold tw-tracking-wide tw-text-slate-500">{title}</div>
-      <div className="tw-divide-y tw-divide-slate-100">{children}</div>
+    <div className="tw-rounded-xl tw-border tw-border-slate-200 tw-bg-white">
+      <div className="tw-border-b tw-border-slate-200 tw-bg-white tw-px-4 tw-py-3 tw-text-sm tw-font-bold tw-text-slate-900">
+        {title}
+      </div>
+      <div className="tw-divide-y tw-divide-slate-100 tw-px-4">{children}</div>
     </div>
   );
 }
@@ -107,6 +108,7 @@ export function MemberDetailPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [hrEditOpen, setHrEditOpen] = useState(false);
   const { hasPermission } = usePermissions();
   const { user } = useAuth();
 
@@ -198,20 +200,20 @@ export function MemberDetailPage() {
     <div className="tw-w-full">
       <DetailPageHeader shareTitle={`${member.name} — 구성원 상세`} shareText={member.email} />
 
-      <div className="tw-flex tw-w-full tw-flex-col tw-gap-6 lg:tw-flex-row lg:tw-items-start lg:tw-gap-8">
-        <aside className="tw-w-full tw-shrink-0 lg:tw-sticky lg:tw-top-4 lg:tw-w-[min(100%,560px)]">
+      <div className="tw-grid tw-w-full tw-grid-cols-1 tw-gap-4 xl:tw-grid-cols-2">
+        <aside className="tw-w-full tw-min-w-0">
           <div className="tw-overflow-hidden tw-rounded-2xl tw-border tw-border-slate-200 tw-bg-white tw-shadow-sm">
-            <div className="tw-border-b tw-border-slate-100 tw-bg-slate-50/40 tw-px-5 tw-pb-5 tw-pt-4">
-              <div className="tw-flex tw-flex-col tw-items-center tw-px-1 tw-pt-2">
-                <div className="tw-relative tw-mb-4">
+            <div className="tw-border-b tw-border-slate-100 tw-bg-white tw-px-5 tw-py-4">
+              <div className="tw-flex tw-items-start tw-gap-4">
+                <div className="tw-relative tw-shrink-0">
                   <Avatar
                     shape="square"
-                    size={88}
+                    size={64}
                     src={profileSrc}
                     className={
                       profileSrc
-                        ? '[&_img]:tw-object-cover !tw-rounded-3xl tw-shadow-sm'
-                        : '!tw-rounded-3xl !tw-bg-sky-100 !tw-text-[22px] !tw-font-bold !tw-text-blue-600 tw-shadow-sm'
+                        ? '[&_img]:tw-object-cover !tw-rounded-2xl tw-shadow-sm'
+                        : '!tw-rounded-2xl !tw-bg-sky-100 !tw-text-[18px] !tw-font-bold !tw-text-blue-600 tw-shadow-sm'
                     }
                   >
                     {initialsFromName(member.name)}
@@ -221,34 +223,67 @@ export function MemberDetailPage() {
                     aria-hidden
                   />
                 </div>
-                <div className="tw-flex tw-w-full tw-flex-wrap tw-items-center tw-justify-center tw-gap-2">
-                  <h2 className="tw-m-0 tw-text-center tw-text-xl tw-font-bold tw-leading-tight tw-tracking-tight tw-text-slate-900">
-                    {member.name}
-                  </h2>
-                  {member.jobGradeName ? (
-                    <span className="tw-rounded-md tw-bg-slate-100 tw-px-2 tw-py-0.5 tw-text-xs tw-font-medium tw-text-slate-600">
-                      {member.jobGradeName}
-                    </span>
+                <div className="tw-min-w-0 tw-flex-1">
+                  <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-x-2 tw-gap-y-1">
+                    <h2 className="tw-m-0 tw-min-w-0 tw-text-xl tw-font-bold tw-leading-tight tw-tracking-tight tw-text-slate-900">
+                      {member.name}
+                    </h2>
+                    {member.jobGradeName ? (
+                      <span className="tw-rounded-md tw-bg-slate-100 tw-px-2 tw-py-0.5 tw-text-xs tw-font-medium tw-text-slate-600">
+                        {member.jobGradeName}
+                      </span>
+                    ) : null}
+                  </div>
+                  {orgTitleLine ? (
+                    <div className="tw-mt-2 tw-flex tw-max-w-full tw-items-start tw-text-sm tw-text-slate-500">
+                      <span className="tw-leading-snug">{orgTitleLine}</span>
+                    </div>
                   ) : null}
+                  <div className="tw-mt-2 tw-flex tw-flex-wrap tw-gap-1.5">
+                    <span className="tw-inline-flex tw-h-7 tw-items-center tw-rounded-full tw-bg-emerald-50 tw-px-3 tw-text-xs tw-font-semibold tw-text-emerald-700">
+                      {memberStatusLabel(member.memberStatus)}
+                    </span>
+                    <span className="tw-inline-flex tw-h-7 tw-items-center tw-rounded-full tw-bg-slate-100 tw-px-3 tw-text-xs tw-font-semibold tw-text-slate-600">
+                      계정 {accountStatusLabel(member.accountStatus)}
+                    </span>
+                  </div>
                 </div>
-                {orgTitleLine ? (
-                  <div className="tw-mt-2 tw-flex tw-max-w-full tw-items-start tw-justify-center tw-gap-1.5 tw-text-center tw-text-sm tw-text-slate-500">
-                    <BankOutlined className="tw-mt-0.5 tw-shrink-0 tw-text-slate-400" />
-                    <span className="tw-leading-snug">{orgTitleLine}</span>
+                {canOpenMemberHistory || hasPermission(PERM.MEMBER_UPDATE) ? (
+                  <div className="tw-flex tw-shrink-0 tw-flex-wrap tw-justify-end tw-gap-2">
+                    <PermissionGuard required={PERM.MEMBER_UPDATE}>
+                      <button
+                        type="button"
+                        onClick={() => setHrEditOpen(true)}
+                        className={twMerge(
+                          membersCtaButtonClass,
+                          'tw-box-border tw-flex !tw-h-10 !tw-min-h-10 tw-items-center tw-justify-center tw-gap-2 !tw-rounded-xl tw-px-4 tw-text-[13px] tw-font-bold tw-text-white tw-no-underline hover:tw-text-white',
+                        )}
+                      >
+                        <EditOutlined />
+                        인사 정보 수정
+                      </button>
+                    </PermissionGuard>
+                    {canOpenMemberHistory ? (
+                      <AppButton
+                        variant="secondary"
+                        className="!tw-h-10 !tw-min-h-10 !tw-rounded-xl !tw-px-4 !tw-text-[13px] !tw-font-bold"
+                        icon={<HistoryOutlined />}
+                        onClick={() => setHistoryOpen(true)}
+                      >
+                        직원 이력 보기
+                      </AppButton>
+                    ) : null}
                   </div>
                 ) : null}
-                <p className="tw-mb-0 tw-mt-2 tw-text-center tw-text-xs tw-text-slate-500">
-                  {memberStatusLabel(member.memberStatus)} · 계정 {accountStatusLabel(member.accountStatus)}
-                </p>
               </div>
             </div>
 
-            <div className="tw-space-y-6 tw-px-6 tw-py-5">
+            <div className="tw-space-y-4 tw-bg-white tw-px-5 tw-py-5">
               <SectionBlock title="기본 정보">
-                <ProfileInfoRow icon={<IdcardOutlined />} label="사번" value={member.sabun || '—'} />
-                <ProfileInfoRow icon={<CalendarOutlined />} label="입사일" value={member.joinDate} />
+                <ProfileInfoRow icon={<BankOutlined />} label="사번" value={member.sabun || '—'} />
+                <ProfileInfoRow icon={<CalendarOutlined />} label="입사일" value={member.joinDate || '—'} />
                 <ProfileInfoRow
-                  icon={<CarryOutOutlined />}
+                  icon={<RiseOutlined />}
                   label="고용 형태"
                   value={EMPLOYMENT_TYPE_KO[member.employmentType] ?? member.employmentType}
                 />
@@ -261,7 +296,6 @@ export function MemberDetailPage() {
               <SectionBlock title="연락·식별">
                 <ProfileInfoRow icon={<MailOutlined />} label="이메일" value={member.email} valueTitle={member.email} />
               </SectionBlock>
-
               {canViewSalary ? (
                 <SectionBlock title="급여">
                   {salaryQuery.isLoading ? (
@@ -303,40 +337,20 @@ export function MemberDetailPage() {
               ) : null}
             </div>
 
-            {(canOpenMemberHistory || hasPermission(PERM.MEMBER_UPDATE)) ? (
-              <div className="tw-space-y-2 tw-border-t tw-border-slate-100 tw-bg-slate-50/30 tw-px-6 tw-py-5">
-                <PermissionGuard required={PERM.MEMBER_UPDATE}>
-                  <Link
-                    to="/app/members/$memberId/edit"
-                    params={{ memberId }}
-                    className={twMerge(
-                      membersCtaButtonClass,
-                      'tw-box-border tw-flex tw-w-full tw-items-center tw-justify-center tw-gap-2 tw-text-[15px] tw-font-semibold tw-text-white tw-no-underline hover:tw-text-white',
-                    )}
-                  >
-                    <EditOutlined />
-                    인사 정보 수정
-                  </Link>
-                </PermissionGuard>
-                {canOpenMemberHistory ? (
-                  <AppButton
-                    variant="secondary"
-                    className="tw-w-full !tw-font-bold"
-                    icon={<HistoryOutlined />}
-                    onClick={() => setHistoryOpen(true)}
-                  >
-                    직원 이력 보기
-                  </AppButton>
-                ) : null}
-              </div>
-            ) : null}
           </div>
         </aside>
 
         <main className="tw-min-w-0 tw-flex-1">
           <Card
             className="tw-overflow-hidden tw-rounded-2xl tw-border-slate-200 tw-shadow-sm"
-            title={<span className="tw-text-base tw-font-bold tw-text-slate-900">계정·인사 조치</span>}
+            title={
+              <div>
+                <span className="tw-block tw-text-base tw-font-bold tw-text-slate-900">계정·인사 조치</span>
+                <span className="tw-mt-1 tw-block tw-text-xs tw-font-normal tw-text-slate-500">
+                  접속 상태와 재직 상태를 즉시 변경합니다.
+                </span>
+              </div>
+            }
             styles={{ body: { paddingTop: 16 } }}
           >
             <div className="tw-flex tw-flex-wrap tw-gap-2">
@@ -367,9 +381,9 @@ export function MemberDetailPage() {
                 복직 처리
               </AppButton>
             </div>
-            <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-4 !tw-text-xs tw-leading-relaxed">
+            <div className="tw-mt-4 tw-rounded-xl tw-bg-slate-50 tw-px-4 tw-py-3 tw-text-xs tw-leading-relaxed tw-text-slate-500">
               휴직 또는 복직 처리 시 해당 구성원의 서비스 접속 권한이 즉시 변경됩니다.
-            </Typography.Paragraph>
+            </div>
           </Card>
 
           {canViewSalary ? (
@@ -395,12 +409,13 @@ export function MemberDetailPage() {
                 <Alert
                   type="warning"
                   showIcon
+                  className="!tw-rounded-xl"
                   message="기본급이 아직 등록되지 않았습니다."
                   description="입사 시 자동으로 0원(연봉제) 또는 1호봉(호봉제) 으로 임시 생성되었습니다. [급여 등록] 으로 실제 금액을 등록해 주세요."
                 />
               ) : (
-                <div className="tw-grid tw-grid-cols-2 md:tw-grid-cols-4 tw-gap-3 tw-text-sm">
-                  <div>
+                <div className="tw-grid tw-grid-cols-2 tw-gap-3 tw-text-sm md:tw-grid-cols-4">
+                  <div className="tw-rounded-xl tw-bg-slate-50 tw-px-3 tw-py-3">
                     <div className="tw-text-xs tw-text-slate-500">기본급</div>
                     <div className="tw-mt-1 tw-text-base tw-font-semibold tw-text-slate-900">
                       {activeSalary?.baseSalary != null
@@ -409,20 +424,20 @@ export function MemberDetailPage() {
                     </div>
                   </div>
                   {activeSalary?.step != null ? (
-                    <div>
+                    <div className="tw-rounded-xl tw-bg-slate-50 tw-px-3 tw-py-3">
                       <div className="tw-text-xs tw-text-slate-500">호봉</div>
                       <div className="tw-mt-1 tw-text-base tw-font-semibold tw-text-slate-900">
                         {activeSalary.step}호봉
                       </div>
                     </div>
                   ) : null}
-                  <div>
+                  <div className="tw-rounded-xl tw-bg-slate-50 tw-px-3 tw-py-3">
                     <div className="tw-text-xs tw-text-slate-500">적용 시작</div>
                     <div className="tw-mt-1 tw-text-base tw-text-slate-900">
                       {activeSalary?.effectiveFrom ?? '—'}
                     </div>
                   </div>
-                  <div>
+                  <div className="tw-rounded-xl tw-bg-slate-50 tw-px-3 tw-py-3">
                     <div className="tw-text-xs tw-text-slate-500">부양가족수</div>
                     <div className="tw-mt-1 tw-text-base tw-text-slate-900">
                       {activeSalary?.dependentCount ?? 1}
@@ -430,7 +445,7 @@ export function MemberDetailPage() {
                   </div>
                 </div>
               )}
-              <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-4 !tw-text-xs">
+              <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-4 !tw-text-xs tw-leading-relaxed">
                 연봉 인상·직급 변경 등 급여 이력을 추가할 때도 [급여 등록] 으로 새 이력을 만듭니다.
               </Typography.Paragraph>
             </Card>
@@ -521,6 +536,7 @@ export function MemberDetailPage() {
           />
         )}
       </Modal>
+      <MemberHrEditModal memberId={memberId} open={hrEditOpen} onClose={() => setHrEditOpen(false)} />
     </div>
   );
 }

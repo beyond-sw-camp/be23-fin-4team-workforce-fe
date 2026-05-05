@@ -312,6 +312,11 @@ export const organizationApi = {
     return unwrapApiResponse<null>(response.data);
   },
 
+  async reorder(organizationIds: string[]) {
+    const response = await httpClient.put('/organization/reorder', organizationIds);
+    return unwrapApiResponse<null>(response.data);
+  },
+
   async createJobGrade(payload: CreateJobGradePayload) {
     const response = await httpClient.post('/organization/job-grade/create', payload);
     return unwrapApiResponse<Record<string, unknown>>(response.data);
@@ -325,6 +330,11 @@ export const organizationApi = {
   async updateJobGrade(jobGradeId: string, payload: UpdateJobGradePayload) {
     const response = await httpClient.put(`/organization/job-grade/${jobGradeId}`, payload);
     return unwrapApiResponse<Record<string, unknown>>(response.data);
+  },
+
+  async reorderJobGrades(jobGradeIds: string[]) {
+    const response = await httpClient.put('/organization/job-grade/reorder', jobGradeIds);
+    return unwrapApiResponse<null>(response.data);
   },
 
   async removeJobGrade(jobGradeId: string) {
@@ -345,6 +355,11 @@ export const organizationApi = {
   async updateJobTitle(jobTitleId: string, payload: UpdateJobTitlePayload) {
     const response = await httpClient.put(`/organization/job-title/${jobTitleId}`, payload);
     return unwrapApiResponse<Record<string, unknown>>(response.data);
+  },
+
+  async reorderJobTitles(jobTitleIds: string[]) {
+    const response = await httpClient.put('/organization/job-title/reorder', jobTitleIds);
+    return unwrapApiResponse<null>(response.data);
   },
 
   async removeJobTitle(jobTitleId: string) {

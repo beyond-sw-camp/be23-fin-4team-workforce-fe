@@ -25,6 +25,7 @@ import clsx from 'clsx';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
+import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import type { CompanyHoliday } from '@/features/salary-service/types';
 
 type FormValues = {
@@ -268,19 +269,16 @@ export function AdminCompanyHolidaysPage() {
 
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
-      <div className="tw-flex tw-flex-wrap tw-items-start tw-justify-between tw-gap-4">
-        <div className="tw-min-w-0 tw-flex-1">
-          <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
-            회사 공휴일 관리
-          </Typography.Title>
-          <Typography.Text type="secondary" className="tw-text-xs">
-            월별 달력에서 공휴일을 확인합니다. 직접 등록한 휴일은 법정 공휴일만 다시 불러와도 유지됩니다.
-          </Typography.Text>
-        </div>
-        <Button type="primary" onClick={() => openCreateForDay(selectedDay)}>
-          공휴일 추가
-        </Button>
-      </div>
+      <AppWorkspacePageTitle
+        eyebrow="Attendance"
+        title="회사 공휴일 관리"
+        subtitle="월별 달력에서 공휴일을 확인합니다. 직접 등록한 휴일은 법정 공휴일만 다시 불러와도 유지됩니다."
+        extra={(
+          <Button type="primary" onClick={() => openCreateForDay(selectedDay)}>
+            공휴일 추가
+          </Button>
+        )}
+      />
 
       <Card
         size="small"

@@ -413,7 +413,7 @@ export function ApprovalFormPaperStaticNoteRow({
         }
         className={`${cellBorder} tw-bg-white tw-px-2 tw-py-3 tw-align-top sm:tw-px-3 sm:tw-py-3.5 ${
           interactive ? 'tw-cursor-pointer tw-outline-none hover:tw-bg-slate-50/90' : ''
-        } ${selected ? 'tw-ring-2 tw-ring-[#1e3a5f]/25 tw-ring-inset' : ''}`}
+        } ${selected ? 'tw-bg-blue-50/70 tw-ring-2 tw-ring-blue-500 tw-ring-inset' : ''}`}
       >
         {t ? (
           <Typography.Text
@@ -438,21 +438,28 @@ export function ApprovalFormPaperStaticNoteRow({
 export type ApprovalFormPaperFieldRowProps = {
   label: string;
   required?: boolean;
+  selected?: boolean;
   children: ReactNode;
 };
 
-export function ApprovalFormPaperFieldRow({ label, required, children }: ApprovalFormPaperFieldRowProps) {
+export function ApprovalFormPaperFieldRow({ label, required, selected, children }: ApprovalFormPaperFieldRowProps) {
   return (
-    <tr>
+    <tr className={selected ? 'tw-outline tw-outline-2 tw-outline-blue-500 tw-outline-offset-[-2px]' : undefined}>
       <th
         scope="row"
-        className={`tw-w-[28%] ${cellBorder} ${labelBg} tw-px-2 tw-py-2.5 tw-text-center tw-align-middle tw-text-xs tw-font-semibold tw-text-black sm:tw-w-[22%] sm:tw-px-3 sm:tw-text-sm`}
+        className={`tw-w-[28%] ${cellBorder} ${
+          selected ? 'tw-bg-blue-100' : labelBg
+        } tw-px-2 tw-py-2.5 tw-text-center tw-align-middle tw-text-xs tw-font-semibold ${
+          selected ? 'tw-text-blue-900' : 'tw-text-black'
+        } sm:tw-w-[22%] sm:tw-px-3 sm:tw-text-sm`}
       >
         {required ? <span className="tw-text-red-600">* </span> : null}
         <span className="tw-inline-block tw-text-center [word-break:keep-all]">{label}</span>
       </th>
       <td
-        className={`${cellBorder} tw-bg-white tw-px-2 tw-py-2 tw-align-middle sm:tw-px-3 ${paperFieldValueCellControls}`}
+        className={`${cellBorder} ${
+          selected ? 'tw-bg-blue-50/70' : 'tw-bg-white'
+        } tw-px-2 tw-py-2 tw-align-middle sm:tw-px-3 ${paperFieldValueCellControls}`}
       >
         {children}
       </td>

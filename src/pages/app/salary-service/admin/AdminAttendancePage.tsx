@@ -36,6 +36,7 @@ import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import { normalizeSpringPage } from '@/features/salary-service/lib/normalizePage';
 import type { DailyAttendance } from '@/features/salary-service/types';
 import { AttendanceStatusTag } from '@/features/salary-service/ui/AttendanceStatusTag';
+import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 
 type PeriodMode = 'day' | 'week' | 'month' | 'custom';
 
@@ -346,19 +347,16 @@ export function AdminAttendancePage() {
 
   return (
     <div className="tw-space-y-4">
-      <div className="tw-flex tw-flex-wrap tw-items-start tw-justify-between tw-gap-3">
-        <div>
-          <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
-            전사 근태 현황
-          </Typography.Title>
-          <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-sm">
-            기간을 선택해 일별·월별 근태를 한 화면에서 조회합니다.
-          </Typography.Paragraph>
-        </div>
-        <Button onClick={() => navigate({ to: '/app/attendance/overtime-status' })}>
-          초과 근무 현황
-        </Button>
-      </div>
+      <AppWorkspacePageTitle
+        eyebrow="Attendance"
+        title="전사 근태 현황"
+        subtitle="기간을 선택해 일별·월별 근태를 한 화면에서 조회합니다."
+        extra={(
+          <Button onClick={() => navigate({ to: '/app/attendance/overtime-status' })}>
+            초과 근무 현황
+          </Button>
+        )}
+      />
 
       <Card className="tw-border-slate-200/80 tw-shadow-sm" size="small">
         <Space size="middle" wrap>

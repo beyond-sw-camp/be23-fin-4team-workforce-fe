@@ -6,6 +6,7 @@ import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
+import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import type { OvertimePolicy } from '@/features/salary-service/types';
 
 type FormValues = {
@@ -218,34 +219,33 @@ export function AdminOvertimePoliciesPage() {
 
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
-      <div className="tw-flex tw-items-end tw-justify-between">
-        <div>
-          <Typography.Title level={4} className="!tw-m-0">연장근로 정책</Typography.Title>
-          <Typography.Paragraph type="secondary" className="!tw-mt-1 !tw-mb-0">
-            연장근로 계산 단위와 일/주/월 최대 근무시간 기준을 관리합니다.
-          </Typography.Paragraph>
-        </div>
-        <Button
-          type="primary"
-          onClick={() => {
-            setEditing(null);
-            setOpen(true);
-            form.resetFields();
-            // 폼 초기값 - 가이드의 예시값을 기본 입력값으로 채워 운영 기준에 맞게 수정만 하면 되도록
-            form.setFieldsValue({
-              overtimeFloorMinutes: 15,
-              postApprovalDeadlineHours: 72,
-              dailyOvertimeLimitMinutes: 600,
-              monthlyOvertimeLimitMinutes: 2400,
-              weeklyOvertimeLimitMinutes: 720,
-              weeklyTotalLimitMinutes: 3120,
-              effectiveFrom: dayjs(),
-            });
-          }}
-        >
-          정책 등록
-        </Button>
-      </div>
+      <AppWorkspacePageTitle
+        eyebrow="Attendance"
+        title="연장근로 정책"
+        subtitle="연장근로 계산 단위와 일/주/월 최대 근무시간 기준을 관리합니다."
+        extra={(
+          <Button
+            type="primary"
+            onClick={() => {
+              setEditing(null);
+              setOpen(true);
+              form.resetFields();
+              // 폼 초기값 - 가이드의 예시값을 기본 입력값으로 채워 운영 기준에 맞게 수정만 하면 되도록
+              form.setFieldsValue({
+                overtimeFloorMinutes: 15,
+                postApprovalDeadlineHours: 72,
+                dailyOvertimeLimitMinutes: 600,
+                monthlyOvertimeLimitMinutes: 2400,
+                weeklyOvertimeLimitMinutes: 720,
+                weeklyTotalLimitMinutes: 3120,
+                effectiveFrom: dayjs(),
+              });
+            }}
+          >
+            정책 등록
+          </Button>
+        )}
+      />
       <Card className="tw-border-slate-200/80 tw-shadow-sm" loading={listQ.isLoading}>
         <Table<OvertimePolicy>
           rowKey={(r) => r.overtimePolicyId ?? `${r.effectiveFrom}-${r.effectiveTo}`}

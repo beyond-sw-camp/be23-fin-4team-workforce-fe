@@ -52,6 +52,11 @@ const MINI_CALENDAR_CLASS =
   '[&_.ant-picker-cell:not(.ant-picker-cell-today)_.ant-picker-calendar-date-value]:!tw-text-slate-900 [&_.ant-picker-cell-today_.ant-picker-calendar-date-value]:!tw-text-white';
 
 const CAL_LABEL_COLOR_STORAGE_KEY = 'wf-calendar-label-colors-v1';
+const PERSONAL_LABEL_COLOR_KEY = 'personal';
+const APPROVAL_LABEL_COLOR_KEY = 'approval';
+const DEFAULT_PERSONAL_LABEL_COLOR = '#2563eb';
+const DEFAULT_APPROVAL_LABEL_COLOR = '#f4a640';
+const DEFAULT_TEAM_LABEL_COLOR = '#475569';
 /** UI 참고: 3×6 원형 팔레트 */
 const CAL_LABEL_COLOR_SWATCHES = [
   '#9b5f50', '#c07d72', '#f05a7e', '#ef7a42', '#f4a640', '#f0c236',
@@ -133,6 +138,18 @@ function isApprovalCalendarEvent(e: CalendarEvent): boolean {
 function isTeamEvent(e: CalendarEvent): boolean {
   if (isApprovalCalendarEvent(e)) return false;
   return e.scope === 'team' || Boolean(e.organizationId?.trim());
+}
+
+function calendarLabelColorKey(e: CalendarEvent): string {
+  if (isApprovalCalendarEvent(e)) return APPROVAL_LABEL_COLOR_KEY;
+  if (isTeamEvent(e) && e.organizationId?.trim()) return `team:${e.organizationId.trim()}`;
+  return PERSONAL_LABEL_COLOR_KEY;
+}
+
+function defaultCalendarLabelColor(key: string): string {
+  if (key === PERSONAL_LABEL_COLOR_KEY) return DEFAULT_PERSONAL_LABEL_COLOR;
+  if (key === APPROVAL_LABEL_COLOR_KEY) return DEFAULT_APPROVAL_LABEL_COLOR;
+  return DEFAULT_TEAM_LABEL_COLOR;
 }
 
 /** 월요일 시작 주간 (월~일) 기준 해당 주의 월요일 00:00 */
@@ -440,11 +457,25 @@ export function CalendarPage() {
 
   const eventChipStyle = useCallback(
     (e: CalendarEvent): CSSProperties => {
-      const key = isTeamEvent(e) && e.organizationId?.trim() ? `team:${e.organizationId.trim()}` : 'personal';
-      const base = labelColor(key, key === 'personal' ? '#2563eb' : '#475569');
+      const key = calendarLabelColorKey(e);
+      const base = labelColor(key, defaultCalendarLabelColor(key));
       return {
         backgroundColor: rgbaFromHex(base, EVENT_CHIP_TINT_ALPHA),
         color: textColorForHexOnWhiteTint(base, EVENT_CHIP_TINT_ALPHA),
+      };
+    },
+    [labelColor],
+  );
+
+  const dayLaneEventStyle = useCallback(
+    (e: CalendarEvent, layoutStyle: CSSProperties): CSSProperties => {
+      const key = calendarLabelColorKey(e);
+      const base = labelColor(key, defaultCalendarLabelColor(key));
+      return {
+        ...layoutStyle,
+        backgroundColor: rgbaFromHex(base, 0.22),
+        borderColor: base,
+        color: textColorForHexOnWhiteTint(base, 0.22),
       };
     },
     [labelColor],
@@ -1068,7 +1099,16 @@ ${showSixthMonthRow ? '' : '.wf-cal-month.ant-picker-calendar .ant-picker-conten
                     onClick={(e) => e.stopPropagation()}
                     onChange={(e) => setShowPersonal(e.target.checked)}
                   >
-                    <span className="tw-text-slate-800">개인 일정</span>
+                    <span
+                      className="tw-text-slate-800"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setShowPersonal((v) => !v);
+                      }}
+                    >
+                      개인 일정
+                    </span>
                   </Checkbox>
                   <span className="tw-shrink-0" onClick={(e) => e.stopPropagation()}>
                     {renderLabelColorPicker('personal', '#2563eb', '개인 일정 라벨 색상')}
@@ -1093,8 +1133,24 @@ ${showSixthMonthRow ? '' : '.wf-cal-month.ant-picker-calendar .ant-picker-conten
                     onClick={(e) => e.stopPropagation()}
                     onChange={(e) => setShowApproval(e.target.checked)}
                   >
-                    <span className="tw-text-slate-800">결재 연동 일정</span>
+                    <span
+                      className="tw-text-slate-800"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setShowApproval((v) => !v);
+                      }}
+                    >
+                      결재 연동 일정
+                    </span>
                   </Checkbox>
+                  <span className="tw-shrink-0" onClick={(e) => e.stopPropagation()}>
+                    {renderLabelColorPicker(
+                      APPROVAL_LABEL_COLOR_KEY,
+                      DEFAULT_APPROVAL_LABEL_COLOR,
+                      '결재 연동 일정 라벨 색상',
+                    )}
+                  </span>
                 </div>
               </div>
             </div>
@@ -1139,7 +1195,18 @@ ${showSixthMonthRow ? '' : '.wf-cal-month.ant-picker-calendar .ant-picker-conten
                             );
                           }}
                         >
-                          <span className="tw-text-slate-800">{org.label}</span>
+                          <span
+                            className="tw-text-slate-800"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setSelectedTeamOrgIds((prev) =>
+                                prev.includes(org.id) ? prev.filter((id) => id !== org.id) : [...new Set([...prev, org.id])],
+                              );
+                            }}
+                          >
+                            {org.label}
+                          </span>
                         </Checkbox>
                         <span className="tw-shrink-0" onClick={(e) => e.stopPropagation()}>
                           {renderLabelColorPicker(`team:${org.id}`, '#475569', `${org.label} 라벨 색상`)}
@@ -1236,7 +1303,7 @@ ${showSixthMonthRow ? '' : '.wf-cal-month.ant-picker-calendar .ant-picker-conten
                   fullscreen={false}
                   value={selectedDay}
                   onChange={(d) => {
-                    setMonthValue(d);
+                    setMonthValue(d.startOf('month'));
                     setSelectedDay(d);
                   }}
                   onSelect={(d) => {
@@ -1244,11 +1311,17 @@ ${showSixthMonthRow ? '' : '.wf-cal-month.ant-picker-calendar .ant-picker-conten
                       skipNextMonthCellSelectRef.current = false;
                       return;
                     }
+                    const selectedMonth = d.startOf('month');
+                    if (!selectedMonth.isSame(monthValue, 'month')) {
+                      setSelectedDay(selectedMonth);
+                      setMonthValue(selectedMonth);
+                      return;
+                    }
                     setSelectedDay(d);
-                    setMonthValue(d.startOf('month'));
+                    setMonthValue(selectedMonth);
                     openCreate(d);
                   }}
-                  onPanelChange={(d) => setMonthValue(d)}
+                  onPanelChange={(d) => setMonthValue(d.startOf('month'))}
                   fullCellRender={monthFullCellRender}
                 />
               </>
@@ -1368,12 +1441,12 @@ ${showSixthMonthRow ? '' : '.wf-cal-month.ant-picker-calendar .ant-picker-conten
                             key={`${e.eventId}-${clip.startMin}-${clip.endMin}-${lane}`}
                             type="button"
                             className={dayLaneEventButtonClass(e)}
-                            style={{
+                            style={dayLaneEventStyle(e, {
                               top: `${pctTop}%`,
                               height: `${pctH}%`,
                               left: `${left}%`,
                               width: `${w}%`,
-                            }}
+                            })}
                             onClick={() => {
                               setDetailEvent(e);
                               setDetailOpen(true);

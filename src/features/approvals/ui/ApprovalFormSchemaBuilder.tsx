@@ -1,4 +1,12 @@
-import { DeleteOutlined, MinusCircleOutlined, SettingOutlined } from '@ant-design/icons';
+import {
+  AppstoreAddOutlined,
+  DeleteOutlined,
+  DownOutlined,
+  FileTextOutlined,
+  MinusCircleOutlined,
+  PlusOutlined,
+  RightOutlined,
+} from '@ant-design/icons';
 import dayjs from 'dayjs';
 import {
   DndContext,
@@ -11,7 +19,7 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Alert, Button, Input, Select, Space, Switch, Tag, Tooltip, Typography } from 'antd';
+import { Button, Input, Select, Space, Switch, Tag, Tooltip, Typography } from 'antd';
 import {
   createContext,
   useCallback,
@@ -54,35 +62,6 @@ const TYPE_LABEL: Record<FormFieldType, string> = {
 /** 신규 필드 추가 시 선택 목록에서 제외 (기존 양식에 남아 있으면 해당 행에서만 표시) */
 const SCHEMA_BUILDER_FIELD_TYPES = FORM_SCHEMA_FIELD_TYPES.filter((t) => t !== 'ai_transcribe');
 
-type SortableFormSchemaRowContextValue = {
-  setActivatorNodeRef: (el: HTMLElement | null) => void;
-  listeners: ReturnType<typeof useSortable>['listeners'];
-  attributes: ReturnType<typeof useSortable>['attributes'];
-};
-
-const SortableFormSchemaRowContext = createContext<SortableFormSchemaRowContextValue | null>(null);
-
-/** 결재선 관리 열과 동일한 2×3 점 그리드 드래그 핸들 */
-function FormSchemaDragHandle() {
-  const ctx = useContext(SortableFormSchemaRowContext);
-  if (!ctx) return null;
-  return (
-    <span
-      ref={ctx.setActivatorNodeRef}
-      className="tw-inline-flex tw-cursor-grab tw-items-center tw-justify-center tw-rounded tw-p-1.5 tw-text-slate-500 hover:tw-bg-slate-100 hover:tw-text-slate-700 active:tw-cursor-grabbing"
-      title="드래그하여 순서 변경"
-      {...ctx.listeners}
-      {...ctx.attributes}
-    >
-      <span className="tw-inline-grid tw-grid-cols-2 tw-gap-[3px] tw-leading-none" aria-hidden>
-        {Array.from({ length: 6 }).map((_, i) => (
-          <span key={i} className="tw-block tw-h-[3px] tw-w-[3px] tw-rounded-full tw-bg-current" />
-        ))}
-      </span>
-    </span>
-  );
-}
-
 const SchemaRowLockedMapContext = createContext<Map<string, boolean>>(new Map());
 
 type SortableFieldListRowProps = {
@@ -115,58 +94,69 @@ function SortableFieldListRow({ id, selected, locked, onSelect, onDelete, childr
       : {}),
   };
 
-  const ctxValue = useMemo(
-    () => ({ setActivatorNodeRef, listeners, attributes }),
-    [setActivatorNodeRef, listeners, attributes],
-  );
-
   return (
-    <SortableFormSchemaRowContext.Provider value={ctxValue}>
-      <div
-        ref={setNodeRef}
-        style={mergedStyle}
-        {...attributes}
-        role="button"
-        tabIndex={0}
-        onClick={onSelect}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            onSelect();
-            e.preventDefault();
-          }
-        }}
-        className={`tw-flex tw-min-w-0 tw-w-full tw-max-w-full tw-items-center tw-gap-1.5 tw-rounded-lg tw-border tw-px-2 tw-py-2 tw-text-left tw-outline-none tw-transition-colors ${
-          selected
-            ? 'tw-border-[#1e3a5f] tw-bg-[#1e3a5f]/[0.06] tw-ring-1 tw-ring-[#1e3a5f]/25'
-            : 'tw-border-slate-200/90 tw-bg-white hover:tw-bg-slate-50'
+    <div
+      ref={setNodeRef}
+      style={mergedStyle}
+      role="button"
+      tabIndex={0}
+      onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          onSelect();
+          e.preventDefault();
+        }
+      }}
+      className={`tw-box-border tw-grid tw-min-w-0 tw-w-full tw-max-w-full tw-grid-cols-[1.75rem_1.5rem_minmax(0,1fr)_2.5rem] tw-items-center tw-gap-1.5 tw-rounded-xl tw-border tw-py-2.5 tw-pl-2.5 tw-pr-3 tw-text-left tw-outline-none tw-transition-colors ${
+        selected
+          ? 'tw-border-blue-500 tw-bg-blue-50 tw-shadow-sm tw-ring-1 tw-ring-inset tw-ring-blue-200'
+          : 'tw-border-slate-200/90 tw-bg-white hover:tw-border-blue-200 hover:tw-bg-blue-50/40'
+      }`}
+    >
+      <span
+        ref={locked ? undefined : setActivatorNodeRef}
+        title={locked ? undefined : '드래그하여 순서 변경'}
+        className={`tw-inline-flex tw-h-8 tw-w-7 tw-items-center tw-justify-center tw-rounded-lg tw-text-slate-500 hover:tw-bg-slate-100 hover:tw-text-blue-700 ${
+          locked ? '' : 'tw-cursor-grab active:tw-cursor-grabbing'
         }`}
+        {...(locked ? {} : listeners)}
+        {...(locked ? {} : attributes)}
+        onClick={(e) => e.stopPropagation()}
       >
-        {locked ? (
-          <Typography.Text type="secondary" className="tw-w-7 tw-shrink-0 tw-text-center tw-text-[10px]">
-            고정
-          </Typography.Text>
-        ) : (
-          <span onClick={(e) => e.stopPropagation()} className="tw-shrink-0">
-            <FormSchemaDragHandle />
-          </span>
-        )}
-        <div className="tw-min-w-0 tw-flex-1">{children}</div>
-        {!locked && onDelete ? (
-          <Button
-            type="text"
-            danger
-            size="small"
-            icon={<DeleteOutlined />}
-            className="tw-shrink-0"
-            aria-label="삭제"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-          />
-        ) : null}
-      </div>
-    </SortableFormSchemaRowContext.Provider>
+        <span className="tw-inline-grid tw-grid-cols-2 tw-gap-[3px] tw-leading-none" aria-hidden>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <span key={i} className="tw-block tw-h-[3px] tw-w-[3px] tw-rounded-full tw-bg-current" />
+          ))}
+        </span>
+      </span>
+      <span
+        className={`tw-inline-flex tw-h-7 tw-w-6 tw-items-center tw-justify-center tw-rounded-lg tw-text-[11px] ${
+          selected ? 'tw-bg-blue-100 tw-text-blue-700' : 'tw-text-slate-400'
+        }`}
+        aria-hidden
+      >
+        {selected ? <DownOutlined /> : <RightOutlined />}
+      </span>
+      <div className="tw-min-w-0 tw-flex-1">{children}</div>
+      {locked ? (
+        <Typography.Text type="secondary" className="tw-justify-self-end tw-text-[11px] tw-font-semibold">
+          고정
+        </Typography.Text>
+      ) : !locked && onDelete ? (
+        <Button
+          type="text"
+          danger
+          size="small"
+          icon={<DeleteOutlined />}
+          className="!tw-h-8 !tw-w-8 !tw-rounded-lg tw-justify-self-end"
+          aria-label="삭제"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+        />
+      ) : null}
+    </div>
   );
 }
 
@@ -473,11 +463,13 @@ export function ApprovalFormSchemaBuilder({
     const locked = rowLocked(field);
     if (field.type === 'static_note') {
       return (
-        <div className="tw-box-border tw-min-w-0 tw-max-w-full tw-space-y-3 tw-overflow-x-hidden tw-rounded-lg tw-border tw-border-slate-200 tw-bg-white tw-p-3 tw-shadow-sm">
-          <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2 tw-border-b tw-border-slate-100 tw-pb-2">
-            <SettingOutlined className="tw-text-[#1e3a5f]" />
-            <Typography.Text strong className="tw-text-xs">
+        <div className="tw-box-border tw-min-w-0 tw-max-w-full tw-space-y-3 tw-overflow-x-hidden tw-rounded-xl tw-border tw-border-slate-200 tw-bg-white tw-p-3 tw-shadow-sm">
+          <div className="tw-min-w-0 tw-border-b tw-border-slate-100 tw-pb-2">
+            <Typography.Text strong className="tw-block tw-text-sm tw-text-slate-900">
               안내 문구 속성
+            </Typography.Text>
+            <Typography.Text type="secondary" className="tw-text-[11px]">
+              문서에 표시되는 읽기 전용 안내 영역입니다.
             </Typography.Text>
           </div>
           <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-text-[11px]">
@@ -529,7 +521,7 @@ export function ApprovalFormSchemaBuilder({
               onChange={(t) => updateAt(index, { type: t as FormFieldType })}
             />
           </div>
-          <div className="tw-flex tw-min-w-0 tw-max-w-full tw-items-center tw-justify-between tw-gap-2 tw-rounded-md tw-bg-slate-50 tw-px-2.5 tw-py-2">
+          <div className="tw-flex tw-min-w-0 tw-max-w-full tw-items-center tw-justify-between tw-gap-2 tw-rounded-lg tw-border tw-border-slate-200 tw-bg-slate-50 tw-px-3 tw-py-2.5">
             <Typography.Text className="tw-min-w-0 tw-flex-1 tw-text-[11px] [overflow-wrap:anywhere]">
               잠금(이후 양식 수정 시 제한)
             </Typography.Text>
@@ -558,16 +550,15 @@ export function ApprovalFormSchemaBuilder({
       );
     }
     return (
-      <div className="tw-box-border tw-min-w-0 tw-max-w-full tw-space-y-3 tw-overflow-x-hidden tw-rounded-lg tw-border tw-border-slate-200 tw-bg-white tw-p-3 tw-shadow-sm">
-        <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2 tw-border-b tw-border-slate-100 tw-pb-2">
-          <SettingOutlined className="tw-text-[#1e3a5f]" />
-          <Typography.Text strong className="tw-text-xs">
+      <div className="tw-box-border tw-min-w-0 tw-max-w-full tw-space-y-3 tw-overflow-x-hidden tw-rounded-xl tw-border tw-border-slate-200 tw-bg-white tw-p-3 tw-shadow-sm">
+        <div className="tw-min-w-0 tw-border-b tw-border-slate-100 tw-pb-2">
+          <Typography.Text strong className="tw-block tw-text-sm tw-text-slate-900">
             필드 속성
           </Typography.Text>
+          <Typography.Text type="secondary" className="tw-text-[11px]">
+            선택한 입력 항목의 이름, 형식, 안내 문구를 조정합니다.
+          </Typography.Text>
         </div>
-        <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-text-[11px]">
-          이 항목의 라벨·형식·힌트를 바꿉니다.
-        </Typography.Paragraph>
         <div className="tw-min-w-0 tw-space-y-3">
           <div className="tw-min-w-0 tw-max-w-full">
             <Typography.Text className="tw-mb-1 tw-block tw-text-[11px] tw-font-medium tw-text-slate-700">필드 이름</Typography.Text>
@@ -610,7 +601,7 @@ export function ApprovalFormSchemaBuilder({
               onChange={(e) => updateAt(index, { placeholder: e.target.value || undefined })}
             />
           </div>
-          <div className="tw-flex tw-min-w-0 tw-max-w-full tw-items-center tw-justify-between tw-gap-2 tw-rounded-md tw-bg-slate-50 tw-px-2.5 tw-py-2">
+          <div className="tw-flex tw-min-w-0 tw-max-w-full tw-items-center tw-justify-between tw-gap-2 tw-rounded-lg tw-border tw-border-slate-200 tw-bg-slate-50 tw-px-3 tw-py-2.5">
             <Typography.Text className="tw-min-w-0 tw-flex-1 tw-text-[11px] [overflow-wrap:anywhere]">
               잠금(이후 양식 수정 시 제한)
             </Typography.Text>
@@ -651,10 +642,23 @@ export function ApprovalFormSchemaBuilder({
   };
 
   const documentPaperPreview = (
-    <div className="tw-min-h-0 tw-min-w-0 tw-flex-1 tw-overflow-y-auto tw-bg-slate-100/60 tw-p-2 sm:tw-p-3">
-      <Typography.Text type="secondary" className="tw-mb-2 tw-block tw-text-[11px]">
-        문서 미리보기
-      </Typography.Text>
+    <div className="tw-min-w-0 tw-flex-1 tw-bg-slate-50 tw-p-3 sm:tw-p-4">
+      <div className="tw-mb-3 tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2">
+        <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
+          <span className="tw-inline-flex tw-h-8 tw-w-8 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-lg tw-bg-white tw-text-[#1e3a5f] tw-shadow-sm">
+            <FileTextOutlined />
+          </span>
+          <div className="tw-min-w-0">
+            <Typography.Text strong className="tw-block tw-text-sm tw-text-slate-900">
+              문서 미리보기
+            </Typography.Text>
+            <Typography.Text type="secondary" className="tw-text-[11px]">
+              기안자가 보게 될 문서 형태입니다.
+            </Typography.Text>
+          </div>
+        </div>
+        <Tag className="!tw-m-0 !tw-rounded-lg">{approvalRequestTypeLabelKo(paperPreviewMeta.requestTypeCode)}</Tag>
+      </div>
       <ApprovalFormPaperLayout
         documentName={paperPreviewMeta.documentName.trim() || '—'}
         categoryLabel={paperPreviewMeta.categoryLabel}
@@ -696,7 +700,12 @@ export function ApprovalFormSchemaBuilder({
               );
             }
             return (
-              <ApprovalFormPaperFieldRow key={sortableIds[i] ?? `pv-${i}`} label={field.label?.trim() || '(이름 없음)'} required={fieldLocked}>
+              <ApprovalFormPaperFieldRow
+                key={sortableIds[i] ?? `pv-${i}`}
+                label={field.label?.trim() || '(이름 없음)'}
+                required={fieldLocked}
+                selected={isSel}
+              >
                 <div
                   role="button"
                   tabIndex={0}
@@ -707,7 +716,11 @@ export function ApprovalFormSchemaBuilder({
                       e.preventDefault();
                     }
                   }}
-                  className={isSel ? 'tw-rounded tw-ring-1 tw-ring-[#1e3a5f]/35' : ''}
+                  className={
+                    isSel
+                      ? 'tw-rounded tw-ring-2 tw-ring-blue-500 [&_.ant-input]:!tw-border-blue-500 [&_.ant-input]:!tw-shadow-[0_0_0_2px_rgba(37,99,235,0.12)] [&_.ant-select-selector]:!tw-border-blue-500 [&_.ant-select-selector]:!tw-shadow-[0_0_0_2px_rgba(37,99,235,0.12)]'
+                      : ''
+                  }
                 >
                   {previewControlForField(field)}
                 </div>
@@ -721,16 +734,16 @@ export function ApprovalFormSchemaBuilder({
 
   const sidebarMetaReadonly =
     sidebarTop == null ? (
-      <div className="tw-mb-3 tw-min-w-0 tw-max-w-full tw-space-y-2 tw-overflow-x-hidden tw-rounded-lg tw-border tw-border-slate-200 tw-bg-white tw-px-3 tw-py-2.5">
-        <div>
+      <div className="tw-mb-3 tw-grid tw-min-w-0 tw-max-w-full tw-grid-cols-2 tw-gap-2 tw-overflow-x-hidden tw-rounded-xl tw-border tw-border-slate-200 tw-bg-slate-50/70 tw-p-2.5">
+        <div className="tw-min-w-0 tw-rounded-lg tw-bg-white tw-px-3 tw-py-2">
           <Typography.Text className="tw-mb-0.5 tw-block tw-text-[11px] tw-font-medium tw-text-slate-500">양식명</Typography.Text>
-          <Typography.Text className="tw-block tw-text-sm tw-text-slate-900">
+          <Typography.Text className="tw-block tw-truncate tw-text-sm tw-font-semibold tw-text-slate-900">
             {paperPreviewMeta.documentName.trim() || '—'}
           </Typography.Text>
         </div>
-        <div>
+        <div className="tw-min-w-0 tw-rounded-lg tw-bg-white tw-px-3 tw-py-2">
           <Typography.Text className="tw-mb-0.5 tw-block tw-text-[11px] tw-font-medium tw-text-slate-500">요청 유형</Typography.Text>
-          <Typography.Text className="tw-block tw-text-sm tw-text-slate-900">
+          <Typography.Text className="tw-block tw-truncate tw-text-sm tw-font-semibold tw-text-slate-900">
             {approvalRequestTypeLabelKo(paperPreviewMeta.requestTypeCode)}
           </Typography.Text>
         </div>
@@ -738,25 +751,40 @@ export function ApprovalFormSchemaBuilder({
     ) : null;
 
   return (
-    <div className="tw-min-w-0 tw-max-w-full tw-space-y-2">
-      <Alert
-        type="info"
-        showIcon
-        className="tw-text-sm"
-        message="왼쪽에서 항목을 누르면 아래에 속성이 펼쳐지고, 같은 항목을 다시 누르면 접힙니다. 오른쪽은 기안과 같은 문서 미리보기입니다."
-      />
+    <div className="tw-min-w-0 tw-max-w-full tw-space-y-4">
+      <div className="tw-rounded-xl tw-border tw-border-blue-100 tw-bg-blue-50/60 tw-px-4 tw-py-3">
+        <Typography.Text className="tw-block tw-text-sm tw-font-semibold tw-text-[#1e3a5f]">
+          기안 입력 항목
+        </Typography.Text>
+        <Typography.Text className="tw-mt-1 tw-block tw-text-xs tw-leading-5 tw-text-slate-600">
+          왼쪽에서 항목을 선택해 속성을 편집하고, 오른쪽 문서 미리보기에서 실제 배치를 확인합니다.
+        </Typography.Text>
+      </div>
       {belowHelpSlot ? <div className="tw-mt-2 tw-min-w-0 tw-max-w-full tw-overflow-x-hidden">{belowHelpSlot}</div> : null}
       <SchemaRowLockedMapContext.Provider value={lockedBySortableId}>
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-          <div className="tw-flex tw-min-h-[min(52vh,480px)] tw-max-h-[min(70vh,720px)] tw-min-w-0 tw-flex-col tw-gap-0 tw-overflow-hidden tw-rounded-lg tw-border tw-border-slate-200/90 tw-bg-slate-50/30 lg:tw-flex-row">
-            <div className="tw-box-border tw-flex tw-min-h-0 tw-w-full tw-min-w-0 tw-max-w-full tw-shrink-0 tw-flex-col tw-overflow-x-hidden tw-border-slate-200 tw-bg-slate-50/40 tw-border-b tw-p-3 lg:tw-w-[380px] lg:tw-max-w-[380px] lg:tw-shrink-0 lg:tw-border-b-0 lg:tw-border-r lg:tw-border-solid">
+          <div className="tw-flex tw-min-w-0 tw-flex-col tw-gap-0 tw-overflow-hidden tw-rounded-2xl tw-border tw-border-slate-200/90 tw-bg-white tw-shadow-sm lg:tw-flex-row">
+            <div className="tw-box-border tw-w-full tw-min-w-0 tw-max-w-full tw-shrink-0 tw-overflow-x-hidden tw-border-none tw-bg-white tw-p-3 lg:tw-w-[360px] lg:tw-max-w-[360px] lg:tw-shrink-0">
               {sidebarTop ? <div className="tw-mb-3 tw-min-w-0 tw-max-w-full tw-space-y-2">{sidebarTop}</div> : null}
               {sidebarMetaReadonly}
-              <Typography.Text strong className="tw-mb-2 tw-block tw-text-xs tw-text-slate-600">
-                항목 목록
-              </Typography.Text>
+              <div className="tw-mb-2.5 tw-flex tw-items-center tw-justify-between tw-gap-2">
+                <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
+                  <span className="tw-inline-flex tw-h-8 tw-w-8 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-lg tw-bg-slate-100 tw-text-[#1e3a5f]">
+                    <AppstoreAddOutlined />
+                  </span>
+                  <div className="tw-min-w-0">
+                    <Typography.Text strong className="tw-block tw-text-sm tw-text-slate-900">
+                      항목 목록
+                    </Typography.Text>
+                    <Typography.Text type="secondary" className="tw-text-[11px]">
+                      클릭하면 속성이 펼쳐집니다.
+                    </Typography.Text>
+                  </div>
+                </div>
+                <Tag className="!tw-m-0 !tw-rounded-lg">총 {value.length}개</Tag>
+              </div>
               <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
-                <div className="tw-flex tw-min-h-0 tw-min-w-0 tw-flex-1 tw-flex-col tw-gap-1.5 tw-overflow-y-auto tw-overflow-x-hidden tw-pr-0.5">
+                <div className="tw-flex tw-min-w-0 tw-flex-col tw-gap-1.5 tw-overflow-x-hidden tw-p-1">
                   {value.length === 0 ? (
                     <Typography.Text type="secondary" className="tw-px-1 tw-text-xs">
                       항목이 없습니다. 아래 버튼으로 추가하세요.
@@ -786,7 +814,7 @@ export function ApprovalFormSchemaBuilder({
                             </div>
                           </SortableFieldListRow>
                           {selectedIndex === i ? (
-                            <div className="tw-ml-1 tw-mt-1 tw-mb-1 tw-min-w-0 tw-max-w-full tw-border-l-2 tw-border-[#1e3a5f]/35 tw-pl-2 tw-pr-0">
+                            <div className="tw-mb-2 tw-ml-3 tw-mt-2 tw-min-w-0 tw-max-w-full tw-border-l-2 tw-border-[#1e3a5f]/30 tw-pl-3 tw-pr-0">
                               {renderFieldProperties(i)}
                             </div>
                           ) : null}
@@ -796,14 +824,14 @@ export function ApprovalFormSchemaBuilder({
                   )}
                 </div>
               </SortableContext>
-              <Space.Compact block className="tw-mt-2 tw-shrink-0">
-                <Button type="dashed" className="tw-min-w-0 tw-flex-1" size="small" onClick={addField}>
+              <div className="tw-mt-3 tw-grid tw-grid-cols-2 tw-gap-2">
+                <Button icon={<PlusOutlined />} className="!tw-h-9 !tw-rounded-xl !tw-border-slate-200" onClick={addField}>
                   입력 항목
                 </Button>
-                <Button type="dashed" className="tw-min-w-0 tw-flex-1" size="small" onClick={addStaticNote}>
+                <Button icon={<FileTextOutlined />} className="!tw-h-9 !tw-rounded-xl !tw-border-slate-200" onClick={addStaticNote}>
                   안내 문구
                 </Button>
-              </Space.Compact>
+              </div>
             </div>
             {documentPaperPreview}
           </div>
