@@ -147,6 +147,8 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
   const [resendModalOpen, setResendModalOpen] = useState(false);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [batchResendModalOpen, setBatchResendModalOpen] = useState(false);
+  const [contractsRefreshing, setContractsRefreshing] = useState(false);
+  const [batchesRefreshing, setBatchesRefreshing] = useState(false);
   const [resendForm] = Form.useForm<{ adminInput?: Record<string, unknown> }>();
   const [batchResendForm] = Form.useForm<{
     batchName: string;
@@ -433,6 +435,24 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
     return (contractDetail.revision ?? 1) > 1;
   }, [contractDetail]);
 
+  const refreshContracts = async () => {
+    setContractsRefreshing(true);
+    try {
+      await Promise.all([refetchContracts(), new Promise((resolve) => window.setTimeout(resolve, 450))]);
+    } finally {
+      setContractsRefreshing(false);
+    }
+  };
+
+  const refreshBatches = async () => {
+    setBatchesRefreshing(true);
+    try {
+      await Promise.all([refetchBatches(), new Promise((resolve) => window.setTimeout(resolve, 450))]);
+    } finally {
+      setBatchesRefreshing(false);
+    }
+  };
+
   const detailSignCells = useMemo(() => {
     const empty = { label: '—', imageUrl: '', signedAt: '' };
     if (!contractDetail) return { employee: empty, company: empty };
@@ -495,9 +515,11 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
   };
 
   const contractsToolbar = (
-    <div className="tw-mb-3 tw-flex tw-items-center tw-justify-between tw-gap-2">
-      <Select value={statusFilter} onChange={(v) => setStatusFilter(v)} options={[...STATUS_OPTIONS]} style={{ width: 160 }} />
-      <Button onClick={() => void refetchContracts()}>새로고침</Button>
+    <div className="tw-mb-3 tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2">
+      <Select value={statusFilter} onChange={(v) => setStatusFilter(v)} options={[...STATUS_OPTIONS]} className="tw-w-40" />
+      <Button className="!tw-rounded-xl" loading={contractsRefreshing} onClick={() => void refreshContracts()}>
+        새로고침
+      </Button>
     </div>
   );
 
@@ -505,9 +527,10 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
     <Table<ContractRecord>
       rowKey="contractId"
       size={compact ? 'small' : 'middle'}
-      loading={contractsLoading}
+      loading={contractsLoading || contractsRefreshing}
       dataSource={filteredContracts}
       pagination={{ pageSize: compact ? 5 : 8, showSizeChanger: false }}
+      className="[&_.ant-table]:!tw-bg-white [&_.ant-table-thead>tr>th]:!tw-border-slate-200 [&_.ant-table-thead>tr>th]:!tw-bg-slate-50 [&_.ant-table-thead>tr>th]:!tw-px-4 [&_.ant-table-thead>tr>th]:!tw-py-3 [&_.ant-table-thead>tr>th]:!tw-text-xs [&_.ant-table-thead>tr>th]:!tw-font-semibold [&_.ant-table-thead>tr>th]:!tw-text-slate-600 [&_.ant-table-tbody>tr>td]:!tw-border-slate-100 [&_.ant-table-tbody>tr>td]:!tw-px-4 [&_.ant-table-tbody>tr>td]:!tw-py-4 [&_.ant-table-tbody>tr:hover>td]:!tw-bg-slate-50/70"
       locale={{ emptyText: '계약 데이터가 없습니다.' }}
       onRow={(record) => ({
         onClick: (e) => {
@@ -517,38 +540,44 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
         },
         className: 'tw-cursor-pointer',
       })}
-      columns={[
-        { title: '직원', dataIndex: 'employeeName', key: 'employeeName', width: compact ? 100 : 140 },
-        { title: '사번', dataIndex: 'employeeSabun', key: 'employeeSabun', width: compact ? 88 : 120, render: (v: string | null) => v || '—' },
-        { title: '부서', dataIndex: 'organizationName', key: 'organizationName', width: compact ? 100 : 140, render: (v: string | null) => v || '—' },
+      columns={compact ? [
+        { title: '직원', dataIndex: 'employeeName', key: 'employeeName', width: 110 },
+        { title: '템플릿', dataIndex: 'templateName', key: 'templateName', ellipsis: true },
+        { title: '상태', dataIndex: 'contractStatus', key: 'contractStatus', width: 100, render: (v: string) => statusTag(v) },
+      ] : [
+        { title: '직원', dataIndex: 'employeeName', key: 'employeeName', width: 140 },
+        { title: '사번', dataIndex: 'employeeSabun', key: 'employeeSabun', width: 120, render: (v: string | null) => v || '—' },
+        { title: '부서', dataIndex: 'organizationName', key: 'organizationName', width: 140, render: (v: string | null) => v || '—' },
         { title: '템플릿', dataIndex: 'templateName', key: 'templateName', ellipsis: true },
         {
           title: '문서번호',
           dataIndex: 'contractNumber',
           key: 'contractNumber',
-          width: compact ? 120 : 140,
+          width: 140,
           ellipsis: true,
           render: (v: string | null) => v?.trim() || '—',
         },
-        { title: '상태', dataIndex: 'contractStatus', key: 'contractStatus', width: compact ? 100 : 120, render: (v: string) => statusTag(v) },
+        { title: '상태', dataIndex: 'contractStatus', key: 'contractStatus', width: 120, render: (v: string) => statusTag(v) },
         {
           title: '회수 사유',
           key: 'cancelReason',
-          width: compact ? 140 : 180,
+          width: 180,
           ellipsis: true,
           render: (_: unknown, row: ContractRecord) =>
             String(row.contractStatus).toUpperCase() === 'CANCELED' && row.cancelReason?.trim()
               ? row.cancelReason.trim()
               : '—',
         },
-        { title: '생성일', dataIndex: 'createdAt', key: 'createdAt', width: compact ? 138 : 170, render: (v: string) => formatDateTime(v) },
+        { title: '생성일', dataIndex: 'createdAt', key: 'createdAt', width: 170, render: (v: string) => formatDateTime(v) },
       ]}
     />
   );
 
   const batchesToolbar = (
     <div className="tw-mb-3 tw-flex tw-justify-end">
-      <Button onClick={() => void refetchBatches()}>새로고침</Button>
+      <Button className="!tw-rounded-xl" loading={batchesRefreshing} onClick={() => void refreshBatches()}>
+        새로고침
+      </Button>
     </div>
   );
 
@@ -556,9 +585,10 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
     <Table<ContractBatchSummary>
       rowKey="batchId"
       size={compact ? 'small' : 'middle'}
-      loading={batchesLoading}
+      loading={batchesLoading || batchesRefreshing}
       dataSource={batches}
       pagination={{ pageSize: compact ? 5 : 8, showSizeChanger: false }}
+      className="[&_.ant-table]:!tw-bg-white [&_.ant-table-thead>tr>th]:!tw-border-slate-200 [&_.ant-table-thead>tr>th]:!tw-bg-slate-50 [&_.ant-table-thead>tr>th]:!tw-px-4 [&_.ant-table-thead>tr>th]:!tw-py-3 [&_.ant-table-thead>tr>th]:!tw-text-xs [&_.ant-table-thead>tr>th]:!tw-font-semibold [&_.ant-table-thead>tr>th]:!tw-text-slate-600 [&_.ant-table-tbody>tr>td]:!tw-border-slate-100 [&_.ant-table-tbody>tr>td]:!tw-px-4 [&_.ant-table-tbody>tr>td]:!tw-py-4 [&_.ant-table-tbody>tr:hover>td]:!tw-bg-slate-50/70"
       locale={{ emptyText: '배치 데이터가 없습니다.' }}
       onRow={(record) => ({
         onClick: (e) => {
@@ -595,25 +625,23 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
   return (
     <>
       {hubLayout ? (
-        <div className="tw-flex tw-h-full tw-min-h-0 tw-w-full tw-flex-1 tw-flex-col tw-overflow-hidden">
-          <div className="tw-grid tw-h-full tw-min-h-0 tw-w-full tw-flex-1 tw-grid-cols-1 tw-gap-3 lg:tw-grid-cols-2 lg:tw-items-stretch">
+        <div className="tw-w-full">
+          <div className="tw-grid tw-w-full tw-grid-cols-1 tw-gap-4 lg:tw-grid-cols-2">
             <Card
               title="전체 계약 목록"
-              className={`${CONTRACT_HUB_CARD_CLASS} tw-flex tw-h-full tw-min-h-0 tw-flex-col tw-overflow-hidden`}
-              styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' } }}
+              className={`${CONTRACT_HUB_CARD_CLASS} tw-overflow-hidden [&_.ant-card-head]:tw-border-slate-100 [&_.ant-card-head-title]:tw-text-sm [&_.ant-card-head-title]:tw-font-semibold [&_.ant-card-body]:tw-p-5`}
             >
               {contractsToolbar}
-              <div className="tw-min-h-0 tw-flex-1 tw-overflow-auto wf-scrollbar tw-pr-0.5">
+              <div className="tw-overflow-x-auto">
                 {renderContractsTable(true)}
               </div>
             </Card>
             <Card
               title="일괄 발송 현황"
-              className={`${CONTRACT_HUB_CARD_CLASS} tw-flex tw-h-full tw-min-h-0 tw-flex-col tw-overflow-hidden`}
-              styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' } }}
+              className={`${CONTRACT_HUB_CARD_CLASS} tw-overflow-hidden [&_.ant-card-head]:tw-border-slate-100 [&_.ant-card-head-title]:tw-text-sm [&_.ant-card-head-title]:tw-font-semibold [&_.ant-card-body]:tw-p-5`}
             >
               {batchesToolbar}
-              <div className="tw-min-h-0 tw-flex-1 tw-overflow-auto wf-scrollbar tw-pr-0.5">
+              <div className="tw-overflow-x-auto">
                 {renderBatchesTable(true)}
               </div>
             </Card>

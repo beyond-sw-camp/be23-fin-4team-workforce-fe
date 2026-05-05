@@ -7,7 +7,7 @@ export const APP_MENU_LABEL: Record<string, string> = {
   '/app/insights': '인사이트',
   '/app/calendar': '일정',
   '/app/members': '구성원',
-  '/app/organization': '조직',
+  '/app/organization': '조직 관리',
   '/app/roles': '역할·권한',
   '/app/attendance': '내 근태',
   '/app/leave': '휴가 계획 관리',

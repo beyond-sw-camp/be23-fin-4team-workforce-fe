@@ -22,7 +22,6 @@ import {
     LineChartOutlined,
     PieChartOutlined,
     MoreOutlined,
-    AudioOutlined,
     MessageOutlined,
     PartitionOutlined,
     PauseCircleOutlined,
@@ -35,6 +34,7 @@ import {
     SettingOutlined,
     ShoppingOutlined,
     StarOutlined,
+    SearchOutlined,
     TeamOutlined,
     UserOutlined,
     VideoCameraOutlined,
@@ -833,6 +833,15 @@ function useAppShellSiderMenuItems(currentPathname: string): {
 const headerGhostIconClass =
     'tw-flex tw-size-11 tw-appearance-none tw-items-center tw-justify-center tw-rounded-full tw-border-0 tw-bg-transparent tw-text-slate-500 tw-shadow-none tw-transition-colors hover:tw-bg-slate-100 hover:tw-text-slate-800 focus-visible:tw-outline focus-visible:tw-outline-2 focus-visible:tw-outline-offset-2 focus-visible:tw-outline-[#2563EB]';
 
+const headerSearchFieldClass =
+    'tw-max-w-[560px] !tw-h-12 !tw-rounded-[24px] !tw-bg-white !tw-px-4 !tw-shadow-[inset_0_0_0_1px_#D8E1F1] hover:!tw-bg-white hover:!tw-shadow-[inset_0_0_0_1px_#B9C8DE] focus-within:!tw-bg-white focus-within:!tw-shadow-[inset_0_0_0_2px_#2563EB,0_0_0_3px_rgba(37,99,235,0.08)] [&_.ant-input]:!tw-bg-transparent [&_.ant-input]:!tw-text-slate-800 [&_.ant-input]:tw-placeholder:!tw-text-slate-400';
+
+const headerAiRecordButtonClass =
+    'tw-inline-flex tw-h-10 tw-appearance-none tw-items-center tw-justify-center tw-gap-1.5 tw-rounded-full tw-border-0 tw-bg-gradient-to-r tw-from-[#1598ff] tw-via-[#2563eb] tw-to-[#8b5cf6] tw-px-4 tw-text-sm tw-font-bold tw-text-white tw-shadow-[0_8px_18px_rgba(37,99,235,0.20)] tw-transition-[background,box-shadow,filter] hover:tw-brightness-105 hover:tw-shadow-[0_10px_22px_rgba(99,102,241,0.24)] focus-visible:tw-outline focus-visible:tw-outline-2 focus-visible:tw-outline-offset-2 focus-visible:tw-outline-[#60a5fa]';
+
+const headerAiRecordHintClass =
+    'tw-pointer-events-none tw-absolute tw-left-1/2 tw-top-[calc(100%+10px)] tw-z-[1070] -tw-translate-x-1/2 tw-translate-y-1 tw-whitespace-nowrap tw-rounded-2xl tw-bg-white tw-px-3.5 tw-py-2 tw-text-xs tw-font-semibold tw-text-slate-700 tw-shadow-[0_10px_24px_rgba(15,23,42,0.14)] tw-ring-1 tw-ring-slate-200/80 tw-opacity-0 tw-transition-all tw-duration-200 before:tw-absolute before:tw-bottom-full before:tw-left-1/2 before:-tw-translate-x-1/2 before:tw-border-x-[6px] before:tw-border-b-[7px] before:tw-border-x-transparent before:tw-border-b-white group-hover:tw-translate-y-0 group-hover:tw-opacity-100 group-focus-within:tw-translate-y-0 group-focus-within:tw-opacity-100';
+
 function formatSessionCountdown(totalSeconds: number): string {
     const s = Math.max(0, totalSeconds);
     const m = Math.floor(s / 60);
@@ -874,27 +883,51 @@ function SessionAccessTimer() {
         }
     };
 
-    const warn = remainingSec > 0 && remainingSec <= 5 * 60;
+    const sessionTone = remainingSec > 0 && remainingSec <= 60 ? 'danger' : remainingSec > 0 && remainingSec <= 5 * 60 ? 'warning' : 'safe';
+    const sessionStyle = {
+        safe: {
+            shell: 'tw-border-blue-100/70 tw-bg-blue-50/50',
+            dot: 'tw-bg-blue-500',
+            icon: 'tw-text-blue-500',
+            time: 'tw-text-blue-950',
+            button: '!tw-border-blue-200 !tw-bg-white !tw-text-blue-600 hover:!tw-border-blue-600 hover:!tw-bg-blue-600 hover:!tw-text-white',
+        },
+        warning: {
+            shell: 'tw-border-orange-200/70 tw-bg-orange-50/70',
+            dot: 'tw-animate-pulse tw-bg-orange-500',
+            icon: 'tw-text-orange-500',
+            time: 'tw-text-orange-950',
+            button: '!tw-border-orange-300 !tw-bg-orange-500 !tw-text-white hover:!tw-border-orange-600 hover:!tw-bg-orange-600 hover:!tw-text-white',
+        },
+        danger: {
+            shell: 'tw-border-red-200 tw-bg-red-50/80',
+            dot: 'tw-animate-ping tw-bg-red-600',
+            icon: 'tw-text-red-600',
+            time: 'tw-text-red-950',
+            button: '!tw-border-red-400 !tw-bg-red-600 !tw-text-white !tw-shadow-[0_4px_12px_rgba(220,38,38,0.18)] hover:!tw-border-red-700 hover:!tw-bg-red-700 hover:!tw-text-white',
+        },
+    }[sessionTone];
 
     return (
         <div
-            className="tw-flex tw-h-11 tw-items-center tw-gap-2 tw-rounded-full tw-border tw-border-solid tw-border-slate-200 tw-bg-slate-50 tw-px-3">
-            <ClockCircleOutlined
-                className={warn ? 'tw-text-amber-600' : 'tw-text-slate-500'}
-                aria-hidden
-            />
-            <span
-                className={`tw-tabular-nums tw-text-sm tw-font-semibold ${warn ? 'tw-text-amber-700' : 'tw-text-slate-800'}`}
-                title="액세스 토큰 만료까지 남은 시간"
-            >
-        {formatSessionCountdown(remainingSec)}
-      </span>
+            className={`tw-flex tw-h-11 tw-w-fit tw-items-center tw-gap-2.5 tw-rounded-full tw-border tw-border-solid tw-py-1 tw-pl-3 tw-pr-1.5 tw-shadow-[0_1px_2px_rgba(15,23,42,0.04)] tw-backdrop-blur-md tw-transition-all tw-duration-500 ${sessionStyle.shell}`}
+            title="액세스 토큰 만료까지 남은 시간"
+        >
+            <div className="tw-flex tw-items-center tw-gap-2">
+                <span className="tw-relative tw-inline-flex tw-size-4 tw-items-center tw-justify-center">
+                    <span className={`tw-absolute -tw-right-0.5 -tw-top-0.5 tw-size-1.5 tw-rounded-full ${sessionStyle.dot}`} />
+                    <ClockCircleOutlined className={`tw-text-[16px] ${sessionStyle.icon}`} aria-hidden />
+                </span>
+                <span className={`tw-min-w-[48px] tw-tabular-nums tw-text-sm tw-font-semibold tw-leading-none tw-tracking-tight ${sessionStyle.time}`}>
+                    {formatSessionCountdown(remainingSec)}
+                </span>
+            </div>
             <Button
                 type="default"
                 size="small"
                 loading={extending}
                 onClick={() => void handleExtend()}
-                className="!tw-h-7 !tw-rounded-full !tw-border-slate-300 !tw-px-3 !tw-text-xs !tw-font-semibold !tw-text-slate-700 hover:!tw-border-slate-400 hover:!tw-text-slate-900"
+                className={`!tw-h-8 !tw-rounded-full !tw-px-3.5 !tw-text-xs !tw-font-bold !tw-transition-all active:!tw-scale-95 ${sessionStyle.button}`}
             >
                 연장
             </Button>
@@ -1450,11 +1483,12 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
             {hideSearch ? <div className="tw-flex-1" /> : (
                 <div className="tw-relative tw-flex tw-min-w-0 tw-flex-1 tw-justify-start">
                     <AppSearchField
-                        className="tw-max-w-2xl"
+                        className={headerSearchFieldClass}
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                         placeholder="메뉴, 동료, 문서 검색"
                         aria-label="메뉴, 동료, 문서 검색"
+                        prefix={<SearchOutlined className="tw-text-[22px] tw-text-[#2563EB]"/>}
                     />
                     {showSearchPanel && (
                         <div
@@ -1525,18 +1559,38 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
 
             <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-3 tw-overflow-visible md:tw-gap-3.5">
                 <SessionAccessTimer/>
-                <Tooltip title="음성 녹음">
+                <div className="tw-group tw-relative tw-inline-flex tw-overflow-visible">
                     <button
                         type="button"
-                        className={headerGhostIconClass}
-                        aria-label="음성 녹음"
+                        className={headerAiRecordButtonClass}
+                        aria-label="AI 회의록"
+                        aria-describedby="header-ai-record-hint"
                         onClick={() => {
                             setAiRecordingModalOpen(true);
                         }}
                     >
-                        <AudioOutlined className="tw-text-[20px]"/>
+                        <svg
+                            className="tw-size-3.5 tw-shrink-0 tw-origin-center tw-transition-transform tw-duration-200 group-hover:tw-scale-125 group-focus-within:tw-scale-125"
+                            viewBox="0 0 16 16"
+                            fill="none"
+                            aria-hidden
+                        >
+                            <path
+                                d="M8 1.75L9.18 5.28L12.75 6.5L9.18 7.72L8 11.25L6.82 7.72L3.25 6.5L6.82 5.28L8 1.75Z"
+                                fill="currentColor"
+                            />
+                            <path
+                                d="M3.15 9.8L3.62 11.18L5 11.65L3.62 12.12L3.15 13.5L2.68 12.12L1.3 11.65L2.68 11.18L3.15 9.8Z"
+                                fill="currentColor"
+                                opacity="0.9"
+                            />
+                        </svg>
+                        <span className="tw-whitespace-nowrap">AI 회의록</span>
                     </button>
-                </Tooltip>
+                    <div id="header-ai-record-hint" className={headerAiRecordHintClass}>
+                        녹음 원문을 정리해 AI 회의록을 만들어드려요.
+                    </div>
+                </div>
                 <Tooltip title="멤버 채팅">
                     <Badge count={chatUnreadTotal} color="#EF4444" offset={[-8, 8]} showZero={false} overflowCount={99}>
                         <button

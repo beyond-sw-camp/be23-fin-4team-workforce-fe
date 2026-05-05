@@ -23,6 +23,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
+import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import { useMemo, useState } from 'react';
 import { membersApi } from '@/features/members/api/membersApi';
 import type { Member } from '@/features/members/model/types';
@@ -199,17 +200,17 @@ export function AdminAttendanceCorrectionPage() {
 
   return (
     <div className="tw-space-y-4">
-      <div>
-        <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
-          출퇴근 정정 검토
-        </Typography.Title>
-        <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-sm">
-          직원이 신청한 출퇴근 정정을 검토합니다. <b>승인</b> 시 해당 일자 근태가 즉시 확정 처리되고, <b>반려</b> 시 신청 전 상태로 복구됩니다.
-          <br />
-          ※ 정정 검토 중인 근태 데이터는 자동 처리(익일 2시와 14시)대상이 아니므로
-            주의해서 처리하세요.
-        </Typography.Paragraph>
-      </div>
+      <AppWorkspacePageTitle
+        eyebrow="Attendance"
+        title="출퇴근 정정 검토"
+        subtitle={(
+          <>
+            직원이 신청한 출퇴근 정정을 검토합니다. <b>승인</b> 시 해당 일자 근태가 즉시 확정 처리되고, <b>반려</b> 시 신청 전 상태로 복구됩니다.
+            <br />
+            ※ 정정 검토 중인 근태 데이터는 자동 처리(익일 2시와 14시)대상이 아니므로 주의해서 처리하세요.
+          </>
+        )}
+      />
 
       <Card className="tw-border-slate-200/80 tw-shadow-sm" title="검토 대기 목록">
         {pendingQ.isError && (

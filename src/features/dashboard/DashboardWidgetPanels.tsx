@@ -968,6 +968,7 @@ function DashboardPayrollNewHiresBlock({ user }: { user: Me | null }) {
     queryKey: ['salary', 'salaries'],
     queryFn: () => salaryApi.salary.listByCompany(),
     enabled: isAdmin,
+    retry: false,
     staleTime: 60_000,
   });
   // 임시 Salary 시그니처 — SalaryTab 의 isProvisionalSalary 와 동일 기준.
