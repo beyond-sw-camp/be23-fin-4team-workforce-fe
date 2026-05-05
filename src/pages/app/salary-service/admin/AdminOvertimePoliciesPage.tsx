@@ -15,8 +15,6 @@ type FormValues = {
   weeklyTotalLimitMinutes?: number;
   dailyOvertimeLimitMinutes?: number;
   monthlyOvertimeLimitMinutes?: number;
-  nightStartTime?: string;
-  nightEndTime?: string;
   effectiveFrom: dayjs.Dayjs;
   effectiveTo?: dayjs.Dayjs | null;
 };
@@ -43,9 +41,10 @@ function formatMinutesWithDuration(value?: number | null): string {
  *  - 월 최대 연장 >= 주 최대 연장
  *  - 주 최대 총 >= 일 최대 근무
  *  - 주 최대 총 >= 주 최대 연장
- *  - 야간 시작/종료 시각 같으면 안 됨
  *  - 적용 종료일 >= 적용 시작일 (있을 때)
  *  - 사후 결재 마감 시간 0 이상
+ *
+ * 야간 시간대(22:00-06:00)는 근로기준법 고정값이라 입력받지 않음
  */
 function validateOvertimePolicyValues(v: FormValues): string | null {
   const dayMax = v.dailyOvertimeLimitMinutes;
@@ -71,11 +70,6 @@ function validateOvertimePolicyValues(v: FormValues): string | null {
   }
   if (weekTotal != null && weekMax != null && weekTotal < weekMax) {
     return '주 최대 총 근무시간은 주 최대 연장근무시간보다 크거나 같아야 합니다.';
-  }
-
-  // 야간 시각
-  if (v.nightStartTime && v.nightEndTime && v.nightStartTime === v.nightEndTime) {
-    return '야간 시작/종료 시각이 같을 수 없습니다.';
   }
 
   // 적용 기간
@@ -116,8 +110,6 @@ export function AdminOvertimePoliciesPage() {
         dailyOvertimeLimitMinutes: v.dailyOvertimeLimitMinutes ?? null,
         monthlyOvertimeLimitMinutes: v.monthlyOvertimeLimitMinutes ?? null,
         holidayWorkRequiresApproval: true,
-        nightStartTime: v.nightStartTime ?? null,
-        nightEndTime: v.nightEndTime ?? null,
         effectiveFrom: v.effectiveFrom.format('YYYY-MM-DD'),
         effectiveTo: v.effectiveTo ? v.effectiveTo.format('YYYY-MM-DD') : null,
       }),
@@ -141,8 +133,6 @@ export function AdminOvertimePoliciesPage() {
         dailyOvertimeLimitMinutes: v.dailyOvertimeLimitMinutes ?? null,
         monthlyOvertimeLimitMinutes: v.monthlyOvertimeLimitMinutes ?? null,
         holidayWorkRequiresApproval: true,
-        nightStartTime: v.nightStartTime ?? null,
-        nightEndTime: v.nightEndTime ?? null,
         effectiveFrom: v.effectiveFrom.format('YYYY-MM-DD'),
         effectiveTo: v.effectiveTo ? v.effectiveTo.format('YYYY-MM-DD') : null,
       }),
@@ -211,8 +201,6 @@ export function AdminOvertimePoliciesPage() {
                   weeklyTotalLimitMinutes: r.weeklyTotalLimitMinutes ?? undefined,
                   dailyOvertimeLimitMinutes: r.dailyOvertimeLimitMinutes ?? undefined,
                   monthlyOvertimeLimitMinutes: r.monthlyOvertimeLimitMinutes ?? undefined,
-                  nightStartTime: r.nightStartTime ?? '22:00',
-                  nightEndTime: r.nightEndTime ?? '06:00',
                   effectiveFrom: r.effectiveFrom ? dayjs(r.effectiveFrom) : dayjs(),
                   effectiveTo: r.effectiveTo ? dayjs(r.effectiveTo) : null,
                 });
@@ -246,13 +234,11 @@ export function AdminOvertimePoliciesPage() {
             // 폼 초기값 - 가이드의 예시값을 기본 입력값으로 채워 운영 기준에 맞게 수정만 하면 되도록
             form.setFieldsValue({
               overtimeFloorMinutes: 15,
-              postApprovalDeadlineHours: 24,
+              postApprovalDeadlineHours: 72,
               dailyOvertimeLimitMinutes: 600,
               monthlyOvertimeLimitMinutes: 2400,
               weeklyOvertimeLimitMinutes: 720,
               weeklyTotalLimitMinutes: 3120,
-              nightStartTime: '22:00',
-              nightEndTime: '06:00',
               effectiveFrom: dayjs(),
             });
           }}
@@ -302,13 +288,6 @@ export function AdminOvertimePoliciesPage() {
             }
           }}
         >
-          <Alert
-            type="info"
-            showIcon
-            className="tw-mb-3"
-            message="입력 가이드"
-            description="정책값은 분 단위 기준으로 저장됩니다. 숫자 입력칸에는 예시를 넣어두었으니 운영 기준에 맞게 수정해 주세요."
-          />
           <Row gutter={[12, 4]}>
             <Col span={8}>
               <Form.Item
@@ -336,10 +315,10 @@ export function AdminOvertimePoliciesPage() {
             <Col span={8}>
               <Form.Item
                 name="postApprovalDeadlineHours"
-                label="사후 결재 마감(시간)"
-                extra="예: 다음 날 24시간 이내"
+                label="사후 신청 가능 기한(시간)"
+                extra="근무 종료 후 N시간 이내 사후 결재 신청 허용 (예: 72 = 3일)"
               >
-              <InputNumber min={0} placeholder="예: 24" style={{ width: 170 }} />
+              <InputNumber min={0} placeholder="예: 72" style={{ width: 170 }} />
               </Form.Item>
             </Col>
           </Row>
@@ -387,33 +366,7 @@ export function AdminOvertimePoliciesPage() {
           </Row>
 
           <Row gutter={[12, 4]}>
-            <Col span={6}>
-              <Form.Item name="nightStartTime" label="야간 시작 시각(HH:mm)" extra="예: 22:00">
-                <Select
-                  style={{ width: 150 }}
-                  placeholder="예: 22:00"
-                  options={[
-                    { value: '21:00', label: '21:00' },
-                    { value: '22:00', label: '22:00' },
-                    { value: '23:00', label: '23:00' },
-                  ]}
-                />
-              </Form.Item>
-            </Col>
-            <Col span={6}>
-              <Form.Item name="nightEndTime" label="야간 종료 시각(HH:mm)" extra="예: 06:00">
-                <Select
-                  style={{ width: 150 }}
-                  placeholder="예: 06:00"
-                  options={[
-                    { value: '05:00', label: '05:00' },
-                    { value: '06:00', label: '06:00' },
-                    { value: '07:00', label: '07:00' },
-                  ]}
-                />
-              </Form.Item>
-            </Col>
-            <Col span={6}>
+            <Col span={8}>
               <Form.Item
                 name="effectiveFrom"
                 label="적용 시작일"
@@ -423,12 +376,19 @@ export function AdminOvertimePoliciesPage() {
                 <DatePicker format="YYYY-MM-DD" placeholder="시작일 선택" style={{ width: 170 }} />
               </Form.Item>
             </Col>
-            <Col span={6}>
+            <Col span={8}>
               <Form.Item name="effectiveTo" label="적용 종료일" extra="미입력 시 계속 적용">
                 <DatePicker format="YYYY-MM-DD" placeholder="종료일 선택 (선택)" style={{ width: 170 }} />
               </Form.Item>
             </Col>
           </Row>
+
+          <Alert
+            type="success"
+            showIcon
+            className="!tw-mt-2"
+            message="야간근로 시간대는 22:00 ~ 06:00 으로 고정 적용됩니다 (근로기준법)."
+          />
         </Form>
         </div>
       </AppDoubleActionModal>

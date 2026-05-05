@@ -236,6 +236,27 @@ export function MyContractsPanel() {
     [contractDetail, user?.id],
   );
 
+  const detailSignCells = useMemo(() => {
+    const empty = { label: '—', imageUrl: '', signedAt: '' };
+    if (!contractDetail) return { employee: empty, company: empty };
+    const employee = contractDetail.parties?.find((p) => String(p.partyRole).toUpperCase() === 'EMPLOYEE');
+    const company = contractDetail.parties?.find((p) => String(p.partyRole).toUpperCase() === 'COMPANY');
+    const employeeImg = employee?.signatureImageUrl?.trim() || '';
+    const companyImg = company?.signatureImageUrl?.trim() || contractDetail.sealImageUrl?.trim() || '';
+    return {
+      employee: {
+        label: contractDetail.employeeName?.trim() || '직원',
+        imageUrl: employeeImg,
+        signedAt: employee?.signedAt ? formatDateTime(employee.signedAt) : '',
+      },
+      company: {
+        label: '회사',
+        imageUrl: companyImg,
+        signedAt: company?.signedAt ? formatDateTime(company.signedAt) : '',
+      },
+    };
+  }, [contractDetail]);
+
   return (
     <>
       <Card className="tw-border-slate-200/80 tw-shadow-sm" title="내 계약">
@@ -387,43 +408,6 @@ export function MyContractsPanel() {
           <Typography.Text type="secondary">표시할 계약이 없습니다.</Typography.Text>
         ) : (
           <Space direction="vertical" className="tw-w-full" size={12}>
-            <Card size="small" title="기본 정보">
-              <div className="tw-grid tw-grid-cols-1 sm:tw-grid-cols-2 tw-gap-2 tw-text-sm">
-                <div><strong>템플릿</strong>: {contractDetail.templateName}</div>
-                <div><strong>문서번호</strong>: {contractDetail.contractNumber?.trim() || '—'}</div>
-                <div><strong>상태</strong>: {statusTag(contractDetail.contractStatus)}</div>
-                {contractDetail.sealImageUrl?.trim() ? (
-                  <div className="sm:tw-col-span-2 tw-flex tw-flex-wrap tw-items-center tw-gap-2">
-                    <strong className="tw-shrink-0">회사 직인</strong>
-                    <img
-                      src={contractDetail.sealImageUrl.trim()}
-                      alt="회사 직인"
-                      className="tw-max-h-24 tw-max-w-[200px] tw-rounded tw-border tw-border-slate-200 tw-object-contain tw-bg-white tw-p-1"
-                    />
-                  </div>
-                ) : null}
-                <div><strong>직원명</strong>: {contractDetail.employeeName || '—'}</div>
-                <div><strong>사번</strong>: {contractDetail.employeeSabun || '—'}</div>
-                <div><strong>부서</strong>: {contractDetail.organizationName || '—'}</div>
-                <div><strong>직책</strong>: {contractDetail.jobTitleName || '—'}</div>
-                {String(contractDetail.contractStatus).toUpperCase() === 'CANCELED' && contractDetail.cancelReason?.trim() ? (
-                  <div className="sm:tw-col-span-2">
-                    <strong>회수 사유</strong>:{' '}
-                    <Typography.Paragraph className="!tw-mb-0 tw-inline tw-whitespace-pre-wrap">
-                      {contractDetail.cancelReason.trim()}
-                    </Typography.Paragraph>
-                  </div>
-                ) : null}
-                {String(contractDetail.contractStatus).toUpperCase() === 'REJECTED' && contractEffectiveRejectReason(contractDetail) ? (
-                  <div className="sm:tw-col-span-2">
-                    <strong>거절 사유</strong>:{' '}
-                    <Typography.Paragraph className="!tw-mb-0 tw-inline tw-whitespace-pre-wrap">
-                      {contractEffectiveRejectReason(contractDetail)}
-                    </Typography.Paragraph>
-                  </div>
-                ) : null}
-              </div>
-            </Card>
             {contractEmployeeSignaturePending(contractDetail) || canRejectCurrentDetail ? (
               <Card size="small" className="tw-border-amber-200/90 tw-bg-amber-50/60">
                 <div className="tw-flex tw-flex-col tw-gap-3 sm:tw-flex-row sm:tw-items-center sm:tw-justify-between">
@@ -468,7 +452,6 @@ export function MyContractsPanel() {
                 description={<span className="tw-whitespace-pre-wrap tw-text-sm">{detailFormDescription}</span>}
               />
             ) : null}
-            <ContractPartySignaturesCard parties={contractDetail.parties} />
             <Card size="small" title="계약서 내용">
               <div className="tw-max-h-[min(70vh,720px)] tw-overflow-auto">
                 <ApprovalFormPaperLayout
@@ -479,7 +462,72 @@ export function MyContractsPanel() {
                   drafterOrg={contractDetail.organizationName || '—'}
                   drafterJobTitle={contractDetail.jobTitleName || undefined}
                   writtenDate={dayjs(contractDetail.createdAt).isValid() ? dayjs(contractDetail.createdAt).format('YYYY-MM-DD') : contractDetail.createdAt}
+                  documentNumber={contractDetail.contractNumber?.trim() || undefined}
+                  stampColumn={
+                    <table className="tw-w-[14rem] tw-table-fixed tw-border-collapse tw-text-sm">
+                      <colgroup>
+                        <col className="tw-w-[2rem]" />
+                        <col className="tw-w-[6rem]" />
+                        <col className="tw-w-[6rem]" />
+                      </colgroup>
+                      <tbody>
+                        <tr>
+                          <td
+                            rowSpan={3}
+                            className="tw-border tw-border-solid tw-border-black tw-bg-[#efefef] tw-px-0 tw-py-2 tw-text-center tw-align-middle tw-text-[11px] tw-font-semibold tw-text-black"
+                            style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}
+                          >
+                            서명
+                          </td>
+                          <td className="tw-border tw-border-solid tw-border-black tw-bg-[#efefef] tw-px-2 tw-py-1 tw-text-center tw-text-xs tw-font-semibold">직원</td>
+                          <td className="tw-border tw-border-solid tw-border-black tw-bg-[#efefef] tw-px-2 tw-py-1 tw-text-center tw-text-xs tw-font-semibold">회사</td>
+                        </tr>
+                        <tr>
+                          <td className="tw-border tw-border-solid tw-border-black tw-bg-white tw-px-1 tw-py-1 tw-text-center tw-align-middle">
+                            <div className="tw-flex tw-min-h-[3.2rem] tw-flex-col tw-items-center tw-justify-center tw-gap-1">
+                              <span className="tw-text-[11px] tw-font-semibold">{detailSignCells.employee.label}</span>
+                              {detailSignCells.employee.imageUrl ? (
+                                <img src={detailSignCells.employee.imageUrl} alt="직원 서명" className="tw-max-h-8 tw-max-w-[3.25rem] tw-object-contain" />
+                              ) : null}
+                            </div>
+                          </td>
+                          <td className="tw-border tw-border-solid tw-border-black tw-bg-white tw-px-1 tw-py-1 tw-text-center tw-align-middle">
+                            <div className="tw-flex tw-min-h-[3.2rem] tw-flex-col tw-items-center tw-justify-center tw-gap-1">
+                              <span className="tw-text-[11px] tw-font-semibold">{detailSignCells.company.label}</span>
+                              {detailSignCells.company.imageUrl ? (
+                                <img src={detailSignCells.company.imageUrl} alt="회사 직인" className="tw-max-h-8 tw-max-w-[3.25rem] tw-object-contain" />
+                              ) : null}
+                            </div>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="tw-border tw-border-solid tw-border-black tw-bg-white tw-px-1 tw-py-0.5 tw-text-center tw-text-[10px]">
+                            {detailSignCells.employee.signedAt || '\u00a0'}
+                          </td>
+                          <td className="tw-border tw-border-solid tw-border-black tw-bg-white tw-px-1 tw-py-0.5 tw-text-center tw-text-[10px]">
+                            {detailSignCells.company.signedAt || '\u00a0'}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  }
                 >
+                  <ApprovalFormPaperFieldRow label="문서번호">
+                    <Typography.Text>{contractDetail.contractNumber?.trim() || '—'}</Typography.Text>
+                  </ApprovalFormPaperFieldRow>
+                  <ApprovalFormPaperFieldRow label="상태">
+                    {statusTag(contractDetail.contractStatus)}
+                  </ApprovalFormPaperFieldRow>
+                  {String(contractDetail.contractStatus).toUpperCase() === 'CANCELED' && contractDetail.cancelReason?.trim() ? (
+                    <ApprovalFormPaperFieldRow label="회수 사유">
+                      <Typography.Text className="tw-whitespace-pre-wrap">{contractDetail.cancelReason.trim()}</Typography.Text>
+                    </ApprovalFormPaperFieldRow>
+                  ) : null}
+                  {String(contractDetail.contractStatus).toUpperCase() === 'REJECTED' && contractEffectiveRejectReason(contractDetail) ? (
+                    <ApprovalFormPaperFieldRow label="거절 사유">
+                      <Typography.Text className="tw-whitespace-pre-wrap">{contractEffectiveRejectReason(contractDetail)}</Typography.Text>
+                    </ApprovalFormPaperFieldRow>
+                  ) : null}
                   {detailContractSchema && detailContractSchema.fields.length > 0 ? (
                     detailContractSchema.fields.map((field) =>
                       field.type === 'static_note' ? (

@@ -213,6 +213,32 @@ type PreActionConfig = {
 };
 
 const SCHEDULE_SELECTION_PREFILL_STORAGE_KEY = 'wf-approval-prefill-schedule-selection';
+const PERSONNEL_ORDER_PREFILL_STORAGE_KEY = 'wf-approval-prefill-personnel-order';
+const LEAVE_REQUEST_PREFILL_STORAGE_KEY = 'wf-approval-prefill-leave-request';
+const CHATBOT_ACTION_PREFILL_STORAGE_KEY = 'wf-approval-prefill-chatbot-action';
+
+/** 쿼리값이 `prefill=%22true%22`처럼 따옴표가 포함된 문자열일 때 정규화 */
+function normalizeUrlSearchToken(v: unknown): string {
+  if (v === true) return 'true';
+  if (v === false) return 'false';
+  if (v == null) return '';
+  let s = String(v).trim();
+  if (s.length >= 2) {
+    const a = s[0];
+    const b = s[s.length - 1];
+    if ((a === '"' && b === '"') || (a === "'" && b === "'")) {
+      s = s.slice(1, -1).trim();
+    }
+  }
+  return s;
+}
+
+function isTruthyPrefillParam(v: unknown): boolean {
+  if (v === true) return true;
+  if (v === false) return false;
+  const s = normalizeUrlSearchToken(v).toLowerCase();
+  return s === 'true' || s === '1' || s === 'yes';
+}
 
 function readStr(content: Record<string, unknown>, key: string): string {
   const v = content[key];
@@ -223,6 +249,15 @@ function readNum(content: Record<string, unknown>, key: string): number | null {
   if (typeof v === 'number') return v;
   if (typeof v === 'string' && v.trim() !== '' && !Number.isNaN(Number(v))) return Number(v);
   return null;
+}
+/** YYYY-MM-DD 문자열 배열 추출, 비어있으면 undefined */
+function readDateArray(content: Record<string, unknown>, key: string): string[] | undefined {
+  const v = content[key];
+  if (!Array.isArray(v)) return undefined;
+  const out = v
+    .map((d) => (typeof d === 'string' ? d.trim() : ''))
+    .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d));
+  return out.length > 0 ? out : undefined;
 }
 
 /** HH:mm 또는 HH:mm:ss 시간 문자열을 LocalDateTime 파싱용 ISO 로 조합 */
@@ -268,12 +303,19 @@ function minutesBetweenTimes(start: string, end: string): number {
 
 const PRE_ACTION_CONFIGS: PreActionConfig[] = [
   {
-    documentName: '연차신청서',
+    documentName: '휴가신청서',
     entityIdField: 'leaveRequestId',
     submitEntity: async (content, hasAttachment) => {
       const companyLeaveTypeId = readStr(content, 'vacationType');
-      const startDate = readStr(content, 'startDate');
-      const endDate = readStr(content, 'endDate');
+      // 비연속 날짜 - 채워져 있으면 startDate/endDate 는 first/last 로 자동 도출
+      const plannedDates = readDateArray(content, 'plannedDates');
+      let startDate = readStr(content, 'startDate');
+      let endDate = readStr(content, 'endDate');
+      if (plannedDates && plannedDates.length > 0) {
+        const sorted = [...plannedDates].sort();
+        startDate = sorted[0] ?? startDate;
+        endDate = sorted[sorted.length - 1] ?? endDate;
+      }
       if (!companyLeaveTypeId || !startDate || !endDate) {
         throw new Error('휴가 종류·시작일·종료일은 필수입니다.');
       }
@@ -288,6 +330,7 @@ const PRE_ACTION_CONFIGS: PreActionConfig[] = [
         endDate,
         reason: readStr(content, 'reason') || '휴가 신청',
         evidenceFileUrl,
+        ...(plannedDates ? { plannedDates } : {}),
       });
       if (!r.leaveRequestId) throw new Error('휴가 신청 ID 를 받지 못했습니다.');
       return r.leaveRequestId;
@@ -1200,8 +1243,6 @@ function formatDateTime(value?: string | null) {
 
 function formatApprovalDocumentName(name?: string | null): string {
   const raw = String(name ?? '').trim();
-  const compact = raw.replace(/\s+/g, '');
-  if (compact === '휴가신청') return '연차신청서';
   return raw || '—';
 }
 
@@ -2761,6 +2802,109 @@ export function ApprovalsPage() {
     routeSearch.schBreakEnd,
     routeSearch.schReason,
   ]);
+
+  // 인사발령품의서 prefill - 조직 개편 시뮬에서 localStorage 로 넘겨준 contentJson 자동 채움
+  // payload: { documentName: "인사발령품의서", contentJson: { effectiveDate, orderCategory, orderCategoryLabel, reason, summaryText, items: [...] } }
+  // localStorage 사용 - iframe 모달도 부모와 동일 origin 으로 접근 가능 (sessionStorage는 분리됨)
+  // iframe(embed) 안에서만 처리 - 부모쪽이 먼저 localStorage.removeItem 하면 iframe 이 prefill 못 채우는 문제 방지
+  const personnelOrderPrefillAppliedRef = useRef(false);
+  useEffect(() => {
+    if (!isEmbedComposeModal) return;
+    if (tab !== 'compose' || composePhase !== 'fill') return;
+    if (!selectedDocument || selectedDocument.documentName !== '인사발령품의서') {
+      personnelOrderPrefillAppliedRef.current = false;
+      return;
+    }
+    if (personnelOrderPrefillAppliedRef.current) return;
+    const raw = localStorage.getItem(PERSONNEL_ORDER_PREFILL_STORAGE_KEY);
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw) as {
+        documentName?: string;
+        contentJson?: Record<string, unknown>;
+      };
+      const cj = parsed.contentJson ?? {};
+      const current = (form.getFieldValue('content') ?? {}) as Record<string, unknown>;
+      // 사용자 노출 textarea 에는 한글 요약 (UUID 등 ID 제외)
+      const summaryText = typeof cj.summaryText === 'string' ? cj.summaryText : '';
+      form.setFieldsValue({
+        content: {
+          ...current,
+          ...cj,
+          contentJsonText: summaryText,
+        },
+      });
+      personnelOrderPrefillAppliedRef.current = true;
+      message.success('조직 개편 시뮬 변경 사항을 결재 양식에 채웠습니다. 결재선만 지정해 신청하세요.');
+    } catch {
+      // ignore bad payload
+    } finally {
+      localStorage.removeItem(PERSONNEL_ORDER_PREFILL_STORAGE_KEY);
+    }
+  }, [composePhase, form, isEmbedComposeModal, message, selectedDocument, tab]);
+
+  // 휴가신청서 prefill - 휴가 계획 내역 [휴가 신청] 버튼에서 넘겨준 startDate/endDate/plannedDates 자동 채움
+  // localStorage 사용 - iframe 모달도 부모와 동일 origin 으로 접근 가능 (sessionStorage는 분리됨)
+  // autoCompose 진입은 iframe 안에서 양식이 표시되므로 storage 비우기는 iframe 컨텍스트에서만 수행
+  // (부모가 먼저 비워버리면 iframe 까지 prefill 데이터가 도달 못 함)
+  useEffect(() => {
+    if (tab !== 'compose' || composePhase !== 'fill') return;
+    const raw = localStorage.getItem(LEAVE_REQUEST_PREFILL_STORAGE_KEY)
+      ?? sessionStorage.getItem(LEAVE_REQUEST_PREFILL_STORAGE_KEY);
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw) as {
+        documentId?: string;
+        content?: Record<string, unknown>;
+      };
+      if (!parsed.documentId || parsed.documentId !== selectedDocumentId) return;
+      if (!parsed.content || typeof parsed.content !== 'object' || Array.isArray(parsed.content)) return;
+      const current = (form.getFieldValue('content') ?? {}) as Record<string, unknown>;
+      form.setFieldsValue({
+        content: {
+          ...current,
+          ...parsed.content,
+        },
+      });
+      message.success('휴가 계획에서 가져온 날짜가 자동 입력되었습니다. 결재선 지정 후 신청하세요.');
+      // iframe(embed) 컨텍스트에서만 storage 비움. 부모가 비우면 iframe 에 데이터 도달 못 함
+      if (isEmbedComposeModal) {
+        localStorage.removeItem(LEAVE_REQUEST_PREFILL_STORAGE_KEY);
+        sessionStorage.removeItem(LEAVE_REQUEST_PREFILL_STORAGE_KEY);
+      }
+    } catch {
+      if (isEmbedComposeModal) {
+        localStorage.removeItem(LEAVE_REQUEST_PREFILL_STORAGE_KEY);
+        sessionStorage.removeItem(LEAVE_REQUEST_PREFILL_STORAGE_KEY);
+      }
+    }
+  }, [composePhase, form, isEmbedComposeModal, message, selectedDocumentId, tab]);
+
+  // 챗봇 액션 prefill - sessionStorage 로 넘겨준 documentId+content 자동 입력
+  useEffect(() => {
+    if (tab !== 'compose' || composePhase !== 'fill') return;
+    const raw = sessionStorage.getItem(CHATBOT_ACTION_PREFILL_STORAGE_KEY);
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw) as {
+        documentId?: string;
+        content?: Record<string, unknown>;
+      };
+      if (!parsed.documentId || parsed.documentId !== selectedDocumentId) return;
+      if (!parsed.content || typeof parsed.content !== 'object' || Array.isArray(parsed.content)) return;
+      const current = (form.getFieldValue('content') ?? {}) as Record<string, unknown>;
+      form.setFieldsValue({
+        content: {
+          ...current,
+          ...parsed.content,
+        },
+      });
+      message.info('챗봇 제안값이 결재 양식에 자동 입력되었습니다.');
+      sessionStorage.removeItem(CHATBOT_ACTION_PREFILL_STORAGE_KEY);
+    } catch {
+      sessionStorage.removeItem(CHATBOT_ACTION_PREFILL_STORAGE_KEY);
+    }
+  }, [composePhase, form, message, selectedDocumentId, tab]);
 
   const toggleBookmark = useCallback((requestId: string) => {
     setBookmarkedRequestIds((prev) => {
@@ -5040,6 +5184,53 @@ export function ApprovalsPage() {
             ),
       )}
     >
+      {/* 허브 대시보드 밖(예: sideNav=workbench)에서도 동일 모달이 필요 - 챗봇 prefill 등 */}
+      {/* 허브 안(onComposeHub=true)에선 위쪽 그리드의 동일 모달이 뜨므로 중복 렌더 방지 위해 가드 */}
+      {!isEmbedComposeModal && !onComposeHub ? (
+        <Modal
+          title={composeHomeMoreModal?.kind === 'pending-inbox' ? composeHomeMoreModal.title : null}
+          open={composeHomeMoreModal != null}
+          onCancel={() => setComposeHomeMoreModal(null)}
+          footer={null}
+          width={1120}
+          destroyOnHidden
+          style={{ top: 48 }}
+          styles={{
+            content: {
+              height: 820,
+              maxHeight: '90vh',
+              resize: 'both',
+              display: 'flex',
+              flexDirection: 'column',
+              padding: 0,
+              overflow: 'auto',
+            },
+            header: { flexShrink: 0, marginBottom: 0, padding: '12px 16px' },
+            body: { flex: 1, minHeight: 0, padding: 0, overflow: 'hidden' },
+          }}
+        >
+          {composeHomeMoreModal?.kind === 'pending-inbox' ? (
+            <PendingApprovalInboxModalContent
+              myMemberId={authMemberId}
+              myMemberPositionId={drafterProfile?.memberPositionId?.trim()}
+              onOpenDetail={(requestId) => setSelectedRequestId(requestId)}
+              onStartApprove={(approvalId) => setApprovalAction({ approvalId, mode: 'approve' })}
+              onStartReject={(approvalId) => setApprovalAction({ approvalId, mode: 'reject' })}
+            />
+          ) : composeHomeMoreModal?.kind === 'iframe' ? (
+            <iframe
+              key={`${composeHomeMoreModal.panel}-${composeHomeMoreModal.composeDraftId ?? ''}-${composeHomeMoreModal.prefillDocumentId ?? ''}`}
+              title="전자결재 문서함"
+              src={composeHomeEmbedPanelUrl(composeHomeMoreModal.panel, {
+                composeDraftId: composeHomeMoreModal.composeDraftId,
+                prefillDocumentId: composeHomeMoreModal.prefillDocumentId,
+              })}
+              className="tw-h-full tw-min-h-0 tw-w-full tw-border-0"
+            />
+          ) : null}
+        </Modal>
+      ) : null}
+
       {!isEmbedComposeModal ? (
         <div
           className={clsx(
@@ -5405,6 +5596,12 @@ export function ApprovalsPage() {
                               selectedDocument.documentName === '근태정정신청' &&
                               field.name === 'attendanceDate' &&
                               Boolean(routeSearch.corrDate);
+                            // 휴가신청서는 시작일/종료일 입력을 숨기고 아래 "휴가 날짜" multi DatePicker 하나로 통합 처리
+                            // 제출 시 PRE_ACTION_CONFIGS 가 plannedDates 의 first/last 로 startDate/endDate 자동 도출
+                            const isLeaveRangeField =
+                              selectedDocument.documentName === '휴가신청서'
+                              && (field.name === 'startDate' || field.name === 'endDate');
+                            if (isLeaveRangeField) return null;
                             return (
                               <ApprovalFormPaperFieldRow key={field.name} label={field.label} required={fieldLocked}>
                                 <Form.Item name={namePath} rules={inputRules} className="!tw-mb-0">
@@ -5552,6 +5749,51 @@ export function ApprovalsPage() {
                                   </ApprovalFormPaperFieldRow>
                                 );
                               })}
+                              {/* 휴가신청서 - 휴가 날짜 multi DatePicker (단일/연속/비연속 모두 한 번에 처리) */}
+                              {/* 시작일/종료일 양식 필드는 위에서 숨김 처리, 사용 일수 = 선택한 날짜 개수 */}
+                              {selectedDocument.documentName === '휴가신청서' && (
+                                <ApprovalFormPaperFieldRow label="휴가 날짜" required>
+                                  <Form.Item
+                                    name={['content', 'plannedDates']}
+                                    className="!tw-mb-0"
+                                    rules={[
+                                      {
+                                        validator: (_, v) =>
+                                          Array.isArray(v) && v.length > 0
+                                            ? Promise.resolve()
+                                            : Promise.reject(new Error('휴가 날짜를 1개 이상 선택해 주세요.')),
+                                      },
+                                    ]}
+                                    getValueProps={(v) => ({
+                                      value: Array.isArray(v)
+                                        ? (v as string[])
+                                            .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))
+                                            .map((d) => dayjs(d, 'YYYY-MM-DD'))
+                                        : null,
+                                    })}
+                                    getValueFromEvent={(d: dayjs.Dayjs[] | dayjs.Dayjs | null) => {
+                                      if (!d) return undefined;
+                                      const arr = Array.isArray(d) ? d : [d];
+                                      const out = arr
+                                        .filter((x) => x && x.isValid())
+                                        .map((x) => x.format('YYYY-MM-DD'))
+                                        .sort();
+                                      return out.length > 0 ? out : undefined;
+                                    }}
+                                  >
+                                    <DatePicker
+                                      multiple
+                                      maxTagCount={10}
+                                      format="YYYY-MM-DD"
+                                      placeholder="휴가일을 클릭해 하나씩 선택 (연속/비연속 모두 가능)"
+                                      className="!tw-max-w-lg tw-w-full"
+                                    />
+                                  </Form.Item>
+                                  <Typography.Text type="secondary" className="!tw-text-[11px] !tw-block !tw-mt-1">
+                                    선택한 날짜 개수가 사용 일수로 카운트됩니다. 주말·공휴일은 제외하고 평일만 골라 주세요.
+                                  </Typography.Text>
+                                </ApprovalFormPaperFieldRow>
+                              )}
                             </ApprovalFormPaperLayout>
                   {composeSelectedOfficial ? (
                     <Card size="small" title="수신 부서 (공문 필수)" className="tw-border-slate-200">

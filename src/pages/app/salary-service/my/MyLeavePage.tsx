@@ -25,7 +25,6 @@ import {
   CalendarOutlined,
   DollarCircleOutlined,
   FileTextOutlined,
-  SendOutlined,
   SwapOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
@@ -42,6 +41,9 @@ import type {
   PromotionStageCode,
 } from '@/features/salary-service/types';
 import { PromotionResponseModal } from './components/PromotionResponseModal';
+
+// 결재 작성 화면에서 자동 prefill 받을 sessionStorage 키 (ApprovalsPage 와 동기화)
+const LEAVE_REQUEST_PREFILL_STORAGE_KEY = 'wf-approval-prefill-leave-request';
 
 const ACCRUAL_KO: Record<string, string> = {
   FISCAL: '회계연도',
@@ -71,7 +73,7 @@ const BALANCE_TYPE_KO: Record<string, string> = {
 
 // 휴가 계획 내역 표 행 - LeaveRequest + 휴가종류명 + 묶음 표시용 필드
 // 연속된 평일 휴가(주말/공휴일 제외)는 한 행으로 그룹화 (시작일~종료일, 일수 합산)
-type LeavePlanRow = LeaveRequest & {
+type LeavePlanRow = Partial<LeaveRequest> & {
   rowNo: number;
   leaveTypeName: string;
   /** 그룹 시작일 (groupedRange 표시용) */
@@ -82,6 +84,14 @@ type LeavePlanRow = LeaveRequest & {
   groupCount?: number;
   /** 그룹 합산 일수 */
   groupTotalDays?: number;
+  /** 촉진 회신에서 가져온 행 (실제 LeaveRequest 아님 - 휴가 신청 결재 필요) */
+  isFromPromotion?: boolean;
+  /** 촉진 통보 ID (재회신 / 추적용) */
+  promotionLogId?: string;
+  /** 촉진 회신 plannedDates - 결재 신청 시 비연속 날짜 그대로 prefill */
+  plannedDates?: string[];
+  /** 부분 신청 시 아직 결재 안 올린 남은 날짜만 prefill */
+  remainingPlannedDates?: string[];
 };
 
 /**
@@ -176,29 +186,80 @@ export function MyLeavePage() {
     return fuzzy?.documentId;
   }, [approvalDocsQ.data]);
 
-  // 휴가신청 버튼 핸들러 전자결재 휴가신청서 양식으로 이동
-  const handleNewLeaveRequest = () => {
-    if (leaveRequestDocId) {
-      void navigate({
-        to: '/app/approvals',
-        search: {
-          tab: 'compose',
-          docId: leaveRequestDocId,
-        },
-      });
+  // 휴가 계획 행에서 결재 신청으로 점프 - plannedDates 가 있으면 그대로 비연속 prefill
+  // 결재 양식 단계에서 PRE_ACTION_CONFIGS 가 LeaveRequest 를 생성하므로 여기서는 sessionStorage 만 세팅
+  const handleApplyFromPromotion = (r: LeavePlanRow) => {
+    if (!leaveRequestDocId) {
+      message.warning('휴가 신청서 양식이 등록되지 않았습니다.');
       return;
     }
-    if (approvalDocsQ.isLoading) {
-      message.info('결재 양식을 불러오는 중입니다 잠시 후 다시 시도해 주세요');
+    const start = r.groupStartDate ?? r.startDate;
+    const end = r.groupEndDate ?? r.endDate;
+    if (!start) {
+      message.warning('시작일 정보가 없습니다.');
       return;
     }
-    // 양식이 등록되지 않은 경우 결재 작성 화면으로만 이동 사용자가 양식 직접 선택
-    message.warning('휴가 신청서 양식이 등록되지 않았습니다 전자결재에서 직접 선택해 주세요');
+
+    // 기본 연차 휴가종류 우선 (code='ANNUAL' 또는 isSystemDefault), 없으면 첫번째
+    const types = leaveTypesQ.data ?? [];
+    const annual =
+      types.find((t) => (t.code ?? '').toUpperCase() === 'ANNUAL')
+      ?? types.find((t) => t.isSystemDefault)
+      ?? types[0];
+    const vacationType = annual?.companyLeaveTypeId;
+
+    // 부분 신청 케이스 (PLAN_PARTIAL) 면 남은 날짜만 prefill, 아니면 전체 plannedDates
+    const sourceDates = r.approvalStatus === 'PLAN_PARTIAL' && r.remainingPlannedDates && r.remainingPlannedDates.length > 0
+      ? r.remainingPlannedDates
+      : r.plannedDates;
+    let plannedDates: string[] | undefined = sourceDates && sourceDates.length > 0
+      ? [...sourceDates].sort()
+      : undefined;
+    if (!plannedDates && start) {
+      const acc: string[] = [];
+      const last = end ?? start;
+      let cur = dayjs(start);
+      const stop = dayjs(last);
+      if (cur.isValid() && stop.isValid()) {
+        while (!cur.isAfter(stop, 'day')) {
+          const dow = cur.day();
+          const ymd = cur.format('YYYY-MM-DD');
+          const isWeekend = dow === 0 || dow === 6;
+          if (!isWeekend && !holidaySet.has(ymd)) acc.push(ymd);
+          cur = cur.add(1, 'day');
+        }
+      }
+      if (acc.length > 0) plannedDates = acc;
+    }
+
+    const content: Record<string, unknown> = {
+      vacationType,
+      // 양식에서 시작일/종료일 입력은 숨겼지만 호환을 위해 같이 채워둠 (PRE_ACTION_CONFIGS 가 plannedDates 우선 사용)
+      startDate: plannedDates?.[0] ?? start,
+      endDate: plannedDates ? plannedDates[plannedDates.length - 1] : (end ?? start),
+      reason: r.reason && !r.isFromPromotion ? r.reason : '연차 사용 계획에 따른 신청',
+      ...(plannedDates ? { plannedDates } : {}),
+    };
+
+    try {
+      const payload = JSON.stringify({ documentId: leaveRequestDocId, content });
+      // iframe 모달과 부모 sessionStorage 가 분리되므로 localStorage 도 함께 세팅
+      localStorage.setItem(LEAVE_REQUEST_PREFILL_STORAGE_KEY, payload);
+      sessionStorage.setItem(LEAVE_REQUEST_PREFILL_STORAGE_KEY, payload);
+    } catch {
+      // ignore quota error
+    }
+
     void navigate({
       to: '/app/approvals',
-      search: {},
+      search: {
+        tab: 'compose',
+        docId: leaveRequestDocId,
+        autoCompose: '1',
+      },
     });
   };
+
 
   const balanceQ = useQuery({
     queryKey: ['salary', 'member-balance', 'mine'],
@@ -242,6 +303,9 @@ export function MyLeavePage() {
       message.success('회신이 완료되었습니다');
       setPromotionTarget(null);
       void qc.invalidateQueries({ queryKey: ['salary', 'leave-promotion', 'mine'] });
+      // 회신 시 휴가 계획 내역(LeaveRequest)도 자동 생성되는 BE 흐름이면 같이 갱신.
+      // 잔고 차감은 결재 통과 시점에 반영되므로 여기서는 invalidate 안 함.
+      void qc.invalidateQueries({ queryKey: ['salary', 'leave-requests', 'my'] });
     },
     onError: (e: Error) => message.error(e.message || '회신 처리에 실패했습니다'),
   });
@@ -415,68 +479,76 @@ export function MyLeavePage() {
     return map;
   }, [leaveTypesQ.data]);
 
-  // 휴가 계획 내역 - 연속된 평일 휴가를 한 행으로 그룹화 (성능 O(n))
-  // 같은 휴가종류 + 같은 결재상태 + 같은 사유 + 평일 인접(주말 점프 허용) 조건 충족 시 묶음
-  // 연도 필터 적용 - startDate 의 연도가 선택 연도와 일치하는 항목만
+  // 휴가 계획 내역 - 촉진 회신(ACKNOWLEDGED) 의 plannedDates 만 표시 (사용 계획)
+  // 실제 결재 신청/승인/사용 이력은 내 근태의 [휴가 이력] 버튼에서 별도 확인
+  // 연도 필터 적용 - plannedDates 안에 해당 연도가 있는 항목만
   const planRows: LeavePlanRow[] = useMemo(() => {
-    const items = (requestsQ.data?.content ?? []).filter((r) => {
-      const d = dayjs(r.startDate);
-      return d.isValid() && d.year() === year;
-    });
-    if (items.length === 0) return [];
-
-    // 1. 시작일 오름차순 정렬 (그룹화 위해)
-    const ascSorted = [...items].sort((a, b) =>
-      (a.startDate ?? '').localeCompare(b.startDate ?? ''),
-    );
-
-    // 2. O(n) 한 번 순회로 그룹 생성
-    type Group = {
-      first: LeaveRequest;
-      lastEnd: string;
-      count: number;
-      totalDays: number;
-    };
-    const groups: Group[] = [];
-    for (const cur of ascSorted) {
-      const last = groups[groups.length - 1];
-      const sameMeta =
-        last &&
-        last.first.companyLeaveTypeId === cur.companyLeaveTypeId &&
-        last.first.approvalStatus === cur.approvalStatus &&
-        (last.first.reason ?? '') === (cur.reason ?? '');
-      const adjacent =
-        last && cur.startDate && isAdjacentBusinessDay(last.lastEnd, cur.startDate, holidaySet);
-      if (sameMeta && adjacent) {
-        last.lastEnd = cur.endDate ?? cur.startDate ?? last.lastEnd;
-        last.count += 1;
-        last.totalDays += cur.usageDays ?? 0;
-      } else {
-        groups.push({
-          first: cur,
-          lastEnd: cur.endDate ?? cur.startDate ?? '',
-          count: 1,
-          totalDays: cur.usageDays ?? 0,
-        });
+    // 모든 LeaveRequest 가 사용한 날짜 set - 부분 일치 매칭 용 (취소/반려 제외)
+    const submittedDates = new Set<string>();
+    (requestsQ.data?.content ?? []).forEach((r) => {
+      if (r.approvalStatus === 'CANCELLED' || r.approvalStatus === 'REJECTED') return;
+      if (Array.isArray(r.plannedDates) && r.plannedDates.length > 0) {
+        r.plannedDates.forEach((d) => submittedDates.add(d));
+      } else if (r.startDate && r.endDate) {
+        let cur = dayjs(r.startDate);
+        const stop = dayjs(r.endDate);
+        if (cur.isValid() && stop.isValid()) {
+          while (!cur.isAfter(stop, 'day')) {
+            submittedDates.add(cur.format('YYYY-MM-DD'));
+            cur = cur.add(1, 'day');
+          }
+        }
       }
-    }
+    });
 
-    // 3. 최근 시작일 위로 정렬 + LeavePlanRow 매핑
-    const desc = [...groups].sort((a, b) =>
-      (b.first.startDate ?? '').localeCompare(a.first.startDate ?? ''),
-    );
-    return desc.map((g, idx) => ({
-      ...g.first,
-      rowNo: idx + 1,
-      leaveTypeName: g.first.companyLeaveTypeId
-        ? leaveTypeMap.get(g.first.companyLeaveTypeId) ?? '—'
-        : '—',
-      groupStartDate: g.first.startDate,
-      groupEndDate: g.lastEnd,
-      groupCount: g.count,
-      groupTotalDays: g.totalDays,
-    }));
-  }, [requestsQ.data, leaveTypeMap, holidaySet, year]);
+    const promotionRows: LeavePlanRow[] = (promotionQ.data ?? [])
+      .filter((p) => p.status === 'ACKNOWLEDGED' && Array.isArray(p.plannedDates) && p.plannedDates.length > 0)
+      .filter((p) => {
+        const ds = (p.plannedDates ?? []).filter(Boolean);
+        return ds.some((d) => dayjs(d).isValid() && dayjs(d).year() === year);
+      })
+      .map((p) => {
+        const sorted = [...(p.plannedDates ?? [])].sort();
+        const start = sorted[0];
+        const end = sorted[sorted.length - 1];
+        // 부분 일치 - 회신 plannedDates 중 LeaveRequest 에 들어간 날짜 카운트
+        const submittedCount = sorted.filter((d) => submittedDates.has(d)).length;
+        const remainingDates = sorted.filter((d) => !submittedDates.has(d));
+        let status: string;
+        let reason: string;
+        if (submittedCount === 0) {
+          status = 'PLAN';
+          reason = '촉진 회신 - 사용 계획';
+        } else if (submittedCount === sorted.length) {
+          status = 'PLAN_SUBMITTED';
+          reason = '결재 신청 완료';
+        } else {
+          status = 'PLAN_PARTIAL';
+          reason = `결재 신청 ${submittedCount}/${sorted.length}일 (남은 ${remainingDates.length}일)`;
+        }
+        return {
+          rowNo: 0,
+          leaveTypeName: '연차 (계획)',
+          startDate: start,
+          endDate: end,
+          groupStartDate: start,
+          groupEndDate: end,
+          groupCount: sorted.length,
+          groupTotalDays: sorted.length,
+          approvalStatus: status,
+          reason,
+          isFromPromotion: true,
+          promotionLogId: p.promotionLogId,
+          plannedDates: sorted,
+          // 부분 신청 시 남은 날짜만 prefill (handleApplyFromPromotion 에서 사용)
+          remainingPlannedDates: remainingDates,
+        } as LeavePlanRow;
+      });
+
+    return [...promotionRows]
+      .sort((a, b) => (b.startDate ?? '').localeCompare(a.startDate ?? ''))
+      .map((r, idx) => ({ ...r, rowNo: idx + 1 }));
+  }, [requestsQ.data, year, promotionQ.data]);
 
   const planColumns: ColumnsType<LeavePlanRow> = [
     {
@@ -490,10 +562,19 @@ export function MyLeavePage() {
       title: '상태',
       dataIndex: 'approvalStatus',
       key: 'approvalStatus',
-      width: 90,
+      width: 110,
       align: 'center',
       render: (s?: string) => {
         const code = s ?? 'PENDING';
+        if (code === 'PLAN') {
+          return <Tag color="purple">사용 계획</Tag>;
+        }
+        if (code === 'PLAN_SUBMITTED') {
+          return <Tag color="blue">결재 신청 완료</Tag>;
+        }
+        if (code === 'PLAN_PARTIAL') {
+          return <Tag color="cyan">일부 신청됨</Tag>;
+        }
         return (
           <Tag color={APPROVAL_STATUS_COLOR[code] ?? 'default'}>
             {APPROVAL_STATUS_KO[code] ?? code}
@@ -511,9 +592,23 @@ export function MyLeavePage() {
     {
       title: '기간',
       key: 'range',
-      width: 200,
+      width: 220,
       align: 'center',
       render: (_: unknown, r: LeavePlanRow) => {
+        // 비연속 plannedDates 가 있으면 그 날짜들을 m/d 형식으로 콤마 나열 (촉진 회신 행 + LeaveRequest plannedDates 모두)
+        const planned = Array.isArray(r.plannedDates) && r.plannedDates.length > 0
+          ? r.plannedDates
+          : undefined;
+        if (planned && planned.length > 0) {
+          const sorted = [...planned].sort();
+          const text = sorted
+            .map((d) => {
+              const dj = dayjs(d);
+              return dj.isValid() ? dj.format('M/D') : d;
+            })
+            .join(', ');
+          return <Tooltip title={sorted.map((d) => formatDate(d)).join(', ')}>{text}</Tooltip>;
+        }
         const start = r.groupStartDate ?? r.startDate;
         const end = r.groupEndDate ?? r.endDate;
         if (!start) return <Typography.Text type="secondary">—</Typography.Text>;
@@ -529,16 +624,7 @@ export function MyLeavePage() {
       render: (_: unknown, r: LeavePlanRow) => {
         const total = r.groupTotalDays ?? r.usageDays ?? 0;
         if (total <= 0) return <Typography.Text type="secondary">—</Typography.Text>;
-        return (
-          <span>
-            {total}일
-            {(r.groupCount ?? 1) > 1 && (
-              <Typography.Text type="secondary" className="!tw-ml-1 !tw-text-[11px]">
-                ({r.groupCount}건 묶음)
-              </Typography.Text>
-            )}
-          </span>
-        );
+        return <span>{total}일</span>;
       },
     },
     {
@@ -560,6 +646,42 @@ export function MyLeavePage() {
         ) : (
           <Typography.Text type="secondary">—</Typography.Text>
         ),
+    },
+    {
+      title: '결재',
+      key: 'apply',
+      width: 120,
+      align: 'center',
+      render: (_: unknown, r: LeavePlanRow) => {
+        const start = r.groupStartDate ?? r.startDate;
+        // 전체 신청 완료된 계획은 버튼 숨김
+        if (r.approvalStatus === 'PLAN_SUBMITTED') {
+          return <Typography.Text type="secondary" className="!tw-text-xs">신청 완료</Typography.Text>;
+        }
+        // 부분 신청된 계획은 남은 날짜만 신청 버튼
+        if (r.approvalStatus === 'PLAN_PARTIAL') {
+          const remain = r.remainingPlannedDates?.length ?? 0;
+          return (
+            <Button
+              size="small"
+              disabled={!leaveRequestDocId || remain === 0}
+              onClick={() => void handleApplyFromPromotion(r)}
+            >
+              남은 {remain}일 신청
+            </Button>
+          );
+        }
+        return (
+          <Button
+            size="small"
+            type="primary"
+            disabled={!leaveRequestDocId || !start}
+            onClick={() => void handleApplyFromPromotion(r)}
+          >
+            휴가 신청
+          </Button>
+        );
+      },
     },
   ];
 
@@ -586,14 +708,6 @@ export function MyLeavePage() {
               style={{ width: 90 }}
             />
           </Space>
-          <Button
-            type="primary"
-            icon={<SendOutlined />}
-            onClick={handleNewLeaveRequest}
-            loading={approvalDocsQ.isLoading}
-          >
-            휴가 신청
-          </Button>
           {user?.isSystemAdmin && (
             <Link to="/app/leave/policies" className="tw-font-medium tw-text-[#2563EB]">
               연차 정책
@@ -754,7 +868,7 @@ export function MyLeavePage() {
       </Card>
 
 
-      {/* 촉진 알림 내역 - 인라인 회신 (구 휴가 계획 회신 페이지 통합) */}
+      {/* 촉진 알림 내역 + 휴가 계획 내역 - 위아래 배치 (가로 폭 확보) */}
       <Card
         className="tw-border-slate-200/80 tw-shadow-sm"
         size="small"
@@ -772,7 +886,7 @@ export function MyLeavePage() {
           loading={promotionQ.isLoading}
           size="small"
           dataSource={promotionsOfYear}
-          pagination={{ pageSize: 10 }}
+          pagination={false}
           locale={{ emptyText: <Empty description={`${year}년 받은 통보가 없습니다`} /> }}
           columns={[
             {
@@ -864,7 +978,17 @@ export function MyLeavePage() {
                   );
                 }
                 if (r.status === 'ACKNOWLEDGED') {
-                  return <Typography.Text type="secondary" className="!tw-text-xs">회신 완료</Typography.Text>;
+                  return (
+                    <Space size={6}>
+                      <Typography.Text type="secondary" className="!tw-text-xs">회신 완료</Typography.Text>
+                      <Button
+                        size="small"
+                        onClick={() => setPromotionTarget(r)}
+                      >
+                        재회신
+                      </Button>
+                    </Space>
+                  );
                 }
                 if (r.status === 'DESIGNATED') {
                   return <Typography.Text type="secondary" className="!tw-text-xs">회사 자동 지정 완료</Typography.Text>;
@@ -878,6 +1002,7 @@ export function MyLeavePage() {
 
       <Card
         className="tw-border-slate-200/80 tw-shadow-sm"
+        size="small"
         title={
           <Space>
             <span>휴가 계획 내역</span>
@@ -892,7 +1017,7 @@ export function MyLeavePage() {
           loading={requestsQ.isLoading || leaveTypesQ.isLoading}
           columns={planColumns}
           dataSource={planRows}
-          pagination={{ pageSize: 10, showSizeChanger: true }}
+          pagination={false}
           size="small"
           locale={{ emptyText: '조회 결과가 없습니다.' }}
         />
