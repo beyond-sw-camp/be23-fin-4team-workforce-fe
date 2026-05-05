@@ -23,6 +23,7 @@ import type { Goal, KpiCycle } from '@/features/goals/model/types';
 import { meetingApi } from '@/features/meetings/api/meetingApi';
 import { memberApi } from '@/features/member/api/memberApi';
 import { useMemberDisplayNames } from '@/features/members/hooks/useMemberDisplayNames';
+import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import type { Salary } from '@/features/salary-service/types';
 import { notificationApi, type NotificationItem } from '@/features/notification/api/notificationApi';
@@ -653,8 +654,16 @@ export function DashboardCalendarBlock() {
     queryFn: () => calendarApi.listMonth(today.year(), today.month() + 1),
     staleTime: 60_000,
   });
+  const companyHolidaysQ = useQuery({
+    queryKey: ['company-holidays', 'dashboard'],
+    queryFn: () => attendanceApi.companyHoliday.list(),
+    staleTime: 5 * 60_000,
+  });
   const events = monthQuery.data?.events ?? [];
-  const holidays = monthQuery.data?.holidays ?? [];
+  const monthPrefix = today.format('YYYY-MM');
+  const holidays = (companyHolidaysQ.data ?? []).filter(
+    (h) => typeof h.holidayDate === 'string' && h.holidayDate.startsWith(monthPrefix),
+  );
   const upcomingEvents = events
     .filter((event) => !dayjs(event.endAt).isBefore(today.startOf('day')))
     .sort((a, b) => dayjs(a.startAt).valueOf() - dayjs(b.startAt).valueOf())
@@ -670,7 +679,12 @@ export function DashboardCalendarBlock() {
     const key = dayjs(event.startAt).format('YYYY-MM-DD');
     countByDate.set(key, (countByDate.get(key) ?? 0) + 1);
   });
-  const holidayByDate = new Map(holidays.map((holiday) => [holiday.holidayDate, holiday.holidayName]));
+  const holidayByDate = new Map<string, string>();
+  holidays.forEach((holiday) => {
+    if (holiday.holidayDate && holiday.holidayName) {
+      holidayByDate.set(holiday.holidayDate, holiday.holidayName);
+    }
+  });
 
   const renderEventList = (items: typeof events) => (
     <List

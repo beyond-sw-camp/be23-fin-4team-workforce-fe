@@ -48,7 +48,7 @@ import { AiDocumentsAdminPage } from '@/pages/app/AiDocumentsAdminPage';
 import { AdminAttendancePage } from '@/pages/app/salary-service/admin/AdminAttendancePage';
 import { AdminAttendanceCorrectionPage } from '@/pages/app/salary-service/admin/AdminAttendanceCorrectionPage';
 import { AdminBonusPolicyPage } from '@/pages/app/salary-service/admin/AdminBonusPolicyPage';
-import { AdminComprehensiveOvertimePage } from '@/pages/app/salary-service/admin/AdminComprehensiveOvertimePage';
+import { AdminOvertimeUsagePage } from '@/pages/app/salary-service/admin/AdminOvertimeUsagePage';
 import { AdminCompanyHolidaysPage } from '@/pages/app/salary-service/admin/AdminCompanyHolidaysPage';
 import { AdminFlexibleSlotsPage } from '@/pages/app/salary-service/admin/AdminFlexibleSlotsPage';
 import { AdminLeavePromotionNoResponsePage } from '@/pages/app/salary-service/admin/AdminLeavePromotionNoResponsePage';
@@ -691,10 +691,10 @@ const adminFlexibleSlotsRoute = createRoute({
   },
 });
 
-const adminComprehensiveOvertimeRoute = createRoute({
+const adminOvertimeUsageRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/attendance/overtime-status',
-  component: AdminComprehensiveOvertimePage,
+  component: AdminOvertimeUsagePage,
   beforeLoad: ({ context }) => {
     if (!context.auth.user?.isSystemAdmin) {
       throw redirect({ to: '/app/attendance' });
@@ -703,7 +703,7 @@ const adminComprehensiveOvertimeRoute = createRoute({
 });
 
 /** 구 경로 호환용 리다이렉트 */
-const adminComprehensiveOvertimeLegacyRoute = createRoute({
+const adminOvertimeUsageLegacyRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/attendance/comprehensive-ot',
   beforeLoad: ({ context }) => {
@@ -712,7 +712,7 @@ const adminComprehensiveOvertimeLegacyRoute = createRoute({
     }
     throw redirect({ to: '/app/attendance/overtime-status' });
   },
-  component: AdminComprehensiveOvertimePage,
+  component: AdminOvertimeUsagePage,
 });
 
 const myLeaveRoute = createRoute({
@@ -1026,8 +1026,8 @@ const routeTree = rootRoute.addChildren([
       adminWorkSchedulesRoute,
       adminOvertimePoliciesRoute,
       adminFlexibleSlotsRoute,
-      adminComprehensiveOvertimeRoute,
-      adminComprehensiveOvertimeLegacyRoute,
+      adminOvertimeUsageRoute,
+      adminOvertimeUsageLegacyRoute,
       myLeaveRoute,
       myLeavePromotionRoute,
       adminLeavePoliciesRoute,

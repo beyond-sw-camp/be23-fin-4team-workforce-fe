@@ -1197,11 +1197,16 @@ export type LeaveRequestSubmitPayload = {
   plannedDates?: string[];
 };
 
-/** 포괄임금 고정 OT 한도 대비 월간 현황 (50% 이상 사용자만) */
-export type ComprehensiveOvertimeStatus = {
+/** 직원 월별 OT 누적 vs 회사 월 한도 현황 (전 직원, wage type 무관) */
+export type OvertimeUsage = {
   memberId?: string;
   name?: string | null;
+  organizationName?: string | null;
+  /** 실측 OT 분 (DailyAttendance.overtimeMinutes 합) */
+  actualOvertimeMinutes?: number | null;
+  /** 승인 OT 분 (OvertimeRequest APPROVED 합) */
   approvedMinutes?: number | null;
+  /** 회사 월 한도 분 (OvertimePolicy.monthlyOvertimeLimitMinutes) */
   fixedLimit?: number | null;
   usagePercent?: number | null;
   exceedMinutes?: number | null;
