@@ -5,7 +5,7 @@ import type {
   AttendanceLog,
   AttendanceLogCreatePayload,
   MissingAttendanceSuspect,
-  ComprehensiveOvertimeStatus,
+  OvertimeUsage,
   CompanyHoliday,
   LeaveOfAbsenceSubmitPayload,
   LeaveRequest,
@@ -710,24 +710,24 @@ export const attendanceApi = {
     },
   },
 
-  /** /attendance/comprehensive-overtime — 포괄임금 연장근무 한도 현황 */
-  comprehensiveOvertime: {
-    // 관리자 전체 현황 (사용률 50% 이상만, 내림차순)
-    async getStatus(baseDate?: string): Promise<ComprehensiveOvertimeStatus[]> {
-      const { data } = await httpClient.get(`${BASE}/attendance/comprehensive-overtime/status`, {
+  /** /attendance/overtime-usage - 직원 월별 OT 누적 vs 회사 월 한도 현황 */
+  overtimeUsage: {
+    // 관리자 전체 현황 (사용률 내림차순)
+    async getStatus(baseDate?: string): Promise<OvertimeUsage[]> {
+      const { data } = await httpClient.get(`${BASE}/attendance/overtime-usage/status`, {
         params: baseDate ? { baseDate } : undefined,
       });
-      const unwrapped = unwrapApiResponse<ComprehensiveOvertimeStatus[] | null>(data);
+      const unwrapped = unwrapApiResponse<OvertimeUsage[] | null>(data);
       return Array.isArray(unwrapped) ? unwrapped : [];
     },
 
-    // 내 포괄임금 초과 근무 현황
-    async getMy(baseDate?: string): Promise<ComprehensiveOvertimeStatus | null> {
+    // 내 OT 사용 현황
+    async getMy(baseDate?: string): Promise<OvertimeUsage | null> {
       try {
-        const { data } = await httpClient.get(`${BASE}/attendance/comprehensive-overtime/my`, {
+        const { data } = await httpClient.get(`${BASE}/attendance/overtime-usage/my`, {
           params: baseDate ? { baseDate } : undefined,
         });
-        return unwrapApiResponse<ComprehensiveOvertimeStatus | null>(data);
+        return unwrapApiResponse<OvertimeUsage | null>(data);
       } catch (e) {
         // 백엔드에 해당 API가 아직 배포되지 않은 환경(404)은 미적용(null)로 안전 처리
         if (isApiError(e) && e.status === 404) return null;

@@ -31,7 +31,7 @@ import { memberApi } from '@/features/member/api/memberApi';
 import { AdminPayGradeTablePage } from '@/pages/app/salary-service/admin/AdminPayGradeTablePage';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import type {
-  ComprehensiveOvertimeStatus,
+  OvertimeUsage,
   Salary,
   SalaryPolicy,
   SalaryItemTemplate,
@@ -1652,12 +1652,12 @@ function SalaryItemTemplateTab() {
 }
 
 /* ======================================================================
- * 5. 초과 근무 현황 (ComprehensiveOvertime)
+ * 5. 초과 근무 현황 (OvertimeUsage)
  *    - 포괄임금제 회사만 의미, 비포괄이면 빈 테이블
  *    - 이번 달 1일 ~ 기준일 누적 승인 OT vs 고정 OT 한도
  * ====================================================================== */
 
-export function ComprehensiveOvertimeTab() {
+export function OvertimeUsageTab() {
   // 검색 모드 - 기준일(특정일) vs 월(말일 기준)
   const [searchMode, setSearchMode] = useState<'date' | 'month'>('date');
   const [baseDate, setBaseDate] = useState<dayjs.Dayjs>(() => dayjs());
@@ -1676,8 +1676,8 @@ export function ComprehensiveOvertimeTab() {
     v == null ? '—' : `${v.toLocaleString()}분 (${(v / 60).toFixed(1)}h)`;
 
   const listQ = useQuery({
-    queryKey: ['salary', 'comprehensive-overtime', iso],
-    queryFn: () => attendanceApi.comprehensiveOvertime.getStatus(iso),
+    queryKey: ['salary', 'overtime-usage', iso],
+    queryFn: () => attendanceApi.overtimeUsage.getStatus(iso),
   });
 
   const policyQ = useQuery({
@@ -1708,10 +1708,19 @@ export function ComprehensiveOvertimeTab() {
     return { total: list.length, danger, warn, normal };
   }, [listQ.data]);
 
-  const cols = useMemo<ColumnsType<ComprehensiveOvertimeStatus>>(() => [
+  const cols = useMemo<ColumnsType<OvertimeUsage>>(() => [
     { title: '구성원', dataIndex: 'name', key: 'name', render: (v) => v ?? '—' },
     {
-      title: '이번 달 누적 OT',
+      title: '실측 OT',
+      dataIndex: 'actualOvertimeMinutes',
+      key: 'actualOvertimeMinutes',
+      width: 140,
+      align: 'right',
+      render: (v: number | null) => formatMinutes(v),
+      sorter: (a, b) => (a.actualOvertimeMinutes ?? 0) - (b.actualOvertimeMinutes ?? 0),
+    },
+    {
+      title: '승인 OT',
       dataIndex: 'approvedMinutes',
       key: 'approvedMinutes',
       width: 140,
@@ -1719,40 +1728,18 @@ export function ComprehensiveOvertimeTab() {
       render: (v: number | null) => formatMinutes(v),
     },
     {
-      title: '고정 한도',
+      title: '회사 월 한도',
       dataIndex: 'fixedLimit',
       key: 'fixedLimit',
-      width: 120,
+      width: 130,
       align: 'right',
       render: (v: number | null) => formatMinutes(v),
     },
     {
-      title: '회사 월 한도',
-      key: 'companyMonthlyLimit',
-      width: 130,
-      align: 'right',
-      render: () => formatMinutes(policyQ.data?.monthlyOvertimeLimitMinutes),
-    },
-    {
-      title: '회사 월 한도 대비',
-      key: 'companyMonthlyUsage',
-      width: 140,
-      align: 'right',
-      render: (_, row) => {
-        const approved = row.approvedMinutes ?? 0;
-        const monthlyLimit = policyQ.data?.monthlyOvertimeLimitMinutes ?? null;
-        if (!monthlyLimit || monthlyLimit <= 0) return '—';
-        const pct = (approved / monthlyLimit) * 100;
-        if (pct >= 100) return <Tag color="red">{pct.toFixed(1)}%</Tag>;
-        if (pct >= 80) return <Tag color="orange">{pct.toFixed(1)}%</Tag>;
-        return <Tag>{pct.toFixed(1)}%</Tag>;
-      },
-    },
-    {
-      title: '사용률',
+      title: '사용률 (실측/한도)',
       dataIndex: 'usagePercent',
       key: 'usagePercent',
-      width: 100,
+      width: 140,
       align: 'right',
       render: (v: number | null) => {
         if (v == null) return '—';
@@ -1772,15 +1759,15 @@ export function ComprehensiveOvertimeTab() {
       render: (v: number | null) =>
         !v ? <Typography.Text type="secondary">—</Typography.Text> : <Tag color="red">{v}분</Tag>,
     },
-  ], [policyQ.data?.monthlyOvertimeLimitMinutes]);
+  ], []);
 
   return (
     <Space direction="vertical" className="tw-w-full" size={12}>
       <Alert
         type="info"
         showIcon
-        message="포괄임금제 직원의 누적 초과 근무 현황 모니터링"
-        description="사용률 50% 이상부터 자동 집계됩니다. 기준일/월 토글로 시점 선택, 이름·임계치로 빠르게 좁혀 볼 수 있습니다."
+        message="전 직원 누적 초과 근무 현황 모니터링 (주52시간/월한도)"
+        description="실측 OT(출퇴근 기록 기반)와 승인 OT(연장근로 신청 결재 기준)를 함께 표시합니다. 사용률은 실측 ÷ 회사 월 한도 기준."
       />
 
       {/* 한도 카드 + 요약 카드 */}
@@ -1892,7 +1879,7 @@ export function ComprehensiveOvertimeTab() {
         </div>
       </Card>
 
-      <Table<ComprehensiveOvertimeStatus>
+      <Table<OvertimeUsage>
         rowKey={(r) => r.memberId ?? `${r.name}-${r.approvedMinutes}`}
         loading={listQ.isLoading}
         dataSource={filteredRows}
