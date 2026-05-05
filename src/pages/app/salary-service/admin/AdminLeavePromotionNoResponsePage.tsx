@@ -25,12 +25,20 @@ import { membersApi } from '@/features/members/api/membersApi';
 import type { Member } from '@/features/members/model/types';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
+import { AppTablePanel } from '@/shared/ui/AppTablePanel';
+import { AppSearchBar } from '@/shared/ui';
 import type {
   LeavePromotionHistory,
   LeavePromotionNoResponse,
 } from '@/features/salary-service/types';
 
 const QK = ['salary', 'leave-promotion', 'no-response'] as const;
+const PROMOTION_CONTENT_CARD_CLASS =
+  'tw-overflow-hidden tw-rounded-2xl tw-border-slate-200/80 tw-bg-white tw-shadow-[0_1px_3px_rgba(15,23,42,0.06)] [&_.ant-card-body]:tw-px-5 [&_.ant-card-body]:tw-pb-8 [&_.ant-card-body]:tw-pt-6 sm:[&_.ant-card-body]:tw-px-7';
+const PROMOTION_TABS_CLASS =
+  '[&_.ant-tabs-nav]:tw-mb-4 [&_.ant-tabs-tab]:!tw-text-slate-600 [&_.ant-tabs-tab-active_.ant-tabs-tab-btn]:!tw-font-semibold [&_.ant-tabs-tab-active_.ant-tabs-tab-btn]:!tw-text-[#1e3a5f] [&_.ant-tabs-ink-bar]:!tw-bg-[#1e3a5f]';
+const PROMOTION_PRIMARY_BUTTON_CLASS =
+  '!tw-h-11 !tw-rounded-xl !tw-border-0 !tw-bg-[#1e3a5f] !tw-px-5 !tw-font-semibold !tw-shadow-none hover:!tw-bg-[#152a45] hover:!tw-text-white disabled:!tw-opacity-60';
 
 function formatDate(iso?: string | null) {
   if (!iso) return '—';
@@ -136,13 +144,14 @@ export function AdminLeavePromotionNoResponsePage() {
 
   // 탭 상단 공통 필터 바
   const FilterBar = (
-    <Space className="tw-mb-3" wrap size="small">
-      <Input
-        allowClear
+    <Space className="tw-w-full" wrap size="middle">
+      <AppSearchBar
         placeholder="이름 검색"
         value={filterName}
-        onChange={(e) => setFilterName(e.target.value)}
-        style={{ width: 180 }}
+        onValueChange={setFilterName}
+        onSearch={setFilterName}
+        ariaLabel="촉진 알림 직원 검색"
+        className="tw-w-full tw-flex-none sm:tw-w-[300px]"
       />
       <Select
         allowClear
@@ -298,7 +307,7 @@ export function AdminLeavePromotionNoResponsePage() {
         ) },
       { title: '회신 시점', dataIndex: 'acknowledgedAt', key: 'acknowledgedAt', width: 150,
         render: (v?: string | null) => v ? dayjs(v).format('YYYY-MM-DD HH:mm') : '—' },
-      { title: '직원 계획 / 회사 자동 지정일', key: 'dates',
+      { title: '직원 계획 / 회사 자동 지정일', key: 'dates', width: 260,
         render: (_, r) => {
           // 회신 완료면 직원 계획 / 자동 지정이면 designated_dates 노출
           const isDesignated = r.status === 'DESIGNATED';
@@ -314,8 +323,7 @@ export function AdminLeavePromotionNoResponsePage() {
             </Space>
           );
         } },
-      { title: '자동 지정 사유', dataIndex: 'designationReason', key: 'designationReason', width: 280,
-        ellipsis: true,
+      { title: '자동 지정 사유', dataIndex: 'designationReason', key: 'designationReason', width: 240,
         render: (v?: string | null) =>
           v ? <Typography.Text className="!tw-text-xs">{v}</Typography.Text>
             : <Typography.Text type="secondary" className="!tw-text-xs">—</Typography.Text> },
@@ -416,6 +424,7 @@ export function AdminLeavePromotionNoResponsePage() {
             <Tooltip title="시연·점검용 — 선택한 일자 기준으로 만료 임박 잔고를 찾아 통보 발송">
               <Button
                 type="primary"
+                className={PROMOTION_PRIMARY_BUTTON_CLASS}
                 loading={triggerM.isPending}
                 onClick={() => triggerM.mutate(triggerDate.format('YYYY-MM-DD'))}
               >
@@ -426,95 +435,108 @@ export function AdminLeavePromotionNoResponsePage() {
         )}
       />
 
-      <Tabs
-        defaultActiveKey="no-response"
-        items={[
-          {
-            key: 'no-response',
-            label: `자동 지정 예외 (${listQ.data?.length ?? 0})`,
-            children: (
-              <>
-                <Alert
-                  type="warning"
-                  showIcon
-                  className="tw-mb-3"
-                  message="자동 지정이 실패해 수동 처리가 필요한 2차 통보입니다."
-                />
-                <Card className="tw-border-slate-200/80 tw-shadow-sm">
-                  {FilterBar}
-                  <Table<LeavePromotionNoResponse>
-                    rowKey={(r) => r.promotionLogId}
-                    loading={listQ.isLoading || membersQ.isLoading}
-                    columns={columns}
-                    dataSource={applyFilter(listQ.data ?? [])}
-                    pagination={{ pageSize: 20, showSizeChanger: true }}
-                    locale={{
-                      emptyText: <Empty description="자동 지정 예외 대상이 없습니다 (정상)" />,
-                    }}
+      <Card variant="borderless" className={PROMOTION_CONTENT_CARD_CLASS}>
+        <Tabs
+          defaultActiveKey="no-response"
+          className={PROMOTION_TABS_CLASS}
+          items={[
+            {
+              key: 'no-response',
+              label: `자동 지정 예외 (${listQ.data?.length ?? 0})`,
+              children: (
+                <div className="tw-space-y-3">
+                  <Alert
+                    type="warning"
+                    showIcon
+                    className="tw-mb-0"
+                    message="자동 지정이 실패해 수동 처리가 필요한 2차 통보입니다."
                   />
-                </Card>
-              </>
-            ),
-          },
-          {
-            key: 'first-notice',
-            label: `1차 알림 현황 (${firstNoticeRows.length})`,
-            children: (
-              <Card className="tw-border-slate-200/80 tw-shadow-sm">
-                {FilterBar}
-                <Table<LeavePromotionHistory>
-                  rowKey={(r) => r.promotionLogId}
-                  loading={historyQ.isLoading || membersQ.isLoading}
-                  columns={noticeColumns}
-                  dataSource={applyFilter(firstNoticeRows)}
-                  pagination={{ pageSize: 20, showSizeChanger: true }}
-                  locale={{
-                    emptyText: <Empty description="1차 알림 이력이 없습니다" />,
-                  }}
-                />
-              </Card>
-            ),
-          },
-          {
-            key: 'second-notice',
-            label: `2차 알림 현황 (${secondNoticeRows.length})`,
-            children: (
-              <Card className="tw-border-slate-200/80 tw-shadow-sm">
-                {FilterBar}
-                <Table<LeavePromotionHistory>
-                  rowKey={(r) => r.promotionLogId}
-                  loading={historyQ.isLoading || membersQ.isLoading}
-                  columns={noticeColumns}
-                  dataSource={applyFilter(secondNoticeRows)}
-                  pagination={{ pageSize: 20, showSizeChanger: true }}
-                  locale={{
-                    emptyText: <Empty description="2차 알림 이력이 없습니다" />,
-                  }}
-                />
-              </Card>
-            ),
-          },
-          {
-            key: 'expiry-status',
-            label: `연차 사용기한 현황 (${expiryRows.length})`,
-            children: (
-              <Card className="tw-border-slate-200/80 tw-shadow-sm">
-                {FilterBar}
-                <Table<LeavePromotionHistory & { status?: string }>
-                  rowKey={(r) => r.promotionLogId}
-                  loading={historyQ.isLoading || listQ.isLoading || membersQ.isLoading}
-                  columns={expiryColumns}
-                  dataSource={applyFilter(expiryRows)}
-                  pagination={{ pageSize: 20, showSizeChanger: true }}
-                  locale={{
-                    emptyText: <Empty description="연차 사용기한 현황이 없습니다" />,
-                  }}
-                />
-              </Card>
-            ),
-          },
-        ]}
-      />
+                  {FilterBar}
+                  <AppTablePanel>
+                    <Table<LeavePromotionNoResponse>
+                      rowKey={(r) => r.promotionLogId}
+                      loading={listQ.isLoading || membersQ.isLoading}
+                      columns={columns}
+                      dataSource={applyFilter(listQ.data ?? [])}
+                      scroll={{ x: 'max-content' }}
+                      pagination={{ pageSize: 20, showSizeChanger: true }}
+                      locale={{
+                        emptyText: <Empty description="자동 지정 예외 대상이 없습니다 (정상)" />,
+                      }}
+                    />
+                  </AppTablePanel>
+                </div>
+              ),
+            },
+            {
+              key: 'first-notice',
+              label: `1차 알림 현황 (${firstNoticeRows.length})`,
+              children: (
+                <div className="tw-space-y-3">
+                  {FilterBar}
+                  <AppTablePanel>
+                    <Table<LeavePromotionHistory>
+                      rowKey={(r) => r.promotionLogId}
+                      loading={historyQ.isLoading || membersQ.isLoading}
+                      columns={noticeColumns}
+                      dataSource={applyFilter(firstNoticeRows)}
+                      scroll={{ x: 'max-content' }}
+                      pagination={{ pageSize: 20, showSizeChanger: true }}
+                      locale={{
+                        emptyText: <Empty description="1차 알림 이력이 없습니다" />,
+                      }}
+                    />
+                  </AppTablePanel>
+                </div>
+              ),
+            },
+            {
+              key: 'second-notice',
+              label: `2차 알림 현황 (${secondNoticeRows.length})`,
+              children: (
+                <div className="tw-space-y-3">
+                  {FilterBar}
+                  <AppTablePanel>
+                    <Table<LeavePromotionHistory>
+                      rowKey={(r) => r.promotionLogId}
+                      loading={historyQ.isLoading || membersQ.isLoading}
+                      columns={noticeColumns}
+                      dataSource={applyFilter(secondNoticeRows)}
+                      scroll={{ x: 'max-content' }}
+                      pagination={{ pageSize: 20, showSizeChanger: true }}
+                      locale={{
+                        emptyText: <Empty description="2차 알림 이력이 없습니다" />,
+                      }}
+                    />
+                  </AppTablePanel>
+                </div>
+              ),
+            },
+            {
+              key: 'expiry-status',
+              label: `연차 사용기한 현황 (${expiryRows.length})`,
+              children: (
+                <div className="tw-space-y-3">
+                  {FilterBar}
+                  <AppTablePanel>
+                    <Table<LeavePromotionHistory & { status?: string }>
+                      rowKey={(r) => r.promotionLogId}
+                      loading={historyQ.isLoading || listQ.isLoading || membersQ.isLoading}
+                      columns={expiryColumns}
+                      dataSource={applyFilter(expiryRows)}
+                      scroll={{ x: 'max-content' }}
+                      pagination={{ pageSize: 20, showSizeChanger: true }}
+                      locale={{
+                        emptyText: <Empty description="연차 사용기한 현황이 없습니다" />,
+                      }}
+                    />
+                  </AppTablePanel>
+                </div>
+              ),
+            },
+          ]}
+        />
+      </Card>
 
       {/* 수동 강제 지정 모달 - 자동 지정 실패 예외 건 처리 */}
       <Modal

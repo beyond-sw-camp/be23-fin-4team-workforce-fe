@@ -1,6 +1,6 @@
-import { FolderOpenOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons';
+import { FolderOpenOutlined, ReloadOutlined } from '@ant-design/icons';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { Alert, Button, Empty, Input, Select, Space, Table, Tag, Typography } from 'antd';
+import { Alert, Button, Empty, Select, Space, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { useEffect, useMemo, useState } from 'react';
@@ -20,6 +20,7 @@ import {
   APPROVAL_STATUS_LABEL,
   APPROVAL_TYPE_LABEL,
 } from '@/features/approvals/lib/approvalSearchMeta';
+import { AppSearchBar } from '@/shared/ui';
 
 export type ApprovalSearchPanelFilters = {
   query?: string;
@@ -301,13 +302,13 @@ export function ApprovalSearchPanel({
   return (
     <Space direction="vertical" size={12} className="tw-w-full">
       <Space wrap>
-        <Input
+        <AppSearchBar
           value={queryInput}
-          onChange={(e) => setQueryInput(e.target.value)}
+          onValueChange={setQueryInput}
+          onSearch={(next) => onFiltersChange({ ...filters, query: next || undefined, page: 0 })}
           placeholder="문서명, 기안자, 부서, 내용 검색"
-          prefix={<SearchOutlined />}
-          allowClear
-          className="tw-w-[280px]"
+          ariaLabel="전자결재 문서 검색"
+          className="tw-w-full tw-flex-none sm:tw-w-[360px]"
         />
         <Select
           value={filters.status ?? 'ALL'}

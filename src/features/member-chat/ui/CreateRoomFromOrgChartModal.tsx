@@ -1,6 +1,6 @@
-import { RightOutlined, SearchOutlined } from '@ant-design/icons';
+import { RightOutlined } from '@ant-design/icons';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Avatar, Checkbox, Input, Spin, Tree, Typography, message } from 'antd';
+import { Avatar, Checkbox, Spin, Tree, Typography, message } from 'antd';
 import type { DataNode } from 'antd/es/tree';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { memberChatApi } from '@/features/member-chat/api/memberChatApi';
@@ -10,6 +10,7 @@ import {
   type OrgChartOrgNode,
   organizationApi,
 } from '@/features/organization/api/organizationApi';
+import { AppSearchBar } from '@/shared/ui';
 import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
 
 const KS = '\x1f';
@@ -370,13 +371,12 @@ export function CreateRoomFromOrgChartModal({
       title={<span className="tw-text-base tw-font-semibold tw-text-slate-900">새 대화</span>}
     >
       <div className="tw-flex tw-flex-col tw-gap-3 tw-px-5 tw-py-4 tw-pt-2">
-        <Input
-          allowClear
+        <AppSearchBar
           value={keyword}
-          onChange={(e) => setKeyword(e.target.value)}
+          onValueChange={setKeyword}
+          onSearch={setKeyword}
           placeholder="이름, 직위, 직책, 직급, 부서, 전화, 아이디"
-          prefix={<SearchOutlined className="tw-text-slate-400" />}
-          className="tw-rounded-xl tw-bg-slate-50 [&_.ant-input]:tw-bg-transparent"
+          className="tw-w-full"
         />
 
         <div>

@@ -25,6 +25,7 @@ import dayjs from 'dayjs';
 import { membersApi } from '@/features/members/api/membersApi';
 import type { Member } from '@/features/members/model/types';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
+import { AppButton } from '@/shared/ui/AppButton';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import type { WorkSchedule, WorkTypeCode } from '@/features/salary-service/types';
@@ -355,7 +356,7 @@ export function AdminWorkSchedulesPage() {
             >
               시차 출퇴근 시간대 관리
             </Button>
-            <Button
+            <AppButton
               type="primary"
               onClick={() => {
                 setEditing(null);
@@ -379,7 +380,7 @@ export function AdminWorkSchedulesPage() {
               }}
             >
               스케줄 추가
-            </Button>
+            </AppButton>
           </Space>
         )}
       />
@@ -389,7 +390,7 @@ export function AdminWorkSchedulesPage() {
         </Typography.Text>
       ) : null}
 
-      <Card>
+      <Card className="tw-border-slate-200/80 tw-shadow-sm [&_.ant-card-body]:!tw-p-6">
         {/* TODO: 서버 페이지네이션 전환 필요(현재는 전체 조회 후 프론트 페이징) */}
         <Table<WorkSchedule>
           rowKey={(r) => r.workScheduleId ?? `${r.scheduleName}-${r.effectiveFrom}`}

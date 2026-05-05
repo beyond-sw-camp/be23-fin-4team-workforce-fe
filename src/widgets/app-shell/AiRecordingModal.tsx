@@ -33,6 +33,7 @@ import {
   type AiRecordingLanguage,
 } from '@/features/ai-recordings/api/aiRecordingsApi';
 import { AppModal } from '@/shared/ui/AppModal';
+import { AppSearchBar } from '@/shared/ui';
 import { formatApprovalAttachmentBytes } from '@/features/approvals/api/approvalAttachmentsApi';
 
 type AiRecordingModalProps = {
@@ -287,6 +288,7 @@ export function AiRecordingModal({ open, onClose }: AiRecordingModalProps) {
         let nextInterim = '';
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const row = event.results[i];
+          if (!row) continue;
           const piece = row?.[0]?.transcript ?? '';
           if (row.isFinal) nextFinal += piece;
           else nextInterim += piece;
@@ -538,12 +540,13 @@ export function AiRecordingModal({ open, onClose }: AiRecordingModalProps) {
   const listBody = (
     <Space direction="vertical" className="tw-w-full" size="middle">
       <div className="tw-flex tw-items-center tw-gap-2">
-        <Input.Search
-          allowClear
+        <AppSearchBar
           value={keywordInput}
-          onChange={(e) => setKeywordInput(e.target.value)}
+          onValueChange={setKeywordInput}
+          onSearch={setKeywordInput}
           placeholder="제목 검색"
-          className="tw-max-w-md"
+          ariaLabel="AI 회의록 검색"
+          className="tw-w-full tw-max-w-md"
         />
         <Button type="primary" icon={<AudioOutlined />} onClick={() => setTab('create')}>
           새 녹음

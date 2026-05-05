@@ -833,7 +833,7 @@ export function ApprovalRequestReadOnlyModal({
       width={920}
       destroyOnHidden
     >
-      <div className="tw-max-h-[min(85vh,900px)] tw-overflow-y-auto tw-px-5 tw-py-4">
+      <div className="tw-px-5 tw-py-4">
       {detailLoading || !selectedRequestDetail ? (
         <Typography.Text type="secondary">불러오는 중...</Typography.Text>
       ) : (

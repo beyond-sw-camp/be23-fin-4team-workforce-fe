@@ -487,12 +487,16 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
     const adminFields = fields.filter((f) => isContractAdminInputSource(metaByName[f.name]?.source));
     const names = adminFields.map((f) => f.name);
     const picked = pickAdminFromContractContent(contractDetail, names);
-    resendForm.setFieldsValue({ adminInput: coerceAdminInputInitialForForm(picked, adminFields) });
+    resendForm.setFieldsValue({
+      adminInput: coerceAdminInputInitialForForm(picked, adminFields) as Record<string, {} | undefined>,
+    });
   }, [resendModalOpen, contractDetail?.contractId, contractDetail?.formSchemaSnapshot, resendForm]);
 
   const batchResendAdminFieldDefs = useMemo(() => {
     if (resendableInBatch.length === 0) return [];
-    const raw = resendTemplate?.formSchema ?? resendableInBatch[0].formSchemaSnapshot;
+    const firstResendable = resendableInBatch[0];
+    if (!firstResendable) return [];
+    const raw = resendTemplate?.formSchema ?? firstResendable.formSchemaSnapshot;
     const { fields, metaByName } = parseContractFormSchema(raw);
     return fields.filter((f) => isContractAdminInputSource(metaByName[f.name]?.source));
   }, [resendableInBatch, resendTemplate?.formSchema]);
@@ -508,7 +512,10 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
       items: resendableInBatch.map((c) => ({
         contractId: c.contractId,
         include: true,
-        adminInput: coerceAdminInputInitialForForm(pickAdminFromContractContent(c, adminNames), adminFieldDefs),
+        adminInput: coerceAdminInputInitialForForm(
+          pickAdminFromContractContent(c, adminNames),
+          adminFieldDefs,
+        ) as Record<string, {} | undefined>,
       })),
     });
     setBatchResendModalOpen(true);

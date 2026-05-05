@@ -11,7 +11,6 @@ import {
   Card,
   DatePicker,
   Form,
-  Input,
   Space,
   Table,
   Tag,
@@ -21,6 +20,8 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
+import { AppSearchBar } from '@/shared/ui/AppSearchBar';
+import { AppTablePanel } from '@/shared/ui/AppTablePanel';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import { membersApi } from '@/features/members/api/membersApi';
 import type { Member } from '@/features/members/model/types';
@@ -243,28 +244,32 @@ export function AdminLeaveOfAbsencePage() {
               현재 휴직 중인 직원만 표시됩니다.
             </Typography.Text>
           </Space>
-          <Input.Search
+          <AppSearchBar
             placeholder="이름·부서·직책·직급·사유로 필터"
             value={memberSearch}
-            onChange={(e) => setMemberSearch(e.target.value)}
-            allowClear
-            style={{ width: 280 }}
+            onValueChange={setMemberSearch}
+            onSearch={setMemberSearch}
+            ariaLabel="휴직 검색"
+            className="tw-w-full tw-flex-none sm:tw-w-[360px]"
           />
         </div>
 
-        <Table<LeaveOfAbsence>
-          rowKey={(r) => r.leaveOfAbsenceId ?? `${r.memberId}-${r.startDate}`}
-          loading={listQ.isLoading || membersQ.isLoading}
-          dataSource={filteredList}
-          columns={columns}
-          pagination={{ pageSize: 20 }}
-          size="small"
-          locale={{
-            emptyText: memberSearch.trim()
-              ? `'${memberSearch}' 로 검색된 휴직이 없습니다.`
-              : '조회된 휴직 내역이 없습니다.',
-          }}
-        />
+        <AppTablePanel className="tw-mt-3">
+          <Table<LeaveOfAbsence>
+            rowKey={(r) => r.leaveOfAbsenceId ?? `${r.memberId}-${r.startDate}`}
+            loading={listQ.isLoading || membersQ.isLoading}
+            dataSource={filteredList}
+            columns={columns}
+            pagination={{ pageSize: 20 }}
+            scroll={{ x: 'max-content' }}
+            size="small"
+            locale={{
+              emptyText: memberSearch.trim()
+                ? `'${memberSearch}' 로 검색된 휴직이 없습니다.`
+                : '조회된 휴직 내역이 없습니다.',
+            }}
+          />
+        </AppTablePanel>
       </Card>
 
       <AppDoubleActionModal

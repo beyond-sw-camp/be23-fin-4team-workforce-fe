@@ -1,7 +1,7 @@
 import {useMutation, useQuery} from '@tanstack/react-query';
 import {App, Avatar, Button, Checkbox, Form, Input, Space, Spin, Tag, Tree, Typography} from 'antd';
 import type {DataNode} from 'antd/es/tree';
-import {RightOutlined, SearchOutlined, TeamOutlined} from '@ant-design/icons';
+import {RightOutlined, TeamOutlined} from '@ant-design/icons';
 import {useEffect, useMemo, useState} from 'react';
 import {EVALUATION_PAGE_KO as L} from '@/app/locale/app-ko';
 import {evaluationRedesignApi} from '@/features/evaluation/api/evaluationRedesignApi';
@@ -14,6 +14,7 @@ import {
     type OrgChartOrgNode,
     organizationApi,
 } from '@/features/organization/api/organizationApi';
+import { AppSearchBar } from '@/shared/ui';
 
 type Props = {
     open: boolean;
@@ -369,12 +370,12 @@ function OrgMemberPickerModal({open, onClose, initialSelectedIds, onApply}: OrgM
             confirmDisabled={selectedCount === 0}
         >
             <div className="tw-space-y-3 tw-px-5 tw-py-4">
-                <Input
-                    allowClear
+                <AppSearchBar
                     value={keyword}
-                    onChange={(e) => setKeyword(e.target.value)}
+                    onValueChange={setKeyword}
+                    onSearch={setKeyword}
                     placeholder="이름, 직급, 부서명으로 검색"
-                    prefix={<SearchOutlined className="tw-text-slate-400" />}
+                    ariaLabel="평가 그룹 구성원 검색"
                 />
                 <div className="tw-flex tw-items-center tw-justify-between tw-px-1">
                     <span className="tw-text-sm tw-font-semibold tw-text-[#1e3a5f]">{data?.companyName ?? '회사'}</span>

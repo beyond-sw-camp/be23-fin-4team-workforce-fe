@@ -468,45 +468,6 @@ export function MyOvertimeRequestsPage() {
         submitText="닫기"
         title="초과근무 신청 상세"
         width={620}
-        onCancel={() => setDetailRow(null)}
-        footer={[
-          detailRow?.approvalRequestId ? (
-            <Button
-              key="view"
-              type="primary"
-              onClick={() => {
-                const rid = detailRow.approvalRequestId!;
-                setDetailRow(null);
-                void navigate({
-                  to: '/app/approvals',
-                  search: {
-                    approvalRequestId: rid,
-                    approvalOpenAt: String(Date.now()),
-                  },
-                });
-              }}
-            >
-              결재 문서 보기
-            </Button>
-          ) : null,
-          detailRow?.approvalStatus === 'PENDING' ? (
-            <Popconfirm
-              key="cancel"
-              title="신청을 철회할까요?"
-              onConfirm={() => {
-                if (detailRow.overtimeRequestId) {
-                  cancelM.mutate(detailRow.overtimeRequestId);
-                  setDetailRow(null);
-                }
-              }}
-            >
-              <Button danger>신청 취소</Button>
-            </Popconfirm>
-          ) : null,
-          <Button key="close" onClick={() => setDetailRow(null)}>
-            닫기
-          </Button>,
-        ]}
         destroyOnHidden
       >
         <div className="tw-px-5 tw-py-4">

@@ -1,6 +1,6 @@
 /** /app/attendance/company/monthly — 전사 월별 일자별 근태 (관리자) */
 import { useQuery } from '@tanstack/react-query';
-import { Card, DatePicker, Input, Space, Table, Typography } from 'antd';
+import { Card, DatePicker, Space, Table, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useMemo, useState } from 'react';
@@ -8,6 +8,7 @@ import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import { normalizeSpringPage } from '@/features/salary-service/lib/normalizePage';
 import type { DailyAttendance } from '@/features/salary-service/types';
 import { AttendanceStatusTag } from '@/features/salary-service/ui/AttendanceStatusTag';
+import { AppSearchBar } from '@/shared/ui';
 
 function shortId(id?: string | null) {
   if (!id) return '—';
@@ -106,12 +107,13 @@ export function AdminAttendanceMonthlyPage() {
             }}
             allowClear={false}
           />
-          <Input.Search
+          <AppSearchBar
             placeholder="구성원 UUID 일부로 필터"
             value={memberSearch}
-            onChange={(e) => setMemberSearch(e.target.value)}
-            allowClear
-            style={{ width: 280 }}
+            onValueChange={setMemberSearch}
+            onSearch={setMemberSearch}
+            ariaLabel="월별 근태 검색"
+            className="tw-w-full tw-flex-none sm:tw-w-[320px]"
           />
         </Space>
       </Card>

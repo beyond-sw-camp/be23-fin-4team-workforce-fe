@@ -309,6 +309,18 @@ export const salaryApi = {
       return unwrapApiResponse<PayrollPrecheckRes>(data);
     },
 
+    async bootstrap(payload: {
+      memberId: string;
+      hireDate: string;
+      baseSalary?: number | null;
+      jobGradeName?: string | null;
+      jobTitleName?: string | null;
+    }): Promise<Salary> {
+      const { data } = await httpClient.post(`${BASE}/salary/salaries/bootstrap`, payload);
+      unwrapMessage(data);
+      return unwrapApiResponse<Salary>(data);
+    },
+
     async getById(salaryId: string): Promise<Salary> {
       const { data } = await httpClient.get(
         `${BASE}/salary/salaries/${encodeURIComponent(salaryId)}`,

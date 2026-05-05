@@ -25,6 +25,7 @@ import type { ColumnsType } from 'antd/es/table';
 import dayjs, { type Dayjs } from 'dayjs';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
+import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import type {
   BonusEligibilityScopeCode,
   BonusPolicy,
@@ -259,19 +260,11 @@ export function AdminBonusPolicyPage() {
 
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
-      <div>
-        <Typography.Title level={1} className="!tw-m-0 !tw-text-slate-900">
-          보너스 정책
-        </Typography.Title>
-        <Typography.Paragraph
-          type="secondary"
-          className="!tw-mb-0 !tw-mt-1 !tw-text-sm"
-        >
-          정기상여 · 성과급 · 명절상여 회사 표준 룰을 관리합니다. 실제 지급은 급여 정산
-          관리에서 PayrollType 을 [성과급] 또는 [특별상여] 로 선택해 새 명세를 발행합니다.
-          정책 변경 시 이전 활성 정책은 자동 마감됩니다.
-        </Typography.Paragraph>
-      </div>
+      <AppWorkspacePageTitle
+        eyebrow="PAYROLL"
+        title="상여/성과금 정책"
+        subtitle="정기상여 · 성과급 · 명절상여 회사 표준 룰을 관리합니다. 실제 지급은 급여 정산 관리에서 처리합니다."
+      />
 
       {activeQ.data && (
         <Alert

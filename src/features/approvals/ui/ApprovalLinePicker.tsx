@@ -5,9 +5,10 @@
  */
 import { CloseOutlined, PlusOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { Button, Empty, Input, List, Modal, Tag, Typography } from 'antd';
+import { Button, Empty, List, Modal, Tag, Typography } from 'antd';
 import { useMemo, useState } from 'react';
 import { memberApi } from '@/features/member/api/memberApi';
+import { AppSearchBar } from '@/shared/ui';
 
 export type ApprovalLinePickerRow = {
   /** 클라이언트 식별자, drag 등에 활용 */
@@ -73,14 +74,22 @@ export function ApprovalLinePicker({ value, onChange, excludeMemberId }: Props) 
   const handleMoveUp = (idx: number) => {
     if (idx === 0) return;
     const next = [...value];
-    [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+    const current = next[idx];
+    const previous = next[idx - 1];
+    if (!current || !previous) return;
+    next[idx - 1] = current;
+    next[idx] = previous;
     onChange(renumber(next));
   };
 
   const handleMoveDown = (idx: number) => {
     if (idx === value.length - 1) return;
     const next = [...value];
-    [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+    const current = next[idx];
+    const target = next[idx + 1];
+    if (!current || !target) return;
+    next[idx] = target;
+    next[idx + 1] = current;
     onChange(renumber(next));
   };
 
@@ -153,12 +162,13 @@ export function ApprovalLinePicker({ value, onChange, excludeMemberId }: Props) 
         destroyOnHidden
         width={520}
       >
-        <Input.Search
+        <AppSearchBar
           placeholder="이름 / 부서 / 직급 검색"
-          allowClear
           value={keyword}
-          onChange={(e) => setKeyword(e.target.value)}
-          className="tw-mb-3"
+          onValueChange={setKeyword}
+          onSearch={setKeyword}
+          ariaLabel="결재자 검색"
+          className="tw-mb-3 tw-w-full"
         />
         <List
           size="small"

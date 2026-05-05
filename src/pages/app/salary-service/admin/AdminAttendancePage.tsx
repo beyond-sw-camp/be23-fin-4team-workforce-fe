@@ -19,7 +19,6 @@ import {
   Descriptions,
   Drawer,
   Empty,
-  Input,
   Switch,
   Segmented,
   Space,
@@ -37,6 +36,7 @@ import { normalizeSpringPage } from '@/features/salary-service/lib/normalizePage
 import type { DailyAttendance } from '@/features/salary-service/types';
 import { AttendanceStatusTag } from '@/features/salary-service/ui/AttendanceStatusTag';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
+import { AppSearchBar } from '@/shared/ui';
 
 type PeriodMode = 'day' | 'week' | 'month' | 'custom';
 
@@ -191,7 +191,7 @@ export function AdminAttendancePage() {
     let tripCount = 0;
     filteredContent.forEach((r) => {
       const s = r.status ?? '';
-      if (s in counts) counts[s] += 1;
+      if (s in counts) counts[s] = (counts[s] ?? 0) + 1;
       if (typeof r.workedMinutes === 'number' && r.workedMinutes > 0) {
         workMinTotal += r.workedMinutes;
         workCount += 1;
@@ -206,9 +206,9 @@ export function AdminAttendancePage() {
       }
     });
     return {
-      normal: counts.NORMAL,
-      absent: counts.ABSENT,
-      leaveOrHalf: counts.LEAVE + counts.HALF,
+      normal: counts.NORMAL ?? 0,
+      absent: counts.ABSENT ?? 0,
+      leaveOrHalf: (counts.LEAVE ?? 0) + (counts.HALF ?? 0),
       tripCount,
       avgWorkMin: workCount > 0 ? Math.round(workMinTotal / workCount) : 0,
       overtimeMinTotal,
@@ -395,12 +395,13 @@ export function AdminAttendancePage() {
               allowClear={false}
             />
           ) : null}
-          <Input.Search
+          <AppSearchBar
             placeholder="이름·이메일·사번·부서로 검색"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            allowClear
-            style={{ width: 260 }}
+            onValueChange={setSearch}
+            onSearch={setSearch}
+            ariaLabel="전사 근태 검색"
+            className="tw-w-full tw-flex-none sm:tw-w-[320px]"
           />
           <Space size={6}>
             <Typography.Text className="!tw-text-xs">초과근무만</Typography.Text>
@@ -424,47 +425,48 @@ export function AdminAttendancePage() {
         <KpiTile label="초과근무 인원" value={`${kpi.overtimeMemberCount.toLocaleString()}명`} tone="hot" />
       </div>
 
-      <Card className="tw-border-slate-200/80 tw-shadow-sm" size="small">
-        {listQ.isError ? (
-          <Alert
-            type="error"
-            showIcon
-            className="tw-mb-3"
-            message="전사 근태 조회에 실패했습니다."
-            description="네트워크 또는 권한 상태를 확인해 주세요."
+      <Card className="tw-border-slate-200/80 tw-shadow-sm [&_.ant-card-body]:!tw-p-6" size="small">
+        <div className="tw-space-y-4">
+          {listQ.isError ? (
+            <Alert
+              type="error"
+              showIcon
+              message="전사 근태 조회에 실패했습니다."
+              description="네트워크 또는 권한 상태를 확인해 주세요."
+            />
+          ) : null}
+          <Table<DailyAttendance>
+            rowKey={(r) => r.dailyAttendanceId ?? `${r.memberId}-${r.attendanceDate}`}
+            loading={listQ.isLoading || membersQ.isLoading}
+            columns={columns}
+            dataSource={filteredContent}
+            size="small"
+            virtual
+            scroll={{ y: 520, x: 'max-content' }}
+            onRow={(record) => ({
+              onClick: () => setDrawerRow(record),
+              style: { cursor: 'pointer' },
+            })}
+            pagination={
+              search.trim()
+                ? false
+                : {
+                    current: page + 1,
+                    pageSize,
+                    total: normalized.totalElements,
+                    showSizeChanger: false,
+                    onChange: (p) => setPage(p - 1),
+                  }
+            }
+            locale={{
+              emptyText: search.trim() ? (
+                <Empty description={`'${search}' 로 검색된 근태가 없습니다.`} />
+              ) : (
+                <Empty description="해당 기간 근태 데이터가 없습니다." />
+              ),
+            }}
           />
-        ) : null}
-        <Table<DailyAttendance>
-          rowKey={(r) => r.dailyAttendanceId ?? `${r.memberId}-${r.attendanceDate}`}
-          loading={listQ.isLoading || membersQ.isLoading}
-          columns={columns}
-          dataSource={filteredContent}
-          size="small"
-          virtual
-          scroll={{ y: 520, x: 'max-content' }}
-          onRow={(record) => ({
-            onClick: () => setDrawerRow(record),
-            style: { cursor: 'pointer' },
-          })}
-          pagination={
-            search.trim()
-              ? false
-              : {
-                  current: page + 1,
-                  pageSize,
-                  total: normalized.totalElements,
-                  showSizeChanger: false,
-                  onChange: (p) => setPage(p - 1),
-                }
-          }
-          locale={{
-            emptyText: search.trim() ? (
-              <Empty description={`'${search}' 로 검색된 근태가 없습니다.`} />
-            ) : (
-              <Empty description="해당 기간 근태 데이터가 없습니다." />
-            ),
-          }}
-        />
+        </div>
       </Card>
 
       <Drawer

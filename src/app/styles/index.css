@@ -30,6 +30,130 @@ a {
 }
 
 /**
+ * 공통 데이터 테이블 — AppTablePanel과 동일한 톤을 모든 Ant Table에 적용.
+ * 문서 미리보기 등 순수 HTML table은 건드리지 않는다.
+ */
+.ant-table-wrapper {
+  overflow: hidden;
+  border: 1px solid rgba(203, 213, 225, 0.9);
+  border-radius: 0.75rem;
+  background: #fff;
+}
+
+.ant-table-wrapper .ant-table {
+  background: transparent !important;
+}
+
+.ant-table-wrapper .ant-table-container {
+  border: 0 !important;
+}
+
+.ant-table-wrapper .ant-table-thead > tr > th {
+  white-space: nowrap;
+  border-color: rgba(203, 213, 225, 0.8) !important;
+  background: rgba(248, 250, 252, 0.9) !important;
+  padding: 0.75rem !important;
+  color: #475569 !important;
+  font-size: 0.75rem !important;
+  font-weight: 600 !important;
+}
+
+.ant-table-wrapper .ant-table-thead > tr > th::before {
+  background-color: #e2e8f0 !important;
+}
+
+.ant-table-wrapper .ant-table-tbody > tr > td {
+  border-color: #f1f5f9 !important;
+  background: #fff !important;
+  padding: 1rem 0.75rem !important;
+}
+
+.ant-table-wrapper .ant-table-tbody > tr:hover > td {
+  background: rgba(248, 250, 252, 0.7) !important;
+}
+
+.ant-table-wrapper .ant-empty {
+  margin: 2.5rem 0;
+}
+
+.ant-table-wrapper .ant-pagination {
+  padding-inline: 0.75rem;
+}
+
+/**
+ * Search fields — 구성원 검색바와 같은 pill · slate 톤으로 통일.
+ * AppSearchField, Input.Search, SearchOutlined prefix를 쓰는 기존 검색 입력을 함께 보정한다.
+ */
+.ant-input-affix-wrapper:has(.anticon-search),
+.ant-input-search .ant-input-affix-wrapper {
+  min-height: 2.75rem !important;
+  border: 0 !important;
+  border-radius: 9999px !important;
+  background: #f1f5f9 !important;
+  padding-inline: 0.875rem !important;
+  box-shadow: none !important;
+}
+
+.ant-input-affix-wrapper:has(.anticon-search):hover,
+.ant-input-affix-wrapper:has(.anticon-search).ant-input-affix-wrapper-focused,
+.ant-input-search .ant-input-affix-wrapper:hover,
+.ant-input-search .ant-input-affix-wrapper-focused {
+  border: 0 !important;
+  background: #f1f5f9 !important;
+  box-shadow: none !important;
+}
+
+.ant-input-affix-wrapper:has(.anticon-search) .ant-input,
+.ant-input-search .ant-input {
+  background: transparent !important;
+  color: #1e293b !important;
+}
+
+.ant-input-affix-wrapper:has(.anticon-search) .ant-input::placeholder,
+.ant-input-search .ant-input::placeholder {
+  color: #94a3b8 !important;
+}
+
+.ant-input-affix-wrapper:has(.anticon-search) .anticon-search,
+.ant-input-search .anticon-search {
+  color: #94a3b8 !important;
+  font-size: 0.9375rem !important;
+}
+
+.ant-input-search .ant-input-group {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+}
+
+.ant-input-search .ant-input-group > .ant-input-affix-wrapper {
+  flex: 1 1 auto !important;
+}
+
+.ant-input-search .ant-input-group-addon {
+  width: auto !important;
+  border: 0 !important;
+  background: transparent !important;
+}
+
+.ant-input-search .ant-input-search-button {
+  min-height: 2.5rem !important;
+  border: 0 !important;
+  border-radius: 0.75rem !important;
+  background: #1e3a5f !important;
+  padding-inline: 1.125rem !important;
+  color: #fff !important;
+  font-weight: 600 !important;
+  box-shadow: none !important;
+}
+
+.ant-input-search .ant-input-search-button:hover,
+.ant-input-search .ant-input-search-button:focus {
+  background: #152a45 !important;
+  color: #fff !important;
+}
+
+/**
  * 얇은 스크롤바 — 칸반·긴 가로 목록 등 (Firefox + WebKit)
  */
 .wf-scrollbar {

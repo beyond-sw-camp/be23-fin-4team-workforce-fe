@@ -1742,7 +1742,8 @@ function menuOpenKeysForPath(
     if (
         isSystemAdmin &&
         ((pathname.startsWith('/app/leave') &&
-            pathname !== '/app/leave/absence') ||
+            pathname !== '/app/leave/absence' &&
+            pathname !== '/app/leave/promotion-no-response') ||
             pathname === '/app/attendance/holidays')
     ) {
         keys.push(LEAVE_GROUP_KEY);
@@ -1862,6 +1863,9 @@ function AppShellLayout() {
             });
             const merged = new Set(prev);
             for (const k of pathKeys) merged.add(k);
+            if (pathname === '/app/leave/promotion-no-response') {
+                merged.delete(LEAVE_GROUP_KEY);
+            }
             return [...merged];
         });
     }, [pathname, search, siderCollapsed, isSystemAdmin, showSalaryNegotiationSubmenu]);
@@ -2042,7 +2046,7 @@ function AppShellLayout() {
             <Layout className="tw-flex tw-min-h-0 tw-min-w-0 tw-flex-1 tw-flex-col tw-bg-slate-50">
                 <AppShellHeader/>
                 <Layout.Content
-                    className="wf-scrollbar tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-y-auto tw-bg-transparent tw-p-6">
+                    className="wf-scrollbar tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-y-auto tw-bg-transparent tw-px-6 tw-pt-6 tw-pb-40 [scroll-padding-bottom:10rem]">
                     <Outlet/>
                 </Layout.Content>
             </Layout>

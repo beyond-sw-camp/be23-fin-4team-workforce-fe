@@ -100,6 +100,7 @@ function withSuspense(Comp: ComponentType) {
 import { AdminUnusedLeavePayoutPage } from '@/pages/app/salary-service/admin/AdminUnusedLeavePayoutPage';
 import { AdminWorkSchedulesPage } from '@/pages/app/salary-service/admin/AdminWorkSchedulesPage';
 import { MyAttendanceMonthlyPage } from '@/pages/app/salary-service/my/MyAttendanceMonthlyPage';
+import { AttendanceCorrectionRequestPage } from '@/pages/app/salary-service/my/AttendanceCorrectionRequestPage';
 import { MyAttendancePage } from '@/pages/app/salary-service/my/MyAttendancePage';
 import { MyLeavePage } from '@/pages/app/salary-service/my/MyLeavePage';
 import { MyLeavePromotionPage } from '@/pages/app/salary-service/my/MyLeavePromotionPage';
@@ -345,9 +346,11 @@ const approvalsSearchSchema = z.object({
   tab: z.string().optional(),
   myStatus: z.string().optional(),
   compose: z.string().optional(),
-  sideNav: z.string().optional(),
-  docId: z.string().optional(),
-  box: z.string().optional(),
+    sideNav: z.string().optional(),
+    docId: z.string().optional(),
+    documentId: z.string().optional(),
+    prefill: z.string().optional(),
+    box: z.string().optional(),
   /** 전자결재 알림 라우팅: 작성 허브에서 전체보기 모달 자동 오픈 키 */
   approvalModal: z.string().optional(),
   /** 같은 모달 재오픈을 위한 트리거 값 */
@@ -589,6 +592,18 @@ const myAttendanceMonthlyRoute = createRoute({
   path: '/attendance/monthly',
   component: MyAttendanceMonthlyPage,
 });
+
+const attendanceCorrectionRequestRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/approvals/correction-request',
+  validateSearch: z.object({
+    date: z.string().optional(),
+    clockIn: z.string().optional(),
+    clockOut: z.string().optional(),
+  }),
+  component: AttendanceCorrectionRequestPage,
+});
+
 const myScheduleSelectionsRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/attendance/schedules/my',
@@ -788,7 +803,11 @@ const payrollAdminManageRoute = createRoute({
   component: withSuspense(AdminPayrollManagePageLazy),
   validateSearch: z.object({
     // 어느 탭에서 진입했는지 — 뒤로가기 시 동일 탭으로 복귀
-    tab: z.enum(['company', 'member', 'salary', 'allowances']).optional(),
+    tab: z
+      .enum(['company', 'member', 'register', 'salary', 'allowances', 'retirement', 'bonus'])
+      .optional(),
+    ym: z.string().optional(),
+    from: z.string().optional(),
   }),
   beforeLoad: ({ context }) => {
     if (!context.auth.user?.isSystemAdmin) {
@@ -803,7 +822,11 @@ const payrollAdminRoute = createRoute({
   component: withSuspense(AdminPayrollPageLazy),
   validateSearch: z.object({
     // 정산 화면 활성 탭: company(이번달 정산) | member(월별 정산 결과) | register(급여 등록) | salary(급여 변동 이력) | allowances(수당 관리)
-    tab: z.enum(['company', 'member', 'register', 'salary', 'allowances']).optional(),
+    tab: z
+      .enum(['company', 'member', 'register', 'salary', 'allowances', 'retirement', 'bonus'])
+      .optional(),
+    ym: z.string().optional(),
+    month: z.string().optional(),
     // [salary 탭 전용] 직원 상세/직원 생성 직후 deep-link -> 해당 직원으로 prefill 한 [급여 등록] 모달 자동 오픈
     createForMemberId: z.string().optional(),
   }),
@@ -1016,6 +1039,7 @@ const routeTree = rootRoute.addChildren([
       aiDocumentsAdminRoute,
       myAttendanceRoute,
       myAttendanceMonthlyRoute,
+      attendanceCorrectionRequestRoute,
       myScheduleSelectionsRoute,
       myOvertimeRequestsRoute,
       myWorkTimeRoute,
