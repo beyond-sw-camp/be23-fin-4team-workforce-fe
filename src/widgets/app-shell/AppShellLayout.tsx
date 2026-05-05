@@ -2046,7 +2046,7 @@ function AppShellLayout() {
             <Layout className="tw-flex tw-min-h-0 tw-min-w-0 tw-flex-1 tw-flex-col tw-bg-slate-50">
                 <AppShellHeader/>
                 <Layout.Content
-                    className="wf-scrollbar tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-y-auto tw-bg-transparent tw-p-6">
+                    className="wf-scrollbar tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-y-auto tw-bg-transparent tw-px-6 tw-pt-6 tw-pb-28">
                     <Outlet/>
                 </Layout.Content>
             </Layout>
