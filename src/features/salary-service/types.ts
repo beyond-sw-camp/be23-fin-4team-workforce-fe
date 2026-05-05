@@ -1066,8 +1066,6 @@ export type CompanyLeaveType = {
   isPaidYn?: string | null;
   maxDaysPerYear?: number | null;
   requireEvidenceYn?: string | null;
-  /** 사유 발생일(eventDate) 기준 사용 마감 일수, null 이면 기한 없음 (경조/출산 등) */
-  usageDeadlineDays?: number | null;
   displayOrder?: number | null;
 };
 
@@ -1079,7 +1077,6 @@ export type CompanyLeaveTypeCreatePayload = {
   isPaidYn: string;
   maxDaysPerYear?: number | null;
   requireEvidenceYn: string;
-  usageDeadlineDays?: number | null;
   displayOrder: number;
 };
 
@@ -1090,7 +1087,6 @@ export type CompanyLeaveTypeUpdatePayload = {
   isPaidYn?: string | null;
   maxDaysPerYear?: number | null;
   requireEvidenceYn?: string | null;
-  usageDeadlineDays?: number | null;
   displayOrder: number;
 };
 
