@@ -350,13 +350,6 @@ export const attendanceApi = {
       await httpClient.delete(`${BASE}/company-holidays/${encodeURIComponent(holidayId)}`);
     },
 
-    /** 공휴일 일자에 들어있는 DailyAttendance 일괄 삭제 - 시드 재실행 없이 즉시 cleanup */
-    async cleanupAttendance(): Promise<number> {
-      const { data } = await httpClient.post(`${BASE}/company-holidays/cleanup-attendance`);
-      const unwrapped = unwrapApiResponse<number>(data);
-      return typeof unwrapped === 'number' ? unwrapped : 0;
-    },
-
     /** 지정 연도 법정 공휴일 재수집, 커스텀 휴일은 보존 */
     async refreshLegal(year: number): Promise<{ year: number; importedCount: number }> {
       /** POST 본문 `null`은 일부 프록시/서버에서 이상 동작할 수 있어 본문 생략 */
