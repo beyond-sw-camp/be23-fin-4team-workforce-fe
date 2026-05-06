@@ -22,6 +22,7 @@ import type {
   WorkSchedule,
 } from '@/features/salary-service/types';
 import { AttendanceStatusTag } from '@/features/salary-service/ui/AttendanceStatusTag';
+import { MyLeaveHistoryModal } from '@/features/salary-service/ui/MyLeaveHistoryModal';
 import type { ApiError } from '@/shared/api/types';
 
 function isApiError(e: unknown): e is ApiError {
@@ -93,25 +94,8 @@ export function MyAttendancePage() {
   const activeView: 'daily' | 'weekly' = routeSearch.view === 'weekly' ? 'weekly' : 'daily';
 
   // 주간/월간 탭 - 기간 기준일 (해당 일자가 속한 주의 요약을 조회)
-  // 휴가 이력 모달 (내 휴가 신청 결재 이력 - LeaveRequest 전체)
+  // 휴가 이력 모달 (내 휴가 신청 결재 이력 - LeaveRequest 전체) - 컴포넌트 추출, 대시보드와 공유
   const [leaveHistoryOpen, setLeaveHistoryOpen] = useState(false);
-  const leaveHistoryQ = useQuery({
-    queryKey: ['salary', 'leave-requests', 'my', 'history-modal'],
-    queryFn: () => attendanceApi.leaveRequest.listMyHistory({ page: 0, size: 200 }),
-    enabled: leaveHistoryOpen,
-  });
-  const leaveTypesQ = useQuery({
-    queryKey: ['attendance', 'company-leave-types'],
-    queryFn: () => attendanceApi.companyLeaveType.list(),
-    enabled: leaveHistoryOpen,
-  });
-  const leaveTypeNameById = useMemo(() => {
-    const m = new Map<string, string>();
-    (leaveTypesQ.data ?? []).forEach((t) => {
-      if (t.companyLeaveTypeId) m.set(t.companyLeaveTypeId, t.name ?? '-');
-    });
-    return m;
-  }, [leaveTypesQ.data]);
 
   const [weekAnchor, setWeekAnchor] = useState<Dayjs>(() => dayjs());
   const weekAnchorIso = weekAnchor.format('YYYY-MM-DD');
@@ -965,98 +949,11 @@ export function MyAttendancePage() {
       </>
       )}
 
-      {/* 휴가 이력 모달 - 내가 신청한 LeaveRequest 전체 (대기/승인/반려/취소) */}
-      <Modal
+      {/* 휴가 이력 모달 - 내가 신청한 LeaveRequest 전체 (대기/승인/반려/취소). 대시보드 위젯과 동일 컴포넌트 사용 */}
+      <MyLeaveHistoryModal
         open={leaveHistoryOpen}
-        onCancel={() => setLeaveHistoryOpen(false)}
-        title="내 휴가 신청 이력"
-        footer={null}
-        width={920}
-      >
-        <Table<LeaveRequest>
-          rowKey={(r) => r.leaveRequestId ?? `${r.startDate}-${r.requestedAt}`}
-          loading={leaveHistoryQ.isLoading || leaveTypesQ.isLoading}
-          dataSource={leaveHistoryQ.data?.content ?? []}
-          pagination={{ pageSize: 15 }}
-          size="small"
-          locale={{ emptyText: <Empty description="휴가 신청 이력이 없습니다" /> }}
-          columns={[
-            {
-              title: '신청일',
-              dataIndex: 'requestedAt',
-              key: 'requestedAt',
-              width: 130,
-              render: (v?: string | null) => (v ? dayjs(v).format('YYYY-MM-DD') : '-'),
-            },
-            {
-              title: '휴가 종류',
-              dataIndex: 'companyLeaveTypeId',
-              key: 'leaveType',
-              width: 120,
-              render: (id?: string) => leaveTypeNameById.get(id ?? '') ?? '-',
-            },
-            {
-              title: '기간 / 사용 날짜',
-              key: 'range',
-              render: (_: unknown, r: LeaveRequest) => {
-                const planned = Array.isArray(r.plannedDates) && r.plannedDates.length > 0
-                  ? [...r.plannedDates].sort()
-                  : null;
-                if (planned) {
-                  const text = planned
-                    .map((d) => {
-                      const dj = dayjs(d);
-                      return dj.isValid() ? dj.format('M/D') : d;
-                    })
-                    .join(', ');
-                  return <Tooltip title={planned.join(', ')}>{text}</Tooltip>;
-                }
-                if (!r.startDate) return '-';
-                if (!r.endDate || r.startDate === r.endDate) return r.startDate;
-                return `${r.startDate} ~ ${r.endDate}`;
-              },
-            },
-            {
-              title: '일수',
-              dataIndex: 'usageDays',
-              key: 'usageDays',
-              width: 70,
-              align: 'right',
-              render: (v?: number | null) => (v != null ? `${v}일` : '-'),
-            },
-            {
-              title: '상태',
-              dataIndex: 'approvalStatus',
-              key: 'status',
-              width: 90,
-              align: 'center',
-              render: (v?: string) => {
-                const code = v ?? '';
-                const colorMap: Record<string, string> = {
-                  PENDING: 'gold',
-                  APPROVED: 'green',
-                  REJECTED: 'red',
-                  CANCELLED: 'default',
-                };
-                const labelMap: Record<string, string> = {
-                  PENDING: '대기',
-                  APPROVED: '승인',
-                  REJECTED: '반려',
-                  CANCELLED: '취소',
-                };
-                return <Tag color={colorMap[code] ?? 'default'}>{labelMap[code] ?? code}</Tag>;
-              },
-            },
-            {
-              title: '사유',
-              dataIndex: 'reason',
-              key: 'reason',
-              ellipsis: true,
-              render: (v?: string | null) => v || '-',
-            },
-          ]}
-        />
-      </Modal>
+        onClose={() => setLeaveHistoryOpen(false)}
+      />
     </Space>
   );
 }

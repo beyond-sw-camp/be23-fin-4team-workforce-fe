@@ -849,6 +849,14 @@ export type RetirementPolicy = {
   effectiveFrom?: string;
   effectiveTo?: string | null;
   memo?: string | null;
+  /** DC 월 부담금 비율(%) - DC 형만, 미설정 시 8.33 */
+  dcContributionRate?: number | null;
+  /** 운용 금융기관명 - DB/DC 표시용 */
+  providerName?: string | null;
+  /** 운용 계약/계좌번호 - DB/DC 표시용 */
+  contractNumber?: string | null;
+  /** LEGAL 중간정산 허용 Y/N */
+  allowEarlySettlementYn?: 'Y' | 'N' | null;
   /** 오늘 기준 활성 여부 (서버 계산) */
   active?: boolean;
   createdAt?: string | null;
@@ -860,13 +868,21 @@ export type RetirementPolicyCreatePayload = {
   effectiveFrom: string;
   effectiveTo?: string | null;
   memo?: string | null;
+  dcContributionRate?: number | null;
+  providerName?: string | null;
+  contractNumber?: string | null;
+  allowEarlySettlementYn?: 'Y' | 'N' | null;
 };
 
-/** 시작일은 변경 불가 — 종료일·제도·메모만 수정 */
+/** 시작일은 변경 불가 — 종료일·제도·메모·종류별 옵션만 수정 */
 export type RetirementPolicyUpdatePayload = {
   retirementType: RetirementTypeCode;
   effectiveTo?: string | null;
   memo?: string | null;
+  dcContributionRate?: number | null;
+  providerName?: string | null;
+  contractNumber?: string | null;
+  allowEarlySettlementYn?: 'Y' | 'N' | null;
 };
 
 /** 퇴직금 시뮬 요청 (직원 본인용 — memberId 는 헤더에서 자동) */

@@ -52,7 +52,6 @@ import { MyApprovalRequestsPage } from '@/pages/app/MyApprovalRequestsPage';
 import { GenericPage } from '@/pages/app/GenericPage';
 import { AiDocumentsAdminPage } from '@/pages/app/AiDocumentsAdminPage';
 import { AdminAttendancePage } from '@/pages/app/salary-service/admin/AdminAttendancePage';
-import { AdminAttendanceCorrectionPage } from '@/pages/app/salary-service/admin/AdminAttendanceCorrectionPage';
 import { AdminBonusPolicyPage } from '@/pages/app/salary-service/admin/AdminBonusPolicyPage';
 import { AdminOvertimeUsagePage } from '@/pages/app/salary-service/admin/AdminOvertimeUsagePage';
 import { AdminCompanyHolidaysPage } from '@/pages/app/salary-service/admin/AdminCompanyHolidaysPage';
@@ -664,17 +663,6 @@ const adminAttendanceDailyRoute = createRoute({
   },
 });
 
-const adminAttendanceCorrectionRoute = createRoute({
-  getParentRoute: () => appBaseRoute,
-  path: '/attendance/corrections',
-  component: AdminAttendanceCorrectionPage,
-  beforeLoad: ({ context }) => {
-    if (!context.auth.user?.isSystemAdmin) {
-      throw redirect({ to: '/app/attendance' });
-    }
-  },
-});
-
 const adminCompanyHolidaysRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/attendance/holidays',
@@ -1104,7 +1092,6 @@ const routeTree = rootRoute.addChildren([
       myWorkTimeRoute,
       adminAttendanceMonthlyRoute,
       adminAttendanceDailyRoute,
-      adminAttendanceCorrectionRoute,
       adminCompanyHolidaysRoute,
       adminWorkSchedulesRoute,
       adminOvertimePoliciesRoute,
