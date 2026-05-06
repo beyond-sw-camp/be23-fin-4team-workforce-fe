@@ -11,6 +11,7 @@ import {
   DatePicker,
   Form,
   Input,
+  InputNumber,
   Popconfirm,
   Select,
   Space,
@@ -44,6 +45,13 @@ type PolicyFormValues = {
   retirementType: RetirementTypeCode;
   effectiveRange: [dayjs.Dayjs, dayjs.Dayjs | null];
   memo?: string;
+  // DC 월 부담금 비율(%)
+  dcContributionRate?: number | null;
+  // DB/DC 운용 금융기관
+  providerName?: string;
+  contractNumber?: string;
+  // LEGAL 중간정산 허용 Y/N
+  allowEarlySettlementYn?: 'Y' | 'N';
 };
 
 export function AdminRetirementPolicyPage() {
@@ -70,6 +78,10 @@ export function AdminRetirementPolicyPage() {
         effectiveFrom: v.effectiveRange[0].format('YYYY-MM-DD'),
         effectiveTo: v.effectiveRange[1]?.format('YYYY-MM-DD') ?? null,
         memo: v.memo?.trim() || null,
+        dcContributionRate: v.retirementType === 'DC' ? (v.dcContributionRate ?? null) : null,
+        providerName: v.retirementType === 'LEGAL' ? null : (v.providerName?.trim() || null),
+        contractNumber: v.retirementType === 'LEGAL' ? null : (v.contractNumber?.trim() || null),
+        allowEarlySettlementYn: v.retirementType === 'LEGAL' ? (v.allowEarlySettlementYn ?? null) : null,
       }),
     onSuccess: () => {
       message.success('등록 완료 — 이전 활성 정책은 자동으로 마감되었습니다.');
@@ -86,6 +98,10 @@ export function AdminRetirementPolicyPage() {
         retirementType: v.retirementType,
         effectiveTo: v.effectiveRange[1]?.format('YYYY-MM-DD') ?? null,
         memo: v.memo?.trim() || null,
+        dcContributionRate: v.retirementType === 'DC' ? (v.dcContributionRate ?? null) : null,
+        providerName: v.retirementType === 'LEGAL' ? null : (v.providerName?.trim() || null),
+        contractNumber: v.retirementType === 'LEGAL' ? null : (v.contractNumber?.trim() || null),
+        allowEarlySettlementYn: v.retirementType === 'LEGAL' ? (v.allowEarlySettlementYn ?? null) : null,
       }),
     onSuccess: () => {
       message.success('수정 완료');
@@ -158,6 +174,10 @@ export function AdminRetirementPolicyPage() {
                     r.effectiveTo ? dayjs(r.effectiveTo) : null,
                   ],
                   memo: r.memo ?? undefined,
+                  dcContributionRate: r.dcContributionRate ?? undefined,
+                  providerName: r.providerName ?? undefined,
+                  contractNumber: r.contractNumber ?? undefined,
+                  allowEarlySettlementYn: (r.allowEarlySettlementYn as 'Y' | 'N') ?? undefined,
                 });
                 setOpen(true);
               }}
@@ -315,6 +335,72 @@ export function AdminRetirementPolicyPage() {
               style={{ width: '100%' }}
               disabled={editing ? [true, false] : false}
             />
+          </Form.Item>
+
+          {/* 제도 종류별 분기 입력 */}
+          <Form.Item
+            shouldUpdate={(prev, cur) => prev.retirementType !== cur.retirementType}
+            noStyle
+          >
+            {({ getFieldValue }) => {
+              const t = getFieldValue('retirementType') as RetirementTypeCode;
+              if (t === 'LEGAL') {
+                return (
+                  <Form.Item
+                    label="중간정산 허용"
+                    name="allowEarlySettlementYn"
+                    extra="허용해도 사유는 법정 제한 (주택구입 / 요양 / 파산 / 임금피크 등)"
+                  >
+                    <Select
+                      allowClear
+                      placeholder="선택"
+                      options={[
+                        { value: 'Y', label: '허용' },
+                        { value: 'N', label: '불가' },
+                      ]}
+                    />
+                  </Form.Item>
+                );
+              }
+              if (t === 'DB') {
+                return (
+                  <>
+                    <Form.Item label="운용 금융기관" name="providerName">
+                      <Input maxLength={100} placeholder="예: 신한은행" />
+                    </Form.Item>
+                    <Form.Item label="계약번호" name="contractNumber">
+                      <Input maxLength={100} placeholder="예: 123-456-7890" />
+                    </Form.Item>
+                  </>
+                );
+              }
+              if (t === 'DC') {
+                return (
+                  <>
+                    <Form.Item
+                      label="월 부담금 비율 (%)"
+                      name="dcContributionRate"
+                      extra="법정 기본 8.33% (1/12). 회사가 추가 적립 시 더 높게 설정"
+                    >
+                      <InputNumber
+                        min={0}
+                        max={100}
+                        step={0.01}
+                        style={{ width: '100%' }}
+                        placeholder="8.33"
+                      />
+                    </Form.Item>
+                    <Form.Item label="운용 금융기관" name="providerName">
+                      <Input maxLength={100} placeholder="예: 미래에셋증권" />
+                    </Form.Item>
+                    <Form.Item label="계좌번호" name="contractNumber">
+                      <Input maxLength={100} placeholder="예: 123-456-7890" />
+                    </Form.Item>
+                  </>
+                );
+              }
+              return null;
+            }}
           </Form.Item>
 
           <Form.Item label="비고 (선택)" name="memo">

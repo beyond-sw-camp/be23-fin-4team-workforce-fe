@@ -161,24 +161,17 @@ export function AdminMemberAllowancePage() {
     queryFn: () => salaryApi.salaryItemTemplate.list(),
     staleTime: 5 * 60_000,
   });
-  // 퇴직 정산 cascade 가 자동 생성하는 항목들 - 수동 부여 메뉴에서 제외
+  // 퇴직 정산 cascade 가 자동 생성하는 항목들 - 사직서 승인된 직원에게만 수동 부여 허용
   const RETIREMENT_AUTO_ITEMS = useMemo(
     () => new Set(['퇴직금', '퇴직월 일할 급여', '미사용 연차 수당']),
     [],
   );
   const allowanceTemplates = useMemo<SalaryItemTemplate[]>(() => {
     const list = tplQ.data ?? [];
-    // 개인 차등 (applyToAllYn != 'Y') EARNING 항목만 - [수당 부여] 모달에서 부여 가능한 항목.
-    // 회사 공통 (Y) 은 PayrollService 가 전 직원 자동 적용하므로 부여 메뉴에서 제외.
-    // 기본급 제외 (메인 급여로 처리). 퇴직 자동 생성 항목 제외 (cascade 가 처리).
-    return list.filter(
-      (t) =>
-        t.itemType === 'EARNING'
-        && t.itemName !== '기본급'
-        && t.applyToAllYn !== 'Y'
-        && !RETIREMENT_AUTO_ITEMS.has(t.itemName ?? ''),
-    );
-  }, [tplQ.data, RETIREMENT_AUTO_ITEMS]);
+    // 부여 모달에 노출할 항목: 모든 EARNING (개인 차등 + 회사 공통). 기본급만 제외.
+    // 퇴직 자동 생성 항목은 옵션에 보이되 라벨에 안내 추가, 부여 시 BE 가 사직서 승인 여부 검증.
+    return list.filter((t) => t.itemType === 'EARNING' && t.itemName !== '기본급');
+  }, [tplQ.data]);
 
   /** 필터 dropdown 용 - 회사 공통/개인 차등 모두 포함 (기본급만 제외).
    *  회사 공통도 직원별로 override 부여된 케이스가 있을 수 있으므로 필터 후보로 노출. */
@@ -434,41 +427,21 @@ export function AdminMemberAllowancePage() {
             return <Typography.Text type="secondary" className="!tw-text-xs">이력</Typography.Text>;
           }
           return (
-            <Space size={4}>
-              <Button
-                size="small"
-                disabled={!r.memberAllowanceId}
-                onClick={() =>
-                  modal.confirm({
-                    title: '수당 종료',
-                    content: '오늘 자로 종료 처리합니다 (이전 정산 이력 보존). 다음 달부터 합산 안 됨.',
-                    okText: '종료',
-                    cancelText: '취소',
-                    onOk: () => closeOneMut.mutateAsync(r.memberAllowanceId!),
-                  })
-                }
-              >
-                종료
-              </Button>
-              <Button
-                size="small"
-                danger
-                type="text"
-                disabled={!r.memberAllowanceId}
-                onClick={() =>
-                  modal.confirm({
-                    title: '완전 삭제',
-                    content: '실수 정정용. 이력 없이 통째로 제거합니다. 되돌릴 수 없습니다.',
-                    okText: '삭제',
-                    okButtonProps: { danger: true },
-                    cancelText: '취소',
-                    onOk: () => deleteOneMut.mutateAsync(r.memberAllowanceId!),
-                  })
-                }
-              >
-                삭제
-              </Button>
-            </Space>
+            <Button
+              size="small"
+              disabled={!r.memberAllowanceId}
+              onClick={() =>
+                modal.confirm({
+                  title: '수당 종료',
+                  content: '오늘 자로 종료 처리합니다 (이전 정산 이력 보존). 다음 달부터 합산 안 됨.',
+                  okText: '종료',
+                  cancelText: '취소',
+                  onOk: () => closeOneMut.mutateAsync(r.memberAllowanceId!),
+                })
+              }
+            >
+              종료
+            </Button>
           );
         },
       },
@@ -588,10 +561,18 @@ export function AdminMemberAllowancePage() {
             {filteredAllowances.length}건 / 전체 {(listQ.data ?? []).length}건
           </Typography.Text>
         </Space>
-        <div className="tw-flex tw-justify-between tw-items-center tw-mb-2">
-          <Typography.Text type="secondary" className="!tw-text-xs">
-            선택한 월의 어느 시점이라도 활성이었던 직원별 수당 부여 행을 표시합니다.
-          </Typography.Text>
+        <div className="tw-flex tw-justify-between tw-items-center tw-mb-2 tw-flex-wrap tw-gap-2">
+          <Space size={12} wrap>
+            <Typography.Text type="secondary" className="!tw-text-xs">
+              선택한 월의 어느 시점이라도 활성이었던 직원별 수당 부여 행을 표시합니다.
+            </Typography.Text>
+            <Space size={6}>
+              <Tag color="blue" className="!tw-mr-0">파랑</Tag>
+              <Typography.Text type="secondary" className="!tw-text-xs">지급 중</Typography.Text>
+              <Tag color="orange" className="!tw-mr-0">주황</Tag>
+              <Typography.Text type="secondary" className="!tw-text-xs">종료 임박 (30일 내)</Typography.Text>
+            </Space>
+          </Space>
           <Segmented
             size="small"
             value={viewMode}
@@ -627,6 +608,13 @@ export function AdminMemberAllowancePage() {
                       {g.items.map((it) => {
                         const lc = evalLifecycle(it.effectiveTo);
                         const itemName = tplMap.get(it.salaryItemTemplateId ?? '')?.itemName ?? '—';
+                        // 조회 월에 어느 시점이라도 활성이었던 행은 BE 가 이미 걸러서 내려줌
+                        // -> 이 화면에 보이는 모든 행은 "그 달에 지급되었거나 지급 중"
+                        // 종료 임박만 주황, 종료된 것 포함 그 외는 모두 파랑 (회색 안 씀)
+                        const tagColor = lc === 'soon' ? 'orange' : 'blue';
+                        const endedLabel = lc === 'expired' && it.effectiveTo
+                          ? ` · ${dayjs(it.effectiveTo).format('M/D')} 종료`
+                          : '';
                         const tooltipContent = (
                           <div className="tw-text-xs">
                             <div>{it.effectiveFrom ?? '—'} ~ {it.effectiveTo ?? '진행중'}</div>
@@ -636,61 +624,22 @@ export function AdminMemberAllowancePage() {
                         return (
                           <Tooltip key={it.memberAllowanceId ?? `${itemName}-${it.effectiveFrom}`} title={tooltipContent}>
                             <Tag
-                              color={
-                                lc === 'expired'
-                                  ? 'default'
-                                  : lc === 'soon'
-                                    ? 'orange'
-                                    : 'blue'
-                              }
-                              className={`!tw-px-2 !tw-py-0.5 !tw-text-sm ${lc === 'expired' ? '!tw-text-slate-400' : ''}`}
+                              color={tagColor}
+                              className="!tw-px-2 !tw-py-0.5 !tw-text-sm"
                               closable={!!it.memberAllowanceId && lc !== 'expired'}
                               onClose={(e) => {
                                 e.preventDefault();
                                 modal.confirm({
                                   title: `${g.label} - ${itemName} (${formatWon(it.amount ?? 0)})`,
-                                  width: 520,
-                                  content: (
-                                    <div>
-                                      <Typography.Paragraph className="!tw-mb-2">
-                                        어떻게 처리할까요?
-                                      </Typography.Paragraph>
-                                      <ul className="tw-list-disc tw-pl-5 tw-text-sm tw-text-slate-600 tw-space-y-1">
-                                        <li><b>종료(권장)</b>: 오늘부터 더 이상 합산되지 않음. 이전 정산 이력은 보존됨.</li>
-                                        <li><b>완전 삭제</b>: 부여 자체를 잘못 입력한 경우. 이력 없이 통째로 제거.</li>
-                                      </ul>
-                                    </div>
-                                  ),
-                                  okText: '종료 (이력 보존)',
+                                  width: 480,
+                                  content: '오늘 자로 종료 처리합니다. 이전 정산 이력은 그대로 보존됩니다.',
+                                  okText: '종료',
                                   cancelText: '취소',
                                   onOk: () => closeOneMut.mutateAsync(it.memberAllowanceId!),
-                                  // 추가 footer button 으로 완전 삭제 분기
-                                  footer: (_, { OkBtn, CancelBtn }) => (
-                                    <Space>
-                                      <CancelBtn />
-                                      <Button
-                                        danger
-                                        onClick={() => {
-                                          Modal.destroyAll();
-                                          modal.confirm({
-                                            title: '완전 삭제',
-                                            content: `${g.label} - ${itemName}: 이력 없이 통째로 제거합니다. 되돌릴 수 없습니다.`,
-                                            okText: '완전 삭제',
-                                            okButtonProps: { danger: true },
-                                            cancelText: '취소',
-                                            onOk: () => deleteOneMut.mutateAsync(it.memberAllowanceId!),
-                                          });
-                                        }}
-                                      >
-                                        완전 삭제
-                                      </Button>
-                                      <OkBtn />
-                                    </Space>
-                                  ),
                                 });
                               }}
                             >
-                              {itemName} {formatWon(it.amount ?? 0)}
+                              {itemName} {formatWon(it.amount ?? 0)}{endedLabel}
                             </Tag>
                           </Tooltip>
                         );
@@ -851,10 +800,18 @@ export function AdminMemberAllowancePage() {
                       <Select
                         loading={tplQ.isLoading}
                         placeholder="항목 선택"
-                        options={allowanceTemplates.map((t) => ({
-                          value: t.salaryItemTemplateId!,
-                          label: t.itemName ?? '',
-                        }))}
+                        options={allowanceTemplates.map((t) => {
+                          const isCommon = t.applyToAllYn === 'Y';
+                          const isRetirement = RETIREMENT_AUTO_ITEMS.has(t.itemName ?? '');
+                          const tags: string[] = [];
+                          if (isCommon) tags.push('회사공통');
+                          if (isRetirement) tags.push('사직서 승인 후');
+                          const suffix = tags.length ? ` (${tags.join(' / ')})` : '';
+                          return {
+                            value: t.salaryItemTemplateId!,
+                            label: `${t.itemName ?? ''}${suffix}`,
+                          };
+                        })}
                         onChange={(val: string) => {
                           // 템플릿 선택 시 default 금액 자동 채움
                           const tpl = allowanceTemplates.find((t) => t.salaryItemTemplateId === val);
