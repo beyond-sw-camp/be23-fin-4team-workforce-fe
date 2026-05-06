@@ -169,7 +169,7 @@ const INITIAL_STEP_STATUS: StepStatus[] = ONBOARDING_STEPS.map(() => 'pending');
 const ORG_GUIDE_POPOVER_SHARED = {
   getPopupContainer: (trigger: HTMLElement) => trigger.parentElement ?? document.body,
   autoAdjustOverflow: { adjustX: 1 as const, adjustY: 1 as const },
-  overlayInnerStyle: { maxWidth: 320 },
+  styles: { body: { maxWidth: 320 } },
 } as const;
 /** 1단계 안내: Popover 대신 트리 위 인라인(동일 320px 폭, 화면 밖 좌표 버그 방지) */
 const ORG_GUIDE_CALLOUT_CLASS =

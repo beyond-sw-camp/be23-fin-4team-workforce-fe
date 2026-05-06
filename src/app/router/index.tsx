@@ -77,12 +77,7 @@ import { AdminPayrollTaxSummaryPage } from '@/pages/app/salary-service/admin/Adm
 import { AdminRetirementPolicyPage } from '@/pages/app/salary-service/admin/AdminRetirementPolicyPage';
 import { AdminMemberAllowancePage } from '@/pages/app/salary-service/admin/AdminMemberAllowancePage';
 import { AdminSalaryNegotiationsPage } from '@/pages/app/salary-service/admin/AdminSalaryNegotiationsPage';
-// 큰 페이지(2000줄+) - 코드 스플릿
-const AdminSalarySettingsPageLazy = lazy(() =>
-  import('@/pages/app/salary-service/admin/AdminSalarySettingsPage').then((m) => ({
-    default: m.AdminSalarySettingsPage,
-  })),
-);
+import { AdminSalarySettingsPage } from '@/pages/app/salary-service/admin/AdminSalarySettingsPage';
 
 // 코드 스플릿된 페이지 공통 Suspense 래퍼 (로딩 스피너)
 function withSuspense(Comp: ComponentType) {
@@ -122,7 +117,6 @@ import { MyAllowancesPage } from '@/pages/app/salary-service/my/MyAllowancesPage
 import { PayrollDetailPage } from '@/pages/app/salary-service/my/PayrollDetailPage';
 import { OrganizationPage } from '@/pages/app/OrganizationPage';
 import { MyProfilePage } from '@/pages/app/MyProfilePage';
-import { MyProfileEditPage } from '@/pages/app/MyProfileEditPage';
 import OnboardingStepperPage from '@/pages/app/OnboardingStepperPage';
 import MeetingsPage from '@/pages/app/MeetingsPage';
 import MeetingDetailPage from '@/pages/app/MeetingDetailPage';
@@ -268,12 +262,6 @@ const esgAdminRoute = createRoute({
       throw redirect({ to: '/app/esg' });
     }
   },
-});
-
-const myProfileEditRoute = createRoute({
-  getParentRoute: () => appBaseRoute,
-  path: '/me/edit',
-  component: MyProfileEditPage,
 });
 
 const myProfileRoute = createRoute({
@@ -623,6 +611,17 @@ const attendanceCorrectionRequestRoute = createRoute({
   component: AttendanceCorrectionRequestPage,
 });
 
+const attendanceCorrectionsRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/attendance/corrections',
+  validateSearch: z.object({
+    date: z.string().optional(),
+    clockIn: z.string().optional(),
+    clockOut: z.string().optional(),
+  }),
+  component: AttendanceCorrectionRequestPage,
+});
+
 const myScheduleSelectionsRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/attendance/schedules/my',
@@ -905,7 +904,7 @@ const myNegotiationHistoryRoute = createRoute({
 const adminSalarySettingsRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/salary/settings',
-  component: withSuspense(AdminSalarySettingsPageLazy),
+  component: AdminSalarySettingsPage,
   beforeLoad: ({ context }) => {
     if (!context.auth.user?.isSystemAdmin) {
       throw redirect({ to: '/app/payroll' });
@@ -1066,7 +1065,6 @@ const routeTree = rootRoute.addChildren([
       esgHomeRoute,
       esgShopRoute,
       esgAdminRoute,
-      myProfileEditRoute,
       myProfileRoute,
       membersRoute,
       memberDetailRoute,
@@ -1094,6 +1092,7 @@ const routeTree = rootRoute.addChildren([
       myAttendanceRoute,
       myAttendanceMonthlyRoute,
       attendanceCorrectionRequestRoute,
+      attendanceCorrectionsRoute,
       myScheduleSelectionsRoute,
       myOvertimeRequestsRoute,
       myWorkTimeRoute,

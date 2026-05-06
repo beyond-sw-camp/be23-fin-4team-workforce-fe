@@ -442,7 +442,7 @@ export function AdminAttendancePage() {
             dataSource={filteredContent}
             size="small"
             virtual
-            scroll={{ y: 520, x: 'max-content' }}
+            scroll={{ y: 520, x: 1280 }}
             onRow={(record) => ({
               onClick: () => setDrawerRow(record),
               style: { cursor: 'pointer' },

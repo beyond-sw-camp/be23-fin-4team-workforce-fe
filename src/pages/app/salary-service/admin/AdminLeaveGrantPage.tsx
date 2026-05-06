@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Alert, Button, Card, DatePicker, Form, InputNumber, Select, Space, Typography } from 'antd';
-import dayjs from 'dayjs';
+import type dayjs from 'dayjs';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import { memberApi } from '@/features/member/api/memberApi';
 

@@ -117,7 +117,6 @@ export function appHeaderTitleFromPath(
   const exact = APP_MENU_LABEL[pathname] ?? ESG_MENU_LABEL[pathname];
   if (exact) return exact;
   if (pathname === '/app/me') return '마이페이지';
-  if (pathname === '/app/me/edit') return '내 정보 수정';
   if (pathname === '/app/attendance/monthly') return '개인 월근태근무';
   if (pathname === '/app/attendance/schedules/my') return '개인 근무 스케줄';
   if (pathname === '/app/attendance/overtime') return '초과 근무 관리';

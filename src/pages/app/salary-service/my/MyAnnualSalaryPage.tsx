@@ -7,17 +7,7 @@
  */
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import {
-  Alert,
-  Card,
-  DatePicker,
-  Empty,
-  Space,
-  Statistic,
-  Table,
-  Tag,
-  Typography,
-} from 'antd';
+import { Alert, Card, DatePicker, Empty, Space, Statistic, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs, { type Dayjs } from 'dayjs';
 import {
@@ -38,6 +28,7 @@ import type {
   AnnualSalaryMonthlyRow,
   PayrollTypeCode,
 } from '@/features/salary-service/types';
+import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 
 // chart.js 모듈 등록 (한 번만 호출)
 ChartJS.register(
@@ -135,8 +126,10 @@ export function MyAnnualSalaryPage() {
     const map = new Map<PayrollTypeCode, number>();
     (data?.monthly ?? []).forEach((r) => {
       if (!r.payrollType || !r.totalPayment) return;
-      map.set(r.payrollType as PayrollTypeCode,
-              (map.get(r.payrollType as PayrollTypeCode) ?? 0) + r.totalPayment);
+      map.set(
+        r.payrollType as PayrollTypeCode,
+        (map.get(r.payrollType as PayrollTypeCode) ?? 0) + r.totalPayment,
+      );
     });
     const entries = Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
     return entries;
@@ -144,9 +137,7 @@ export function MyAnnualSalaryPage() {
 
   const totalPayment = data?.totalPayment ?? 0;
   const netPay = data?.netPay ?? 0;
-  const deductionRate = totalPayment > 0
-    ? Math.round((1 - netPay / totalPayment) * 1000) / 10
-    : 0;
+  const deductionRate = totalPayment > 0 ? Math.round((1 - netPay / totalPayment) * 1000) / 10 : 0;
 
   const monthlyColumns: ColumnsType<AnnualSalaryMonthlyRow> = [
     {
@@ -167,8 +158,11 @@ export function MyAnnualSalaryPage() {
       dataIndex: 'payrollStatus',
       key: 'payrollStatus',
       render: (s?: string | null) =>
-        s ? <Tag color={STATUS_COLOR[s] ?? 'default'}>{STATUS_KO[s] ?? s}</Tag>
-          : <Typography.Text type="secondary">미정산</Typography.Text>,
+        s ? (
+          <Tag color={STATUS_COLOR[s] ?? 'default'}>{STATUS_KO[s] ?? s}</Tag>
+        ) : (
+          <Typography.Text type="secondary">미정산</Typography.Text>
+        ),
     },
     {
       title: '지급',
@@ -182,9 +176,7 @@ export function MyAnnualSalaryPage() {
       dataIndex: 'totalDeduction',
       key: 'totalDeduction',
       align: 'right',
-      render: (n: number) => (
-        <Typography.Text type="secondary">{formatWon(n)} 원</Typography.Text>
-      ),
+      render: (n: number) => <Typography.Text type="secondary">{formatWon(n)} 원</Typography.Text>,
     },
     {
       title: '실수령',
@@ -208,27 +200,19 @@ export function MyAnnualSalaryPage() {
 
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
-      <div className="tw-flex tw-flex-wrap tw-items-end tw-justify-between tw-gap-3">
-        <div>
-          <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
-            연봉 조회
-          </Typography.Title>
-          <Typography.Paragraph
-            type="secondary"
-            className="!tw-mb-0 !tw-mt-1 !tw-text-sm"
-          >
-            연도별 지급·공제·실수령 합계와 월별 정산 내역을 확인합니다 항목별 누적도 함께 제공됩니다
-          </Typography.Paragraph>
-        </div>
-        <Space wrap>
+      <AppWorkspacePageTitle
+        eyebrow="PAYROLL"
+        title="연봉 조회"
+        subtitle="연도별 지급, 공제, 실수령 합계와 월별 정산 내역을 확인합니다."
+        extra={
           <DatePicker
             picker="year"
             value={yearPicker}
             onChange={(d) => d && setYearPicker(d)}
             allowClear={false}
           />
-        </Space>
-      </div>
+        }
+      />
 
       {summaryQ.isError ? (
         <Alert
@@ -240,7 +224,11 @@ export function MyAnnualSalaryPage() {
       ) : null}
 
       <div className="tw-grid tw-grid-cols-2 md:tw-grid-cols-4 tw-gap-3">
-        <Card size="small" loading={summaryQ.isLoading} className="tw-border-slate-200/80 tw-shadow-sm">
+        <Card
+          size="small"
+          loading={summaryQ.isLoading}
+          className="tw-border-slate-200/80 tw-shadow-sm"
+        >
           <Statistic
             title="연 총지급"
             value={data?.totalPayment ?? 0}
@@ -249,7 +237,11 @@ export function MyAnnualSalaryPage() {
             valueStyle={{ fontSize: 20, color: '#0c4a6e' }}
           />
         </Card>
-        <Card size="small" loading={summaryQ.isLoading} className="tw-border-slate-200/80 tw-shadow-sm">
+        <Card
+          size="small"
+          loading={summaryQ.isLoading}
+          className="tw-border-slate-200/80 tw-shadow-sm"
+        >
           <Statistic
             title="연 총공제"
             value={data?.totalDeduction ?? 0}
@@ -258,7 +250,11 @@ export function MyAnnualSalaryPage() {
             valueStyle={{ fontSize: 20, color: '#dc2626' }}
           />
         </Card>
-        <Card size="small" loading={summaryQ.isLoading} className="tw-border-slate-200/80 tw-shadow-sm">
+        <Card
+          size="small"
+          loading={summaryQ.isLoading}
+          className="tw-border-slate-200/80 tw-shadow-sm"
+        >
           <Statistic
             title="연 실수령"
             value={data?.netPay ?? 0}
@@ -267,7 +263,11 @@ export function MyAnnualSalaryPage() {
             valueStyle={{ fontSize: 22, color: '#2563EB' }}
           />
         </Card>
-        <Card size="small" loading={summaryQ.isLoading} className="tw-border-slate-200/80 tw-shadow-sm">
+        <Card
+          size="small"
+          loading={summaryQ.isLoading}
+          className="tw-border-slate-200/80 tw-shadow-sm"
+        >
           <Statistic
             title="월평균 실수령"
             value={data?.monthlyAverage ?? 0}
@@ -367,9 +367,7 @@ export function MyAnnualSalaryPage() {
         {payrollTypeBreakdown.length > 0 ? (
           <div className="tw-grid tw-grid-cols-2 md:tw-grid-cols-5 tw-gap-3">
             {payrollTypeBreakdown.map(([type, amount]) => {
-              const ratio = totalPayment > 0
-                ? Math.round((amount / totalPayment) * 1000) / 10
-                : 0;
+              const ratio = totalPayment > 0 ? Math.round((amount / totalPayment) * 1000) / 10 : 0;
               const color = PAYROLL_TYPE_COLOR[type] ?? '#64748b';
               return (
                 <div
@@ -418,11 +416,7 @@ export function MyAnnualSalaryPage() {
       </Card>
 
       <div className="tw-grid tw-grid-cols-1 md:tw-grid-cols-2 tw-gap-3">
-        <Card
-          title="지급 항목 누적"
-          size="small"
-          className="tw-border-slate-200/80 tw-shadow-sm"
-        >
+        <Card title="지급 항목 누적" size="small" className="tw-border-slate-200/80 tw-shadow-sm">
           {(() => {
             // 0원 항목 숨김 - 회사 공통 템플릿이지만 본인 미부여 항목 0원 노출 방지
             const earningRows = (data?.earnings ?? []).filter((r) => (r.totalAmount ?? 0) > 0);
@@ -455,11 +449,7 @@ export function MyAnnualSalaryPage() {
           })()}
         </Card>
 
-        <Card
-          title="공제 항목 누적"
-          size="small"
-          className="tw-border-slate-200/80 tw-shadow-sm"
-        >
+        <Card title="공제 항목 누적" size="small" className="tw-border-slate-200/80 tw-shadow-sm">
           {(() => {
             const deductionRows = (data?.deductions ?? []).filter((r) => (r.totalAmount ?? 0) > 0);
             if (deductionRows.length === 0) {

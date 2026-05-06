@@ -40,6 +40,7 @@ import type {
   PromotionLogStatusCode,
   PromotionStageCode,
 } from '@/features/salary-service/types';
+import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import { PromotionResponseModal } from './components/PromotionResponseModal';
 
 // 결재 작성 화면에서 자동 prefill 받을 sessionStorage 키 (ApprovalsPage 와 동기화)
@@ -99,11 +100,7 @@ type LeavePlanRow = Partial<LeaveRequest> & {
  * 예: 12/24(목) -> 12/28(월) 사이가 12/25(금:공휴일) + 12/26(토) + 12/27(일) 이면 인접 OK.
  * 사이 길이는 보통 1~5일이라 O(k) 단순 순회로 충분.
  */
-function isAdjacentBusinessDay(
-  prevEnd: string,
-  nextStart: string,
-  holidays: Set<string>,
-): boolean {
+function isAdjacentBusinessDay(prevEnd: string, nextStart: string, holidays: Set<string>): boolean {
   const prev = dayjs(prevEnd);
   const next = dayjs(nextStart);
   if (!prev.isValid() || !next.isValid()) return false;
@@ -203,18 +200,20 @@ export function MyLeavePage() {
     // 기본 연차 휴가종류 우선 (code='ANNUAL' 또는 isSystemDefault), 없으면 첫번째
     const types = leaveTypesQ.data ?? [];
     const annual =
-      types.find((t) => (t.code ?? '').toUpperCase() === 'ANNUAL')
-      ?? types.find((t) => t.isSystemDefault)
-      ?? types[0];
+      types.find((t) => (t.code ?? '').toUpperCase() === 'ANNUAL') ??
+      types.find((t) => t.isSystemDefault) ??
+      types[0];
     const vacationType = annual?.companyLeaveTypeId;
 
     // 부분 신청 케이스 (PLAN_PARTIAL) 면 남은 날짜만 prefill, 아니면 전체 plannedDates
-    const sourceDates = r.approvalStatus === 'PLAN_PARTIAL' && r.remainingPlannedDates && r.remainingPlannedDates.length > 0
-      ? r.remainingPlannedDates
-      : r.plannedDates;
-    let plannedDates: string[] | undefined = sourceDates && sourceDates.length > 0
-      ? [...sourceDates].sort()
-      : undefined;
+    const sourceDates =
+      r.approvalStatus === 'PLAN_PARTIAL' &&
+      r.remainingPlannedDates &&
+      r.remainingPlannedDates.length > 0
+        ? r.remainingPlannedDates
+        : r.plannedDates;
+    let plannedDates: string[] | undefined =
+      sourceDates && sourceDates.length > 0 ? [...sourceDates].sort() : undefined;
     if (!plannedDates && start) {
       const acc: string[] = [];
       const last = end ?? start;
@@ -259,7 +258,6 @@ export function MyLeavePage() {
       },
     });
   };
-
 
   const balanceQ = useQuery({
     queryKey: ['salary', 'member-balance', 'mine'],
@@ -379,7 +377,7 @@ export function MyLeavePage() {
     unplanned: number; // 미계획
   }>(() => {
     const policy = (policyQ.data ?? []).find((p) => p.policyId);
-    const carryCap = policy?.isCarryoverYn === 'Y' ? policy?.carryoverDays ?? 0 : 0;
+    const carryCap = policy?.isCarryoverYn === 'Y' ? (policy?.carryoverDays ?? 0) : 0;
 
     // expirationDate -> consented 여부 매핑
     const consentedByExp = new Map<string, boolean>();
@@ -403,12 +401,13 @@ export function MyLeavePage() {
       }
       const slot = byBalance.get(key)!;
       // 같은 잔고 내 1차(ACK) + 2차(DESIG) 일수는 비중복이라 합산
-      const ackCount = p.status === 'ACKNOWLEDGED' ? p.plannedDates?.length ?? 0 : 0;
-      const desCount = p.status === 'DESIGNATED' ? p.designatedDates?.length ?? 0 : 0;
+      const ackCount = p.status === 'ACKNOWLEDGED' ? (p.plannedDates?.length ?? 0) : 0;
+      const desCount = p.status === 'DESIGNATED' ? (p.designatedDates?.length ?? 0) : 0;
       slot.planned += ackCount + desCount;
     });
 
-    let scope = 0, planned = 0;
+    let scope = 0,
+      planned = 0;
     byBalance.forEach((v) => {
       scope += v.scope;
       planned += Math.min(v.planned, v.scope);
@@ -466,10 +465,7 @@ export function MyLeavePage() {
     return { label: '1차 수신', tone: 'orange', sub };
   }, [promotionsOfYear]);
 
-  const activePolicy = useMemo(
-    () => (policyQ.data ?? []).find((p) => p.policyId),
-    [policyQ.data],
-  );
+  const activePolicy = useMemo(() => (policyQ.data ?? []).find((p) => p.policyId), [policyQ.data]);
 
   const leaveTypeMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -502,7 +498,10 @@ export function MyLeavePage() {
     });
 
     const promotionRows: LeavePlanRow[] = (promotionQ.data ?? [])
-      .filter((p) => p.status === 'ACKNOWLEDGED' && Array.isArray(p.plannedDates) && p.plannedDates.length > 0)
+      .filter(
+        (p) =>
+          p.status === 'ACKNOWLEDGED' && Array.isArray(p.plannedDates) && p.plannedDates.length > 0,
+      )
       .filter((p) => {
         const ds = (p.plannedDates ?? []).filter(Boolean);
         return ds.some((d) => dayjs(d).isValid() && dayjs(d).year() === year);
@@ -596,9 +595,8 @@ export function MyLeavePage() {
       align: 'center',
       render: (_: unknown, r: LeavePlanRow) => {
         // 비연속 plannedDates 가 있으면 그 날짜들을 m/d 형식으로 콤마 나열 (촉진 회신 행 + LeaveRequest plannedDates 모두)
-        const planned = Array.isArray(r.plannedDates) && r.plannedDates.length > 0
-          ? r.plannedDates
-          : undefined;
+        const planned =
+          Array.isArray(r.plannedDates) && r.plannedDates.length > 0 ? r.plannedDates : undefined;
         if (planned && planned.length > 0) {
           const sorted = [...planned].sort();
           const text = sorted
@@ -633,7 +631,7 @@ export function MyLeavePage() {
       key: 'deductedBalanceType',
       width: 110,
       render: (v?: string | null) =>
-        v ? BALANCE_TYPE_KO[v] ?? v : <Typography.Text type="secondary">—</Typography.Text>,
+        v ? (BALANCE_TYPE_KO[v] ?? v) : <Typography.Text type="secondary">—</Typography.Text>,
     },
     {
       title: '비고',
@@ -641,11 +639,7 @@ export function MyLeavePage() {
       key: 'reason',
       ellipsis: true,
       render: (v?: string | null) =>
-        v && v.length > 0 ? (
-          v
-        ) : (
-          <Typography.Text type="secondary">—</Typography.Text>
-        ),
+        v && v.length > 0 ? v : <Typography.Text type="secondary">—</Typography.Text>,
     },
     {
       title: '결재',
@@ -656,7 +650,11 @@ export function MyLeavePage() {
         const start = r.groupStartDate ?? r.startDate;
         // 전체 신청 완료된 계획은 버튼 숨김
         if (r.approvalStatus === 'PLAN_SUBMITTED') {
-          return <Typography.Text type="secondary" className="!tw-text-xs">신청 완료</Typography.Text>;
+          return (
+            <Typography.Text type="secondary" className="!tw-text-xs">
+              신청 완료
+            </Typography.Text>
+          );
         }
         // 부분 신청된 계획은 남은 날짜만 신청 버튼
         if (r.approvalStatus === 'PLAN_PARTIAL') {
@@ -687,97 +685,113 @@ export function MyLeavePage() {
 
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
-      <div className="tw-flex tw-flex-wrap tw-items-start tw-justify-between tw-gap-3">
-        <div>
-          <Typography.Title level={2} className="!tw-m-0 !tw-text-slate-900">
-            휴가 계획 관리
-          </Typography.Title>
-          <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-sm">
-            연도별 촉진 통보 / 휴가 계획 / 이월 동의를 한 곳에서 관리합니다.
-          </Typography.Paragraph>
-        </div>
-        <Space size="small" wrap>
-          <Space size={4}>
-            <Typography.Text type="secondary" className="!tw-text-xs">근무년도</Typography.Text>
-            <InputNumber
-              size="small"
-              min={2020}
-              max={2100}
-              value={year}
-              onChange={(v) => typeof v === 'number' && setYear(v)}
-              style={{ width: 90 }}
-            />
+      <AppWorkspacePageTitle
+        eyebrow="ATTENDANCE"
+        title="휴가 계획 관리"
+        subtitle="연도별 촉진 통보, 휴가 계획, 이월 동의를 한 곳에서 관리합니다."
+        extra={
+          <Space size="small" wrap>
+            <Space size={4}>
+              <Typography.Text type="secondary" className="!tw-text-xs">
+                근무년도
+              </Typography.Text>
+              <InputNumber
+                size="small"
+                min={2020}
+                max={2100}
+                value={year}
+                onChange={(v) => typeof v === 'number' && setYear(v)}
+                style={{ width: 90 }}
+              />
+            </Space>
+            {user?.isSystemAdmin && (
+              <Link to="/app/leave/policies" className="tw-font-medium tw-text-[#2563EB]">
+                연차 정책
+              </Link>
+            )}
           </Space>
-          {user?.isSystemAdmin && (
-            <Link to="/app/leave/policies" className="tw-font-medium tw-text-[#2563EB]">
-              연차 정책
-            </Link>
-          )}
-        </Space>
-      </div>
+        }
+      />
 
       {/* 상단 KPI - 이월 동의 / 촉진 대상 / 계획 신청 기한 / 촉진 안내 수신 */}
       <div className="tw-grid tw-grid-cols-2 md:tw-grid-cols-4 tw-gap-3">
         {/* 이월 동의 - 회사 정책 ON 일 때만 표시. 잔고별 동의 버튼 인라인 */}
-        {activePolicy?.isCarryoverConsentYn === 'Y' && (() => {
-          const carryRows = balances.filter((b) => b.balanceType === 'ANNUAL' && (b.remaining ?? 0) > 0);
-          // 만료년도 - 가장 빠른 만료일 기준 (보통 잔고 1개)
-          const expYear = carryRows
-            .map((b) => (b.expirationDate ? dayjs(b.expirationDate).year() : null))
-            .filter((y): y is number => y != null)
-            .sort()[0];
-          const cap = activePolicy.isCarryoverYn === 'Y' ? activePolicy.carryoverDays ?? 0 : 0;
-          return (
-            <div className="tw-rounded-lg tw-border tw-border-slate-200 tw-bg-white tw-px-4 tw-py-3">
-              <div className="tw-text-[13px] tw-text-slate-500">
-                {expYear ? `${expYear}년 연차 이월 동의` : '연차 이월 동의'}
-                {cap > 0 && (
-                  <span className="!tw-ml-1 tw-text-slate-400">(최대 {cap}일)</span>
-                )}
+        {activePolicy?.isCarryoverConsentYn === 'Y' &&
+          (() => {
+            const carryRows = balances.filter(
+              (b) => b.balanceType === 'ANNUAL' && (b.remaining ?? 0) > 0,
+            );
+            // 만료년도 - 가장 빠른 만료일 기준 (보통 잔고 1개)
+            const expYear = carryRows
+              .map((b) => (b.expirationDate ? dayjs(b.expirationDate).year() : null))
+              .filter((y): y is number => y != null)
+              .sort()[0];
+            const cap = activePolicy.isCarryoverYn === 'Y' ? (activePolicy.carryoverDays ?? 0) : 0;
+            return (
+              <div className="tw-rounded-lg tw-border tw-border-slate-200 tw-bg-white tw-px-4 tw-py-3">
+                <div className="tw-text-[13px] tw-text-slate-500">
+                  {expYear ? `${expYear}년 연차 이월 동의` : '연차 이월 동의'}
+                  {cap > 0 && <span className="!tw-ml-1 tw-text-slate-400">(최대 {cap}일)</span>}
+                </div>
+                <div className="tw-mt-1.5 tw-flex tw-flex-col tw-gap-1">
+                  {carryRows.length === 0 ? (
+                    <span className="tw-text-slate-400 tw-text-sm">—</span>
+                  ) : (
+                    carryRows.map((b) => {
+                      const consented = b.carryoverConsentYn === 'Y';
+                      return (
+                        <div key={b.memberBalanceId} className="tw-flex tw-items-center tw-gap-1.5">
+                          <span className="tw-text-base tw-font-semibold tw-text-slate-800">
+                            {b.remaining}일
+                          </span>
+                          {consented && (
+                            <Tag
+                              color="green"
+                              className="!tw-m-0 !tw-text-[11px] !tw-leading-4 !tw-px-1.5"
+                            >
+                              동의
+                            </Tag>
+                          )}
+                          <Button
+                            size="small"
+                            type={consented ? 'default' : 'primary'}
+                            danger={consented}
+                            loading={carryoverConsentM.isPending}
+                            onClick={() => {
+                              if (!b.memberBalanceId) return;
+                              carryoverConsentM.mutate({
+                                id: b.memberBalanceId,
+                                agree: !consented,
+                              });
+                            }}
+                            className="!tw-text-xs !tw-h-6 !tw-px-2 !tw-ml-auto"
+                          >
+                            {consented ? '철회' : '동의'}
+                          </Button>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
               </div>
-              <div className="tw-mt-1.5 tw-flex tw-flex-col tw-gap-1">
-                {carryRows.length === 0 ? (
-                  <span className="tw-text-slate-400 tw-text-sm">—</span>
-                ) : (
-                  carryRows.map((b) => {
-                    const consented = b.carryoverConsentYn === 'Y';
-                    return (
-                      <div key={b.memberBalanceId} className="tw-flex tw-items-center tw-gap-1.5">
-                        <span className="tw-text-base tw-font-semibold tw-text-slate-800">{b.remaining}일</span>
-                        {consented && (
-                          <Tag color="green" className="!tw-m-0 !tw-text-[11px] !tw-leading-4 !tw-px-1.5">동의</Tag>
-                        )}
-                        <Button
-                          size="small"
-                          type={consented ? 'default' : 'primary'}
-                          danger={consented}
-                          loading={carryoverConsentM.isPending}
-                          onClick={() => {
-                            if (!b.memberBalanceId) return;
-                            carryoverConsentM.mutate({ id: b.memberBalanceId, agree: !consented });
-                          }}
-                          className="!tw-text-xs !tw-h-6 !tw-px-2 !tw-ml-auto"
-                        >
-                          {consented ? '철회' : '동의'}
-                        </Button>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-          );
-        })()}
+            );
+          })()}
         <div className="tw-rounded-lg tw-border tw-border-slate-200 tw-bg-white tw-px-4 tw-py-3">
           <div className="tw-text-[13px] tw-text-slate-500">{year}년 촉진 대상</div>
           <div className="tw-mt-1.5 tw-flex tw-flex-wrap tw-items-baseline tw-gap-x-3 tw-gap-y-0.5">
             <span className="tw-text-base">
               <span className="tw-text-slate-500">계획 </span>
-              <span className="tw-text-emerald-600 tw-font-bold">{promotionBreakdown.planned}일</span>
+              <span className="tw-text-emerald-600 tw-font-bold">
+                {promotionBreakdown.planned}일
+              </span>
             </span>
             <span className="tw-text-base">
               <span className="tw-text-slate-500">미정 </span>
-              <span className={`tw-font-bold ${totalPromoted > 0 ? 'tw-text-[#dc2626]' : 'tw-text-slate-400'}`}>{totalPromoted}일</span>
+              <span
+                className={`tw-font-bold ${totalPromoted > 0 ? 'tw-text-[#dc2626]' : 'tw-text-slate-400'}`}
+              >
+                {totalPromoted}일
+              </span>
             </span>
             <span className="tw-text-sm tw-text-slate-400">/ 총 {promotionBreakdown.scope}일</span>
           </div>
@@ -800,17 +814,22 @@ export function MyLeavePage() {
           <div className="tw-mt-1.5">
             <Tag
               color={
-                promotionReceiveStatus.tone === 'red' ? 'red'
-                  : promotionReceiveStatus.tone === 'orange' ? 'orange'
-                  : promotionReceiveStatus.tone === 'blue' ? 'blue'
-                  : 'default'
+                promotionReceiveStatus.tone === 'red'
+                  ? 'red'
+                  : promotionReceiveStatus.tone === 'orange'
+                    ? 'orange'
+                    : promotionReceiveStatus.tone === 'blue'
+                      ? 'blue'
+                      : 'default'
               }
               className="!tw-text-sm !tw-px-2 !tw-py-0.5"
             >
               {promotionReceiveStatus.label}
             </Tag>
             {promotionReceiveStatus.sub && (
-              <div className="tw-mt-1 tw-text-[12px] tw-text-slate-500">{promotionReceiveStatus.sub}</div>
+              <div className="tw-mt-1 tw-text-[12px] tw-text-slate-500">
+                {promotionReceiveStatus.sub}
+              </div>
             )}
           </div>
         </div>
@@ -867,7 +886,6 @@ export function MyLeavePage() {
         )}
       </Card>
 
-
       {/* 촉진 알림 내역 + 휴가 계획 내역 - 위아래 배치 (가로 폭 확보) */}
       <Card
         className="tw-border-slate-200/80 tw-shadow-sm"
@@ -913,8 +931,7 @@ export function MyLeavePage() {
               key: 'remainingDays',
               width: 100,
               align: 'right',
-              render: (n: number | null | undefined) =>
-                typeof n === 'number' ? `${n}일` : '—',
+              render: (n: number | null | undefined) => (typeof n === 'number' ? `${n}일` : '—'),
             },
             {
               title: '만료일',
@@ -941,7 +958,9 @@ export function MyLeavePage() {
                 d ? (
                   formatDateTime(d)
                 ) : (
-                  <Typography.Text type="secondary" className="!tw-text-xs">미열람</Typography.Text>
+                  <Typography.Text type="secondary" className="!tw-text-xs">
+                    미열람
+                  </Typography.Text>
                 ),
             },
             {
@@ -968,11 +987,7 @@ export function MyLeavePage() {
                     );
                   }
                   return (
-                    <Button
-                      type="primary"
-                      size="small"
-                      onClick={() => setPromotionTarget(r)}
-                    >
+                    <Button type="primary" size="small" onClick={() => setPromotionTarget(r)}>
                       회신하기
                     </Button>
                   );
@@ -980,20 +995,27 @@ export function MyLeavePage() {
                 if (r.status === 'ACKNOWLEDGED') {
                   return (
                     <Space size={6}>
-                      <Typography.Text type="secondary" className="!tw-text-xs">회신 완료</Typography.Text>
-                      <Button
-                        size="small"
-                        onClick={() => setPromotionTarget(r)}
-                      >
+                      <Typography.Text type="secondary" className="!tw-text-xs">
+                        회신 완료
+                      </Typography.Text>
+                      <Button size="small" onClick={() => setPromotionTarget(r)}>
                         재회신
                       </Button>
                     </Space>
                   );
                 }
                 if (r.status === 'DESIGNATED') {
-                  return <Typography.Text type="secondary" className="!tw-text-xs">회사 자동 지정 완료</Typography.Text>;
+                  return (
+                    <Typography.Text type="secondary" className="!tw-text-xs">
+                      회사 자동 지정 완료
+                    </Typography.Text>
+                  );
                 }
-                return <Typography.Text type="secondary" className="!tw-text-xs">자동 지정 처리중</Typography.Text>;
+                return (
+                  <Typography.Text type="secondary" className="!tw-text-xs">
+                    자동 지정 처리중
+                  </Typography.Text>
+                );
               },
             },
           ]}

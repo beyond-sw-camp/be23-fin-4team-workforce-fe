@@ -9,7 +9,7 @@ export function ContractSendPage() {
   useEffect(() => {
     if (!import.meta.env.DEV) return;
     (window as unknown as Record<string, boolean>)[WF_DEV_CONTRACT_SEND_MARK] = true;
-    // eslint-disable-next-line no-console -- 개발 시 올바른 탭/번들인지 확인용
+     
     console.info(
       `[wf-dev] ContractSendPage 마운트됨. 브라우저 콘솔(이 탭)에서 확인하세요. window.${WF_DEV_CONTRACT_SEND_MARK} === true`,
     );

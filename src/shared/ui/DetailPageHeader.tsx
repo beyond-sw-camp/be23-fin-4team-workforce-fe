@@ -50,7 +50,7 @@ export function DetailPageHeader({
   }, [shareText, shareTitle, title]);
 
   return (
-    <header className="tw-mb-8 tw-w-full">
+    <header className="tw-mb-6 tw-w-full">
       {!hideBack ? (
         onBackClick ? (
           <button
@@ -73,7 +73,7 @@ export function DetailPageHeader({
       ) : null}
 
       <div className="tw-flex tw-w-full tw-items-start tw-justify-between tw-gap-4">
-        <h1 className="tw-m-0 tw-min-w-0 tw-flex-1 tw-text-2xl tw-font-bold tw-leading-tight tw-tracking-tight tw-text-[#1e3a5f] sm:tw-text-[26px]">
+        <h1 className="tw-m-0 tw-min-w-0 tw-flex-1 tw-text-[24px] tw-font-bold tw-leading-tight tw-tracking-normal tw-text-[#1e3a5f]">
           {title}
         </h1>
         {showShare ? (

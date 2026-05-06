@@ -67,7 +67,7 @@ function normalizeArray<T>(payload: unknown, mapFn: (r: any) => T): T[] {
 export const meetingApi = {
   // ── Meeting Records ──
   async createMeeting(body: CreateMeetingPayload): Promise<MeetingRecord> {
-    const res = await httpClient.post('/meeting/record', body);
+    const res = await httpClient.post('/meeting/record', { ...body, repeatCycle: 'ONE_TIME' });
     return mapMeeting(unwrapApiResponse<any>(res.data));
   },
 
@@ -101,18 +101,26 @@ export const meetingApi = {
     return mapMeeting(unwrapApiResponse<any>(res.data));
   },
 
-  async completeMeeting(meetingRecordId: string, body: CompleteMeetingPayload): Promise<MeetingRecord> {
+  async completeMeeting(
+    meetingRecordId: string,
+    body: CompleteMeetingPayload,
+  ): Promise<MeetingRecord> {
     const res = await httpClient.patch(`/meeting/record/${meetingRecordId}/complete`, body);
     return mapMeeting(unwrapApiResponse<any>(res.data));
   },
 
-  async recordMemberReaction(meetingRecordId: string, body: MemberReactionPayload): Promise<MeetingRecord> {
+  async recordMemberReaction(
+    meetingRecordId: string,
+    body: MemberReactionPayload,
+  ): Promise<MeetingRecord> {
     const res = await httpClient.patch(`/meeting/record/${meetingRecordId}/member-reaction`, body);
     return mapMeeting(unwrapApiResponse<any>(res.data));
   },
 
   async updatePrivateMemo(meetingRecordId: string, privateMemo: string): Promise<MeetingRecord> {
-    const res = await httpClient.patch(`/meeting/record/${meetingRecordId}/private-memo`, { privateMemo });
+    const res = await httpClient.patch(`/meeting/record/${meetingRecordId}/private-memo`, {
+      privateMemo,
+    });
     return mapMeeting(unwrapApiResponse<any>(res.data));
   },
 
@@ -141,13 +149,23 @@ export const meetingApi = {
     return mapAction(unwrapApiResponse<any>(res.data));
   },
 
-  async rateAction(meetingRecordId: string, actionId: string, body: RateActionPayload): Promise<MeetingAction> {
+  async rateAction(
+    meetingRecordId: string,
+    actionId: string,
+    body: RateActionPayload,
+  ): Promise<MeetingAction> {
     const res = await httpClient.patch(`/meeting/${meetingRecordId}/action/${actionId}/rate`, body);
     return mapAction(unwrapApiResponse<any>(res.data));
   },
 
-  async linkActionApproval(meetingRecordId: string, actionId: string, approvalId: string): Promise<MeetingAction> {
-    const res = await httpClient.patch(`/meeting/${meetingRecordId}/action/${actionId}/approval`, { approvalId });
+  async linkActionApproval(
+    meetingRecordId: string,
+    actionId: string,
+    approvalId: string,
+  ): Promise<MeetingAction> {
+    const res = await httpClient.patch(`/meeting/${meetingRecordId}/action/${actionId}/approval`, {
+      approvalId,
+    });
     return mapAction(unwrapApiResponse<any>(res.data));
   },
 
@@ -157,7 +175,9 @@ export const meetingApi = {
 
   // ── Meeting Record ── 연관 목표 연결
   async linkGoals(meetingRecordId: string, relatedGoalIdsJson: string): Promise<MeetingRecord> {
-    const res = await httpClient.patch(`/meeting/record/${meetingRecordId}/goals`, { relatedGoalIdsJson });
+    const res = await httpClient.patch(`/meeting/record/${meetingRecordId}/goals`, {
+      relatedGoalIdsJson,
+    });
     return mapMeeting(unwrapApiResponse<any>(res.data));
   },
 };

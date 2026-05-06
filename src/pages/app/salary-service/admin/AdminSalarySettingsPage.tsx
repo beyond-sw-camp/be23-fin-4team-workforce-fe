@@ -607,7 +607,7 @@ export function SalaryTab({
           </Space>
         ),
       },
-      // eslint-disable-next-line react-hooks/exhaustive-deps
+       
     ],
     [form],
   );

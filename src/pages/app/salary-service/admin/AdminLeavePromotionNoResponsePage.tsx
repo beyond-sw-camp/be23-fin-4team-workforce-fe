@@ -35,8 +35,6 @@ import type {
 const QK = ['salary', 'leave-promotion', 'no-response'] as const;
 const PROMOTION_CONTENT_CARD_CLASS =
   'tw-overflow-hidden tw-rounded-2xl tw-border-slate-200/80 tw-bg-white tw-shadow-[0_1px_3px_rgba(15,23,42,0.06)] [&_.ant-card-body]:tw-px-5 [&_.ant-card-body]:tw-pb-8 [&_.ant-card-body]:tw-pt-6 sm:[&_.ant-card-body]:tw-px-7';
-const PROMOTION_TABS_CLASS =
-  '[&_.ant-tabs-nav]:tw-mb-4 [&_.ant-tabs-tab]:!tw-text-slate-600 [&_.ant-tabs-tab-active_.ant-tabs-tab-btn]:!tw-font-semibold [&_.ant-tabs-tab-active_.ant-tabs-tab-btn]:!tw-text-[#1e3a5f] [&_.ant-tabs-ink-bar]:!tw-bg-[#1e3a5f]';
 const PROMOTION_PRIMARY_BUTTON_CLASS =
   '!tw-h-11 !tw-rounded-xl !tw-border-0 !tw-bg-[#1e3a5f] !tw-px-5 !tw-font-semibold !tw-shadow-none hover:!tw-bg-[#152a45] hover:!tw-text-white disabled:!tw-opacity-60';
 
@@ -90,7 +88,9 @@ export function AdminLeavePromotionNoResponsePage() {
   const openDesignate = (row: LeavePromotionNoResponse) => {
     setDesignateTarget(row);
     setDesignateDates([]);
-    setDesignateReason(`근로기준법 61조에 따른 회사 자동 지정 (수동 처리 - ${dayjs().format('YYYY-MM-DD')})`);
+    setDesignateReason(
+      `근로기준법 61조에 따른 회사 자동 지정 (수동 처리 - ${dayjs().format('YYYY-MM-DD')})`,
+    );
   };
 
   // 시연용 - 촉진 배치 즉시 실행
@@ -126,7 +126,9 @@ export function AdminLeavePromotionNoResponsePage() {
     (membersQ.data?.items ?? []).forEach((m) => {
       if (m.department) set.add(m.department);
     });
-    return Array.from(set).sort().map((d) => ({ value: d, label: d }));
+    return Array.from(set)
+      .sort()
+      .map((d) => ({ value: d, label: d }));
   }, [membersQ.data]);
 
   // 필터 적용 - memberId 로 멤버 조회 후 이름/부서 매칭
@@ -162,7 +164,13 @@ export function AdminLeavePromotionNoResponsePage() {
         style={{ width: 200 }}
       />
       {(filterName || filterDept) && (
-        <Button size="small" onClick={() => { setFilterName(''); setFilterDept(undefined); }}>
+        <Button
+          size="small"
+          onClick={() => {
+            setFilterName('');
+            setFilterDept(undefined);
+          }}
+        >
           초기화
         </Button>
       )}
@@ -189,9 +197,7 @@ export function AdminLeavePromotionNoResponsePage() {
             <div className="tw-leading-tight">
               <div className="tw-font-medium tw-text-slate-900">{m.name}</div>
               {m.department ? (
-                <div className="tw-text-xs tw-text-slate-500">
-                  {m.department}
-                </div>
+                <div className="tw-text-xs tw-text-slate-500">{m.department}</div>
               ) : null}
             </div>
           );
@@ -209,8 +215,7 @@ export function AdminLeavePromotionNoResponsePage() {
         dataIndex: 'remainingDays',
         key: 'remainingDays',
         width: 110,
-        render: (n: number | null) =>
-          typeof n === 'number' ? `${n}일` : '—',
+        render: (n: number | null) => (typeof n === 'number' ? `${n}일` : '—'),
       },
       {
         title: '만료일',
@@ -231,9 +236,7 @@ export function AdminLeavePromotionNoResponsePage() {
         dataIndex: 'daysSinceSent',
         key: 'daysSinceSent',
         width: 100,
-        render: (n: number) => (
-          <Tag color={n >= 30 ? 'red' : 'orange'}>{n}일 경과</Tag>
-        ),
+        render: (n: number) => <Tag color={n >= 30 ? 'red' : 'orange'}>{n}일 경과</Tag>,
       },
       {
         title: '처리',
@@ -248,7 +251,7 @@ export function AdminLeavePromotionNoResponsePage() {
       },
     ],
     // openDesignate 는 stable 가정
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
     [memberMap],
   );
 
@@ -273,9 +276,7 @@ export function AdminLeavePromotionNoResponsePage() {
     return (
       <div className="tw-leading-tight">
         <div className="tw-font-medium tw-text-slate-900">{m.name}</div>
-        {m.department ? (
-          <div className="tw-text-xs tw-text-slate-500">{m.department}</div>
-        ) : null}
+        {m.department ? <div className="tw-text-xs tw-text-slate-500">{m.department}</div> : null}
       </div>
     );
   };
@@ -283,9 +284,20 @@ export function AdminLeavePromotionNoResponsePage() {
   // 1차/2차 알림 현황 컬럼 - 옵션 2 자동 강제 지정 결과(DESIGNATED) 명확히 표시
   const noticeColumns = useMemo<ColumnsType<LeavePromotionHistory>>(
     () => [
-      { title: '직원', dataIndex: 'memberId', key: 'memberId', width: 200, render: renderEmployeeCell },
-      { title: '단계', dataIndex: 'stage', key: 'stage', width: 70,
-        render: (s: string) => <Tag color="geekblue">{s === 'FIRST' ? '1차' : '2차'}</Tag> },
+      {
+        title: '직원',
+        dataIndex: 'memberId',
+        key: 'memberId',
+        width: 200,
+        render: renderEmployeeCell,
+      },
+      {
+        title: '단계',
+        dataIndex: 'stage',
+        key: 'stage',
+        width: 70,
+        render: (s: string) => <Tag color="geekblue">{s === 'FIRST' ? '1차' : '2차'}</Tag>,
+      },
       {
         title: '상태',
         dataIndex: 'status',
@@ -298,35 +310,64 @@ export function AdminLeavePromotionNoResponsePage() {
           return <Tag>{s}</Tag>;
         },
       },
-      { title: '잔여 / 만료', key: 'balance', width: 160,
+      {
+        title: '잔여 / 만료',
+        key: 'balance',
+        width: 160,
         render: (_, r) => (
           <div className="tw-text-xs">
             <div>{r.remainingDays != null ? `${r.remainingDays}일 남음` : '—'}</div>
             <div className="tw-text-slate-500">{formatDate(r.balanceExpirationDate)} 만료</div>
           </div>
-        ) },
-      { title: '회신 시점', dataIndex: 'acknowledgedAt', key: 'acknowledgedAt', width: 150,
-        render: (v?: string | null) => v ? dayjs(v).format('YYYY-MM-DD HH:mm') : '—' },
-      { title: '직원 계획 / 회사 자동 지정일', key: 'dates', width: 260,
+        ),
+      },
+      {
+        title: '회신 시점',
+        dataIndex: 'acknowledgedAt',
+        key: 'acknowledgedAt',
+        width: 150,
+        render: (v?: string | null) => (v ? dayjs(v).format('YYYY-MM-DD HH:mm') : '—'),
+      },
+      {
+        title: '직원 계획 / 회사 자동 지정일',
+        key: 'dates',
+        width: 260,
         render: (_, r) => {
           // 회신 완료면 직원 계획 / 자동 지정이면 designated_dates 노출
           const isDesignated = r.status === 'DESIGNATED';
           const dates = isDesignated ? (r.designatedDates ?? []) : (r.plannedDates ?? []);
           if (dates.length === 0) {
-            return <Typography.Text type="secondary" className="!tw-text-xs">계획 미입력</Typography.Text>;
+            return (
+              <Typography.Text type="secondary" className="!tw-text-xs">
+                계획 미입력
+              </Typography.Text>
+            );
           }
           return (
             <Space size={4} wrap>
               {dates.map((d) => (
-                <Tag key={d} color={isDesignated ? 'red' : 'green'}>{d}</Tag>
+                <Tag key={d} color={isDesignated ? 'red' : 'green'}>
+                  {d}
+                </Tag>
               ))}
             </Space>
           );
-        } },
-      { title: '자동 지정 사유', dataIndex: 'designationReason', key: 'designationReason', width: 240,
+        },
+      },
+      {
+        title: '자동 지정 사유',
+        dataIndex: 'designationReason',
+        key: 'designationReason',
+        width: 240,
         render: (v?: string | null) =>
-          v ? <Typography.Text className="!tw-text-xs">{v}</Typography.Text>
-            : <Typography.Text type="secondary" className="!tw-text-xs">—</Typography.Text> },
+          v ? (
+            <Typography.Text className="!tw-text-xs">{v}</Typography.Text>
+          ) : (
+            <Typography.Text type="secondary" className="!tw-text-xs">
+              —
+            </Typography.Text>
+          ),
+      },
     ],
     // renderEmployeeCell 은 stable 가정 - memberMap 만 의존
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -335,10 +376,13 @@ export function AdminLeavePromotionNoResponsePage() {
 
   const expiryRows = useMemo(
     () =>
-      [...(historyQ.data ?? []), ...(listQ.data ?? []).map((r) => ({
-        ...r,
-        status: 'SENT',
-      }))].sort((a, b) => {
+      [
+        ...(historyQ.data ?? []),
+        ...(listQ.data ?? []).map((r) => ({
+          ...r,
+          status: 'SENT',
+        })),
+      ].sort((a, b) => {
         const aDate = dayjs(a.balanceExpirationDate);
         const bDate = dayjs(b.balanceExpirationDate);
         if (!aDate.isValid() && !bDate.isValid()) return 0;
@@ -351,9 +395,22 @@ export function AdminLeavePromotionNoResponsePage() {
 
   const expiryColumns = useMemo<ColumnsType<LeavePromotionHistory & { status?: string }>>(
     () => [
-      { title: '직원', dataIndex: 'memberId', key: 'memberId', width: 200, render: renderEmployeeCell },
-      { title: '단계', dataIndex: 'stage', key: 'stage', width: 70,
-        render: (s: string) => <Tag color={s === 'FIRST' ? 'geekblue' : 'volcano'}>{s === 'FIRST' ? '1차' : '2차'}</Tag> },
+      {
+        title: '직원',
+        dataIndex: 'memberId',
+        key: 'memberId',
+        width: 200,
+        render: renderEmployeeCell,
+      },
+      {
+        title: '단계',
+        dataIndex: 'stage',
+        key: 'stage',
+        width: 70,
+        render: (s: string) => (
+          <Tag color={s === 'FIRST' ? 'geekblue' : 'volcano'}>{s === 'FIRST' ? '1차' : '2차'}</Tag>
+        ),
+      },
       {
         title: '알림 상태',
         dataIndex: 'status',
@@ -365,7 +422,11 @@ export function AdminLeavePromotionNoResponsePage() {
           return <Tag>{s ?? '—'}</Tag>;
         },
       },
-      { title: '잔여 연차', key: 'remainingDays', dataIndex: 'remainingDays', width: 100,
+      {
+        title: '잔여 연차',
+        key: 'remainingDays',
+        dataIndex: 'remainingDays',
+        width: 100,
         render: (n?: number | null) => (typeof n === 'number' ? `${n}일` : '—'),
       },
       {
@@ -390,19 +451,31 @@ export function AdminLeavePromotionNoResponsePage() {
         width: 130,
         render: (v?: string) => formatDate(v),
       },
-      { title: '회신 시점', dataIndex: 'acknowledgedAt', key: 'acknowledgedAt', width: 150,
-        render: (v?: string | null) => (v ? dayjs(v).format('YYYY-MM-DD HH:mm') : '—') },
-      { title: '사용 계획일', key: 'plannedDates',
+      {
+        title: '회신 시점',
+        dataIndex: 'acknowledgedAt',
+        key: 'acknowledgedAt',
+        width: 150,
+        render: (v?: string | null) => (v ? dayjs(v).format('YYYY-MM-DD HH:mm') : '—'),
+      },
+      {
+        title: '사용 계획일',
+        key: 'plannedDates',
         render: (_, r) => (
           <Space size={4} wrap>
             {(r.plannedDates ?? []).map((d) => (
-              <Tag key={d} color="green">{d}</Tag>
+              <Tag key={d} color="green">
+                {d}
+              </Tag>
             ))}
             {(!r.plannedDates || r.plannedDates.length === 0) && (
-              <Typography.Text type="secondary" className="!tw-text-xs">—</Typography.Text>
+              <Typography.Text type="secondary" className="!tw-text-xs">
+                —
+              </Typography.Text>
             )}
           </Space>
-        ) },
+        ),
+      },
     ],
     [memberMap],
   );
@@ -413,7 +486,7 @@ export function AdminLeavePromotionNoResponsePage() {
         eyebrow="Leave"
         title="촉진 알림 현황"
         subtitle="근로기준법 61조 연차 사용 촉진 알림 현황 (매일 06:30 자동 배치)"
-        extra={(
+        extra={
           <Space>
             <DatePicker
               value={triggerDate}
@@ -432,13 +505,12 @@ export function AdminLeavePromotionNoResponsePage() {
               </Button>
             </Tooltip>
           </Space>
-        )}
+        }
       />
 
       <Card variant="borderless" className={PROMOTION_CONTENT_CARD_CLASS}>
         <Tabs
           defaultActiveKey="no-response"
-          className={PROMOTION_TABS_CLASS}
           items={[
             {
               key: 'no-response',
@@ -573,7 +645,9 @@ export function AdminLeavePromotionNoResponsePage() {
             message="선택한 일자가 LeaveRequest로 자동 생성되며, 잔여 연차에서 차감됩니다. 직원에게 알림이 발송됩니다."
           />
           <div>
-            <Typography.Text className="!tw-text-sm !tw-font-medium">지정할 연차 일자</Typography.Text>
+            <Typography.Text className="!tw-text-sm !tw-font-medium">
+              지정할 연차 일자
+            </Typography.Text>
             <DatePicker
               multiple
               value={designateDates}
@@ -591,7 +665,8 @@ export function AdminLeavePromotionNoResponsePage() {
               }}
             />
             <Typography.Text type="secondary" className="!tw-text-xs">
-              주말 및 만료일 이후는 선택 불가. 잔여 {designateTarget?.remainingDays ?? 0}일까지 지정 가능합니다.
+              주말 및 만료일 이후는 선택 불가. 잔여 {designateTarget?.remainingDays ?? 0}일까지 지정
+              가능합니다.
             </Typography.Text>
           </div>
           <div>

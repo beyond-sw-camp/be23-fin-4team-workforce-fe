@@ -8,6 +8,7 @@ import dayjs, { type Dayjs } from 'dayjs';
 import { useAuth } from '@/features/auth/useAuth';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import type { Payroll } from '@/features/salary-service/types';
+import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 
 const STATUS_KO: Record<string, string> = {
   DRAFT: '작성 중',
@@ -165,32 +166,31 @@ export function MyPayrollPage() {
 
   if (!memberId) {
     return (
-      <Typography.Text type="danger">로그인 정보에 구성원 ID가 없습니다. 다시 로그인해 주세요.</Typography.Text>
+      <Typography.Text type="danger">
+        로그인 정보에 구성원 ID가 없습니다. 다시 로그인해 주세요.
+      </Typography.Text>
     );
   }
 
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
-      <div className="tw-flex tw-flex-wrap tw-items-start tw-justify-between tw-gap-3">
-        <div>
-          <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
-            급여
-          </Typography.Title>
-          <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-sm">
-            직원 급여 목록입니다.
-          </Typography.Paragraph>
-        </div>
-        {user?.isSystemAdmin && (
-          <Space size="middle" wrap className="tw-text-sm">
-            <Link to="/app/payroll/admin" className="tw-font-medium tw-text-[#2563EB]">
-              급여 관리
-            </Link>
-            <Link to="/app/salary/settings" className="tw-font-medium tw-text-[#2563EB]">
-              급여 정책
-            </Link>
-          </Space>
-        )}
-      </div>
+      <AppWorkspacePageTitle
+        eyebrow="PAYROLL"
+        title="급여 조회"
+        subtitle="월별 급여명세서와 지급 상태를 확인합니다."
+        extra={
+          user?.isSystemAdmin ? (
+            <Space size="middle" wrap className="tw-text-sm">
+              <Link to="/app/payroll/admin" className="tw-font-medium tw-text-[#2563EB]">
+                급여 관리
+              </Link>
+              <Link to="/app/salary/settings" className="tw-font-medium tw-text-[#2563EB]">
+                급여 정책
+              </Link>
+            </Space>
+          ) : null
+        }
+      />
 
       <Card className="tw-border-slate-200/80 tw-shadow-sm">
         {listQ.isError && (

@@ -11,6 +11,14 @@
   --wf-color-text: #0f172a;
   --wf-color-primary: #2563eb;
   --wf-color-bg: #f8fafc;
+  --wf-text-xs: 0.75rem;
+  --wf-text-sm: 0.8125rem;
+  --wf-text-base: 0.875rem;
+  --wf-text-lg: 1rem;
+  --wf-title-page: 1.375rem;
+  --wf-title-page-lg: 1.5rem;
+  --wf-title-section: 1rem;
+  --wf-leading-body: 1.6;
 }
 
 html,
@@ -21,10 +29,21 @@ body,
 }
 
 body {
-  font-family: 'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR',
+  font-family:
+    'Pretendard Variable',
+    'Pretendard',
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    'Noto Sans KR',
     sans-serif;
   color: var(--wf-color-text);
   background-color: var(--wf-color-bg);
+  font-size: var(--wf-text-base);
+  line-height: var(--wf-leading-body);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
 }
 
 * {
@@ -33,6 +52,178 @@ body {
 
 a {
   color: var(--wf-color-primary);
+}
+
+p,
+.ant-typography,
+.ant-form,
+.ant-table,
+.ant-modal,
+.ant-drawer,
+.ant-card {
+  font-size: var(--wf-text-base);
+  line-height: var(--wf-leading-body);
+}
+
+/**
+ * App surface polish — AntD를 직접 쓰는 오래된 화면까지 같은 업무용 톤으로 정리한다.
+ */
+.ant-typography h1,
+h1.ant-typography,
+.ant-typography h2,
+h2.ant-typography,
+.ant-typography h3,
+h3.ant-typography,
+.ant-typography h4,
+h4.ant-typography {
+  letter-spacing: 0 !important;
+  color: #1e3a5f !important;
+}
+
+.ant-typography h1,
+h1.ant-typography {
+  font-size: 1.75rem !important;
+  line-height: 1.2 !important;
+}
+
+.ant-typography h2,
+h2.ant-typography {
+  font-size: 1.5rem !important;
+  line-height: 1.25 !important;
+}
+
+.ant-typography h3,
+h3.ant-typography {
+  font-size: var(--wf-title-page-lg) !important;
+  line-height: 1.28 !important;
+}
+
+.ant-typography h4,
+h4.ant-typography {
+  font-size: var(--wf-title-section) !important;
+  line-height: 1.35 !important;
+}
+
+:where(.ant-card) {
+  border-color: rgba(203, 213, 225, 0.9);
+  border-radius: 1rem;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+
+:where(.ant-card-head) {
+  min-height: 3.25rem;
+  border-bottom-color: rgba(226, 232, 240, 0.9);
+  padding-inline: 1.25rem;
+}
+
+:where(.ant-card-head-title) {
+  color: #0f172a;
+  font-size: var(--wf-text-base);
+  line-height: 1.4;
+  font-weight: 700;
+}
+
+:where(.ant-card-body) {
+  padding: 1.25rem;
+}
+
+:where(.ant-card .ant-card) {
+  box-shadow: none;
+}
+
+:where(.ant-card .ant-card-head) {
+  min-height: 3rem;
+}
+
+.ant-btn-primary:not(.ant-btn-dangerous) {
+  border-color: #1e3a5f !important;
+  background: #1e3a5f !important;
+  box-shadow: none !important;
+}
+
+.ant-btn-primary:not(.ant-btn-dangerous):hover,
+.ant-btn-primary:not(.ant-btn-dangerous):focus {
+  border-color: #152a45 !important;
+  background: #152a45 !important;
+}
+
+.ant-btn {
+  font-size: var(--wf-text-base);
+  line-height: 1.25rem;
+}
+
+.ant-btn-sm {
+  font-size: var(--wf-text-sm);
+  line-height: 1.125rem;
+}
+
+.ant-btn-default {
+  border-color: #e2e8f0;
+  box-shadow: none;
+}
+
+.ant-btn:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.28) !important;
+  outline-offset: 2px !important;
+}
+
+.ant-modal-content {
+  border-radius: 1rem !important;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18) !important;
+}
+
+.ant-modal-header {
+  margin-bottom: 0 !important;
+  padding-bottom: 1rem !important;
+  border-bottom: 1px solid #f1f5f9 !important;
+}
+
+.ant-modal-title {
+  color: #0f172a !important;
+  font-size: 1rem !important;
+  line-height: 1.4 !important;
+  font-weight: 700 !important;
+}
+
+.ant-modal-footer {
+  margin-top: 0 !important;
+  padding-top: 1rem !important;
+  border-top: 1px solid #f1f5f9 !important;
+}
+
+.ant-descriptions-bordered .ant-descriptions-item-label {
+  width: 10rem;
+  background: #f8fafc !important;
+  color: #475569 !important;
+  font-size: var(--wf-text-sm) !important;
+  font-weight: 600 !important;
+}
+
+.ant-descriptions-bordered .ant-descriptions-item-content {
+  color: #0f172a !important;
+  font-size: var(--wf-text-sm) !important;
+}
+
+.ant-form-item-label > label {
+  color: #334155;
+  font-size: var(--wf-text-sm);
+  font-weight: 600;
+}
+
+.ant-input,
+.ant-input-number,
+.ant-select,
+.ant-select-selector,
+.ant-picker,
+.ant-radio-wrapper,
+.ant-checkbox-wrapper {
+  font-size: var(--wf-text-base) !important;
+}
+
+.ant-input::placeholder,
+.ant-select-selection-placeholder,
+.ant-picker-input > input::placeholder {
+  color: #94a3b8 !important;
 }
 
 /**
@@ -72,6 +263,9 @@ a {
   border-color: #f1f5f9 !important;
   background: #fff !important;
   padding: 1rem 0.75rem !important;
+  color: #1e293b !important;
+  font-size: var(--wf-text-sm) !important;
+  line-height: 1.5 !important;
 }
 
 .ant-table-wrapper .ant-table-tbody > tr:hover > td {
@@ -84,6 +278,11 @@ a {
 
 .ant-table-wrapper .ant-pagination {
   padding-inline: 0.75rem;
+}
+
+.ant-tag {
+  font-size: var(--wf-text-xs);
+  line-height: 1.25rem;
 }
 
 /**
@@ -157,6 +356,194 @@ a {
 .ant-input-search .ant-input-search-button:focus {
   background: #152a45 !important;
   color: #fff !important;
+}
+
+/**
+ * Tabs — 업무 화면 전반에서 같은 얇은 underline 톤으로 통일한다.
+ */
+.ant-tabs-nav {
+  margin-bottom: 0.875rem;
+}
+
+.ant-tabs-nav::before {
+  border-bottom-color: #e2e8f0;
+}
+
+.ant-tabs-nav-list {
+  gap: 1.25rem;
+}
+
+.ant-tabs-tab {
+  min-height: 2.375rem;
+  margin: 0 !important;
+  padding: 0.625rem 0;
+  color: #64748b;
+  font-size: var(--wf-text-base);
+  font-weight: 600;
+  letter-spacing: 0;
+  transition:
+    color 0.16s ease,
+    background-color 0.16s ease,
+    border-color 0.16s ease;
+}
+
+.ant-tabs-tab-btn {
+  min-width: 0;
+  line-height: 1.25rem;
+  white-space: nowrap;
+}
+
+.ant-tabs-tab:focus-visible,
+.ant-tabs-tab-btn:focus-visible {
+  border-radius: 0.375rem;
+  outline: 2px solid rgba(37, 99, 235, 0.25);
+  outline-offset: 3px;
+}
+
+.ant-tabs-tab-disabled {
+  color: #cbd5e1 !important;
+}
+
+.ant-tabs-tab-disabled .ant-tabs-tab-btn {
+  cursor: not-allowed;
+}
+
+.ant-tabs-nav-more {
+  color: #64748b;
+}
+
+.ant-tabs-small .ant-tabs-tab {
+  min-height: 2.125rem;
+  padding: 0.5rem 0;
+  font-size: var(--wf-text-sm);
+}
+
+.ant-tabs-small .ant-tabs-nav-list {
+  gap: 1rem;
+}
+
+.ant-tabs-tab:hover,
+.ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: #1e3a5f !important;
+}
+
+.ant-tabs-ink-bar {
+  height: 2px;
+  border-radius: 9999px;
+  background: #1e3a5f !important;
+}
+
+.ant-tabs-tab-btn,
+.wf-workspace-tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.ant-tabs-content-holder {
+  border-top: 0;
+}
+
+.ant-tabs-card > .ant-tabs-nav .ant-tabs-tab {
+  border-color: #e2e8f0;
+  background: #f8fafc;
+  border-radius: 0.5rem 0.5rem 0 0;
+  padding-inline: 0.875rem;
+}
+
+.ant-tabs-card > .ant-tabs-nav .ant-tabs-tab-active {
+  background: #fff !important;
+}
+
+.ant-tabs-card > .ant-tabs-nav .ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: #1e3a5f !important;
+}
+
+.ant-tabs-card > .ant-tabs-nav .ant-tabs-nav-list {
+  gap: 0.25rem;
+}
+
+.ant-card .ant-tabs-nav {
+  margin-bottom: 1rem;
+}
+
+.ant-card .ant-tabs-top > .ant-tabs-nav {
+  padding-inline: 0;
+}
+
+/**
+ * Segmented / radio options — 탭과 같은 네이비 선택 톤으로 맞춘다.
+ */
+.ant-segmented {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.625rem;
+  background: #fff;
+  padding: 0.125rem;
+}
+
+.ant-segmented .ant-segmented-item {
+  min-height: 2rem;
+  border-radius: 0.5rem;
+  color: #64748b;
+  font-size: var(--wf-text-sm);
+  font-weight: 600;
+}
+
+.ant-segmented .ant-segmented-item-label {
+  min-height: 1.75rem;
+  padding-inline: 0.75rem;
+  line-height: 1.75rem;
+}
+
+.ant-segmented .ant-segmented-item-selected {
+  background: #1e3a5f !important;
+  box-shadow: none;
+}
+
+.ant-segmented .ant-segmented-item-selected .ant-segmented-item-label {
+  color: #fff !important;
+}
+
+.ant-segmented .ant-segmented-item:focus-visible,
+.ant-radio-button-wrapper:focus-within {
+  outline: 2px solid rgba(37, 99, 235, 0.25);
+  outline-offset: 3px;
+}
+
+.ant-radio-button-wrapper {
+  border-color: #e2e8f0 !important;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.ant-radio-button-wrapper-checked:not(.ant-radio-button-wrapper-disabled) {
+  border-color: #1e3a5f !important;
+  background: #1e3a5f !important;
+  color: #fff !important;
+}
+
+.ant-radio-button-wrapper-checked:not(.ant-radio-button-wrapper-disabled)::before {
+  background-color: #1e3a5f !important;
+}
+
+@media (max-width: 768px) {
+  :where(.ant-card-head) {
+    min-height: 3rem;
+    padding-inline: 1rem;
+  }
+
+  :where(.ant-card-body) {
+    padding: 1rem;
+  }
+
+  .ant-table-wrapper .ant-table-thead > tr > th,
+  .ant-table-wrapper .ant-table-tbody > tr > td {
+    padding: 0.75rem 0.625rem !important;
+  }
+
+  .ant-modal {
+    max-width: calc(100vw - 1.5rem);
+  }
 }
 
 /**
@@ -260,5 +647,3 @@ a {
 [data-chat-font='lg'] .tw-text-base {
   font-size: 19px !important;
 }
-
-

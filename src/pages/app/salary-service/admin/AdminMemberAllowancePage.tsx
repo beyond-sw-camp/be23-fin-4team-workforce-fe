@@ -190,10 +190,11 @@ export function AdminMemberAllowancePage() {
   const listMonthYm = listMonth.format('YYYY-MM');
   const listQ = useQuery({
     queryKey: ['salary', 'allowance', 'admin', 'list', listMonthYm, statusFilter],
-    queryFn: () => salaryApi.memberAllowanceAdmin.listByCompany({
-      status: statusFilter === 'ALL' ? undefined : statusFilter,
-      yearMonth: listMonthYm,
-    }),
+    queryFn: () =>
+      salaryApi.memberAllowanceAdmin.listByCompany({
+        status: statusFilter === 'ALL' ? undefined : statusFilter,
+        yearMonth: listMonthYm,
+      }),
   });
 
   /* ── 3) 직원 이름 매핑 — 회사 직원 list 1회 조회로 N+1 회피 ──
@@ -385,7 +386,8 @@ export function AdminMemberAllowancePage() {
         title: '수당 항목',
         dataIndex: 'salaryItemTemplateId',
         key: 'tpl',
-        render: (id: string) => tplMap.get(id)?.itemName ?? <Typography.Text type="secondary">—</Typography.Text>,
+        render: (id: string) =>
+          tplMap.get(id)?.itemName ?? <Typography.Text type="secondary">—</Typography.Text>,
       },
       {
         title: '금액',
@@ -421,10 +423,14 @@ export function AdminMemberAllowancePage() {
         width: 90,
         render: (_, r) => {
           // 과거 종료된 행은 history 보존을 위해 삭제 불가 (effectiveTo 가 오늘 이전)
-          const isPast = !!r.effectiveTo
-            && dayjs(r.effectiveTo).startOf('day').isBefore(dayjs().startOf('day'));
+          const isPast =
+            !!r.effectiveTo && dayjs(r.effectiveTo).startOf('day').isBefore(dayjs().startOf('day'));
           if (isPast) {
-            return <Typography.Text type="secondary" className="!tw-text-xs">이력</Typography.Text>;
+            return (
+              <Typography.Text type="secondary" className="!tw-text-xs">
+                이력
+              </Typography.Text>
+            );
           }
           return (
             <Button
@@ -433,7 +439,8 @@ export function AdminMemberAllowancePage() {
               onClick={() =>
                 modal.confirm({
                   title: '수당 종료',
-                  content: '오늘 자로 종료 처리합니다 (이전 정산 이력 보존). 다음 달부터 합산 안 됨.',
+                  content:
+                    '오늘 자로 종료 처리합니다 (이전 정산 이력 보존). 다음 달부터 합산 안 됨.',
                   okText: '종료',
                   cancelText: '취소',
                   onOk: () => closeOneMut.mutateAsync(r.memberAllowanceId!),
@@ -542,9 +549,8 @@ export function AdminMemberAllowancePage() {
               { value: 'ALL', label: '전체' },
               ...allFilterableTemplates.map((t) => ({
                 value: t.salaryItemTemplateId!,
-                label: t.applyToAllYn === 'Y'
-                  ? `${t.itemName ?? '-'} (회사 공통)`
-                  : (t.itemName ?? '-'),
+                label:
+                  t.applyToAllYn === 'Y' ? `${t.itemName ?? '-'} (회사 공통)` : (t.itemName ?? '-'),
               })),
             ]}
           />
@@ -567,10 +573,18 @@ export function AdminMemberAllowancePage() {
               선택한 월의 어느 시점이라도 활성이었던 직원별 수당 부여 행을 표시합니다.
             </Typography.Text>
             <Space size={6}>
-              <Tag color="blue" className="!tw-mr-0">파랑</Tag>
-              <Typography.Text type="secondary" className="!tw-text-xs">지급 중</Typography.Text>
-              <Tag color="orange" className="!tw-mr-0">주황</Tag>
-              <Typography.Text type="secondary" className="!tw-text-xs">종료 임박 (30일 내)</Typography.Text>
+              <Tag color="blue" className="!tw-mr-0">
+                파랑
+              </Tag>
+              <Typography.Text type="secondary" className="!tw-text-xs">
+                지급 중
+              </Typography.Text>
+              <Tag color="orange" className="!tw-mr-0">
+                주황
+              </Tag>
+              <Typography.Text type="secondary" className="!tw-text-xs">
+                종료 임박 (30일 내)
+              </Typography.Text>
             </Space>
           </Space>
           <Segmented
@@ -612,17 +626,23 @@ export function AdminMemberAllowancePage() {
                         // -> 이 화면에 보이는 모든 행은 "그 달에 지급되었거나 지급 중"
                         // 종료 임박만 주황, 종료된 것 포함 그 외는 모두 파랑 (회색 안 씀)
                         const tagColor = lc === 'soon' ? 'orange' : 'blue';
-                        const endedLabel = lc === 'expired' && it.effectiveTo
-                          ? ` · ${dayjs(it.effectiveTo).format('M/D')} 종료`
-                          : '';
+                        const endedLabel =
+                          lc === 'expired' && it.effectiveTo
+                            ? ` · ${dayjs(it.effectiveTo).format('M/D')} 종료`
+                            : '';
                         const tooltipContent = (
                           <div className="tw-text-xs">
-                            <div>{it.effectiveFrom ?? '—'} ~ {it.effectiveTo ?? '진행중'}</div>
+                            <div>
+                              {it.effectiveFrom ?? '—'} ~ {it.effectiveTo ?? '진행중'}
+                            </div>
                             {it.reason && <div className="tw-mt-1">{it.reason}</div>}
                           </div>
                         );
                         return (
-                          <Tooltip key={it.memberAllowanceId ?? `${itemName}-${it.effectiveFrom}`} title={tooltipContent}>
+                          <Tooltip
+                            key={it.memberAllowanceId ?? `${itemName}-${it.effectiveFrom}`}
+                            title={tooltipContent}
+                          >
                             <Tag
                               color={tagColor}
                               className="!tw-px-2 !tw-py-0.5 !tw-text-sm"
@@ -632,14 +652,16 @@ export function AdminMemberAllowancePage() {
                                 modal.confirm({
                                   title: `${g.label} - ${itemName} (${formatWon(it.amount ?? 0)})`,
                                   width: 480,
-                                  content: '오늘 자로 종료 처리합니다. 이전 정산 이력은 그대로 보존됩니다.',
+                                  content:
+                                    '오늘 자로 종료 처리합니다. 이전 정산 이력은 그대로 보존됩니다.',
                                   okText: '종료',
                                   cancelText: '취소',
                                   onOk: () => closeOneMut.mutateAsync(it.memberAllowanceId!),
                                 });
                               }}
                             >
-                              {itemName} {formatWon(it.amount ?? 0)}{endedLabel}
+                              {itemName} {formatWon(it.amount ?? 0)}
+                              {endedLabel}
                             </Tag>
                           </Tooltip>
                         );
@@ -672,33 +694,36 @@ export function AdminMemberAllowancePage() {
               직원별 수당 이력 (활성 + 종료 모두, 효력일 역순). 종료된 수당은 회색으로 표시됩니다.
             </Typography.Text>
             {groupedHistoryByMember.map((g) => (
-              <Card
+              <section
                 key={g.memberId}
-                size="small"
-                title={
+                className="tw-rounded-xl tw-border tw-border-slate-200/80 tw-bg-white tw-p-4"
+              >
+                <div className="tw-mb-3 tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2">
                   <Space>
                     <Typography.Text strong>{g.label}</Typography.Text>
                     <Tag color="blue">활성 {g.activeCount}건</Tag>
                     {g.historyCount > 0 && <Tag>이력 {g.historyCount}건</Tag>}
                   </Space>
-                }
-                extra={
                   <Typography.Text strong className="!tw-text-blue-600">
                     현재 월 합계 {formatWon(g.activeSum)}
                   </Typography.Text>
-                }
-              >
+                </div>
                 <Table<MemberAllowance>
-                  rowKey={(r) => r.memberAllowanceId ?? `${r.memberId}-${r.salaryItemTemplateId}-${r.effectiveFrom}`}
+                  rowKey={(r) =>
+                    r.memberAllowanceId ??
+                    `${r.memberId}-${r.salaryItemTemplateId}-${r.effectiveFrom}`
+                  }
                   dataSource={g.items}
                   columns={listColumns.slice(1)}
                   pagination={false}
                   size="small"
                   rowClassName={(r) =>
-                    evalLifecycle(r.effectiveTo) === 'expired' ? '!tw-bg-slate-50/60 tw-text-slate-400' : ''
+                    evalLifecycle(r.effectiveTo) === 'expired'
+                      ? '!tw-bg-slate-50/60 tw-text-slate-400'
+                      : ''
                   }
                 />
-              </Card>
+              </section>
             ))}
           </Space>
         )}
@@ -743,7 +768,11 @@ export function AdminMemberAllowancePage() {
                     <Button
                       size="small"
                       onClick={() =>
-                        add({ memberId: undefined, salaryItemTemplateId: undefined, amount: undefined })
+                        add({
+                          memberId: undefined,
+                          salaryItemTemplateId: undefined,
+                          amount: undefined,
+                        })
                       }
                     >
                       + 직원 추가
@@ -754,7 +783,11 @@ export function AdminMemberAllowancePage() {
                         const rows = (grantForm.getFieldValue('rows') ?? []) as GrantRow[];
                         const last = rows[rows.length - 1];
                         if (!last) {
-                          add({ memberId: undefined, salaryItemTemplateId: undefined, amount: undefined });
+                          add({
+                            memberId: undefined,
+                            salaryItemTemplateId: undefined,
+                            amount: undefined,
+                          });
                         } else {
                           add({
                             memberId: undefined,
@@ -814,7 +847,9 @@ export function AdminMemberAllowancePage() {
                         })}
                         onChange={(val: string) => {
                           // 템플릿 선택 시 default 금액 자동 채움
-                          const tpl = allowanceTemplates.find((t) => t.salaryItemTemplateId === val);
+                          const tpl = allowanceTemplates.find(
+                            (t) => t.salaryItemTemplateId === val,
+                          );
                           if (tpl?.defaultAmount != null) {
                             const rows = (grantForm.getFieldValue('rows') ?? []) as GrantRow[];
                             rows[field.name] = { ...rows[field.name], amount: tpl.defaultAmount };
@@ -842,15 +877,22 @@ export function AdminMemberAllowancePage() {
                     </Form.Item>
 
                     {/* 비과세 한도 표시 */}
-                    <Form.Item
-                      shouldUpdate
-                      noStyle
-                    >
+                    <Form.Item shouldUpdate noStyle>
                       {({ getFieldValue }) => {
-                        const tplId = getFieldValue(['rows', field.name, 'salaryItemTemplateId']) as string | undefined;
-                        const tpl = allowanceTemplates.find((t) => t.salaryItemTemplateId === tplId);
+                        const tplId = getFieldValue([
+                          'rows',
+                          field.name,
+                          'salaryItemTemplateId',
+                        ]) as string | undefined;
+                        const tpl = allowanceTemplates.find(
+                          (t) => t.salaryItemTemplateId === tplId,
+                        );
                         if (!tpl || tpl.monthlyNonTaxableLimit == null) {
-                          return <Typography.Text type="secondary" className="!tw-text-xs">—</Typography.Text>;
+                          return (
+                            <Typography.Text type="secondary" className="!tw-text-xs">
+                              —
+                            </Typography.Text>
+                          );
                         }
                         return (
                           <Typography.Text type="secondary" className="!tw-text-xs">
@@ -877,8 +919,8 @@ export function AdminMemberAllowancePage() {
 
           <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-3 !tw-text-xs">
             * 관리자가 부여할시에 별도 결재 없이 즉시 활성화됩니다.
-            <br />
-            * 같은 직원에게 여러 항목 부여하려면 [+ 직원 추가], 같은 항목을 여러 직원에게 차등 금액으로 부여하려면 [+ 같은 항목·금액 복사] 후 직원만 변경하세요.
+            <br />* 같은 직원에게 여러 항목 부여하려면 [+ 직원 추가], 같은 항목을 여러 직원에게 차등
+            금액으로 부여하려면 [+ 같은 항목·금액 복사] 후 직원만 변경하세요.
           </Typography.Paragraph>
         </Form>
       </Modal>
