@@ -24,6 +24,7 @@ import type {
   RetroactivePayrollResult,
   BulkPayrollActionResult,
   RetirementPolicy,
+  MySalaryHistory,
   RetirementSimReq,
   RetirementSimRes,
   RetirementPolicyCreatePayload,
@@ -357,6 +358,13 @@ export const salaryApi = {
         `${BASE}/salary/salaries/member/${encodeURIComponent(memberId)}`,
       );
       const unwrapped = unwrapApiResponse<Salary[] | null>(data);
+      return Array.isArray(unwrapped) ? unwrapped : [];
+    },
+
+    /** 본인 급여 이력 (최신 적용일 우선) */
+    async listMine(): Promise<MySalaryHistory[]> {
+      const { data } = await httpClient.get(`${BASE}/salary/salaries/my`);
+      const unwrapped = unwrapApiResponse<MySalaryHistory[] | null>(data);
       return Array.isArray(unwrapped) ? unwrapped : [];
     },
 

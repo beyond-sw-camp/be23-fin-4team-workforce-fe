@@ -732,6 +732,18 @@ export type Salary = {
   updatedAt?: string | null;
 };
 
+/** 본인 급여 이력 조회(/salary/salaries/my) 응답 행 */
+export type MySalaryHistory = {
+  salaryId?: string;
+  previousBaseSalary?: number | null;
+  currentBaseSalary?: number | null;
+  changeRate?: number | null;
+  jobGradeName?: string | null;
+  jobTitleName?: string | null;
+  effectiveFrom?: string | null;
+  effectiveTo?: string | null;
+};
+
 export type SalaryCreatePayload = {
   memberId: string;
   salaryPolicyId: string;

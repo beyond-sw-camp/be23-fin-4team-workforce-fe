@@ -12,9 +12,8 @@ import { PERM } from '@/features/permissions/backend-permissions';
 import { usePermissions } from '@/features/permissions/usePermissionsHook';
 import { parseApiError } from '@/shared/api/error-parser';
 import { companyApi } from '@/features/organization/api/companyApi';
-import { approvalRequestApi } from '@/features/approvals/api/approvalRequestApi';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
-import type { SalaryNegotiation } from '@/features/salary-service/types';
+import type { MySalaryHistory } from '@/features/salary-service/types';
 import {
   contractEffectiveRejectReason,
   contractEmployeeCanReject,
@@ -40,21 +39,6 @@ const MY_CONTRACT_STATUS_TABS = [
   { key: 'CANCELED', label: '회수됨' },
   { key: 'NEGOTIATION', label: '연봉협상 이력' },
 ] as const;
-
-const NEGOTIATION_TYPE_LABEL: Record<string, string> = {
-  REGULAR: '정기',
-  PROMOTION: '승진',
-  AD_HOC: '수시',
-  RETENTION: '유지',
-};
-
-const NEGOTIATION_STATUS_LABEL: Record<string, string> = {
-  DRAFT: '초안',
-  SUBMITTED: '응답 대기',
-  APPROVED: '수락',
-  REJECTED: '거절',
-  APPLIED: '적용 완료',
-};
 
 function parseContent(raw: string): Record<string, unknown> {
   try {
@@ -91,17 +75,6 @@ function statusTag(status: string) {
   if (s === 'CANCELED') return <Tag color="default">회수</Tag>;
   if (s === 'CREATED') return <Tag>생성됨</Tag>;
   return <Tag>{status}</Tag>;
-}
-
-function negotiationStatusTag(status: string | undefined) {
-  const s = String(status ?? '').toUpperCase();
-  // 스펙: SUBMITTED=검토 중(노랑/주황), APPROVED=확정(파랑), REJECTED=거절됨(빨강/회색), APPLIED=적용 완료(초록)
-  if (s === 'SUBMITTED') return <Tag color="warning">검토 중</Tag>;
-  if (s === 'APPROVED') return <Tag color="processing">확정</Tag>;
-  if (s === 'REJECTED') return <Tag color="error">거절됨</Tag>;
-  if (s === 'APPLIED') return <Tag color="success">적용 완료</Tag>;
-  if (s === 'DRAFT') return <Tag>초안</Tag>;
-  return <Tag>{NEGOTIATION_STATUS_LABEL[s] ?? (status || '—')}</Tag>;
 }
 
 function formatWon(value: number | null | undefined): string {
@@ -162,26 +135,24 @@ export function MyContractsPanel() {
     staleTime: 30_000,
   });
   const {
-    data: myNegotiations = [],
-    isFetching: negotiationsLoading,
-    refetch: refetchNegotiations,
+    data: mySalaryHistory = [],
+    isFetching: salaryHistoryLoading,
+    refetch: refetchSalaryHistory,
   } = useQuery({
-    queryKey: ['salary', 'negotiations', 'my', 'contracts-tab'],
-    queryFn: () => salaryApi.negotiation.listMine(),
+    queryKey: ['salary', 'salaries', 'my', 'contracts-tab'],
+    queryFn: () => salaryApi.salary.listMine(),
     enabled: statusFilter === 'NEGOTIATION',
     staleTime: 30_000,
   });
-  const filteredSortedNegotiations = useMemo(() => {
-    const list = myNegotiations
-      .filter((n) => String(n.status ?? '').toUpperCase() !== 'DRAFT')
-      .slice();
+  const sortedSalaryHistory = useMemo(() => {
+    const list = mySalaryHistory.slice();
     list.sort((a, b) => {
-      const ad = a.proposedEffectiveFrom ? new Date(a.proposedEffectiveFrom).getTime() : 0;
-      const bd = b.proposedEffectiveFrom ? new Date(b.proposedEffectiveFrom).getTime() : 0;
+      const ad = a.effectiveFrom ? new Date(a.effectiveFrom).getTime() : 0;
+      const bd = b.effectiveFrom ? new Date(b.effectiveFrom).getTime() : 0;
       return bd - ad;
     });
     return list;
-  }, [myNegotiations]);
+  }, [mySalaryHistory]);
 
   const {
     data: contractDetail,
@@ -293,41 +264,6 @@ export function MyContractsPanel() {
       void message.error(detail ? `계약 PDF 다운로드 실패: ${detail}` : '계약 PDF 다운로드에 실패했습니다.');
     },
   });
-  const approvalPdfDownloadM = useMutation({
-    mutationFn: (requestId: string) => approvalRequestApi.downloadRequestPdf(requestId),
-    onSuccess: ({ blob, filename }) => {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      message.success('PDF를 저장했습니다.');
-    },
-    onError: async (err: unknown) => {
-      let detail = '';
-      const e = err as { response?: { data?: unknown } };
-      const data = e?.response?.data;
-      if (data instanceof Blob) {
-        try {
-          const text = await data.text();
-          try {
-            const json = JSON.parse(text) as { message?: string; error?: string };
-            detail = json?.message || json?.error || text;
-          } catch {
-            detail = text;
-          }
-        } catch {
-          /* noop */
-        }
-      } else if (typeof data === 'object' && data !== null) {
-        detail = (data as { message?: string }).message || '';
-      }
-      void message.error(detail ? `결재 PDF 다운로드 실패: ${detail}` : '결재 PDF 다운로드에 실패했습니다.');
-    },
-  });
 
   const openSignModal = (contractId: string) => {
     setSignModalContractId(contractId);
@@ -354,7 +290,6 @@ export function MyContractsPanel() {
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : '계약 서명에 실패했습니다.';
       message.error(errorMessage);
-      throw e;
     } finally {
       setSignSubmitting(false);
     }
@@ -411,47 +346,45 @@ export function MyContractsPanel() {
             className="tw-min-w-0 tw-flex-1"
           />
           <Button
-            onClick={() => void (statusFilter === 'NEGOTIATION' ? refetchNegotiations() : refetch())}
+            onClick={() => void (statusFilter === 'NEGOTIATION' ? refetchSalaryHistory() : refetch())}
             className="tw-shrink-0"
           >
             새로고침
           </Button>
         </div>
         {statusFilter === 'NEGOTIATION' ? (
-          <Table<SalaryNegotiation>
-            rowKey={(row) =>
-              row.negotiationId ?? `${row.memberId ?? 'member'}-${row.proposedAt ?? row.createdAt ?? ''}-${row.status ?? ''}`
-            }
-            loading={negotiationsLoading}
-            dataSource={filteredSortedNegotiations}
+          <Table<MySalaryHistory>
+            rowKey={(row) => row.salaryId ?? `${row.effectiveFrom ?? ''}-${row.currentBaseSalary ?? 0}-${row.jobTitleName ?? ''}`}
+            loading={salaryHistoryLoading}
+            dataSource={sortedSalaryHistory}
             pagination={{ pageSize: 8, showSizeChanger: false }}
             locale={{ emptyText: '연봉협상 이력이 없습니다.' }}
             columns={[
               {
-                title: '협상 구분',
-                dataIndex: 'negotiationType',
-                key: 'negotiationType',
+                title: '적용일',
+                dataIndex: 'effectiveFrom',
+                key: 'effectiveFrom',
                 width: 120,
-                render: (v: string | undefined) => NEGOTIATION_TYPE_LABEL[String(v ?? '').toUpperCase()] ?? (v || '—'),
+                render: (v: string | null | undefined) => (v?.trim() ? v.trim() : '—'),
               },
               {
-                title: '상태',
-                dataIndex: 'status',
-                key: 'status',
-                width: 120,
-                render: (v: string | undefined) => negotiationStatusTag(v),
+                title: '적용 종료일',
+                dataIndex: 'effectiveTo',
+                key: 'effectiveTo',
+                width: 130,
+                render: (v: string | null | undefined) => (v?.trim() ? v.trim() : '현재 적용 중'),
               },
               {
-                title: '현재 기본급',
-                dataIndex: 'currentBaseSalary',
-                key: 'currentBaseSalary',
+                title: '변경 전 기본급',
+                dataIndex: 'previousBaseSalary',
+                key: 'previousBaseSalary',
                 width: 150,
                 render: (v: number | null | undefined) => formatWon(v),
               },
               {
-                title: '제안 기본급',
-                dataIndex: 'proposedBaseSalary',
-                key: 'proposedBaseSalary',
+                title: '변경 후 기본급',
+                dataIndex: 'currentBaseSalary',
+                key: 'currentBaseSalary',
                 width: 150,
                 render: (v: number | null | undefined) => formatWon(v),
               },
@@ -461,52 +394,26 @@ export function MyContractsPanel() {
                 key: 'changeRate',
                 width: 100,
                 render: (v: number | null | undefined) => {
-                  const txt = formatPercent(v);
-                  if (txt === '—') return <Typography.Text type="secondary">—</Typography.Text>;
                   if (v == null || Number.isNaN(v)) return <Typography.Text type="secondary">—</Typography.Text>;
-                  const tone = v > 0 ? 'tw-text-emerald-700' : v < 0 ? 'tw-text-rose-700' : 'tw-text-slate-500';
-                  return <span className={`tw-font-semibold ${tone}`}>{txt}</span>;
+                  if (v === 0) return <Typography.Text type="secondary">동결</Typography.Text>;
+                  const txt = formatPercent(v);
+                  const tone = v > 0 ? 'tw-text-slate-600' : v < 0 ? 'tw-text-slate-500' : 'tw-text-slate-500';
+                  return <span className={tone}>{txt}</span>;
                 },
               },
               {
-                title: '적용일',
-                dataIndex: 'proposedEffectiveFrom',
-                key: 'proposedEffectiveFrom',
+                title: '직급',
+                dataIndex: 'jobGradeName',
+                key: 'jobGradeName',
                 width: 120,
-                render: (v: string | null | undefined) => (v?.trim() ? v.trim() : '—'),
+                render: (v: string | null | undefined) => v?.trim() || '—',
               },
               {
-                title: '결정일',
-                dataIndex: 'decidedAt',
-                key: 'decidedAt',
-                width: 170,
-                render: (_: string | null | undefined, row) => {
-                  const raw = row.decidedAt?.trim() || row.proposedAt?.trim() || '';
-                  if (!raw) return '—';
-                  const d = dayjs(raw);
-                  return d.isValid() ? d.format('YYYY-MM-DD') : raw.slice(0, 10);
-                },
-              },
-              {
-                title: '액션',
-                key: 'actions',
-                width: 110,
-                render: (_: unknown, row) => {
-                  const rid = row.approvalRequestId?.trim() || '';
-                  if (!rid) return <Typography.Text type="secondary">—</Typography.Text>;
-                  return (
-                    <Button
-                      size="small"
-                      onClick={(ev) => {
-                        ev.stopPropagation();
-                        void approvalPdfDownloadM.mutateAsync(rid);
-                      }}
-                      loading={approvalPdfDownloadM.isPending && approvalPdfDownloadM.variables === rid}
-                    >
-                      PDF
-                    </Button>
-                  );
-                },
+                title: '직책',
+                dataIndex: 'jobTitleName',
+                key: 'jobTitleName',
+                width: 120,
+                render: (v: string | null | undefined) => v?.trim() || '—',
               },
             ]}
           />
