@@ -859,21 +859,24 @@ function collectViewerMemberIds(rows: ViewerDraft[]): Set<string> {
 function flattenApprovalLinesForSubmit(rows: ApprovalLineDraft[]): Array<{
   approverMemberId: string;
   approverMemberPositionId: string;
+  approverName: string;
 }> {
   const ordered = [...rows].sort((a, b) => a.stepOrder - b.stepOrder);
-  const out: Array<{ approverMemberId: string; approverMemberPositionId: string }> = [];
+  const out: Array<{ approverMemberId: string; approverMemberPositionId: string; approverName: string }> = [];
   for (const r of ordered) {
     if (r.kind === 'org') {
       for (const m of r.members) {
         out.push({
           approverMemberId: m.approverMemberId,
           approverMemberPositionId: m.approverMemberPositionId,
+          approverName: m.memberName?.trim() || '—',
         });
       }
     } else {
       out.push({
         approverMemberId: r.approverMemberId,
         approverMemberPositionId: r.approverMemberPositionId,
+        approverName: r.memberName?.trim() || '—',
       });
     }
   }
@@ -3396,6 +3399,7 @@ export function ApprovalsPage() {
         stepOrder: idx + 1,
         approverMemberId: line.approverMemberId,
         approverMemberPositionId: line.approverMemberPositionId,
+        approverName: line.approverName,
       }));
 
       if (status === 'WAIT') {

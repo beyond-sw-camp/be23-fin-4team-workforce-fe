@@ -1,3 +1,4 @@
+import { DownloadOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { Alert, App, Button, Card, Input, Space, Spin, Table, Tabs, Tag, Timeline, Typography } from 'antd';
@@ -10,6 +11,10 @@ import { useAuth } from '@/features/auth/useAuth';
 import { PERM } from '@/features/permissions/backend-permissions';
 import { usePermissions } from '@/features/permissions/usePermissionsHook';
 import { parseApiError } from '@/shared/api/error-parser';
+import { companyApi } from '@/features/organization/api/companyApi';
+import { approvalRequestApi } from '@/features/approvals/api/approvalRequestApi';
+import { salaryApi } from '@/features/salary-service/api/salaryApi';
+import type { SalaryNegotiation } from '@/features/salary-service/types';
 import {
   contractEffectiveRejectReason,
   contractEmployeeCanReject,
@@ -33,7 +38,23 @@ const MY_CONTRACT_STATUS_TABS = [
   { key: 'SIGNED', label: '체결완료' },
   { key: 'REJECTED', label: '거절됨' },
   { key: 'CANCELED', label: '회수됨' },
+  { key: 'NEGOTIATION', label: '연봉협상 이력' },
 ] as const;
+
+const NEGOTIATION_TYPE_LABEL: Record<string, string> = {
+  REGULAR: '정기',
+  PROMOTION: '승진',
+  AD_HOC: '수시',
+  RETENTION: '유지',
+};
+
+const NEGOTIATION_STATUS_LABEL: Record<string, string> = {
+  DRAFT: '초안',
+  SUBMITTED: '응답 대기',
+  APPROVED: '수락',
+  REJECTED: '거절',
+  APPLIED: '적용 완료',
+};
 
 function parseContent(raw: string): Record<string, unknown> {
   try {
@@ -70,6 +91,28 @@ function statusTag(status: string) {
   if (s === 'CANCELED') return <Tag color="default">회수</Tag>;
   if (s === 'CREATED') return <Tag>생성됨</Tag>;
   return <Tag>{status}</Tag>;
+}
+
+function negotiationStatusTag(status: string | undefined) {
+  const s = String(status ?? '').toUpperCase();
+  // 스펙: SUBMITTED=검토 중(노랑/주황), APPROVED=확정(파랑), REJECTED=거절됨(빨강/회색), APPLIED=적용 완료(초록)
+  if (s === 'SUBMITTED') return <Tag color="warning">검토 중</Tag>;
+  if (s === 'APPROVED') return <Tag color="processing">확정</Tag>;
+  if (s === 'REJECTED') return <Tag color="error">거절됨</Tag>;
+  if (s === 'APPLIED') return <Tag color="success">적용 완료</Tag>;
+  if (s === 'DRAFT') return <Tag>초안</Tag>;
+  return <Tag>{NEGOTIATION_STATUS_LABEL[s] ?? (status || '—')}</Tag>;
+}
+
+function formatWon(value: number | null | undefined): string {
+  if (value == null || Number.isNaN(value)) return '—';
+  return `₩${Number(value).toLocaleString('ko-KR')}`;
+}
+
+function formatPercent(value: number | null | undefined): string {
+  if (value == null || Number.isNaN(value)) return '—';
+  const sign = value > 0 ? '+' : '';
+  return `${sign}${value.toFixed(1)}%`;
 }
 
 export function MyContractsPanel() {
@@ -115,8 +158,30 @@ export function MyContractsPanel() {
         : contractTemplateApi.listMyContracts({
             status: statusFilter as 'SENT' | 'SIGNED' | 'REJECTED' | 'CANCELED',
           }),
+    enabled: statusFilter !== 'NEGOTIATION',
     staleTime: 30_000,
   });
+  const {
+    data: myNegotiations = [],
+    isFetching: negotiationsLoading,
+    refetch: refetchNegotiations,
+  } = useQuery({
+    queryKey: ['salary', 'negotiations', 'my', 'contracts-tab'],
+    queryFn: () => salaryApi.negotiation.listMine(),
+    enabled: statusFilter === 'NEGOTIATION',
+    staleTime: 30_000,
+  });
+  const filteredSortedNegotiations = useMemo(() => {
+    const list = myNegotiations
+      .filter((n) => String(n.status ?? '').toUpperCase() !== 'DRAFT')
+      .slice();
+    list.sort((a, b) => {
+      const ad = a.proposedEffectiveFrom ? new Date(a.proposedEffectiveFrom).getTime() : 0;
+      const bd = b.proposedEffectiveFrom ? new Date(b.proposedEffectiveFrom).getTime() : 0;
+      return bd - ad;
+    });
+    return list;
+  }, [myNegotiations]);
 
   const {
     data: contractDetail,
@@ -141,6 +206,12 @@ export function MyContractsPanel() {
     },
     enabled: Boolean(selectedContractId),
   });
+  const { data: companyInfo } = useQuery({
+    queryKey: ['company', 'info'],
+    queryFn: () => companyApi.getCompanyInfo(),
+    staleTime: 60_000,
+  });
+  const companyDisplayName = companyInfo?.companyName?.trim() || '회사';
 
   const {
     data: myContractHistory = [],
@@ -185,6 +256,77 @@ export function MyContractsPanel() {
       ]);
     },
     onError: (e: Error) => message.error(e.message || '계약 거절에 실패했습니다.'),
+  });
+
+  const contractPdfDownloadM = useMutation({
+    mutationFn: (id: string) => contractTemplateApi.downloadContractPdf(id),
+    onSuccess: ({ blob, filename }) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      message.success('PDF를 저장했습니다.');
+    },
+    onError: async (err: unknown) => {
+      let detail = '';
+      const e = err as { response?: { data?: unknown } };
+      const data = e?.response?.data;
+      if (data instanceof Blob) {
+        try {
+          const text = await data.text();
+          try {
+            const json = JSON.parse(text) as { message?: string; error?: string };
+            detail = json?.message || json?.error || text;
+          } catch {
+            detail = text;
+          }
+        } catch {
+          /* noop */
+        }
+      } else if (typeof data === 'object' && data !== null) {
+        detail = (data as { message?: string }).message || '';
+      }
+      void message.error(detail ? `계약 PDF 다운로드 실패: ${detail}` : '계약 PDF 다운로드에 실패했습니다.');
+    },
+  });
+  const approvalPdfDownloadM = useMutation({
+    mutationFn: (requestId: string) => approvalRequestApi.downloadRequestPdf(requestId),
+    onSuccess: ({ blob, filename }) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      message.success('PDF를 저장했습니다.');
+    },
+    onError: async (err: unknown) => {
+      let detail = '';
+      const e = err as { response?: { data?: unknown } };
+      const data = e?.response?.data;
+      if (data instanceof Blob) {
+        try {
+          const text = await data.text();
+          try {
+            const json = JSON.parse(text) as { message?: string; error?: string };
+            detail = json?.message || json?.error || text;
+          } catch {
+            detail = text;
+          }
+        } catch {
+          /* noop */
+        }
+      } else if (typeof data === 'object' && data !== null) {
+        detail = (data as { message?: string }).message || '';
+      }
+      void message.error(detail ? `결재 PDF 다운로드 실패: ${detail}` : '결재 PDF 다운로드에 실패했습니다.');
+    },
   });
 
   const openSignModal = (contractId: string) => {
@@ -268,77 +410,175 @@ export function MyContractsPanel() {
             items={[...MY_CONTRACT_STATUS_TABS]}
             className="tw-min-w-0 tw-flex-1"
           />
-          <Button onClick={() => void refetch()} className="tw-shrink-0">
+          <Button
+            onClick={() => void (statusFilter === 'NEGOTIATION' ? refetchNegotiations() : refetch())}
+            className="tw-shrink-0"
+          >
             새로고침
           </Button>
         </div>
-        <Table<ContractRecord>
-          rowKey="contractId"
-          loading={isFetching}
-          dataSource={myContracts}
-          pagination={{ pageSize: 8, showSizeChanger: false }}
-          locale={{ emptyText: '계약이 없습니다.' }}
-          onRow={(record) => ({
-            onClick: (e) => {
-              const el = e.target as HTMLElement;
-              if (el.closest('button, a, [role="button"], .ant-select, .ant-tabs')) return;
-              openDetail(record.contractId);
-            },
-            className: 'tw-cursor-pointer',
-          })}
-          columns={[
-            { title: '템플릿', dataIndex: 'templateName', key: 'templateName', ellipsis: true },
-            {
-              title: '문서번호',
-              dataIndex: 'contractNumber',
-              key: 'contractNumber',
-              width: 140,
-              ellipsis: true,
-              render: (v: string | null) => v?.trim() || '—',
-            },
-            {
-              title: '상태',
-              dataIndex: 'contractStatus',
-              key: 'contractStatus',
-              width: 140,
-              render: (v: string) => statusTag(v),
-            },
-            {
-              title: '생성일',
-              dataIndex: 'createdAt',
-              key: 'createdAt',
-              width: 180,
-              render: (v: string) => {
-                const d = dayjs(v);
-                return d.isValid() ? d.format('YYYY-MM-DD HH:mm') : v;
+        {statusFilter === 'NEGOTIATION' ? (
+          <Table<SalaryNegotiation>
+            rowKey={(row) =>
+              row.negotiationId ?? `${row.memberId ?? 'member'}-${row.proposedAt ?? row.createdAt ?? ''}-${row.status ?? ''}`
+            }
+            loading={negotiationsLoading}
+            dataSource={filteredSortedNegotiations}
+            pagination={{ pageSize: 8, showSizeChanger: false }}
+            locale={{ emptyText: '연봉협상 이력이 없습니다.' }}
+            columns={[
+              {
+                title: '협상 구분',
+                dataIndex: 'negotiationType',
+                key: 'negotiationType',
+                width: 120,
+                render: (v: string | undefined) => NEGOTIATION_TYPE_LABEL[String(v ?? '').toUpperCase()] ?? (v || '—'),
               },
-            },
-            {
-              title: '서명',
-              key: 'sign',
-              width: 110,
-              render: (_: unknown, row) =>
-                contractEmployeeSignaturePending(row) ? (
-                  <Button
-                    type="primary"
-                    size="small"
-                    loading={
-                      signSubmitting ||
-                      (signM.isPending && signM.variables?.contractId === row.contractId)
-                    }
-                    onClick={(ev) => {
-                      ev.stopPropagation();
-                      openSignModal(row.contractId);
-                    }}
-                  >
-                    서명하기
-                  </Button>
-                ) : (
-                  <Typography.Text type="secondary">—</Typography.Text>
-                ),
-            },
-          ]}
-        />
+              {
+                title: '상태',
+                dataIndex: 'status',
+                key: 'status',
+                width: 120,
+                render: (v: string | undefined) => negotiationStatusTag(v),
+              },
+              {
+                title: '현재 기본급',
+                dataIndex: 'currentBaseSalary',
+                key: 'currentBaseSalary',
+                width: 150,
+                render: (v: number | null | undefined) => formatWon(v),
+              },
+              {
+                title: '제안 기본급',
+                dataIndex: 'proposedBaseSalary',
+                key: 'proposedBaseSalary',
+                width: 150,
+                render: (v: number | null | undefined) => formatWon(v),
+              },
+              {
+                title: '변동률',
+                dataIndex: 'changeRate',
+                key: 'changeRate',
+                width: 100,
+                render: (v: number | null | undefined) => {
+                  const txt = formatPercent(v);
+                  if (txt === '—') return <Typography.Text type="secondary">—</Typography.Text>;
+                  if (v == null || Number.isNaN(v)) return <Typography.Text type="secondary">—</Typography.Text>;
+                  const tone = v > 0 ? 'tw-text-emerald-700' : v < 0 ? 'tw-text-rose-700' : 'tw-text-slate-500';
+                  return <span className={`tw-font-semibold ${tone}`}>{txt}</span>;
+                },
+              },
+              {
+                title: '적용일',
+                dataIndex: 'proposedEffectiveFrom',
+                key: 'proposedEffectiveFrom',
+                width: 120,
+                render: (v: string | null | undefined) => (v?.trim() ? v.trim() : '—'),
+              },
+              {
+                title: '결정일',
+                dataIndex: 'decidedAt',
+                key: 'decidedAt',
+                width: 170,
+                render: (_: string | null | undefined, row) => {
+                  const raw = row.decidedAt?.trim() || row.proposedAt?.trim() || '';
+                  if (!raw) return '—';
+                  const d = dayjs(raw);
+                  return d.isValid() ? d.format('YYYY-MM-DD') : raw.slice(0, 10);
+                },
+              },
+              {
+                title: '액션',
+                key: 'actions',
+                width: 110,
+                render: (_: unknown, row) => {
+                  const rid = row.approvalRequestId?.trim() || '';
+                  if (!rid) return <Typography.Text type="secondary">—</Typography.Text>;
+                  return (
+                    <Button
+                      size="small"
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        void approvalPdfDownloadM.mutateAsync(rid);
+                      }}
+                      loading={approvalPdfDownloadM.isPending && approvalPdfDownloadM.variables === rid}
+                    >
+                      PDF
+                    </Button>
+                  );
+                },
+              },
+            ]}
+          />
+        ) : (
+          <Table<ContractRecord>
+            rowKey="contractId"
+            loading={isFetching}
+            dataSource={myContracts}
+            pagination={{ pageSize: 8, showSizeChanger: false }}
+            locale={{ emptyText: '계약이 없습니다.' }}
+            onRow={(record) => ({
+              onClick: (e) => {
+                const el = e.target as HTMLElement;
+                if (el.closest('button, a, [role="button"], .ant-select, .ant-tabs')) return;
+                openDetail(record.contractId);
+              },
+              className: 'tw-cursor-pointer',
+            })}
+            columns={[
+              { title: '템플릿', dataIndex: 'templateName', key: 'templateName', ellipsis: true },
+              {
+                title: '문서번호',
+                dataIndex: 'contractNumber',
+                key: 'contractNumber',
+                width: 140,
+                ellipsis: true,
+                render: (v: string | null) => v?.trim() || '—',
+              },
+              {
+                title: '상태',
+                dataIndex: 'contractStatus',
+                key: 'contractStatus',
+                width: 140,
+                render: (v: string) => statusTag(v),
+              },
+              {
+                title: '생성일',
+                dataIndex: 'createdAt',
+                key: 'createdAt',
+                width: 180,
+                render: (v: string) => {
+                  const d = dayjs(v);
+                  return d.isValid() ? d.format('YYYY-MM-DD HH:mm') : v;
+                },
+              },
+              {
+                title: '서명',
+                key: 'sign',
+                width: 110,
+                render: (_: unknown, row) =>
+                  contractEmployeeSignaturePending(row) ? (
+                    <Button
+                      type="primary"
+                      size="small"
+                      loading={
+                        signSubmitting ||
+                        (signM.isPending && signM.variables?.contractId === row.contractId)
+                      }
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        openSignModal(row.contractId);
+                      }}
+                    >
+                      서명하기
+                    </Button>
+                  ) : (
+                    <Typography.Text type="secondary">—</Typography.Text>
+                  ),
+              },
+            ]}
+          />
+        )}
       </Card>
 
       <AppModal
@@ -351,6 +591,21 @@ export function MyContractsPanel() {
               {!detailLoading && contractDetail ? (
                 <Button key="history" onClick={() => setHistoryModalOpen(true)}>
                   계약 이력
+                </Button>
+              ) : null}
+              {!detailLoading &&
+              contractDetail &&
+              String(contractDetail.contractStatus).toUpperCase() === 'SIGNED' ? (
+                <Button
+                  key="pdf"
+                  icon={<DownloadOutlined />}
+                  loading={
+                    contractPdfDownloadM.isPending &&
+                    contractPdfDownloadM.variables === contractDetail.contractId
+                  }
+                  onClick={() => void contractPdfDownloadM.mutateAsync(contractDetail.contractId)}
+                >
+                  PDF 다운로드
                 </Button>
               ) : null}
               <Button key="close" onClick={closeDetail}>
@@ -480,7 +735,7 @@ export function MyContractsPanel() {
                             서명
                           </td>
                           <td className="tw-border tw-border-solid tw-border-black tw-bg-[#efefef] tw-px-2 tw-py-1 tw-text-center tw-text-xs tw-font-semibold">직원</td>
-                          <td className="tw-border tw-border-solid tw-border-black tw-bg-[#efefef] tw-px-2 tw-py-1 tw-text-center tw-text-xs tw-font-semibold">회사</td>
+                          <td className="tw-border tw-border-solid tw-border-black tw-bg-[#efefef] tw-px-2 tw-py-1 tw-text-center tw-text-xs tw-font-semibold">{companyDisplayName}</td>
                         </tr>
                         <tr>
                           <td className="tw-border tw-border-solid tw-border-black tw-bg-white tw-px-1 tw-py-1 tw-text-center tw-align-middle">
@@ -493,7 +748,6 @@ export function MyContractsPanel() {
                           </td>
                           <td className="tw-border tw-border-solid tw-border-black tw-bg-white tw-px-1 tw-py-1 tw-text-center tw-align-middle">
                             <div className="tw-flex tw-min-h-[3.2rem] tw-flex-col tw-items-center tw-justify-center tw-gap-1">
-                              <span className="tw-text-[11px] tw-font-semibold">{detailSignCells.company.label}</span>
                               {detailSignCells.company.imageUrl ? (
                                 <img src={detailSignCells.company.imageUrl} alt="회사 직인" className="tw-max-h-8 tw-max-w-[3.25rem] tw-object-contain" />
                               ) : null}

@@ -312,6 +312,24 @@ export const DEFAULT_CONTRACT_FORM_SCHEMA = JSON.stringify(
   2,
 );
 
+function filenameFromContentDisposition(header: string | undefined, fallback: string): string {
+  if (!header || typeof header !== 'string') return fallback;
+  const star = /filename\*\s*=\s*([^']*)''([^;\s]+)/i.exec(header);
+  if (star?.[2]) {
+    const raw = star[2].replace(/"/g, '').trim();
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      return raw || fallback;
+    }
+  }
+  const quoted = /filename\s*=\s*"([^"]+)"/i.exec(header);
+  if (quoted?.[1]?.trim()) return quoted[1].trim();
+  const unquoted = /filename\s*=\s*([^;\s]+)/i.exec(header);
+  if (unquoted?.[1]) return unquoted[1].replace(/"/g, '').trim();
+  return fallback;
+}
+
 export const contractTemplateApi = {
   async list(): Promise<ContractTemplate[]> {
     const response = await httpClient.get('/contract/templates');
@@ -551,6 +569,21 @@ export const contractTemplateApi = {
     const normalized = normalizeContractRecord(unwrapApiResponse<unknown>(response.data));
     if (!normalized) throw new Error('계약 서명 응답을 해석할 수 없습니다.');
     return normalized;
+  },
+
+  /** 서명 완료(SIGNED) 계약 PDF. 미서명·권한 없음 시 400/403 */
+  async downloadContractPdf(contractId: string): Promise<{ blob: Blob; filename: string }> {
+    const response = await httpClient.get(`/contract/contracts/${encodeURIComponent(contractId)}/pdf`, {
+      responseType: 'blob',
+    });
+    const fallback = `contract-${contractId}.pdf`;
+    const rawCd =
+      response.headers['content-disposition'] ??
+      response.headers['Content-Disposition'] ??
+      (response.headers as Record<string, unknown>)['content-disposition'];
+    const cd = Array.isArray(rawCd) ? rawCd[0] : rawCd;
+    const filename = filenameFromContentDisposition(typeof cd === 'string' ? cd : undefined, fallback);
+    return { blob: response.data as Blob, filename };
   },
 
   /** 인사팀(CONTRACT:CREATE) — SENT인 계약만. 미서명 직원에게 CONTRACT_REMIND 알림 */

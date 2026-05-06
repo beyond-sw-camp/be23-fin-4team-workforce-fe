@@ -1,5 +1,5 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { SendOutlined } from '@ant-design/icons';
+import { DownloadOutlined, SendOutlined } from '@ant-design/icons';
 import {
   Alert,
   Button,
@@ -341,6 +341,42 @@ export function ApprovalRequestReadOnlyModal({
   const [requestCancelReason, setRequestCancelReason] = useState('');
   const [approvalAction, setApprovalAction] = useState<{ approvalId: string; mode: 'approve' | 'reject' } | null>(null);
   const [approvalComment, setApprovalComment] = useState('');
+
+  const approvalPdfDownloadM = useMutation({
+    mutationFn: () => approvalRequestApi.downloadRequestPdf(requestId!),
+    onSuccess: ({ blob, filename }) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      message.success('PDF를 저장했습니다.');
+    },
+    onError: async (err: unknown) => {
+      let detail = '';
+      const e = err as { response?: { data?: unknown } };
+      const data = e?.response?.data;
+      if (data instanceof Blob) {
+        try {
+          const text = await data.text();
+          try {
+            const json = JSON.parse(text) as { message?: string; error?: string };
+            detail = json?.message || json?.error || text;
+          } catch {
+            detail = text;
+          }
+        } catch {
+          /* noop */
+        }
+      } else if (typeof data === 'object' && data !== null) {
+        detail = (data as { message?: string }).message || '';
+      }
+      message.error(detail ? `결재 PDF 다운로드 실패: ${detail}` : '결재 PDF 다운로드에 실패했습니다.');
+    },
+  });
 
   const cancelRequestM = useMutation({
     mutationFn: (reason: string) => approvalRequestApi.cancelRequest(requestId!, reason),
@@ -781,45 +817,53 @@ export function ApprovalRequestReadOnlyModal({
     [canDeleteAttachments, deleteAttachmentM.isPending],
   );
 
-  const detailModalFooter =
-    canActApproveReject || canCancelRequest ? (
-      <div className="tw-flex tw-w-full tw-flex-wrap tw-items-center tw-justify-end tw-gap-2">
-        {canActApproveReject ? (
-          <>
-            <Button
-              type="primary"
-              loading={approveM.isPending || rejectM.isPending}
-              disabled={!myActionableApprovalLine}
-              onClick={() =>
-                myActionableApprovalLine &&
-                setApprovalAction({ approvalId: myActionableApprovalLine.approvalId, mode: 'approve' })
-              }
-            >
-              승인
-            </Button>
-            <Button
-              danger
-              loading={approveM.isPending || rejectM.isPending}
-              disabled={!myActionableApprovalLine}
-              onClick={() =>
-                myActionableApprovalLine &&
-                setApprovalAction({ approvalId: myActionableApprovalLine.approvalId, mode: 'reject' })
-              }
-            >
-              반려
-            </Button>
-          </>
-        ) : null}
-        {canCancelRequest ? (
-          <Button danger loading={cancelRequestM.isPending} onClick={() => setRequestCancelOpen(true)}>
-            결재 취소
-          </Button>
-        ) : null}
-        <Button type="primary" className="!tw-min-w-[6rem] !tw-rounded-xl !tw-bg-[#1e3a5f]" onClick={onClose}>
-          닫기
+  const detailModalFooter = (
+    <div className="tw-flex tw-w-full tw-flex-wrap tw-items-center tw-justify-end tw-gap-2">
+      {!detailLoading && selectedRequestDetail && requestId ? (
+        <Button
+          icon={<DownloadOutlined />}
+          loading={approvalPdfDownloadM.isPending}
+          onClick={() => void approvalPdfDownloadM.mutateAsync()}
+        >
+          PDF 다운로드
         </Button>
-      </div>
-    ) : undefined;
+      ) : null}
+      {canActApproveReject ? (
+        <>
+          <Button
+            type="primary"
+            loading={approveM.isPending || rejectM.isPending}
+            disabled={!myActionableApprovalLine}
+            onClick={() =>
+              myActionableApprovalLine &&
+              setApprovalAction({ approvalId: myActionableApprovalLine.approvalId, mode: 'approve' })
+            }
+          >
+            승인
+          </Button>
+          <Button
+            danger
+            loading={approveM.isPending || rejectM.isPending}
+            disabled={!myActionableApprovalLine}
+            onClick={() =>
+              myActionableApprovalLine &&
+              setApprovalAction({ approvalId: myActionableApprovalLine.approvalId, mode: 'reject' })
+            }
+          >
+            반려
+          </Button>
+        </>
+      ) : null}
+      {canCancelRequest ? (
+        <Button danger loading={cancelRequestM.isPending} onClick={() => setRequestCancelOpen(true)}>
+          결재 취소
+        </Button>
+      ) : null}
+      <Button type="primary" className="!tw-min-w-[6rem] !tw-rounded-xl !tw-bg-[#1e3a5f]" onClick={onClose}>
+        닫기
+      </Button>
+    </div>
+  );
 
   return (
     <>

@@ -798,7 +798,7 @@ export function ContractTemplatesAdminPanel({
                     }))}
                   />
                 </Form.Item>
-                <Form.Item name="batchName" label="배치 이름" rules={[{ required: true, message: '배치 이름을 입력해 주세요.' }]}>
+                <Form.Item name="batchName" label="발송 제목" rules={[{ required: true, message: '발송 제목을 입력해 주세요.' }]}>
                   <Input placeholder="예: 2026년 연봉계약" maxLength={120} />
                 </Form.Item>
                 <Form.List name="items">
@@ -908,7 +908,7 @@ export function ContractTemplatesAdminPanel({
                       }))}
                     />
                   </Form.Item>
-                  <Form.Item name="batchName" label="배치 이름" rules={[{ required: true, message: '배치 이름을 입력해 주세요.' }]}>
+                  <Form.Item name="batchName" label="발송 제목" rules={[{ required: true, message: '발송 제목을 입력해 주세요.' }]}>
                     <Input placeholder="예: 2026년 연봉계약" maxLength={120} />
                   </Form.Item>
                   <Form.List name="items">
