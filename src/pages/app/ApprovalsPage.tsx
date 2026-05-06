@@ -260,6 +260,39 @@ function readDateArray(content: Record<string, unknown>, key: string): string[] 
   return out.length > 0 ? out : undefined;
 }
 
+/** 휴가신청서 prefill 정규화: start/end만 와도 plannedDates를 생성해 UI(DatePicker multiple)에 반영 */
+function normalizeLeavePrefillContent(
+  content: Record<string, unknown>,
+  companyHolidaySet: Set<string>,
+): Record<string, unknown> {
+  const next = { ...content };
+  const planned = readDateArray(content, 'plannedDates');
+  if (planned && planned.length > 0) {
+    next.plannedDates = planned;
+    return next;
+  }
+  const startDate = readStr(content, 'startDate');
+  const endDate = readStr(content, 'endDate');
+  if (!startDate || !endDate) return next;
+  const start = dayjs(startDate, 'YYYY-MM-DD', true);
+  const end = dayjs(endDate, 'YYYY-MM-DD', true);
+  if (!start.isValid() || !end.isValid()) return next;
+  const from = start.isBefore(end) ? start : end;
+  const to = start.isBefore(end) ? end : start;
+  const out: string[] = [];
+  let cursor = from;
+  let guard = 0;
+  while (!cursor.isAfter(to, 'day') && guard < 500) {
+    const dow = cursor.day();
+    const ymd = cursor.format('YYYY-MM-DD');
+    if (dow !== 0 && dow !== 6 && !companyHolidaySet.has(ymd)) out.push(ymd);
+    cursor = cursor.add(1, 'day');
+    guard += 1;
+  }
+  if (out.length > 0) next.plannedDates = out;
+  return next;
+}
+
 /** HH:mm 또는 HH:mm:ss 시간 문자열을 LocalDateTime 파싱용 ISO 로 조합 */
 function toLocalDateTime(date: string, time: string): string {
   if (!date || !time) return '';
@@ -1552,6 +1585,8 @@ export function ApprovalsPage() {
   const composeDraftHydratingRef = useRef(false);
   /** 허브 모달 iframe에서 `composeDraftId`로 자동 이어쓰기 시 중복 호출 방지 */
   const embedComposeDraftBootRef = useRef<string | null>(null);
+  /** 챗봇 prefill URL(documentId/prefill) 자동 부팅 중복 방지 */
+  const chatbotPrefillBootRef = useRef<string | null>(null);
   /** 회의록 `ai_transcribe` + attachAudio 일 때 임시저장/제출 직후 첨부 업로드용 */
   const composeMeetingAudioBlobRef = useRef<Blob | null>(null);
   const [form] = Form.useForm();
@@ -2595,7 +2630,13 @@ export function ApprovalsPage() {
     [initializeComposeForDocument],
   );
 
-  const embedDocId = typeof routeSearch.docId === 'string' ? routeSearch.docId.trim() : '';
+  const embedDocId = normalizeUrlSearchToken(routeSearch.docId);
+  const chatbotPrefillFlag = isTruthyPrefillParam(routeSearch.prefill);
+  const chatbotPrefillDocId = normalizeUrlSearchToken(
+    typeof routeSearch.documentId === 'string' && routeSearch.documentId.trim()
+      ? routeSearch.documentId
+      : routeSearch.docId,
+  );
   const composeDraftIdFromUrl =
     typeof routeSearch.composeDraftId === 'string' ? routeSearch.composeDraftId.trim() : '';
 
@@ -2788,6 +2829,38 @@ export function ApprovalsPage() {
   // iframe embed 모달에선 부모 sessionStorage 접근 불가 → URL params 가 정공법, sessionStorage 는 호환 유지
   const schedulePrefillAppliedRef = useRef(false);
   useEffect(() => {
+    /** 허브가 아닐 때(sideNav=workbench 등)에도 챗봇 prefill 모달을 띄워야 하므로 onComposeHub 제외 */
+    if (tab !== 'compose' || isEmbedComposeModal || !chatbotPrefillFlag || !chatbotPrefillDocId) {
+      chatbotPrefillBootRef.current = null;
+      return;
+    }
+    if (!activeDocuments.length) return;
+    if (chatbotPrefillBootRef.current === chatbotPrefillDocId) return;
+    const doc = activeDocuments.find((d) => d.documentId === chatbotPrefillDocId);
+    if (!doc) return;
+    chatbotPrefillBootRef.current = chatbotPrefillDocId;
+    const params = new URLSearchParams();
+    params.set('tab', 'compose');
+    params.set('embed', APPROVAL_EMBED_QUERY);
+    params.set('docId', chatbotPrefillDocId);
+    params.set('documentId', chatbotPrefillDocId);
+    params.set('prefill', 'true');
+    setCorrectionEmbedSrc(`/app/approvals?${params.toString()}`);
+    navigate({
+      to: '/app/approvals',
+      search: { tab: 'compose' },
+      replace: true,
+    });
+  }, [
+    activeDocuments,
+    chatbotPrefillDocId,
+    chatbotPrefillFlag,
+    isEmbedComposeModal,
+    navigate,
+    tab,
+  ]);
+
+  useEffect(() => {
     if (tab !== 'compose' || composePhase !== 'fill') return;
     if (!selectedDocument || selectedDocument.documentName !== '출퇴근시간 변경 신청서') {
       schedulePrefillAppliedRef.current = false;
@@ -2922,11 +2995,15 @@ export function ApprovalsPage() {
       };
       if (!parsed.documentId || parsed.documentId !== selectedDocumentId) return;
       if (!parsed.content || typeof parsed.content !== 'object' || Array.isArray(parsed.content)) return;
+      const normalizedContent =
+        selectedDocument?.documentName === '휴가신청서'
+          ? normalizeLeavePrefillContent(parsed.content, companyHolidaySet)
+          : parsed.content;
       const current = (form.getFieldValue('content') ?? {}) as Record<string, unknown>;
       form.setFieldsValue({
         content: {
           ...current,
-          ...parsed.content,
+          ...normalizedContent,
         },
       });
       message.success('휴가 계획에서 가져온 날짜가 자동 입력되었습니다. 결재선 지정 후 신청하세요.');
@@ -2941,7 +3018,7 @@ export function ApprovalsPage() {
         sessionStorage.removeItem(LEAVE_REQUEST_PREFILL_STORAGE_KEY);
       }
     }
-  }, [composePhase, form, isEmbedComposeModal, message, selectedDocumentId, tab]);
+  }, [composePhase, form, isEmbedComposeModal, message, selectedDocument, selectedDocumentId, tab, companyHolidaySet]);
 
   // 챗봇 액션 prefill - sessionStorage 로 넘겨준 documentId+content 자동 입력
   useEffect(() => {
@@ -2955,11 +3032,15 @@ export function ApprovalsPage() {
       };
       if (!parsed.documentId || parsed.documentId !== selectedDocumentId) return;
       if (!parsed.content || typeof parsed.content !== 'object' || Array.isArray(parsed.content)) return;
+      const normalizedContent =
+        selectedDocument?.documentName === '휴가신청서'
+          ? normalizeLeavePrefillContent(parsed.content, companyHolidaySet)
+          : parsed.content;
       const current = (form.getFieldValue('content') ?? {}) as Record<string, unknown>;
       form.setFieldsValue({
         content: {
           ...current,
-          ...parsed.content,
+          ...normalizedContent,
         },
       });
       message.info('챗봇 제안값이 결재 양식에 자동 입력되었습니다.');
@@ -2967,7 +3048,7 @@ export function ApprovalsPage() {
     } catch {
       sessionStorage.removeItem(CHATBOT_ACTION_PREFILL_STORAGE_KEY);
     }
-  }, [composePhase, form, message, selectedDocumentId, tab]);
+  }, [composePhase, form, message, selectedDocument, selectedDocumentId, tab, companyHolidaySet]);
 
   const toggleBookmark = useCallback((requestId: string) => {
     setBookmarkedRequestIds((prev) => {
@@ -4538,6 +4619,10 @@ export function ApprovalsPage() {
 
   const isComposeHubEntry = tab === 'compose' && !isEmbedComposeModal && (sideNav === '' || sideNav === 'request-compose');
   const composePhaseView = isEmbedComposeModal ? 'fill' : isComposeHubEntry ? 'select' : composePhase;
+  const isComposeFormMounted =
+    tab === 'compose' &&
+    !isComposeHubEntry &&
+    !(isEmbedComposeModal && !selectedDocument);
   const showComposeWorkbench =
     composePhaseView === 'fill' && selectedDocument != null && selectedSchema.fields.length > 0;
 
@@ -5308,8 +5393,8 @@ export function ApprovalsPage() {
         </div>
       ) : null}
 
-      {/* `Form.useForm()`은 항상 살아 있는데, 실제 <Form>은 작성 워크벤치(tab=compose·비허브)에서만 마운트되어 경고가 난다. 비표시 시 숨김 Form으로 인스턴스만 연결한다. */}
-      {!(tab === 'compose' && !isComposeHubEntry) ? (
+      {/* Form이 실제 렌더되지 않는 구간(허브/임베드 로딩 중)에서도 useForm 인스턴스를 연결해 경고를 방지한다. */}
+      {!isComposeFormMounted ? (
         <Form form={form} preserve={false} className="tw-hidden" aria-hidden />
       ) : null}
 

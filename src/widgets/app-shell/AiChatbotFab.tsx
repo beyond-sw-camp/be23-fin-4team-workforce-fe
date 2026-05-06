@@ -1,7 +1,7 @@
 import { ArrowRightOutlined, CloseOutlined, DeleteOutlined, SendOutlined, UserOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { App, Button, Popconfirm, Spin, Tooltip } from 'antd';
+import { App, Button, Popconfirm, Spin } from 'antd';
 import dayjs from 'dayjs';
 import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -231,7 +231,6 @@ function AiParsedAnswerBody({
   );
 
   const menuButtonLabel = screenDetail?.short ?? (menuUrl ? '\uAD00\uB828 \uBA54\uB274\uB85C \uC774\uB3D9' : '');
-  const menuTooltip = screenDetail?.parenthetical ?? menuUrl;
 
   return (
     <>
@@ -242,51 +241,46 @@ function AiParsedAnswerBody({
           }
           const cls = classifyHref(seg.href);
           const display = linkDisplayLabel(seg.label);
-          const tip = seg.href;
           const openExternal = () => {
             window.open(seg.href, '_blank', 'noopener,noreferrer');
           };
           if (cls.kind === 'internal') {
             return (
-              <Tooltip key={i} title={tip}>
-                <Button
-                  type="link"
-                  size="small"
-                  className="!tw-h-auto !tw-p-0 !tw-align-baseline tw-text-[0.8rem]"
-                  onClick={() => onNavigateInternal(cls.pathWithSearch)}
-                >
-                  {display}
-                </Button>
-              </Tooltip>
-            );
-          }
-          return (
-            <Tooltip key={i} title={tip}>
               <Button
+                key={i}
                 type="link"
                 size="small"
                 className="!tw-h-auto !tw-p-0 !tw-align-baseline tw-text-[0.8rem]"
-                onClick={openExternal}
+                onClick={() => onNavigateInternal(cls.pathWithSearch)}
               >
                 {display}
               </Button>
-            </Tooltip>
+            );
+          }
+          return (
+            <Button
+              key={i}
+              type="link"
+              size="small"
+              className="!tw-h-auto !tw-p-0 !tw-align-baseline tw-text-[0.8rem]"
+              onClick={openExternal}
+            >
+              {display}
+            </Button>
           );
         })}
       </span>
       {menuUrl ? (
         <div className="tw-mt-2 tw-border-t tw-border-[#E8ECF0] tw-pt-2">
-          <Tooltip title={menuTooltip || menuUrl}>
-            <Button
-              type="default"
-              size="small"
-              icon={<ArrowRightOutlined />}
-              className="tw-text-[0.8rem]"
-              onClick={() => onNavigateInternal(menuUrl)}
-            >
-              {menuButtonLabel}
-            </Button>
-          </Tooltip>
+          <Button
+            type="default"
+            size="small"
+            icon={<ArrowRightOutlined />}
+            className="tw-text-[0.8rem]"
+            onClick={() => onNavigateInternal(menuUrl)}
+          >
+            {menuButtonLabel}
+          </Button>
           {screenDetail?.parenthetical ? (
             <p className="tw-m-0 tw-mt-1 tw-text-[10px] tw-leading-snug tw-text-[#64748B]">
               {screenDetail.parenthetical}
