@@ -18,6 +18,7 @@ import {
   Space,
   Switch,
   Table,
+  Tabs,
   Tag,
   Typography,
 } from 'antd';
@@ -367,169 +368,202 @@ export function AdminBonusPolicyPage() {
               : createM.mutate(v)
           }
         >
-          <div className="tw-grid tw-grid-cols-1 lg:tw-grid-cols-3 tw-gap-4">
-            <div
-              className={`tw-rounded-lg tw-border tw-p-4 tw-transition-colors ${
-                useRegular
-                  ? 'tw-border-blue-200 tw-bg-blue-50/40'
-                  : 'tw-border-slate-200 tw-bg-slate-50/60'
-              }`}
-            >
-              <div className="tw-mb-3 tw-flex tw-items-center tw-justify-between tw-gap-2 tw-border-b tw-border-slate-200/80 tw-pb-2">
-                <Typography.Text strong className="tw-text-[15px]">
-                  정기상여
-                </Typography.Text>
-                <Form.Item name="useRegularBonusYn" valuePropName="checked" className="!tw-mb-0">
-                  <Switch checkedChildren="사용" unCheckedChildren="끔" size="small" />
-                </Form.Item>
-              </div>
-              <Typography.Paragraph type="secondary" className="!tw-mb-3 !tw-mt-0 !tw-text-xs tw-leading-snug">
-                기본급 기준 연 누계 비율로 정기 지급합니다. (예: 연 600% = 매년 기본급의 6배 분할 지급)
-              </Typography.Paragraph>
-              <Form.Item
-                label="연 누계 비율 (%)"
-                name="regularBonusAnnualRate"
-                className="!tw-mb-2"
-                rules={
-                  useRegular ? [{ required: true, message: '연 누계 비율을 입력하세요.' }] : []
-                }
-              >
-                <InputNumber
-                  disabled={!useRegular}
-                  min={0}
-                  max={2000}
-                  step={50}
-                  className="tw-w-full"
-                  placeholder="예: 600"
-                />
-              </Form.Item>
-              <Form.Item
-                label="연 지급 횟수"
-                name="regularBonusPaymentCount"
-                className="!tw-mb-0"
-                rules={
-                  useRegular ? [{ required: true, message: '연 지급 횟수를 입력하세요.' }] : []
-                }
-                extra="분기 4 · 반기 2 · 명절 포함 6 등"
-              >
-                <InputNumber
-                  disabled={!useRegular}
-                  min={1}
-                  max={24}
-                  className="tw-w-full"
-                  placeholder="예: 4"
-                />
-              </Form.Item>
-            </div>
-
-            <div
-              className={`tw-rounded-lg tw-border tw-p-4 tw-transition-colors ${
-                usePerf
-                  ? 'tw-border-emerald-200 tw-bg-emerald-50/40'
-                  : 'tw-border-slate-200 tw-bg-slate-50/60'
-              }`}
-            >
-              <div className="tw-mb-3 tw-flex tw-items-center tw-justify-between tw-gap-2 tw-border-b tw-border-slate-200/80 tw-pb-2">
-                <Typography.Text strong className="tw-text-[15px]">
-                  성과급
-                </Typography.Text>
-                <Form.Item name="usePerformanceBonusYn" valuePropName="checked" className="!tw-mb-0">
-                  <Switch checkedChildren="사용" unCheckedChildren="끔" size="small" />
-                </Form.Item>
-              </div>
-              <Typography.Paragraph type="secondary" className="!tw-mb-3 !tw-mt-0 !tw-text-xs tw-leading-snug">
-                평가·실적 등에 따른 비정기 지급입니다. 정책에는 최대 한도만 저장합니다.
-              </Typography.Paragraph>
-              <Form.Item
-                label="1회 최대 지급 비율 (%)"
-                name="performanceBonusMaxRate"
-                className="!tw-mb-2"
-                rules={
-                  usePerf ? [{ required: true, message: '최대 지급 비율을 입력하세요.' }] : []
-                }
-                extra="기본급 기준 (예: 200% = 최대 2배)"
-              >
-                <InputNumber
-                  disabled={!usePerf}
-                  min={0}
-                  max={1000}
-                  step={10}
-                  className="tw-w-full"
-                  placeholder="예: 200"
-                />
-              </Form.Item>
-              <Form.Item label="산정 기준 (메모)" name="performanceBonusBasis" className="!tw-mb-0">
-                <Input.TextArea
-                  disabled={!usePerf}
-                  rows={2}
-                  maxLength={500}
-                  className="tw-text-sm"
-                  placeholder="예: 등급별 차등, EBIT 5% 풀 등"
-                />
-              </Form.Item>
-            </div>
-
-            <div
-              className={`tw-rounded-lg tw-border tw-p-4 tw-transition-colors ${
-                useHoliday
-                  ? 'tw-border-amber-200 tw-bg-amber-50/40'
-                  : 'tw-border-slate-200 tw-bg-slate-50/60'
-              }`}
-            >
-              <div className="tw-mb-3 tw-flex tw-items-center tw-justify-between tw-gap-2 tw-border-b tw-border-slate-200/80 tw-pb-2">
-                <Typography.Text strong className="tw-text-[15px]">
-                  명절상여
-                </Typography.Text>
-                <Form.Item name="useHolidayBonusYn" valuePropName="checked" className="!tw-mb-0">
-                  <Switch checkedChildren="사용" unCheckedChildren="끔" size="small" />
-                </Form.Item>
-              </div>
-              <Typography.Paragraph type="secondary" className="!tw-mb-3 !tw-mt-0 !tw-text-xs tw-leading-snug">
-                설·추석 등 명절 별도 지급. 비율(%) 또는 정액(원) 중 선택합니다.
-              </Typography.Paragraph>
-              <Form.Item
-                label="지급 방식"
-                name="holidayBonusType"
-                className="!tw-mb-2"
-                rules={
-                  useHoliday ? [{ required: true, message: '지급 방식을 선택하세요.' }] : []
-                }
-              >
-                <Select
-                  disabled={!useHoliday}
-                  className="tw-w-full"
-                  options={[
-                    { value: 'RATE', label: HOLIDAY_TYPE_KO.RATE },
-                    { value: 'AMOUNT', label: HOLIDAY_TYPE_KO.AMOUNT },
-                  ]}
-                />
-              </Form.Item>
-              <Form.Item
-                label={holidayType === 'AMOUNT' ? '정액 (원)' : '비율 (%)'}
-                name="holidayBonusValue"
-                className="!tw-mb-0"
-                rules={useHoliday ? [{ required: true, message: '값을 입력하세요.' }] : []}
-              >
-                <InputNumber
-                  disabled={!useHoliday}
-                  min={0}
-                  step={holidayType === 'AMOUNT' ? 100000 : 10}
-                  className="tw-w-full"
-                  formatter={
-                    holidayType === 'AMOUNT'
-                      ? (v) => (v ? `${Number(v).toLocaleString('ko-KR')}` : '')
-                      : undefined
-                  }
-                  parser={
-                    holidayType === 'AMOUNT'
-                      ? (v) => Number((v ?? '').replace(/[^0-9]/g, '')) as 0
-                      : undefined
-                  }
-                  placeholder={holidayType === 'AMOUNT' ? '예: 1,000,000' : '예: 100'}
-                />
-              </Form.Item>
-            </div>
-          </div>
+          {/* 종류별 탭 분리 - 라벨에 활성 점 + 자동/수동 뱃지 */}
+          <Tabs
+            type="card"
+            size="middle"
+            items={[
+              {
+                key: 'regular',
+                label: (
+                  <span className="tw-inline-flex tw-items-center tw-gap-2">
+                    <span
+                      className={`tw-inline-block tw-h-2 tw-w-2 tw-rounded-full ${
+                        useRegular ? 'tw-bg-blue-500' : 'tw-bg-slate-300'
+                      }`}
+                    />
+                    정기상여
+                    <Tag color="blue" className="!tw-mr-0">자동</Tag>
+                  </span>
+                ),
+                children: (
+                  <div className="tw-flex tw-flex-col tw-gap-3">
+                    <div className="tw-flex tw-items-center tw-justify-between tw-rounded tw-bg-blue-50/40 tw-border tw-border-blue-100 tw-px-3 tw-py-2">
+                      <Typography.Text type="secondary" className="!tw-text-xs">
+                        매월 09:00 자동 지급 잡이 정책 기반으로 Payroll(REGULAR_BONUS) 행 생성
+                      </Typography.Text>
+                      <Form.Item name="useRegularBonusYn" valuePropName="checked" className="!tw-mb-0">
+                        <Switch checkedChildren="사용" unCheckedChildren="끔" size="small" />
+                      </Form.Item>
+                    </div>
+                    <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-0 !tw-text-xs tw-leading-snug">
+                      기본급 기준 연 누계 비율로 정기 지급. (예: 연 600% = 매년 기본급의 6배 분할 지급)
+                    </Typography.Paragraph>
+                    <Form.Item
+                      label="연 누계 비율 (%)"
+                      name="regularBonusAnnualRate"
+                      className="!tw-mb-2"
+                      rules={
+                        useRegular ? [{ required: true, message: '연 누계 비율을 입력하세요.' }] : []
+                      }
+                    >
+                      <InputNumber
+                        disabled={!useRegular}
+                        min={0}
+                        max={2000}
+                        step={50}
+                        className="tw-w-full"
+                        placeholder="예: 600"
+                      />
+                    </Form.Item>
+                    <Form.Item
+                      label="연 지급 횟수"
+                      name="regularBonusPaymentCount"
+                      className="!tw-mb-0"
+                      rules={
+                        useRegular ? [{ required: true, message: '연 지급 횟수를 입력하세요.' }] : []
+                      }
+                      extra="분기 4 · 반기 2 · 명절 포함 6 등"
+                    >
+                      <InputNumber
+                        disabled={!useRegular}
+                        min={1}
+                        max={24}
+                        className="tw-w-full"
+                        placeholder="예: 4"
+                      />
+                    </Form.Item>
+                  </div>
+                ),
+              },
+              {
+                key: 'performance',
+                label: (
+                  <span className="tw-inline-flex tw-items-center tw-gap-2">
+                    <span
+                      className={`tw-inline-block tw-h-2 tw-w-2 tw-rounded-full ${
+                        usePerf ? 'tw-bg-emerald-500' : 'tw-bg-slate-300'
+                      }`}
+                    />
+                    성과급
+                    <Tag color="orange" className="!tw-mr-0">수동</Tag>
+                  </span>
+                ),
+                children: (
+                  <div className="tw-flex tw-flex-col tw-gap-3">
+                    <div className="tw-flex tw-items-center tw-justify-between tw-rounded tw-bg-emerald-50/40 tw-border tw-border-emerald-100 tw-px-3 tw-py-2">
+                      <Typography.Text type="secondary" className="!tw-text-xs">
+                        평가/실적 후 [상여 발행] 화면에서 관리자가 수동 지급 트리거
+                      </Typography.Text>
+                      <Form.Item name="usePerformanceBonusYn" valuePropName="checked" className="!tw-mb-0">
+                        <Switch checkedChildren="사용" unCheckedChildren="끔" size="small" />
+                      </Form.Item>
+                    </div>
+                    <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-0 !tw-text-xs tw-leading-snug">
+                      비정기 지급. 정책에는 최대 한도만 저장하고 실제 금액은 발행 시점에 결정.
+                    </Typography.Paragraph>
+                    <Form.Item
+                      label="1회 최대 지급 비율 (%)"
+                      name="performanceBonusMaxRate"
+                      className="!tw-mb-2"
+                      rules={
+                        usePerf ? [{ required: true, message: '최대 지급 비율을 입력하세요.' }] : []
+                      }
+                      extra="기본급 기준 (예: 200% = 최대 2배)"
+                    >
+                      <InputNumber
+                        disabled={!usePerf}
+                        min={0}
+                        max={1000}
+                        step={10}
+                        className="tw-w-full"
+                        placeholder="예: 200"
+                      />
+                    </Form.Item>
+                    <Form.Item label="산정 기준 (메모)" name="performanceBonusBasis" className="!tw-mb-0">
+                      <Input.TextArea
+                        disabled={!usePerf}
+                        rows={2}
+                        maxLength={500}
+                        className="tw-text-sm"
+                        placeholder="예: 등급별 차등, EBIT 5% 풀 등"
+                      />
+                    </Form.Item>
+                  </div>
+                ),
+              },
+              {
+                key: 'holiday',
+                label: (
+                  <span className="tw-inline-flex tw-items-center tw-gap-2">
+                    <span
+                      className={`tw-inline-block tw-h-2 tw-w-2 tw-rounded-full ${
+                        useHoliday ? 'tw-bg-amber-500' : 'tw-bg-slate-300'
+                      }`}
+                    />
+                    명절상여
+                    <Tag color="orange" className="!tw-mr-0">수동</Tag>
+                  </span>
+                ),
+                children: (
+                  <div className="tw-flex tw-flex-col tw-gap-3">
+                    <div className="tw-flex tw-items-center tw-justify-between tw-rounded tw-bg-amber-50/40 tw-border tw-border-amber-100 tw-px-3 tw-py-2">
+                      <Typography.Text type="secondary" className="!tw-text-xs">
+                        설/추석 등 명절 도래 시 [상여 발행] 화면에서 수동 지급 트리거
+                      </Typography.Text>
+                      <Form.Item name="useHolidayBonusYn" valuePropName="checked" className="!tw-mb-0">
+                        <Switch checkedChildren="사용" unCheckedChildren="끔" size="small" />
+                      </Form.Item>
+                    </div>
+                    <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-0 !tw-text-xs tw-leading-snug">
+                      비율(%) 또는 정액(원) 중 선택. 연 2회 (설/추석) 발행 가정.
+                    </Typography.Paragraph>
+                    <Form.Item
+                      label="지급 방식"
+                      name="holidayBonusType"
+                      className="!tw-mb-2"
+                      rules={
+                        useHoliday ? [{ required: true, message: '지급 방식을 선택하세요.' }] : []
+                      }
+                    >
+                      <Select
+                        disabled={!useHoliday}
+                        className="tw-w-full"
+                        options={[
+                          { value: 'RATE', label: HOLIDAY_TYPE_KO.RATE },
+                          { value: 'AMOUNT', label: HOLIDAY_TYPE_KO.AMOUNT },
+                        ]}
+                      />
+                    </Form.Item>
+                    <Form.Item
+                      label={holidayType === 'AMOUNT' ? '정액 (원)' : '비율 (%)'}
+                      name="holidayBonusValue"
+                      className="!tw-mb-0"
+                      rules={useHoliday ? [{ required: true, message: '값을 입력하세요.' }] : []}
+                    >
+                      <InputNumber
+                        disabled={!useHoliday}
+                        min={0}
+                        step={holidayType === 'AMOUNT' ? 100000 : 10}
+                        className="tw-w-full"
+                        formatter={
+                          holidayType === 'AMOUNT'
+                            ? (v) => (v ? `${Number(v).toLocaleString('ko-KR')}` : '')
+                            : undefined
+                        }
+                        parser={
+                          holidayType === 'AMOUNT'
+                            ? (v) => Number((v ?? '').replace(/[^0-9]/g, '')) as 0
+                            : undefined
+                        }
+                        placeholder={holidayType === 'AMOUNT' ? '예: 1,000,000' : '예: 100'}
+                      />
+                    </Form.Item>
+                  </div>
+                ),
+              },
+            ]}
+          />
 
           <Divider className="!tw-my-4" />
 

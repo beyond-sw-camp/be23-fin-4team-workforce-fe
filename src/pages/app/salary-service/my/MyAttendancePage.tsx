@@ -18,10 +18,13 @@ import { normalizeSpringPage } from '@/features/salary-service/lib/normalizePage
 import type {
   CorrectionStateCode,
   DailyAttendance,
+  FlexibleTimeSlot,
   LeaveRequest,
+  MemberScheduleSelection,
   WorkSchedule,
 } from '@/features/salary-service/types';
 import { AttendanceStatusTag } from '@/features/salary-service/ui/AttendanceStatusTag';
+import { MyLeaveHistoryModal } from '@/features/salary-service/ui/MyLeaveHistoryModal';
 import type { ApiError } from '@/shared/api/types';
 
 function isApiError(e: unknown): e is ApiError {
@@ -93,25 +96,8 @@ export function MyAttendancePage() {
   const activeView: 'daily' | 'weekly' = routeSearch.view === 'weekly' ? 'weekly' : 'daily';
 
   // 주간/월간 탭 - 기간 기준일 (해당 일자가 속한 주의 요약을 조회)
-  // 휴가 이력 모달 (내 휴가 신청 결재 이력 - LeaveRequest 전체)
+  // 휴가 이력 모달 (내 휴가 신청 결재 이력 - LeaveRequest 전체) - 컴포넌트 추출, 대시보드와 공유
   const [leaveHistoryOpen, setLeaveHistoryOpen] = useState(false);
-  const leaveHistoryQ = useQuery({
-    queryKey: ['salary', 'leave-requests', 'my', 'history-modal'],
-    queryFn: () => attendanceApi.leaveRequest.listMyHistory({ page: 0, size: 200 }),
-    enabled: leaveHistoryOpen,
-  });
-  const leaveTypesQ = useQuery({
-    queryKey: ['attendance', 'company-leave-types'],
-    queryFn: () => attendanceApi.companyLeaveType.list(),
-    enabled: leaveHistoryOpen,
-  });
-  const leaveTypeNameById = useMemo(() => {
-    const m = new Map<string, string>();
-    (leaveTypesQ.data ?? []).forEach((t) => {
-      if (t.companyLeaveTypeId) m.set(t.companyLeaveTypeId, t.name ?? '-');
-    });
-    return m;
-  }, [leaveTypesQ.data]);
 
   const [weekAnchor, setWeekAnchor] = useState<Dayjs>(() => dayjs());
   const weekAnchorIso = weekAnchor.format('YYYY-MM-DD');
@@ -225,6 +211,58 @@ export function MyAttendancePage() {
     return activeSchedule.workType === 'FLEXIBLE' ? '시차 출퇴근제' : '고정 출퇴근제';
   }, [activeSchedule]);
 
+  // FLEXIBLE 회사면 본인 이번 달 슬롯 선택 + 슬롯 시간을 합성해서 화면에 표시
+  // FIXED 회사면 회사 WorkSchedule 자체에 startTime/endTime/break가 박힌다
+  const thisYearMonth = today.format('YYYY-MM');
+  const isFlexible = activeSchedule?.workType === 'FLEXIBLE';
+  const mySelectionQ = useQuery({
+    queryKey: ['salary', 'schedule-selection', 'my', 'current', thisYearMonth],
+    queryFn: () => attendanceApi.scheduleSelection.getMyCurrent(thisYearMonth),
+    enabled: !!isFlexible,
+    staleTime: 5 * 60_000,
+  });
+  const mySelection: MemberScheduleSelection | null = mySelectionQ.data ?? null;
+  const mySlotQ = useQuery({
+    queryKey: ['salary', 'flexible-slot', mySelection?.slotId ?? null],
+    queryFn: () => attendanceApi.flexibleSlot.getById(mySelection!.slotId!),
+    enabled: !!isFlexible && !!mySelection?.slotId,
+    staleTime: 5 * 60_000,
+  });
+  const mySlot: FlexibleTimeSlot | undefined = mySlotQ.data ?? undefined;
+
+  // HH:mm:ss 시간 차를 분으로
+  const minutesBetweenHms = (s?: string | null, e?: string | null): number => {
+    if (!s || !e) return 0;
+    const ds = dayjs(`2000-01-01T${s}`);
+    const de = dayjs(`2000-01-01T${e}`);
+    let m = de.diff(ds, 'minute');
+    if (m < 0) m += 24 * 60;
+    return Math.max(0, m);
+  };
+
+  // 화면 표시·통계용 유효 스케줄 - FLEXIBLE이면 (slot + selection) 우선, FIXED면 회사 WorkSchedule
+  const effectiveSchedule = useMemo(() => {
+    if (!activeSchedule) return undefined;
+    if (!isFlexible) {
+      const breakMin = activeSchedule.breakMinutes
+        ?? minutesBetweenHms(activeSchedule.breakStart, activeSchedule.breakEnd);
+      return {
+        startTime: activeSchedule.startTime ?? null,
+        endTime: activeSchedule.endTime ?? null,
+        workMinutes: activeSchedule.workMinutes ?? null,
+        breakMinutes: breakMin,
+      };
+    }
+    // FLEXIBLE - 본인 슬롯 + 본인 선택 점심 우선
+    const startTime = mySlot?.startTime ?? null;
+    const endTime = mySlot?.endTime ?? null;
+    const workMinutes = mySlot?.workMinutes ?? null;
+    const breakStart = mySelection?.breakStart ?? mySlot?.breakStart ?? null;
+    const breakEnd = mySelection?.breakEnd ?? mySlot?.breakEnd ?? null;
+    const breakMin = mySelection?.breakMinutes ?? minutesBetweenHms(breakStart, breakEnd);
+    return { startTime, endTime, workMinutes, breakMinutes: breakMin };
+  }, [activeSchedule, isFlexible, mySlot, mySelection]);
+
   // 월별 일자별 근태 목록 - 정정 결재 진입용
   // staleTime 60s: 같은 월 페이지 이동 / 다른 탭 갔다와도 60초 내는 캐시 HIT
   const monthlyQ = useQuery({
@@ -291,8 +329,8 @@ export function MyAttendancePage() {
   // 이번 달 통계 - 근무일 / 지각 / 결근 / 조퇴
   const monthStats = useMemo(() => {
     const rows = monthlyNormalized.content;
-    const startTime = activeSchedule?.startTime ?? null; // HH:mm:ss
-    const endTime = activeSchedule?.endTime ?? null;
+    const startTime = effectiveSchedule?.startTime ?? null; // HH:mm:ss
+    const endTime = effectiveSchedule?.endTime ?? null;
     const todayStr = todayIso;
     let workDays = 0;
     let tardy = 0;
@@ -319,7 +357,7 @@ export function MyAttendancePage() {
       }
     }
     return { workDays, tardy, absent, earlyLeave };
-  }, [monthlyNormalized, activeSchedule, todayIso]);
+  }, [monthlyNormalized, effectiveSchedule, todayIso]);
 
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ['salary', 'attendance', 'my'] });
@@ -418,7 +456,7 @@ export function MyAttendancePage() {
         key: 'workedMinutes',
         render: (_, row) => {
           // 배치 전이라도 즉시 표기 - 저장값이 있으면 그대로, 없으면 (체류시간 - 점심) 추정값
-          const breakMin = activeSchedule?.breakMinutes ?? 0;
+          const breakMin = effectiveSchedule?.breakMinutes ?? 0;
           const m = row.workedMinutes ?? estimateWorkedMinutes(row.firstClockIn, row.lastClockOut, breakMin);
           return formatMinutesWithHm(m);
         },
@@ -537,7 +575,7 @@ export function MyAttendancePage() {
         },
       },
     ],
-    [navigate, correctionDocId, overtimeDocId, overtimeByDate, holidayMap, activeSchedule],
+    [navigate, correctionDocId, overtimeDocId, overtimeByDate, holidayMap, effectiveSchedule],
   );
 
   const daily = dailyQ.data;
@@ -855,26 +893,36 @@ export function MyAttendancePage() {
           <DailyScheduleDonut
             firstClockIn={daily?.firstClockIn ?? null}
             lastClockOut={daily?.lastClockOut ?? null}
-            scheduleStartTime={activeSchedule?.startTime ?? null}
-            scheduleEndTime={activeSchedule?.endTime ?? null}
-            scheduledMinutes={activeSchedule?.workMinutes ?? null}
+            scheduleStartTime={effectiveSchedule?.startTime ?? null}
+            scheduleEndTime={effectiveSchedule?.endTime ?? null}
+            scheduledMinutes={effectiveSchedule?.workMinutes ?? null}
             workedMinutes={daily?.workedMinutes ?? null}
-            breakMinutes={activeSchedule?.breakMinutes ?? 0}
+            breakMinutes={effectiveSchedule?.breakMinutes ?? 0}
           />
         </div>
       </Card>
 
       {/* 우측 - 휴가 현황 카드 */}
 
-      {/* 휴가 현황 - 근태 현황과 같은 row (2/3 폭), 연차/사용/잔여/이력 4 메트릭 inline 표시 */}
+      {/* 휴가 현황 - 근태 현황과 같은 row (2/3 폭). 연차/사용/잔여 3 메트릭 + 우측 상단 [휴가 이력] 버튼 */}
       <Card
         className="tw-border-slate-200/80 tw-shadow-sm lg:tw-col-span-2"
         size="small"
         title="휴가 현황"
+        extra={
+          <Button
+            type="link"
+            size="small"
+            onClick={() => setLeaveHistoryOpen(true)}
+            className="!tw-p-0"
+          >
+            휴가 이력 전체 보기
+          </Button>
+        }
         loading={balanceQ.isLoading}
       >
-        <div className="tw-grid tw-grid-cols-4 tw-gap-3">
-          <div className="tw-flex tw-flex-col tw-items-center tw-gap-1">
+        <div className="tw-grid tw-grid-cols-3 tw-gap-3">
+          <div className="tw-flex tw-flex-col tw-items-center tw-gap-1 tw-rounded-lg tw-border tw-border-slate-100 tw-bg-slate-50/60 tw-py-3">
             <Typography.Text type="secondary" className="!tw-text-xs">
               연차휴가
             </Typography.Text>
@@ -882,7 +930,7 @@ export function MyAttendancePage() {
               {totalGranted.toLocaleString('ko-KR')}일
             </Typography.Title>
           </div>
-          <div className="tw-flex tw-flex-col tw-items-center tw-gap-1">
+          <div className="tw-flex tw-flex-col tw-items-center tw-gap-1 tw-rounded-lg tw-border tw-border-slate-100 tw-bg-slate-50/60 tw-py-3">
             <Typography.Text type="secondary" className="!tw-text-xs">
               사용한 휴가
             </Typography.Text>
@@ -890,26 +938,13 @@ export function MyAttendancePage() {
               {totalUsed.toLocaleString('ko-KR')}일
             </Typography.Title>
           </div>
-          <div className="tw-flex tw-flex-col tw-items-center tw-gap-1">
+          <div className="tw-flex tw-flex-col tw-items-center tw-gap-1 tw-rounded-lg tw-border tw-border-blue-100 tw-bg-blue-50/40 tw-py-3">
             <Typography.Text type="secondary" className="!tw-text-xs">
               잔여 휴가
             </Typography.Text>
             <Typography.Title level={3} className="!tw-m-0 !tw-text-[#2563EB]">
               {totalRemaining.toLocaleString('ko-KR')}일
             </Typography.Title>
-          </div>
-          <div className="tw-flex tw-flex-col tw-items-center tw-gap-1">
-            <Typography.Text type="secondary" className="!tw-text-xs">
-              휴가 이력
-            </Typography.Text>
-            <Button
-              type="primary"
-              ghost
-              onClick={() => setLeaveHistoryOpen(true)}
-              className="!tw-mt-1"
-            >
-              전체 보기
-            </Button>
           </div>
         </div>
       </Card>
@@ -965,98 +1000,11 @@ export function MyAttendancePage() {
       </>
       )}
 
-      {/* 휴가 이력 모달 - 내가 신청한 LeaveRequest 전체 (대기/승인/반려/취소) */}
-      <Modal
+      {/* 휴가 이력 모달 - 내가 신청한 LeaveRequest 전체 (대기/승인/반려/취소). 대시보드 위젯과 동일 컴포넌트 사용 */}
+      <MyLeaveHistoryModal
         open={leaveHistoryOpen}
-        onCancel={() => setLeaveHistoryOpen(false)}
-        title="내 휴가 신청 이력"
-        footer={null}
-        width={920}
-      >
-        <Table<LeaveRequest>
-          rowKey={(r) => r.leaveRequestId ?? `${r.startDate}-${r.requestedAt}`}
-          loading={leaveHistoryQ.isLoading || leaveTypesQ.isLoading}
-          dataSource={leaveHistoryQ.data?.content ?? []}
-          pagination={{ pageSize: 15 }}
-          size="small"
-          locale={{ emptyText: <Empty description="휴가 신청 이력이 없습니다" /> }}
-          columns={[
-            {
-              title: '신청일',
-              dataIndex: 'requestedAt',
-              key: 'requestedAt',
-              width: 130,
-              render: (v?: string | null) => (v ? dayjs(v).format('YYYY-MM-DD') : '-'),
-            },
-            {
-              title: '휴가 종류',
-              dataIndex: 'companyLeaveTypeId',
-              key: 'leaveType',
-              width: 120,
-              render: (id?: string) => leaveTypeNameById.get(id ?? '') ?? '-',
-            },
-            {
-              title: '기간 / 사용 날짜',
-              key: 'range',
-              render: (_: unknown, r: LeaveRequest) => {
-                const planned = Array.isArray(r.plannedDates) && r.plannedDates.length > 0
-                  ? [...r.plannedDates].sort()
-                  : null;
-                if (planned) {
-                  const text = planned
-                    .map((d) => {
-                      const dj = dayjs(d);
-                      return dj.isValid() ? dj.format('M/D') : d;
-                    })
-                    .join(', ');
-                  return <Tooltip title={planned.join(', ')}>{text}</Tooltip>;
-                }
-                if (!r.startDate) return '-';
-                if (!r.endDate || r.startDate === r.endDate) return r.startDate;
-                return `${r.startDate} ~ ${r.endDate}`;
-              },
-            },
-            {
-              title: '일수',
-              dataIndex: 'usageDays',
-              key: 'usageDays',
-              width: 70,
-              align: 'right',
-              render: (v?: number | null) => (v != null ? `${v}일` : '-'),
-            },
-            {
-              title: '상태',
-              dataIndex: 'approvalStatus',
-              key: 'status',
-              width: 90,
-              align: 'center',
-              render: (v?: string) => {
-                const code = v ?? '';
-                const colorMap: Record<string, string> = {
-                  PENDING: 'gold',
-                  APPROVED: 'green',
-                  REJECTED: 'red',
-                  CANCELLED: 'default',
-                };
-                const labelMap: Record<string, string> = {
-                  PENDING: '대기',
-                  APPROVED: '승인',
-                  REJECTED: '반려',
-                  CANCELLED: '취소',
-                };
-                return <Tag color={colorMap[code] ?? 'default'}>{labelMap[code] ?? code}</Tag>;
-              },
-            },
-            {
-              title: '사유',
-              dataIndex: 'reason',
-              key: 'reason',
-              ellipsis: true,
-              render: (v?: string | null) => v || '-',
-            },
-          ]}
-        />
-      </Modal>
+        onClose={() => setLeaveHistoryOpen(false)}
+      />
     </Space>
   );
 }

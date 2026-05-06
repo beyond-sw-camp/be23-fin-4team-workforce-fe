@@ -1725,9 +1725,18 @@ export function OvertimeUsageTab() {
       if (r.jobTitleName) titles.add(r.jobTitleName);
     });
     return {
-      orgs: Array.from(orgs).sort().map((v) => ({ value: v, label: v })),
-      grades: Array.from(grades).sort().map((v) => ({ value: v, label: v })),
-      titles: Array.from(titles).sort().map((v) => ({ value: v, label: v })),
+      orgs: [
+        { value: '__ALL__', label: '부서 전체' },
+        ...Array.from(orgs).sort().map((v) => ({ value: v, label: v })),
+      ],
+      grades: [
+        { value: '__ALL__', label: '직급 전체' },
+        ...Array.from(grades).sort().map((v) => ({ value: v, label: v })),
+      ],
+      titles: [
+        { value: '__ALL__', label: '직책 전체' },
+        ...Array.from(titles).sort().map((v) => ({ value: v, label: v })),
+      ],
     };
   }, [listQ.data]);
 
@@ -1956,26 +1965,20 @@ export function OvertimeUsageTab() {
             style={{ width: 180 }}
           />
           <Select
-            allowClear
-            placeholder="부서 전체"
-            value={orgFilter}
-            onChange={setOrgFilter}
+            value={orgFilter ?? '__ALL__'}
+            onChange={(v) => setOrgFilter(v === '__ALL__' ? undefined : v)}
             options={filterOptions.orgs}
             style={{ width: 160 }}
           />
           <Select
-            allowClear
-            placeholder="직급 전체"
-            value={jobGradeFilter}
-            onChange={setJobGradeFilter}
+            value={jobGradeFilter ?? '__ALL__'}
+            onChange={(v) => setJobGradeFilter(v === '__ALL__' ? undefined : v)}
             options={filterOptions.grades}
             style={{ width: 140 }}
           />
           <Select
-            allowClear
-            placeholder="직책 전체"
-            value={jobTitleFilter}
-            onChange={setJobTitleFilter}
+            value={jobTitleFilter ?? '__ALL__'}
+            onChange={(v) => setJobTitleFilter(v === '__ALL__' ? undefined : v)}
             options={filterOptions.titles}
             style={{ width: 140 }}
           />

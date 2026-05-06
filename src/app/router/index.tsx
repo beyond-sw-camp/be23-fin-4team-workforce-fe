@@ -52,7 +52,6 @@ import { MyApprovalRequestsPage } from '@/pages/app/MyApprovalRequestsPage';
 import { GenericPage } from '@/pages/app/GenericPage';
 import { AiDocumentsAdminPage } from '@/pages/app/AiDocumentsAdminPage';
 import { AdminAttendancePage } from '@/pages/app/salary-service/admin/AdminAttendancePage';
-import { AdminAttendanceCorrectionPage } from '@/pages/app/salary-service/admin/AdminAttendanceCorrectionPage';
 import { AdminBonusPolicyPage } from '@/pages/app/salary-service/admin/AdminBonusPolicyPage';
 import { AdminOvertimeUsagePage } from '@/pages/app/salary-service/admin/AdminOvertimeUsagePage';
 import { AdminCompanyHolidaysPage } from '@/pages/app/salary-service/admin/AdminCompanyHolidaysPage';
@@ -362,7 +361,14 @@ const approvalsSearchSchema = z.object({
     sideNav: z.string().optional(),
     docId: z.string().optional(),
     documentId: z.string().optional(),
-    prefill: z.string().optional(),
+    /** TanStack Router 등에서 불리언으로 병합되는 경우가 있어 문자열로 통일 */
+    prefill: z.preprocess(
+      (val) => {
+        if (typeof val === 'boolean') return val ? 'true' : 'false';
+        return val;
+      },
+      z.string().optional(),
+    ),
     box: z.string().optional(),
   /** 전자결재 알림 라우팅: 작성 허브에서 전체보기 모달 자동 오픈 키 */
   approvalModal: z.string().optional(),
@@ -657,17 +663,6 @@ const adminAttendanceDailyRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/attendance/company',
   component: AdminAttendancePage,
-  beforeLoad: ({ context }) => {
-    if (!context.auth.user?.isSystemAdmin) {
-      throw redirect({ to: '/app/attendance' });
-    }
-  },
-});
-
-const adminAttendanceCorrectionRoute = createRoute({
-  getParentRoute: () => appBaseRoute,
-  path: '/attendance/corrections',
-  component: AdminAttendanceCorrectionPage,
   beforeLoad: ({ context }) => {
     if (!context.auth.user?.isSystemAdmin) {
       throw redirect({ to: '/app/attendance' });
@@ -1104,7 +1099,6 @@ const routeTree = rootRoute.addChildren([
       myWorkTimeRoute,
       adminAttendanceMonthlyRoute,
       adminAttendanceDailyRoute,
-      adminAttendanceCorrectionRoute,
       adminCompanyHolidaysRoute,
       adminWorkSchedulesRoute,
       adminOvertimePoliciesRoute,
