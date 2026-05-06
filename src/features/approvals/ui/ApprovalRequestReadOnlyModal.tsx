@@ -903,13 +903,6 @@ export function ApprovalRequestReadOnlyModal({
                 dataSource={selectedRequestDetail.recipients ?? []}
                 columns={[
                   { title: '수신 부서명', dataIndex: 'recipientOrganizationName', key: 'name' },
-                  {
-                    title: '조직 ID',
-                    dataIndex: 'recipientOrganizationId',
-                    key: 'oid',
-                    width: 280,
-                    ellipsis: true,
-                  },
                 ]}
               />
             </Card>

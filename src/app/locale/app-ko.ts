@@ -31,7 +31,6 @@ export const APP_MENU_LABEL: Record<string, string> = {
   '/app/attendance/overtime': '초과근무 관리',
   '/app/attendance/work-time': '내 주간 근무시간',
   '/app/attendance/company': '근태 현황',
-  '/app/attendance/corrections': '출퇴근 정정 검토',
   '/app/attendance/holidays': '공휴일 관리',
   '/app/attendance/schedules': '근무스케줄 관리',
   '/app/attendance/overtime-policies': '연장근로 정책',

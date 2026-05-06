@@ -26,6 +26,7 @@ import { useMemberDisplayNames } from '@/features/members/hooks/useMemberDisplay
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import type { Salary } from '@/features/salary-service/types';
+import { MyLeaveHistoryModal } from '@/features/salary-service/ui/MyLeaveHistoryModal';
 import { notificationApi, type NotificationItem } from '@/features/notification/api/notificationApi';
 import {
   buildApprovalNotificationNavigate,
@@ -91,7 +92,7 @@ const TXT = {
   weeklyRemain: '\uC8FC\uAC04 \uBAA9\uD45C\uAE4C\uC9C0 \uC57D 25\uC2DC\uAC04 \uB0A8\uC558\uC2B5\uB2C8\uB2E4.',
   checkInAction: '\uCD9C\uADFC\uD558\uAE30',
   checkOutAction: '\uD1F4\uADFC\uD558\uAE30',
-  leaveManage: '\uD734\uAC00 \uAD00\uB9AC',
+  leaveManage: '\uD734\uAC00 \uC774\uB825',
   remain: '\uC794\uC5EC',
   used: '\uC0AC\uC6A9',
   yearly: '\uC5F0\uAC04',
@@ -809,7 +810,55 @@ export function DashboardCalendarBlock() {
 }
 
 export function DashboardAttendanceBlock() {
-  const pct = Math.round(((14 + 43 / 60) / 40) * 100);
+  const queryClient = useQueryClient();
+  const todayIso = dayjs().format('YYYY-MM-DD');
+  // \uC624\uB298 \uC77C\uBCC4 \uADFC\uD0DC - \uCD9C\uADFC/\uD1F4\uADFC \uC2DC\uAC01
+  const dailyQ = useQuery({
+    queryKey: ['dashboard', 'attendance', 'daily', todayIso],
+    queryFn: async () => {
+      try {
+        return await attendanceApi.attendance.getMyDaily(todayIso);
+      } catch {
+        return null;
+      }
+    },
+    staleTime: 30_000,
+  });
+  // \uC8FC\uAC04 \uADFC\uBB34\uC2DC\uAC04 \uC694\uC57D - \uB204\uC801 / \uD55C\uB3C4
+  const summaryQ = useQuery({
+    queryKey: ['dashboard', 'attendance', 'summary', todayIso],
+    queryFn: () => attendanceApi.attendance.getMyWorkTimeSummary(todayIso),
+    staleTime: 30_000,
+  });
+  const clockInM = useMutation({
+    mutationFn: () => attendanceApi.attendance.clockIn({}),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['dashboard', 'attendance'] });
+    },
+  });
+  const clockOutM = useMutation({
+    mutationFn: () => attendanceApi.attendance.clockOut({}),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['dashboard', 'attendance'] });
+    },
+  });
+
+  const fmtTime = (iso?: string | null) => (iso ? dayjs(iso).format('HH:mm') : '--:--');
+  const fmtMinutes = (m?: number | null) => {
+    if (m == null) return '0h 0m';
+    const h = Math.floor(m / 60);
+    const mm = m % 60;
+    return `${h}h ${mm}m`;
+  };
+  const totalMin = summaryQ.data?.totalWorkedMinutes ?? 0;
+  const limitMin = summaryQ.data?.totalLimitMinutes ?? 40 * 60;
+  const pct = limitMin > 0 ? Math.min(100, Math.round((totalMin / limitMin) * 100)) : 0;
+  const remainMin = Math.max(0, limitMin - totalMin);
+  const remainText = `\uC8FC\uAC04 \uBAA9\uD45C\uAE4C\uC9C0 \uC57D ${Math.round(remainMin / 60)}\uC2DC\uAC04 \uB0A8\uC558\uC2B5\uB2C8\uB2E4.`;
+
+  const hasClockedIn = !!dailyQ.data?.firstClockIn;
+  const hasClockedOut = !!dailyQ.data?.lastClockOut;
+
   return cardShell(
     DASHBOARD_WIDGET_LABELS.attendance,
     <Tag color="processing" className="!tw-m-0">{TXT.employed}</Tag>,
@@ -822,36 +871,78 @@ export function DashboardAttendanceBlock() {
         <ClockCircleOutlined className="tw-text-2xl tw-text-blue-600" />
       </div>
       <div className="tw-grid tw-grid-cols-2 tw-gap-3 tw-rounded-xl tw-bg-slate-50 tw-p-3">
-        <div><Typography.Text type="secondary" className="tw-text-xs">{TXT.checkIn}</Typography.Text><div className="tw-text-sm tw-font-semibold tw-text-slate-900">09:02</div></div>
-        <div><Typography.Text type="secondary" className="tw-text-xs">{TXT.checkOut}</Typography.Text><div className="tw-text-sm tw-font-semibold tw-text-slate-400">--:--</div></div>
+        <div>
+          <Typography.Text type="secondary" className="tw-text-xs">{TXT.checkIn}</Typography.Text>
+          <div className={`tw-text-sm tw-font-semibold ${hasClockedIn ? 'tw-text-slate-900' : 'tw-text-slate-400'}`}>
+            {fmtTime(dailyQ.data?.firstClockIn)}
+          </div>
+        </div>
+        <div>
+          <Typography.Text type="secondary" className="tw-text-xs">{TXT.checkOut}</Typography.Text>
+          <div className={`tw-text-sm tw-font-semibold ${hasClockedOut ? 'tw-text-slate-900' : 'tw-text-slate-400'}`}>
+            {fmtTime(dailyQ.data?.lastClockOut)}
+          </div>
+        </div>
       </div>
       <div>
         <div className="tw-mb-1 tw-flex tw-justify-between tw-text-xs tw-text-slate-600">
           <span>{TXT.weeklyTotal}</span>
-          <span className="tw-font-medium tw-text-slate-900">14h 43m / 40h</span>
+          <span className="tw-font-medium tw-text-slate-900">{fmtMinutes(totalMin)} / {fmtMinutes(limitMin)}</span>
         </div>
         <Progress percent={pct} showInfo={false} strokeColor="#2563EB" trailColor="#e2e8f0" />
-        <Typography.Text type="secondary" className="tw-mt-1 tw-block tw-text-[11px]">{TXT.weeklyRemain}</Typography.Text>
+        <Typography.Text type="secondary" className="tw-mt-1 tw-block tw-text-[11px]">{remainText}</Typography.Text>
       </div>
       <div className="tw-flex tw-flex-wrap tw-gap-2">
-        <Button type="primary">{TXT.checkInAction}</Button>
-        <Button>{TXT.checkOutAction}</Button>
+        <Button
+          type="primary"
+          loading={clockInM.isPending}
+          disabled={hasClockedIn}
+          onClick={() => clockInM.mutate()}
+        >
+          {TXT.checkInAction}
+        </Button>
+        <Button
+          loading={clockOutM.isPending}
+          disabled={!hasClockedIn || hasClockedOut}
+          onClick={() => clockOutM.mutate()}
+        >
+          {TXT.checkOutAction}
+        </Button>
       </div>
     </div>,
   );
 }
 
 export function DashboardLeaveBlock() {
-  const usedPct = 42.1;
+  // \uD68C\uC0AC \uD734\uAC00 \uC794\uC5EC (\uBCF8\uC778 \uBAA8\uB4E0 balance, ANNUAL \uB9CC \uD45C\uC2DC)
+  const balancesQ = useQuery({
+    queryKey: ['dashboard', 'leave', 'my-balance'],
+    queryFn: () => attendanceApi.memberBalance.listMine(),
+    staleTime: 60_000,
+  });
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const annual = (balancesQ.data ?? []).filter((b) => b.balanceType === 'ANNUAL');
+  const totalGranted = annual.reduce((s, b) => s + (b.totalGranted ?? 0), 0);
+  const totalUsed = annual.reduce((s, b) => s + (b.totalUsed ?? 0), 0);
+  const remaining = annual.reduce((s, b) => s + (b.remaining ?? 0), 0);
+  const usedPct = totalGranted > 0 ? Math.round((totalUsed / totalGranted) * 1000) / 10 : 0;
+  const fmtDays = (n: number) => `${Number.isInteger(n) ? n : n.toFixed(1)}\uC77C`;
+
   return cardShell(
     DASHBOARD_WIDGET_LABELS.leave,
-    <Link to="/app/leave" className="tw-text-xs tw-font-medium tw-text-blue-600">{TXT.leaveManage}</Link>,
+    <button
+      type="button"
+      onClick={() => setHistoryOpen(true)}
+      className="tw-cursor-pointer tw-border-0 tw-bg-transparent tw-p-0 tw-text-xs tw-font-medium tw-text-blue-600 hover:tw-underline"
+    >
+      {TXT.leaveManage}
+    </button>,
     <div className="tw-space-y-4">
       <div className="tw-grid tw-grid-cols-3 tw-gap-2 tw-text-center">
         {[
-          { label: TXT.remain, value: '5.5\uC77C', icon: <CheckCircleOutlined className="tw-text-blue-600" /> },
-          { label: TXT.used, value: '4\uC77C', icon: <CalendarOutlined className="tw-text-blue-500" /> },
-          { label: TXT.yearly, value: '9.5\uC77C', icon: <UserOutlined className="tw-text-slate-500" /> },
+          { label: TXT.remain, value: fmtDays(remaining), icon: <CheckCircleOutlined className="tw-text-blue-600" /> },
+          { label: TXT.used, value: fmtDays(totalUsed), icon: <CalendarOutlined className="tw-text-blue-500" /> },
+          { label: TXT.yearly, value: fmtDays(totalGranted), icon: <UserOutlined className="tw-text-slate-500" /> },
         ].map((x) => (
           <div key={x.label} className="tw-rounded-xl tw-border tw-border-slate-100 tw-bg-slate-50/80 tw-py-3">
             <div className="tw-mb-1 tw-flex tw-justify-center">{x.icon}</div>
@@ -867,6 +958,7 @@ export function DashboardLeaveBlock() {
         </div>
         <Progress percent={usedPct} strokeColor="#2563EB" trailColor="#e2e8f0" size="small" />
       </div>
+      <MyLeaveHistoryModal open={historyOpen} onClose={() => setHistoryOpen(false)} />
     </div>,
   );
 }

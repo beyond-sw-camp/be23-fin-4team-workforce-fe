@@ -342,12 +342,6 @@ function buildAppShellMenuItems(
                             title: APP_MENU_LABEL['/app/attendance/company'],
                         },
                         {
-                            key: '/app/attendance/corrections',
-                            icon: <ClockCircleOutlined className="tw-text-lg"/>,
-                            label: APP_MENU_LABEL['/app/attendance/corrections'],
-                            title: APP_MENU_LABEL['/app/attendance/corrections'],
-                        },
-                        {
                             key: '/app/attendance/schedules',
                             icon: <ScheduleOutlined className="tw-text-lg"/>,
                             label: APP_MENU_LABEL['/app/attendance/schedules'],
@@ -1663,7 +1657,6 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
     if (pathname === '/app/attendance/work-time') return ['/app/attendance'];
     if (pathname === '/app/attendance/company/monthly') return ['/app/attendance/company'];
     if (pathname === '/app/attendance/company') return ['/app/attendance/company'];
-    if (pathname === '/app/attendance/corrections') return ['/app/attendance/corrections'];
     if (pathname === '/app/attendance/holidays') return ['/app/attendance/holidays'];
     if (pathname === '/app/attendance/schedules') return ['/app/attendance/schedules'];
     if (pathname === '/app/attendance/overtime-policies') return ['/app/attendance/overtime-policies'];

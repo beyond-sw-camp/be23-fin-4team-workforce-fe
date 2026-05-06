@@ -96,6 +96,7 @@ import {
   ApprovalFormStampColumn,
 } from '@/features/approvals/ui/ApprovalFormPaperLayout';
 import { ApprovalAiTranscribeField } from '@/features/approvals/ui/ApprovalAiTranscribeField';
+import { PersonnelOrderItemsField } from '@/features/approvals/ui/PersonnelOrderItemsField';
 import { useAuth } from '@/features/auth/useAuth';
 import clsx from 'clsx';
 import {
@@ -1701,6 +1702,31 @@ export function ApprovalsPage() {
     queryFn: () => approvalApi.listActiveDocuments(),
   });
 
+  // dashboardProfile - AppShellLayout 헤더가 부서명 표시할 때 쓰는 동일 쿼리, 캐시 공유
+  const { data: myDashboardProfile } = useQuery({
+    queryKey: ['member', 'dashboard-profile', authMemberId],
+    queryFn: () => memberApi.dashboardProfile(),
+    enabled: Boolean(authMemberId),
+    retry: false,
+    staleTime: 60_000,
+  });
+
+  // 인사발령품의서는 인사팀 소속 직원에게만 노출 (관리자 여부 무관, 부서명만으로 필터)
+  // 우선순위: dashboardProfile -> drafterProfile(detail) -> JWT user.departmentName
+  const myOrgName =
+    (myDashboardProfile as { organizationName?: string } | undefined)?.organizationName?.trim() ||
+    (drafterProfile as { organizationName?: string } | undefined)?.organizationName?.trim() ||
+    user?.departmentName?.trim() ||
+    '';
+  const isHrTeamMember = myOrgName === '인사팀';
+  const pickerDocuments = useMemo(
+    () =>
+      isHrTeamMember
+        ? activeDocuments
+        : activeDocuments.filter((d) => d.documentName !== '인사발령품의서'),
+    [activeDocuments, isHrTeamMember],
+  );
+
   // 연차신청서 vacationType 필드의 동적 옵션, source="companyLeaveType"
   const { data: companyLeaveTypes = [] } = useQuery({
     queryKey: ['salary', 'company-leave-types'],
@@ -1845,7 +1871,8 @@ export function ApprovalsPage() {
     return opts;
   }, [flexibleSlotQueries]);
 
-  const composeHubVisibleDocuments = activeDocuments;
+  // 결재 홈 빠른 양식도 동일 필터 적용
+  const composeHubVisibleDocuments = pickerDocuments;
   const quickHomeFormOptions = useMemo(
     () =>
       composeHubVisibleDocuments.map((doc) => ({
@@ -5190,7 +5217,7 @@ export function ApprovalsPage() {
             setComposeFormSelectModalOpen(false);
             setComposeFormSelectInitialId(undefined);
           }}
-          documents={activeDocuments}
+          documents={pickerDocuments}
           loading={docsLoading}
           initialDocumentId={composeFormSelectInitialId}
           onConfirm={handleApprovalFormSelectConfirm}
@@ -5485,7 +5512,7 @@ export function ApprovalsPage() {
                   >
               {composePhaseView === 'select' ? (
                       <DocumentFormPicker
-                        documents={activeDocuments}
+                        documents={pickerDocuments}
                         loading={docsLoading}
                   onAfterPick={(documentId, doc) => {
                     if (isComposeHubEntry) {
@@ -5694,6 +5721,14 @@ export function ApprovalsPage() {
                           const selectRules = fieldLocked
                             ? [{ required: true as const, message: `${field.label} 선택` }]
                             : [];
+                                if (field.type === 'personnel_order_items') {
+                                  // 인사발령품의서 전용 - 직원/부서/직급/직책 선택 패널, contentJsonText 에는 사람 읽기용 요약만 들어감
+                                  return (
+                                    <ApprovalFormPaperFieldRow key={field.name} label={field.label} required={fieldLocked}>
+                                      <PersonnelOrderItemsField />
+                                    </ApprovalFormPaperFieldRow>
+                                  );
+                                }
                                 if (field.type === 'textarea') {
                                   return (
                               <ApprovalFormPaperFieldRow key={field.name} label={field.label} required={fieldLocked}>
