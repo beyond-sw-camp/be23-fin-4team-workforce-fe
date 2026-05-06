@@ -1,10 +1,11 @@
 import { EditOutlined, ReloadOutlined, ScheduleOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Button, Form, Input, InputNumber, Modal, Select, Space, Switch, Table, Tag, TimePicker, Typography } from 'antd';
+import { Alert, App, Button, Form, Input, InputNumber, Select, Space, Switch, Table, Tag, TimePicker, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { useState } from 'react';
 import { companyBatchScheduleApi, type CompanyBatchSchedule } from '@/features/salary-service/api/companyBatchScheduleApi';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 
 type Frequency = 'hourly' | 'daily' | 'weekly' | 'monthly' | 'yearly';
 const WEEKDAYS = [
@@ -280,16 +281,16 @@ function Inner() {
           pagination={false}
         />
 
-        <Modal
+        <AppDoubleActionModal
           title="실행 시간 변경"
           open={!!editing}
-          onCancel={() => setEditing(null)}
-          onOk={onSubmit}
+          onClose={() => setEditing(null)}
+          onConfirm={onSubmit}
           confirmLoading={updateM.isPending}
-          okText="변경"
+          confirmText="변경"
           cancelText="취소"
         >
-          <Form form={form} layout="vertical">
+          <Form form={form} layout="vertical" className="tw-px-5 tw-py-4">
             <Form.Item label="실행 주기" name="frequency" rules={[{ required: true }]} initialValue="daily">
               <Select
                 onChange={(v) => {
@@ -365,7 +366,7 @@ function Inner() {
               </Form.Item>
             )}
           </Form>
-        </Modal>
+        </AppDoubleActionModal>
       </div>
     </div>
   );

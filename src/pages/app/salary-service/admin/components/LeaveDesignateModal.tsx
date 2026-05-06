@@ -1,7 +1,7 @@
 // 관리자 강제 지정 모달 노무수령 거부 절차
 // 캘린더 다중 선택 + 사유 입력 LeaveRequest 자동 생성 잔여 즉시 차감
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, DatePicker, Input, Modal, Space, Tag, Typography } from 'antd';
+import { Alert, DatePicker, Input, Space, Tag, Typography } from 'antd';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import dayjs, { type Dayjs } from 'dayjs';
 import type { LeavePromotionNoResponse } from '@/features/salary-service/types';
@@ -48,23 +48,21 @@ export function LeaveDesignateModal({
   };
 
   return (
-    <Modal
+    <AppDoubleActionModal
       open={target !== null}
       title="연차 강제 지정 (노무수령 거부)"
-      okText="강제 지정"
-      okType="danger"
+      confirmText="강제 지정"
       cancelText="취소"
-      okButtonProps={{
-        disabled: picked.length === 0 || overLimit || reasonInvalid,
-      }}
+      confirmDanger
+      confirmDisabled={picked.length === 0 || overLimit || reasonInvalid}
       confirmLoading={confirmLoading}
-      onCancel={onCancel}
-      onOk={submit}
+      onClose={onCancel}
+      onConfirm={submit}
       destroyOnHidden
       width={560}
     >
       {target ? (
-        <Space direction="vertical" className="tw-w-full" size="middle">
+        <Space direction="vertical" className="tw-w-full tw-px-5 tw-py-4" size="middle">
           <Alert
             type="warning"
             showIcon
@@ -137,6 +135,6 @@ export function LeaveDesignateModal({
           </div>
         </Space>
       ) : null}
-    </Modal>
+    </AppDoubleActionModal>
   );
 }

@@ -30,7 +30,7 @@ export type CreateMeetingPayload = {
   parentRecordId?: string;
   memberId: string;
   managerId: string;
-  repeatCycle: RepeatCycle;
+  repeatCycle?: 'ONE_TIME';
   scheduledAt: string;
   agenda?: string;
 };
@@ -38,7 +38,6 @@ export type CreateMeetingPayload = {
 export type UpdateMeetingPayload = {
   scheduledAt?: string;
   agenda?: string;
-  repeatCycle?: RepeatCycle;
 };
 
 export type CompleteMeetingPayload = {

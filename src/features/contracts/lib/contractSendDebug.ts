@@ -9,7 +9,7 @@ export function isContractSendDebugEnabled(): boolean {
  */
 export function logContractSendDebug(label: string, payload: Record<string, unknown>): void {
   if (!isContractSendDebugEnabled()) return;
-  // eslint-disable-next-line no-console -- 발송 디버그 전용(명시적 env)
+   
   console.info(`[Contract-Send][DEBUG] ${label}`, payload);
 }
 
@@ -22,6 +22,6 @@ type MessageInfo = { info: (content: string, duration?: number) => void };
 export function notifyContractSendDebug(messageApi: MessageInfo, text: string, durationSec = 3): void {
   if (!isContractSendDebugEnabled()) return;
   messageApi.info(text, durationSec);
-  // eslint-disable-next-line no-console -- 발송 디버그 전용(명시적 env)
+   
   console.info(`[Contract-Send][DEBUG] ${text}`);
 }

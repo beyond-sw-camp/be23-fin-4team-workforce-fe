@@ -391,6 +391,26 @@ function normalizeMemberDetailResponse(raw: unknown): MemberDetail {
   const jobGradeId = asTextMemberField(r.jobGradeId ?? r.job_grade_id);
   const jobTitleId = asTextMemberField(r.jobTitleId ?? r.job_title_id);
   const roleId = asTextMemberField(r.roleId ?? r.role_id);
+  const profileUrl = pickDetailString(r, ['profileUrl', 'profile_url', 'profileImageUrl', 'profile_image_url']);
+  const extensionNumber = pickDetailScalar(r, ['extensionNumber', 'extension_number', 'extensionNo', 'extension_no']);
+  const telNumber = pickDetailScalar(r, ['telNumber', 'tel_number', 'telephoneNumber', 'telephone_number', 'officePhone', 'office_phone']);
+  const phoneNumber = pickDetailScalar(r, ['phoneNumber', 'phone_number', 'mobilePhone', 'mobile_phone', 'mobileNumber', 'mobile_number']);
+  const address = pickDetailString(r, ['address', 'addr']);
+  const detailAddress = pickDetailString(r, ['detailAddress', 'detail_address', 'addressDetail', 'address_detail']);
+  const emergencyContact = pickDetailScalar(r, [
+    'emergencyContact',
+    'emergency_contact',
+    'emergencyPhone',
+    'emergency_phone',
+    'emergencyNumber',
+    'emergency_number',
+  ]);
+  const bank = pickDetailString(r, ['bank', 'bankName', 'bank_name']);
+  const bankAccount = pickDetailScalar(r, ['bankAccount', 'bank_account', 'accountNumber', 'account_number']);
+  const organizationName = pickDetailString(r, ['organizationName', 'organization_name', 'departmentName', 'department_name']);
+  const jobGradeName = pickDetailString(r, ['jobGradeName', 'job_grade_name', 'gradeName', 'grade_name']);
+  const jobTitleName = pickDetailString(r, ['jobTitleName', 'job_title_name', 'titleName', 'title_name']);
+  const roleName = pickDetailString(r, ['roleName', 'role_name']);
   const memberIdResolved =
     asTextMemberField(r.memberId ?? r.member_id) || asTextMemberField(base.memberId as unknown);
   const sabunResolved =
@@ -412,10 +432,23 @@ function normalizeMemberDetailResponse(raw: unknown): MemberDetail {
     phonePublicYn: phone !== undefined ? phone : normalizeYnFlag(base.phonePublicYn as unknown) ?? base.phonePublicYn,
     addressPublicYn: addr !== undefined ? addr : normalizeYnFlag(base.addressPublicYn as unknown) ?? base.addressPublicYn,
     ...(esgScore !== undefined ? { esgScore } : {}),
+    ...(profileUrl ? { profileUrl } : {}),
+    ...(extensionNumber ? { extensionNumber } : {}),
+    ...(telNumber ? { telNumber } : {}),
+    ...(phoneNumber ? { phoneNumber } : {}),
+    ...(address ? { address } : {}),
+    ...(detailAddress ? { detailAddress } : {}),
+    ...(emergencyContact ? { emergencyContact } : {}),
+    ...(bank ? { bank } : {}),
+    ...(bankAccount ? { bankAccount } : {}),
     ...(organizationId ? { organizationId } : {}),
     ...(jobGradeId ? { jobGradeId } : {}),
     ...(jobTitleId ? { jobTitleId } : {}),
     ...(roleId ? { roleId } : {}),
+    ...(organizationName ? { organizationName } : {}),
+    ...(jobGradeName ? { jobGradeName } : {}),
+    ...(jobTitleName ? { jobTitleName } : {}),
+    ...(roleName ? { roleName } : {}),
   };
 }
 

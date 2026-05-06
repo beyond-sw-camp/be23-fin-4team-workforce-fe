@@ -1,13 +1,48 @@
-import { DeleteOutlined, EditOutlined, HolderOutlined, PlusOutlined, RightOutlined, SettingOutlined } from '@ant-design/icons';
-import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
-import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import {
+  DeleteOutlined,
+  EditOutlined,
+  HolderOutlined,
+  PlusOutlined,
+  RightOutlined,
+  SettingOutlined,
+} from '@ant-design/icons';
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Card, Form, Input, Popover, Radio, Space, Tabs, Tooltip, Tree, Typography } from 'antd';
+import {
+  App,
+  Button,
+  Card,
+  Form,
+  Input,
+  Popover,
+  Radio,
+  Space,
+  Tabs,
+  Tooltip,
+  Tree,
+  Typography,
+} from 'antd';
 import type { DataNode } from 'antd/es/tree';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { useMemo, useState, type ComponentProps, type CSSProperties, type Key } from 'react';
-import { type OrganizationTreeNode, organizationApi } from '@/features/organization/api/organizationApi';
+import {
+  type OrganizationTreeNode,
+  organizationApi,
+} from '@/features/organization/api/organizationApi';
 import { OrganizationRolesSection } from '@/features/organization/ui/OrganizationRolesSection';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import { AdminOrgRestructurePage } from '@/pages/app/organization/AdminOrgRestructurePage';
@@ -33,7 +68,13 @@ type GradeDraftRow = {
   isNew?: boolean;
 };
 
-const ORG_TAB_KEYS: readonly OrgSettingsTab[] = ['structure', 'grades', 'titles', 'roles', 'restructure'] as const;
+const ORG_TAB_KEYS: readonly OrgSettingsTab[] = [
+  'structure',
+  'grades',
+  'titles',
+  'roles',
+  'restructure',
+] as const;
 const ORG_VIEW_STORAGE_LAYOUT = 'wf-org-chart-layout-v2';
 const ORG_VIEW_LEGACY_LAYOUT = 'wf-org-chart-layout';
 
@@ -41,7 +82,8 @@ function readStoredOrgViewSettings(): OrgStructureViewSettings {
   let layoutDirection: OrgStructureLayoutDirection = 'horizontal';
   try {
     const storedLayout = sessionStorage.getItem(ORG_VIEW_STORAGE_LAYOUT);
-    if (storedLayout === 'horizontal' || storedLayout === 'vertical') layoutDirection = storedLayout;
+    if (storedLayout === 'horizontal' || storedLayout === 'vertical')
+      layoutDirection = storedLayout;
   } catch {
     /* ignore */
   }
@@ -57,7 +99,12 @@ function parseOrgTab(raw: unknown): OrgSettingsTab {
 
 function pickOrgId(node: OrganizationTreeNode): string {
   const raw =
-    node.id ?? node.organizationId ?? node.organization_id ?? node.uuid ?? node.organizationUuid ?? node.organization_uuid;
+    node.id ??
+    node.organizationId ??
+    node.organization_id ??
+    node.uuid ??
+    node.organizationUuid ??
+    node.organization_uuid;
   if (typeof raw === 'string' && raw) return raw;
   if (typeof raw === 'number') return String(raw);
   return '';
@@ -77,7 +124,9 @@ function toTreeNodes(nodes: OrganizationTreeNode[]): DataNode[] {
   if (!nodes.length) return [];
   const sortNodes = (items: OrganizationTreeNode[]) =>
     [...items].sort((a, b) => (pickDisplayOrder(a) ?? 999_999) - (pickDisplayOrder(b) ?? 999_999));
-  const nested = nodes.some((n) => Array.isArray(n.children) && (n.children as unknown[]).length > 0);
+  const nested = nodes.some(
+    (n) => Array.isArray(n.children) && (n.children as unknown[]).length > 0,
+  );
   if (nested) {
     const mapOne = (n: OrganizationTreeNode, index: number): DataNode => {
       const id = pickOrgId(n);
@@ -203,20 +252,30 @@ function draftToTreeData(nodes: OrgDraftNode[]): DataNode[] {
   }));
 }
 
-function addDraftNode(nodes: OrgDraftNode[], parentId: string | null, node: OrgDraftNode): OrgDraftNode[] {
+function addDraftNode(
+  nodes: OrgDraftNode[],
+  parentId: string | null,
+  node: OrgDraftNode,
+): OrgDraftNode[] {
   if (parentId === null) return [...nodes, node];
   return nodes.map((item) => {
     if (item.key === parentId) {
       return { ...item, children: [...(item.children ?? []), node] };
     }
-    return { ...item, children: item.children ? addDraftNode(item.children, parentId, node) : item.children };
+    return {
+      ...item,
+      children: item.children ? addDraftNode(item.children, parentId, node) : item.children,
+    };
   });
 }
 
 function updateDraftName(nodes: OrgDraftNode[], id: string, name: string): OrgDraftNode[] {
   return nodes.map((node) => {
     if (node.key === id) return { ...node, title: name };
-    return { ...node, children: node.children ? updateDraftName(node.children, id, name) : node.children };
+    return {
+      ...node,
+      children: node.children ? updateDraftName(node.children, id, name) : node.children,
+    };
   });
 }
 
@@ -227,7 +286,10 @@ function collectExistingIds(nodes: OrgDraftNode[]): string[] {
   ]);
 }
 
-function removeDraftNode(nodes: OrgDraftNode[], id: string): { next: OrgDraftNode[]; removedExistingIds: string[] } {
+function removeDraftNode(
+  nodes: OrgDraftNode[],
+  id: string,
+): { next: OrgDraftNode[]; removedExistingIds: string[] } {
   const removedExistingIds: string[] = [];
   const next = nodes
     .map((node) => {
@@ -245,7 +307,10 @@ function removeDraftNode(nodes: OrgDraftNode[], id: string): { next: OrgDraftNod
 }
 
 function flattenDraftNodes(nodes: OrgDraftNode[]): OrgDraftNode[] {
-  return nodes.flatMap((node) => [node, ...(node.children ? flattenDraftNodes(node.children) : [])]);
+  return nodes.flatMap((node) => [
+    node,
+    ...(node.children ? flattenDraftNodes(node.children) : []),
+  ]);
 }
 
 function collectNewDraftNodes(nodes: OrgDraftNode[]): OrgDraftNode[] {
@@ -292,7 +357,12 @@ function reorderDraftSiblings(
     if (node.key === parentId) {
       return { ...node, children: reorder(node.children ?? []) };
     }
-    return { ...node, children: node.children ? reorderDraftSiblings(node.children, parentId, dragId, dropId, placeAfter) : node.children };
+    return {
+      ...node,
+      children: node.children
+        ? reorderDraftSiblings(node.children, parentId, dragId, dropId, placeAfter)
+        : node.children,
+    };
   });
 }
 
@@ -315,16 +385,22 @@ function OrgStructureViewSettingsPopover({
   const content = (
     <div className="tw-w-[min(92vw,300px)] tw-space-y-5 tw-py-0.5">
       <section>
-        <div className="tw-mb-2 tw-text-xs tw-font-semibold tw-tracking-wide tw-text-slate-500">정렬 방식</div>
+        <div className="tw-mb-2 tw-text-xs tw-font-semibold tw-tracking-wide tw-text-slate-500">
+          정렬 방식
+        </div>
         <Radio.Group
           value={value.layoutDirection}
-          onChange={(e) => onChange({ layoutDirection: e.target.value as OrgStructureLayoutDirection })}
+          onChange={(e) =>
+            onChange({ layoutDirection: e.target.value as OrgStructureLayoutDirection })
+          }
           className="tw-flex tw-w-full tw-flex-col tw-gap-2 [&_.ant-radio-wrapper]:tw-mr-0 [&_.ant-radio-wrapper]:tw-w-full [&_.ant-radio-wrapper]:tw-rounded-lg [&_.ant-radio-wrapper]:tw-border [&_.ant-radio-wrapper]:tw-border-slate-200 [&_.ant-radio-wrapper]:tw-px-3 [&_.ant-radio-wrapper]:tw-py-2 [&_.ant-radio-wrapper]:tw-transition-colors [&_.ant-radio-wrapper-checked]:tw-border-[#2563eb] [&_.ant-radio-wrapper-checked]:tw-bg-[#eff6ff]"
         >
           <Radio value="horizontal" className="!tw-items-start">
             <span className="tw-flex tw-flex-col tw-gap-0.5 tw-text-left">
               <span className="tw-text-sm tw-font-semibold tw-text-slate-900">옆으로</span>
-              <span className="tw-text-xs tw-font-normal tw-text-slate-500">접는 조직 구조 목록</span>
+              <span className="tw-text-xs tw-font-normal tw-text-slate-500">
+                접는 조직 구조 목록
+              </span>
             </span>
           </Radio>
           <Radio value="vertical" className="!tw-items-start">
@@ -339,7 +415,12 @@ function OrgStructureViewSettingsPopover({
   );
 
   return (
-    <Popover content={content} trigger="click" placement="bottomRight" overlayClassName="[&_.ant-popover-inner]:tw-p-4">
+    <Popover
+      content={content}
+      trigger="click"
+      placement="bottomRight"
+      overlayClassName="[&_.ant-popover-inner]:tw-p-4"
+    >
       <Button
         type="text"
         className="!tw-inline-flex !tw-h-8 !tw-items-center !tw-justify-center !tw-gap-1.5 !tw-rounded-md !tw-border !tw-border-slate-200 !tw-bg-white !tw-px-2.5 !tw-text-slate-700 hover:!tw-border-slate-300 hover:!tw-bg-slate-50 hover:!tw-text-slate-900"
@@ -358,13 +439,15 @@ function OrgStructureVerticalNode({ node }: { node: DataNode }) {
   return (
     <>
       <div className="org-structure-card tw-min-w-[180px] tw-rounded-xl tw-border tw-border-slate-200 tw-bg-white tw-px-4 tw-py-3 tw-text-center tw-shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
-        <Typography.Text className="tw-text-sm tw-font-semibold tw-text-slate-800">{title}</Typography.Text>
+        <Typography.Text className="tw-text-sm tw-font-semibold tw-text-slate-800">
+          {title}
+        </Typography.Text>
       </div>
       {children.length > 0 ? (
         <ul>
           {children.map((child) => (
             <li key={String(child.key)}>
-                <OrgStructureVerticalNode node={child} />
+              <OrgStructureVerticalNode node={child} />
             </li>
           ))}
         </ul>
@@ -390,7 +473,9 @@ function SortableSettingRow({
   editLabel: string;
   deleteLabel: string;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: row.key });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: row.key,
+  });
   const style: CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -461,17 +546,27 @@ export function OrganizationPage() {
   const [draftTitles, setDraftTitles] = useState<GradeDraftRow[]>([]);
   const [draftDeletedTitleIds, setDraftDeletedTitleIds] = useState<string[]>([]);
   const [draftTitleSeq, setDraftTitleSeq] = useState(0);
-  const [orgViewSettings, setOrgViewSettings] = useState<OrgStructureViewSettings>(() => readStoredOrgViewSettings());
-  const [orgModal, setOrgModal] = useState<null | { mode: 'create'; parentId: string | null } | { mode: 'edit'; id: string; name: string }>(
-    null,
+  const [orgViewSettings, setOrgViewSettings] = useState<OrgStructureViewSettings>(() =>
+    readStoredOrgViewSettings(),
   );
-  const [gradeModal, setGradeModal] = useState<null | { mode: 'create' } | { mode: 'edit'; key: string; name: string }>(null);
-  const [titleModal, setTitleModal] = useState<null | { mode: 'create' } | { mode: 'edit'; key: string; name: string }>(null);
+  const [orgModal, setOrgModal] = useState<
+    null | { mode: 'create'; parentId: string | null } | { mode: 'edit'; id: string; name: string }
+  >(null);
+  const [gradeModal, setGradeModal] = useState<
+    null | { mode: 'create' } | { mode: 'edit'; key: string; name: string }
+  >(null);
+  const [titleModal, setTitleModal] = useState<
+    null | { mode: 'create' } | { mode: 'edit'; key: string; name: string }
+  >(null);
   const [orgForm] = Form.useForm<{ name: string }>();
   const [gradeForm] = Form.useForm<{ name: string; displayOrder: number }>();
   const [titleForm] = Form.useForm<{ name: string; displayOrder: number }>();
 
-  const { data: orgList = [], isFetching: orgLoading, refetch: refetchOrgList } = useQuery({
+  const {
+    data: orgList = [],
+    isFetching: orgLoading,
+    refetch: refetchOrgList,
+  } = useQuery({
     queryKey: ['organization', 'list'],
     queryFn: () => organizationApi.list(),
     staleTime: 0,
@@ -520,8 +615,12 @@ export function OrganizationPage() {
     () => (isTitleEditing ? draftTitles : toTitleDraftRows(titles)),
     [draftTitles, titles, isTitleEditing],
   );
-  const gradeSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
-  const titleSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const gradeSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+  );
+  const titleSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+  );
 
   const persistOrgViewSettings = (next: OrgStructureViewSettings) => {
     setOrgViewSettings(next);
@@ -545,7 +644,8 @@ export function OrganizationPage() {
   });
 
   const updateOrgM = useMutation({
-    mutationFn: ({ id, name }: { id: string; name: string }) => organizationApi.update(id, { name }),
+    mutationFn: ({ id, name }: { id: string; name: string }) =>
+      organizationApi.update(id, { name }),
     onSuccess: async () => {
       message.success('조직명이 수정되었습니다.');
       setOrgModal(null);
@@ -577,16 +677,19 @@ export function OrganizationPage() {
 
       for (const node of collectNewDraftNodes(draftOrgTree)) {
         const parentId = node.parentId?.startsWith('draft-org-')
-          ? createdIdByTempId.get(node.parentId) ?? null
+          ? (createdIdByTempId.get(node.parentId) ?? null)
           : node.parentId;
-        const created = (await organizationApi.create({ name: node.title.trim(), parentId })) as unknown;
+        const created = (await organizationApi.create({
+          name: node.title.trim(),
+          parentId,
+        })) as unknown;
         const rawId =
           typeof created === 'string' || typeof created === 'number'
             ? created
             : created && typeof created === 'object'
-              ? (created as Record<string, unknown>).id ??
+              ? ((created as Record<string, unknown>).id ??
                 (created as Record<string, unknown>).organizationId ??
-                (created as Record<string, unknown>).organization_id
+                (created as Record<string, unknown>).organization_id)
               : null;
         if (typeof rawId === 'string' && rawId) createdIdByTempId.set(node.key, rawId);
         if (typeof rawId === 'number') createdIdByTempId.set(node.key, String(rawId));
@@ -636,9 +739,9 @@ export function OrganizationPage() {
           typeof created === 'string' || typeof created === 'number'
             ? created
             : created && typeof created === 'object'
-              ? (created as Record<string, unknown>).id ??
+              ? ((created as Record<string, unknown>).id ??
                 (created as Record<string, unknown>).jobGradeId ??
-                (created as Record<string, unknown>).job_grade_id
+                (created as Record<string, unknown>).job_grade_id)
               : null;
         if (typeof rawId === 'string' && rawId) createdIdByTempKey.set(row.key, rawId);
         if (typeof rawId === 'number') createdIdByTempKey.set(row.key, String(rawId));
@@ -648,7 +751,10 @@ export function OrganizationPage() {
         if (!row.id || row.isNew || deletedIds.includes(row.id)) continue;
         const original = originalGradeById.get(row.id);
         if (!original || original.name !== row.name || original.displayOrder !== row.displayOrder) {
-          await organizationApi.updateJobGrade(row.id, { name: row.name.trim(), displayOrder: row.displayOrder });
+          await organizationApi.updateJobGrade(row.id, {
+            name: row.name.trim(),
+            displayOrder: row.displayOrder,
+          });
         }
       }
 
@@ -691,9 +797,9 @@ export function OrganizationPage() {
           typeof created === 'string' || typeof created === 'number'
             ? created
             : created && typeof created === 'object'
-              ? (created as Record<string, unknown>).id ??
+              ? ((created as Record<string, unknown>).id ??
                 (created as Record<string, unknown>).jobTitleId ??
-                (created as Record<string, unknown>).job_title_id
+                (created as Record<string, unknown>).job_title_id)
               : null;
         if (typeof rawId === 'string' && rawId) createdIdByTempKey.set(row.key, rawId);
         if (typeof rawId === 'number') createdIdByTempKey.set(row.key, String(rawId));
@@ -703,7 +809,10 @@ export function OrganizationPage() {
         if (!row.id || row.isNew || deletedIds.includes(row.id)) continue;
         const original = originalTitleById.get(row.id);
         if (!original || original.name !== row.name || original.displayOrder !== row.displayOrder) {
-          await organizationApi.updateJobTitle(row.id, { name: row.name.trim(), displayOrder: row.displayOrder });
+          await organizationApi.updateJobTitle(row.id, {
+            name: row.name.trim(),
+            displayOrder: row.displayOrder,
+          });
         }
       }
 
@@ -751,7 +860,9 @@ export function OrganizationPage() {
     setOrgModal({ mode: 'create', parentId });
   };
 
-  const handleOrgDrop = (info: Parameters<NonNullable<ComponentProps<typeof Tree>['onDrop']>>[0]) => {
+  const handleOrgDrop = (
+    info: Parameters<NonNullable<ComponentProps<typeof Tree>['onDrop']>>[0],
+  ) => {
     if (!isOrgEditing) return;
     const dragId = String(info.dragNode.key);
     const dropId = String(info.node.key);
@@ -764,7 +875,9 @@ export function OrganizationPage() {
     const dropPos = String(info.node.pos).split('-');
     const dropPosition = info.dropPosition - Number(dropPos[dropPos.length - 1]);
     if (dropPosition === 0) {
-      message.info('조직의 상하 순서만 변경할 수 있습니다. 다른 조직 하위로 이동은 지원하지 않습니다.');
+      message.info(
+        '조직의 상하 순서만 변경할 수 있습니다. 다른 조직 하위로 이동은 지원하지 않습니다.',
+      );
       return;
     }
     if (dragNode.parentId !== dropNode.parentId) {
@@ -772,7 +885,9 @@ export function OrganizationPage() {
       return;
     }
 
-    setDraftOrgTree((nodes) => reorderDraftSiblings(nodes, dragNode.parentId, dragId, dropId, dropPosition > 0));
+    setDraftOrgTree((nodes) =>
+      reorderDraftSiblings(nodes, dragNode.parentId, dragId, dropId, dropPosition > 0),
+    );
     setSelectedOrgKeys([dragId]);
   };
 
@@ -841,7 +956,9 @@ export function OrganizationPage() {
       cancelText: '취소',
       onOk: () => {
         setDraftGrades((items) =>
-          items.filter((item) => item.key !== row.key).map((item, index) => ({ ...item, displayOrder: index })),
+          items
+            .filter((item) => item.key !== row.key)
+            .map((item, index) => ({ ...item, displayOrder: index })),
         );
         if (row.id) setDraftDeletedGradeIds((ids) => [...ids, row.id!]);
       },
@@ -854,7 +971,10 @@ export function OrganizationPage() {
       const oldIndex = items.findIndex((item) => item.key === active.id);
       const newIndex = items.findIndex((item) => item.key === over.id);
       if (oldIndex < 0 || newIndex < 0) return items;
-      return arrayMove(items, oldIndex, newIndex).map((item, index) => ({ ...item, displayOrder: index }));
+      return arrayMove(items, oldIndex, newIndex).map((item, index) => ({
+        ...item,
+        displayOrder: index,
+      }));
     });
   };
 
@@ -867,7 +987,9 @@ export function OrganizationPage() {
       setDraftGradeSeq((seq) => seq + 1);
       setDraftGrades((items) => [...items, { key, name, displayOrder: items.length, isNew: true }]);
     } else {
-      setDraftGrades((items) => items.map((item) => (item.key === gradeModal.key ? { ...item, name } : item)));
+      setDraftGrades((items) =>
+        items.map((item) => (item.key === gradeModal.key ? { ...item, name } : item)),
+      );
     }
     setGradeModal(null);
   };
@@ -907,7 +1029,9 @@ export function OrganizationPage() {
       cancelText: '취소',
       onOk: () => {
         setDraftTitles((items) =>
-          items.filter((item) => item.key !== row.key).map((item, index) => ({ ...item, displayOrder: index })),
+          items
+            .filter((item) => item.key !== row.key)
+            .map((item, index) => ({ ...item, displayOrder: index })),
         );
         if (row.id) setDraftDeletedTitleIds((ids) => [...ids, row.id!]);
       },
@@ -920,7 +1044,10 @@ export function OrganizationPage() {
       const oldIndex = items.findIndex((item) => item.key === active.id);
       const newIndex = items.findIndex((item) => item.key === over.id);
       if (oldIndex < 0 || newIndex < 0) return items;
-      return arrayMove(items, oldIndex, newIndex).map((item, index) => ({ ...item, displayOrder: index }));
+      return arrayMove(items, oldIndex, newIndex).map((item, index) => ({
+        ...item,
+        displayOrder: index,
+      }));
     });
   };
 
@@ -933,7 +1060,9 @@ export function OrganizationPage() {
       setDraftTitleSeq((seq) => seq + 1);
       setDraftTitles((items) => [...items, { key, name, displayOrder: items.length, isNew: true }]);
     } else {
-      setDraftTitles((items) => items.map((item) => (item.key === titleModal.key ? { ...item, name } : item)));
+      setDraftTitles((items) =>
+        items.map((item) => (item.key === titleModal.key ? { ...item, name } : item)),
+      );
     }
     setTitleModal(null);
   };
@@ -973,9 +1102,15 @@ export function OrganizationPage() {
       </div>
 
       {/* `destroyOnHidden` 모달이 닫히면 내부 Form이 제거되어 useForm 인스턴스가 끊긴다. */}
-      {orgModal === null ? <Form form={orgForm} preserve={false} className="tw-hidden" aria-hidden /> : null}
-      {gradeModal === null ? <Form form={gradeForm} preserve={false} className="tw-hidden" aria-hidden /> : null}
-      {titleModal === null ? <Form form={titleForm} preserve={false} className="tw-hidden" aria-hidden /> : null}
+      {orgModal === null ? (
+        <Form form={orgForm} preserve={false} className="tw-hidden" aria-hidden />
+      ) : null}
+      {gradeModal === null ? (
+        <Form form={gradeForm} preserve={false} className="tw-hidden" aria-hidden />
+      ) : null}
+      {titleModal === null ? (
+        <Form form={titleForm} preserve={false} className="tw-hidden" aria-hidden />
+      ) : null}
 
       <Card variant="borderless" className={perfCardClass}>
         <Tabs
@@ -1007,7 +1142,6 @@ export function OrganizationPage() {
 
             moveTab();
           }}
-          className="[&_.ant-tabs-nav]:tw-mb-4 [&_.ant-tabs-tab]:!tw-text-slate-600 [&_.ant-tabs-tab-active_.ant-tabs-tab-btn]:!tw-font-semibold [&_.ant-tabs-tab-active_.ant-tabs-tab-btn]:!tw-text-[#1e3a5f] [&_.ant-tabs-ink-bar]:!tw-bg-[#1e3a5f]"
           items={[
             {
               key: 'structure',
@@ -1016,15 +1150,25 @@ export function OrganizationPage() {
                 <div>
                   <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2">
                     <Typography.Text className="tw-text-sm tw-text-slate-500">
-                      {isOrgEditing ? '수정 모드입니다. 변경사항은 저장하기 전까지 반영되지 않습니다.' : '수정하기를 누르면 조직 구조를 편집할 수 있습니다.'}
+                      {isOrgEditing
+                        ? '수정 모드입니다. 변경사항은 저장하기 전까지 반영되지 않습니다.'
+                        : '수정하기를 누르면 조직 구조를 편집할 수 있습니다.'}
                     </Typography.Text>
                     <Space wrap size={[8, 8]}>
                       {isOrgEditing ? (
                         <>
-                          <Button icon={<PlusOutlined />} onClick={() => openCreateChild()} className={toolbarSecondaryBtn}>
+                          <Button
+                            icon={<PlusOutlined />}
+                            onClick={() => openCreateChild()}
+                            className={toolbarSecondaryBtn}
+                          >
                             선택 조직 하위 추가
                           </Button>
-                          <Button onClick={cancelOrgEditing} className={toolbarSecondaryBtn} disabled={saveOrgDraftM.isPending}>
+                          <Button
+                            onClick={cancelOrgEditing}
+                            className={toolbarSecondaryBtn}
+                            disabled={saveOrgDraftM.isPending}
+                          >
                             취소
                           </Button>
                           <Button
@@ -1038,10 +1182,18 @@ export function OrganizationPage() {
                         </>
                       ) : (
                         <>
-                          <Button type="primary" icon={<EditOutlined />} onClick={startOrgEditing} className={toolbarPrimaryBtn}>
+                          <Button
+                            type="primary"
+                            icon={<EditOutlined />}
+                            onClick={startOrgEditing}
+                            className={toolbarPrimaryBtn}
+                          >
                             수정하기
                           </Button>
-                          <OrgStructureViewSettingsPopover value={orgViewSettings} onChange={persistOrgViewSettings} />
+                          <OrgStructureViewSettingsPopover
+                            value={orgViewSettings}
+                            onChange={persistOrgViewSettings}
+                          />
                         </>
                       )}
                     </Space>
@@ -1159,112 +1311,124 @@ export function OrganizationPage() {
                       </div>
                     </div>
                   ) : (
-                  <div className="tw-mt-4 tw-min-h-[220px] tw-rounded-xl tw-border tw-border-slate-200/90 tw-bg-slate-50/40 tw-p-3">
-                    {orgLoading ? (
-                      <Typography.Text type="secondary" className="tw-text-sm">
-                        불러오는 중…
-                      </Typography.Text>
-                    ) : displayedTreeData.length === 0 ? (
-                      <Typography.Text type="secondary" className="tw-text-sm">
-                        등록된 조직이 없습니다.
-                      </Typography.Text>
-                    ) : (
-                      <Tree
-                        blockNode
-                        draggable={isOrgEditing ? { icon: <HolderOutlined className="tw-text-slate-400" /> } : false}
-                        switcherIcon={({ expanded }) => (
-                          <RightOutlined
-                            className={`tw-text-[11px] tw-text-slate-400 tw-transition-transform tw-duration-200 tw-ease-out ${expanded ? 'tw-rotate-90' : ''}`}
-                          />
-                        )}
-                        className="tw-bg-transparent [&_.ant-tree-draggable-icon]:tw-mr-1 [&_.ant-tree-node-content-wrapper]:tw-w-full [&_.ant-tree-node-content-wrapper]:tw-rounded-lg [&_.ant-tree-node-content-wrapper]:tw-py-1 [&_.ant-tree-switcher]:tw-flex [&_.ant-tree-switcher]:tw-w-5 [&_.ant-tree-switcher]:tw-shrink-0 [&_.ant-tree-switcher]:tw-items-center [&_.ant-tree-switcher]:tw-justify-center [&_.ant-tree-switcher]:tw-bg-transparent"
-                        treeData={displayedTreeData}
-                        onDrop={isOrgEditing ? handleOrgDrop : undefined}
-                        titleRender={(node) => {
-                          const id = String(node.key);
-                          const name = typeof node.title === 'string' ? node.title : String(node.title ?? '');
-                          const isNew = Boolean((node as DataNode & { isNew?: boolean }).isNew);
-                          return (
-                            <div className="tw-flex tw-min-w-0 tw-items-center tw-justify-between tw-gap-2 tw-pr-1">
-                              <span className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
-                                <span className="tw-min-w-0 tw-truncate tw-text-sm tw-font-medium tw-text-slate-700">{name}</span>
-                                {isNew ? (
-                                  <span className="tw-rounded-md tw-bg-blue-50 tw-px-1.5 tw-py-0.5 tw-text-[11px] tw-font-semibold tw-text-blue-700">
-                                    신규
+                    <div className="tw-mt-4 tw-min-h-[220px] tw-rounded-xl tw-border tw-border-slate-200/90 tw-bg-slate-50/40 tw-p-3">
+                      {orgLoading ? (
+                        <Typography.Text type="secondary" className="tw-text-sm">
+                          불러오는 중…
+                        </Typography.Text>
+                      ) : displayedTreeData.length === 0 ? (
+                        <Typography.Text type="secondary" className="tw-text-sm">
+                          등록된 조직이 없습니다.
+                        </Typography.Text>
+                      ) : (
+                        <Tree
+                          blockNode
+                          draggable={
+                            isOrgEditing
+                              ? { icon: <HolderOutlined className="tw-text-slate-400" /> }
+                              : false
+                          }
+                          switcherIcon={({ expanded }) => (
+                            <RightOutlined
+                              className={`tw-text-[11px] tw-text-slate-400 tw-transition-transform tw-duration-200 tw-ease-out ${expanded ? 'tw-rotate-90' : ''}`}
+                            />
+                          )}
+                          className="tw-bg-transparent [&_.ant-tree-draggable-icon]:tw-mr-1 [&_.ant-tree-node-content-wrapper]:tw-w-full [&_.ant-tree-node-content-wrapper]:tw-rounded-lg [&_.ant-tree-node-content-wrapper]:tw-py-1 [&_.ant-tree-switcher]:tw-flex [&_.ant-tree-switcher]:tw-w-5 [&_.ant-tree-switcher]:tw-shrink-0 [&_.ant-tree-switcher]:tw-items-center [&_.ant-tree-switcher]:tw-justify-center [&_.ant-tree-switcher]:tw-bg-transparent"
+                          treeData={displayedTreeData}
+                          onDrop={isOrgEditing ? handleOrgDrop : undefined}
+                          titleRender={(node) => {
+                            const id = String(node.key);
+                            const name =
+                              typeof node.title === 'string'
+                                ? node.title
+                                : String(node.title ?? '');
+                            const isNew = Boolean((node as DataNode & { isNew?: boolean }).isNew);
+                            return (
+                              <div className="tw-flex tw-min-w-0 tw-items-center tw-justify-between tw-gap-2 tw-pr-1">
+                                <span className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
+                                  <span className="tw-min-w-0 tw-truncate tw-text-sm tw-font-medium tw-text-slate-700">
+                                    {name}
+                                  </span>
+                                  {isNew ? (
+                                    <span className="tw-rounded-md tw-bg-blue-50 tw-px-1.5 tw-py-0.5 tw-text-[11px] tw-font-semibold tw-text-blue-700">
+                                      신규
+                                    </span>
+                                  ) : null}
+                                </span>
+                                {isOrgEditing ? (
+                                  <span className="tw-flex tw-shrink-0 tw-items-center tw-gap-1">
+                                    <Tooltip title="하위 조직 추가">
+                                      <Button
+                                        type="text"
+                                        size="small"
+                                        icon={<PlusOutlined />}
+                                        className="!tw-h-7 !tw-w-7 !tw-rounded-md !tw-p-0 tw-text-slate-500 hover:!tw-bg-blue-50 hover:!tw-text-blue-700"
+                                        aria-label={`${name} 하위 조직 추가`}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedOrgKeys([id]);
+                                          openCreateChild(id);
+                                        }}
+                                      />
+                                    </Tooltip>
+                                    <Tooltip title="조직명 수정">
+                                      <Button
+                                        type="text"
+                                        size="small"
+                                        icon={<EditOutlined />}
+                                        className="!tw-h-7 !tw-w-7 !tw-rounded-md !tw-p-0 tw-text-slate-500 hover:!tw-bg-slate-100 hover:!tw-text-slate-700"
+                                        aria-label={`${name} 조직명 수정`}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedOrgKeys([id]);
+                                          orgForm.setFieldsValue({ name });
+                                          setOrgModal({ mode: 'edit', id, name });
+                                        }}
+                                      />
+                                    </Tooltip>
+                                    <Tooltip title="조직 삭제">
+                                      <Button
+                                        type="text"
+                                        size="small"
+                                        danger
+                                        icon={<DeleteOutlined />}
+                                        className="!tw-h-7 !tw-w-7 !tw-rounded-md !tw-p-0"
+                                        aria-label={`${name} 조직 삭제`}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedOrgKeys([id]);
+                                          modal.confirm({
+                                            title: '선택한 조직을 수정 목록에서 제거할까요?',
+                                            okText: '제거',
+                                            okType: 'danger',
+                                            cancelText: '취소',
+                                            onOk: () => {
+                                              const result = removeDraftNode(draftOrgTree, id);
+                                              setDraftOrgTree(result.next);
+                                              setDraftDeletedOrgIds((ids) => [
+                                                ...ids,
+                                                ...result.removedExistingIds,
+                                              ]);
+                                              setSelectedOrgKeys([]);
+                                            },
+                                          });
+                                        }}
+                                      />
+                                    </Tooltip>
                                   </span>
                                 ) : null}
-                              </span>
-                              {isOrgEditing ? (
-                                <span className="tw-flex tw-shrink-0 tw-items-center tw-gap-1">
-                                  <Tooltip title="하위 조직 추가">
-                                    <Button
-                                      type="text"
-                                      size="small"
-                                      icon={<PlusOutlined />}
-                                      className="!tw-h-7 !tw-w-7 !tw-rounded-md !tw-p-0 tw-text-slate-500 hover:!tw-bg-blue-50 hover:!tw-text-blue-700"
-                                      aria-label={`${name} 하위 조직 추가`}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setSelectedOrgKeys([id]);
-                                        openCreateChild(id);
-                                      }}
-                                    />
-                                  </Tooltip>
-                                  <Tooltip title="조직명 수정">
-                                    <Button
-                                      type="text"
-                                      size="small"
-                                      icon={<EditOutlined />}
-                                      className="!tw-h-7 !tw-w-7 !tw-rounded-md !tw-p-0 tw-text-slate-500 hover:!tw-bg-slate-100 hover:!tw-text-slate-700"
-                                      aria-label={`${name} 조직명 수정`}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setSelectedOrgKeys([id]);
-                                        orgForm.setFieldsValue({ name });
-                                        setOrgModal({ mode: 'edit', id, name });
-                                      }}
-                                    />
-                                  </Tooltip>
-                                  <Tooltip title="조직 삭제">
-                                    <Button
-                                      type="text"
-                                      size="small"
-                                      danger
-                                      icon={<DeleteOutlined />}
-                                      className="!tw-h-7 !tw-w-7 !tw-rounded-md !tw-p-0"
-                                      aria-label={`${name} 조직 삭제`}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setSelectedOrgKeys([id]);
-                                        modal.confirm({
-                                          title: '선택한 조직을 수정 목록에서 제거할까요?',
-                                          okText: '제거',
-                                          okType: 'danger',
-                                          cancelText: '취소',
-                                          onOk: () => {
-                                            const result = removeDraftNode(draftOrgTree, id);
-                                            setDraftOrgTree(result.next);
-                                            setDraftDeletedOrgIds((ids) => [...ids, ...result.removedExistingIds]);
-                                            setSelectedOrgKeys([]);
-                                          },
-                                        });
-                                      }}
-                                    />
-                                  </Tooltip>
-                                </span>
-                              ) : null}
-                            </div>
-                          );
-                        }}
-                        selectedKeys={selectedOrgKeys}
-                        onSelect={(keys) => {
-                          const lastKey = keys.at(-1);
-                          setSelectedOrgKeys(lastKey !== undefined ? [lastKey] : []);
-                        }}
-                        defaultExpandAll
-                      />
-                    )}
-                  </div>
+                              </div>
+                            );
+                          }}
+                          selectedKeys={selectedOrgKeys}
+                          onSelect={(keys) => {
+                            const lastKey = keys.at(-1);
+                            setSelectedOrgKeys(lastKey !== undefined ? [lastKey] : []);
+                          }}
+                          defaultExpandAll
+                        />
+                      )}
+                    </div>
                   )}
                 </div>
               ),
@@ -1290,7 +1454,11 @@ export function OrganizationPage() {
                           >
                             직급 추가
                           </Button>
-                          <Button onClick={cancelGradeEditing} className={toolbarSecondaryBtn} disabled={saveGradeDraftM.isPending}>
+                          <Button
+                            onClick={cancelGradeEditing}
+                            className={toolbarSecondaryBtn}
+                            disabled={saveGradeDraftM.isPending}
+                          >
                             취소
                           </Button>
                           <Button
@@ -1303,7 +1471,12 @@ export function OrganizationPage() {
                           </Button>
                         </>
                       ) : (
-                        <Button type="primary" icon={<EditOutlined />} onClick={startGradeEditing} className={toolbarPrimaryBtn}>
+                        <Button
+                          type="primary"
+                          icon={<EditOutlined />}
+                          onClick={startGradeEditing}
+                          className={toolbarPrimaryBtn}
+                        >
                           수정하기
                         </Button>
                       )}
@@ -1312,7 +1485,9 @@ export function OrganizationPage() {
                   <div className="tw-overflow-hidden tw-rounded-xl tw-border tw-border-slate-200/90">
                     <div
                       className={`tw-grid tw-min-h-11 tw-items-center tw-bg-slate-50/90 tw-px-3 tw-text-xs tw-font-semibold tw-text-slate-600 ${
-                        isGradeEditing ? 'tw-grid-cols-[44px_1fr_100px_112px]' : 'tw-grid-cols-[1fr_100px]'
+                        isGradeEditing
+                          ? 'tw-grid-cols-[44px_1fr_100px_112px]'
+                          : 'tw-grid-cols-[1fr_100px]'
                       }`}
                     >
                       {isGradeEditing ? <span /> : null}
@@ -1329,8 +1504,15 @@ export function OrganizationPage() {
                         등록된 직급이 없습니다.
                       </div>
                     ) : isGradeEditing ? (
-                      <DndContext sensors={gradeSensors} collisionDetection={closestCenter} onDragEnd={handleGradeDragEnd}>
-                        <SortableContext items={displayedGrades.map((row) => row.key)} strategy={verticalListSortingStrategy}>
+                      <DndContext
+                        sensors={gradeSensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={handleGradeDragEnd}
+                      >
+                        <SortableContext
+                          items={displayedGrades.map((row) => row.key)}
+                          strategy={verticalListSortingStrategy}
+                        >
                           {displayedGrades.map((row, index) => (
                             <SortableSettingRow
                               key={row.key}
@@ -1351,7 +1533,9 @@ export function OrganizationPage() {
                           key={row.key}
                           className="tw-grid tw-min-h-14 tw-grid-cols-[1fr_100px] tw-items-center tw-border-t tw-border-slate-100 tw-bg-white tw-px-3 tw-text-sm tw-text-slate-700"
                         >
-                          <div className="tw-min-w-0 tw-font-medium tw-text-slate-900">{row.name || '(이름 없음)'}</div>
+                          <div className="tw-min-w-0 tw-font-medium tw-text-slate-900">
+                            {row.name || '(이름 없음)'}
+                          </div>
                           <div className="tw-text-slate-600">{index}</div>
                         </div>
                       ))
@@ -1374,10 +1558,18 @@ export function OrganizationPage() {
                     <Space wrap size={[8, 8]}>
                       {isTitleEditing ? (
                         <>
-                          <Button icon={<PlusOutlined />} onClick={openCreateTitle} className={toolbarSecondaryBtn}>
+                          <Button
+                            icon={<PlusOutlined />}
+                            onClick={openCreateTitle}
+                            className={toolbarSecondaryBtn}
+                          >
                             직책 추가
                           </Button>
-                          <Button onClick={cancelTitleEditing} className={toolbarSecondaryBtn} disabled={saveTitleDraftM.isPending}>
+                          <Button
+                            onClick={cancelTitleEditing}
+                            className={toolbarSecondaryBtn}
+                            disabled={saveTitleDraftM.isPending}
+                          >
                             취소
                           </Button>
                           <Button
@@ -1390,7 +1582,12 @@ export function OrganizationPage() {
                           </Button>
                         </>
                       ) : (
-                        <Button type="primary" icon={<EditOutlined />} onClick={startTitleEditing} className={toolbarPrimaryBtn}>
+                        <Button
+                          type="primary"
+                          icon={<EditOutlined />}
+                          onClick={startTitleEditing}
+                          className={toolbarPrimaryBtn}
+                        >
                           수정하기
                         </Button>
                       )}
@@ -1399,7 +1596,9 @@ export function OrganizationPage() {
                   <div className="tw-overflow-hidden tw-rounded-xl tw-border tw-border-slate-200/90">
                     <div
                       className={`tw-grid tw-min-h-11 tw-items-center tw-bg-slate-50/90 tw-px-3 tw-text-xs tw-font-semibold tw-text-slate-600 ${
-                        isTitleEditing ? 'tw-grid-cols-[44px_1fr_100px_112px]' : 'tw-grid-cols-[1fr_100px]'
+                        isTitleEditing
+                          ? 'tw-grid-cols-[44px_1fr_100px_112px]'
+                          : 'tw-grid-cols-[1fr_100px]'
                       }`}
                     >
                       {isTitleEditing ? <span /> : null}
@@ -1416,8 +1615,15 @@ export function OrganizationPage() {
                         등록된 직책이 없습니다.
                       </div>
                     ) : isTitleEditing ? (
-                      <DndContext sensors={titleSensors} collisionDetection={closestCenter} onDragEnd={handleTitleDragEnd}>
-                        <SortableContext items={displayedTitles.map((row) => row.key)} strategy={verticalListSortingStrategy}>
+                      <DndContext
+                        sensors={titleSensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={handleTitleDragEnd}
+                      >
+                        <SortableContext
+                          items={displayedTitles.map((row) => row.key)}
+                          strategy={verticalListSortingStrategy}
+                        >
                           {displayedTitles.map((row, index) => (
                             <SortableSettingRow
                               key={row.key}
@@ -1438,7 +1644,9 @@ export function OrganizationPage() {
                           key={row.key}
                           className="tw-grid tw-min-h-14 tw-grid-cols-[1fr_100px] tw-items-center tw-border-t tw-border-slate-100 tw-bg-white tw-px-3 tw-text-sm tw-text-slate-700"
                         >
-                          <div className="tw-min-w-0 tw-font-medium tw-text-slate-900">{row.name || '(이름 없음)'}</div>
+                          <div className="tw-min-w-0 tw-font-medium tw-text-slate-900">
+                            {row.name || '(이름 없음)'}
+                          </div>
                           <div className="tw-text-slate-600">{index}</div>
                         </div>
                       ))
@@ -1471,11 +1679,15 @@ export function OrganizationPage() {
         destroyOnHidden
       >
         <div className="tw-px-5 tw-py-4">
-        <Form form={orgForm} layout="vertical" className="tw-mt-2">
-          <Form.Item name="name" label="조직명" rules={[{ required: true, message: '조직명을 입력해 주세요.' }]}>
-            <Input placeholder="예: 본사, 개발팀" />
-          </Form.Item>
-        </Form>
+          <Form form={orgForm} layout="vertical" className="tw-mt-2">
+            <Form.Item
+              name="name"
+              label="조직명"
+              rules={[{ required: true, message: '조직명을 입력해 주세요.' }]}
+            >
+              <Input placeholder="예: 본사, 개발팀" />
+            </Form.Item>
+          </Form>
         </div>
       </AppDoubleActionModal>
 
@@ -1490,11 +1702,15 @@ export function OrganizationPage() {
         destroyOnHidden
       >
         <div className="tw-px-5 tw-py-4">
-        <Form form={gradeForm} layout="vertical" className="tw-mt-2">
-          <Form.Item name="name" label="직급명" rules={[{ required: true, message: '직급명을 입력해 주세요.' }]}>
-            <Input placeholder="예: 대리, 과장" />
-          </Form.Item>
-        </Form>
+          <Form form={gradeForm} layout="vertical" className="tw-mt-2">
+            <Form.Item
+              name="name"
+              label="직급명"
+              rules={[{ required: true, message: '직급명을 입력해 주세요.' }]}
+            >
+              <Input placeholder="예: 대리, 과장" />
+            </Form.Item>
+          </Form>
         </div>
       </AppDoubleActionModal>
 
@@ -1509,11 +1725,15 @@ export function OrganizationPage() {
         destroyOnHidden
       >
         <div className="tw-px-5 tw-py-4">
-        <Form form={titleForm} layout="vertical" className="tw-mt-2">
-          <Form.Item name="name" label="직책명" rules={[{ required: true, message: '직책명을 입력해 주세요.' }]}>
-            <Input placeholder="예: 팀장, 담당" />
-          </Form.Item>
-        </Form>
+          <Form form={titleForm} layout="vertical" className="tw-mt-2">
+            <Form.Item
+              name="name"
+              label="직책명"
+              rules={[{ required: true, message: '직책명을 입력해 주세요.' }]}
+            >
+              <Input placeholder="예: 팀장, 담당" />
+            </Form.Item>
+          </Form>
         </div>
       </AppDoubleActionModal>
     </div>

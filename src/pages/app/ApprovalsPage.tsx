@@ -29,7 +29,13 @@ import {
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
-import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -130,7 +136,10 @@ import {
   flattenDirectMembersDeduped,
   type OrgPickerMemberRow,
 } from '@/features/approvals/lib/approvalOrgTree';
-import { APPROVAL_ORG_DRAG_MIME, ApprovalOrgDropZone } from '@/features/approvals/ui/ApprovalOrgDropZone';
+import {
+  APPROVAL_ORG_DRAG_MIME,
+  ApprovalOrgDropZone,
+} from '@/features/approvals/ui/ApprovalOrgDropZone';
 import { organizationApi, type OrgChartOrgNode } from '@/features/organization/api/organizationApi';
 import { findMemberOrganizationId } from '@/features/organization/lib/findMemberOrganizationInOrgChart';
 import { PERM } from '@/features/permissions/backend-permissions';
@@ -303,22 +312,22 @@ function toLocalDateTime(date: string, time: string): string {
 
 /** 휴직 신청서 한글 type → 백엔드 enum 매핑 */
 const LEAVE_OF_ABSENCE_TYPE_MAP: Record<string, string> = {
-  '출산휴가': 'MATERNITY',
-  '육아휴직': 'PATERNAL',
-  '장기병가': 'SICK',
-  '무급휴직': 'UNPAID',
-  '학업휴직': 'STUDY',
-  '군복무': 'MILITARY',
+  출산휴가: 'MATERNITY',
+  육아휴직: 'PATERNAL',
+  장기병가: 'SICK',
+  무급휴직: 'UNPAID',
+  학업휴직: 'STUDY',
+  군복무: 'MILITARY',
 };
 
 /** 휴직 종류별 유급 여부 - 종류 자체에 함의되어 있어 따로 입력받지 않고 자동 도출 */
 const LEAVE_OF_ABSENCE_PAID_MAP: Record<string, 'Y' | 'N'> = {
-  MATERNITY: 'Y',   // 출산휴가 - 유급 (근로기준법 74조)
-  PATERNAL: 'N',    // 육아휴직 - 회사 무급, 고용보험 별도 급여
-  SICK: 'N',        // 장기병가 - 보수적 기본값 (회사별 정책 따라 가산 가능)
-  UNPAID: 'N',      // 무급휴직
-  STUDY: 'N',       // 학업휴직
-  MILITARY: 'N',    // 군복무
+  MATERNITY: 'Y', // 출산휴가 - 유급 (근로기준법 74조)
+  PATERNAL: 'N', // 육아휴직 - 회사 무급, 고용보험 별도 급여
+  SICK: 'N', // 장기병가 - 보수적 기본값 (회사별 정책 따라 가산 가능)
+  UNPAID: 'N', // 무급휴직
+  STUDY: 'N', // 학업휴직
+  MILITARY: 'N', // 군복무
 };
 
 /** HH:mm 두 개의 분 차이, 자정 넘어가면 다음날로 보정 */
@@ -590,7 +599,7 @@ const APPROVAL_HOME_DOC_LIST_SCROLL =
 
 /** 작성 허브 하단 그리드 카드(문서함·부재 위임) — 빈 상태여도 부서 문서함과 동일 최소 높이 */
 const APPROVAL_HOME_GRID_DOC_CARD_CLASS =
-  'tw-rounded-2xl tw-border tw-border-slate-200/90 tw-shadow-sm tw-shadow-slate-900/5 md:tw-min-h-[230px]';
+  'tw-rounded-2xl tw-border tw-border-slate-200/90 tw-shadow-sm tw-shadow-slate-900/5';
 
 /** 작성 허브 상단 오른쪽 결재 양식 카드 — 하단 문서함과 달리 min-height 없음 */
 const APPROVAL_HOME_COMPOSE_FORMS_CARD_CLASS =
@@ -638,8 +647,14 @@ const OFFICIAL_INBOX_FILTER_TABS: { key: 'ALL' | ApprovalRequestStatus; label: s
 ];
 
 /** 작성 허브「전체」모달 iframe용 — `embed=compose-modal`이면 AppShell이 본문만 표시 */
-function buildApprovalEmbedUrl(pathname: string, search: Record<string, string | undefined>): string {
-  const u = new URL(pathname, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
+function buildApprovalEmbedUrl(
+  pathname: string,
+  search: Record<string, string | undefined>,
+): string {
+  const u = new URL(
+    pathname,
+    typeof window !== 'undefined' ? window.location.origin : 'http://localhost',
+  );
   u.searchParams.set('embed', APPROVAL_EMBED_QUERY);
   for (const [k, v] of Object.entries(search)) {
     if (v !== undefined && v !== '') u.searchParams.set(k, v);
@@ -661,9 +676,12 @@ const COMPOSE_HOME_EMBED_PANEL_TITLE: Record<ComposeHomeEmbedPanel, string> = {
   absence: '부재 위임 전체',
 };
 
-function composeHomeEmbedPanelModalTitle(
-  modal: { kind: 'iframe'; panel: ComposeHomeEmbedPanel; composeDraftId?: string; prefillDocumentId?: string },
-): string {
+function composeHomeEmbedPanelModalTitle(modal: {
+  kind: 'iframe';
+  panel: ComposeHomeEmbedPanel;
+  composeDraftId?: string;
+  prefillDocumentId?: string;
+}): string {
   if (modal.panel === 'draft' && modal.composeDraftId?.trim()) {
     return '임시 저장 문서 이어쓰기';
   }
@@ -691,13 +709,16 @@ function composeHomeEmbedPanelUrl(
           composeDraftId: opts.composeDraftId,
         });
       }
-      return buildApprovalEmbedUrl('/app/approvals', opts?.prefillDocumentId
-        ? {
-            tab: 'compose',
-            sideNav: APPROVAL_COMPOSE_WORKBENCH_SIDE_NAV,
-            docId: opts.prefillDocumentId,
-          }
-        : { tab: 'my', box: 'per-draft' });
+      return buildApprovalEmbedUrl(
+        '/app/approvals',
+        opts?.prefillDocumentId
+          ? {
+              tab: 'compose',
+              sideNav: APPROVAL_COMPOSE_WORKBENCH_SIDE_NAV,
+              docId: opts.prefillDocumentId,
+            }
+          : { tab: 'my', box: 'per-draft' },
+      );
     case 'absence':
       return buildApprovalEmbedUrl('/app/approvals/absence-proxy', {});
     default:
@@ -760,7 +781,10 @@ function PendingHomeApprovalLineStrip({
   }
   const viewportWidthClass = visibleSlots > 0 ? 'tw-w-[21rem]' : '';
   return (
-    <div className={clsx('tw-min-w-0 tw-overflow-x-auto wf-scrollbar tw-pr-0.5', viewportWidthClass)} aria-label="결재선">
+    <div
+      className={clsx('tw-min-w-0 tw-overflow-x-auto wf-scrollbar tw-pr-0.5', viewportWidthClass)}
+      aria-label="결재선"
+    >
       <div className="tw-inline-flex tw-min-w-max tw-items-stretch tw-gap-1">
         {sorted.map((line, i) => {
           const name =
@@ -922,7 +946,8 @@ function countViewerDraftMembers(rows: ViewerDraft[]): number {
 }
 
 function flattenCcViewersForPayload(rows: ViewerDraft[]) {
-  const out: Array<{ viewerMemberId: string; viewerMemberPositionId: string; viewerType: 'CC' }> = [];
+  const out: Array<{ viewerMemberId: string; viewerMemberPositionId: string; viewerType: 'CC' }> =
+    [];
   for (const r of rows) {
     if (r.kind === 'member') {
       out.push({
@@ -944,7 +969,11 @@ function flattenCcViewersForPayload(rows: ViewerDraft[]) {
 }
 
 function flattenCirculationViewersForPayload(rows: ViewerDraft[]) {
-  const out: Array<{ viewerMemberId: string; viewerMemberPositionId: string; viewerType: 'CIRCULATION' }> = [];
+  const out: Array<{
+    viewerMemberId: string;
+    viewerMemberPositionId: string;
+    viewerType: 'CIRCULATION';
+  }> = [];
   for (const r of rows) {
     if (r.kind === 'member') {
       out.push({
@@ -982,7 +1011,10 @@ function approvalLinesToMemberDrafts(lines: ApprovalLine[]): ApprovalLineDraft[]
     }));
 }
 
-function viewersToDraftRows(viewers: ApprovalViewer[]): { cc: ViewerDraft[]; circulation: ViewerDraft[] } {
+function viewersToDraftRows(viewers: ApprovalViewer[]): {
+  cc: ViewerDraft[];
+  circulation: ViewerDraft[];
+} {
   const cc: ViewerDraft[] = [];
   const circulation: ViewerDraft[] = [];
   for (const v of viewers) {
@@ -1036,7 +1068,9 @@ function loadRecentForms(): RecentFormEntry[] {
     return parsed
       .filter(
         (x): x is RecentFormEntry =>
-          Boolean(x) && typeof x === 'object' && typeof (x as RecentFormEntry).documentId === 'string',
+          Boolean(x) &&
+          typeof x === 'object' &&
+          typeof (x as RecentFormEntry).documentId === 'string',
       )
       .slice(0, 5);
   } catch {
@@ -1058,7 +1092,11 @@ function loadQuickHomeForms(): string[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((v): v is string => typeof v === 'string').map((v) => v.trim()).filter(Boolean).slice(0, 3);
+    return parsed
+      .filter((v): v is string => typeof v === 'string')
+      .map((v) => v.trim())
+      .filter(Boolean)
+      .slice(0, 3);
   } catch {
     return [];
   }
@@ -1101,10 +1139,9 @@ function DocumentFormPicker({
   loading,
 }: DocumentFormPickerProps) {
   const byType = useMemo(() => {
-    const map = Object.fromEntries(APPROVAL_REQUEST_TYPES.map((t) => [t, [] as ApprovalDocument[]])) as Record<
-      ApprovalRequestType,
-      ApprovalDocument[]
-    >;
+    const map = Object.fromEntries(
+      APPROVAL_REQUEST_TYPES.map((t) => [t, [] as ApprovalDocument[]]),
+    ) as Record<ApprovalRequestType, ApprovalDocument[]>;
     for (const doc of documents) {
       map[normalizeApprovalRequestType(doc.requestType)].push(doc);
     }
@@ -1120,22 +1157,27 @@ function DocumentFormPicker({
     [recentForms, docById],
   );
 
-  const [categoryExpanded, setCategoryExpanded] = useState<Partial<Record<ApprovalRequestType, boolean>>>({});
+  const [categoryExpanded, setCategoryExpanded] = useState<
+    Partial<Record<ApprovalRequestType, boolean>>
+  >({});
 
-  const handleSelect = useCallback((documentId: string) => {
-    const doc = docById.get(documentId);
-    if (doc) {
-      const t = normalizeApprovalRequestType(doc.requestType);
-      const next = [
-        { documentId: doc.documentId, documentName: doc.documentName, requestType: t },
-        ...recentForms.filter((x) => x.documentId !== documentId),
-      ].slice(0, 5);
-      setRecentForms(next);
-      saveRecentForms(next);
-    }
-    onChange?.(documentId);
-    onAfterPick?.(documentId, doc);
-  }, [docById, onAfterPick, onChange, recentForms]);
+  const handleSelect = useCallback(
+    (documentId: string) => {
+      const doc = docById.get(documentId);
+      if (doc) {
+        const t = normalizeApprovalRequestType(doc.requestType);
+        const next = [
+          { documentId: doc.documentId, documentName: doc.documentName, requestType: t },
+          ...recentForms.filter((x) => x.documentId !== documentId),
+        ].slice(0, 5);
+        setRecentForms(next);
+        saveRecentForms(next);
+      }
+      onChange?.(documentId);
+      onAfterPick?.(documentId, doc);
+    },
+    [docById, onAfterPick, onChange, recentForms],
+  );
 
   if (loading) {
     return (
@@ -1157,7 +1199,9 @@ function DocumentFormPicker({
       <aside className="tw-w-full tw-shrink-0 lg:tw-w-56 xl:tw-w-60">
         <Card
           size="small"
-          title={<span className="tw-text-sm tw-font-semibold tw-text-slate-800">최근 사용한 양식</span>}
+          title={
+            <span className="tw-text-sm tw-font-semibold tw-text-slate-800">최근 사용한 양식</span>
+          }
           className="tw-mb-3 tw-border-slate-200/90 tw-shadow-sm"
           styles={{ body: { padding: 12 } }}
         >
@@ -1180,8 +1224,13 @@ function DocumentFormPicker({
                         active && 'tw-bg-blue-50/70 tw-text-blue-900',
                       )}
                     >
-                      <Typography.Text className="!tw-block tw-truncate tw-text-sm">{r.documentName}</Typography.Text>
-                      <Typography.Text type="secondary" className="!tw-block tw-truncate tw-text-xs">
+                      <Typography.Text className="!tw-block tw-truncate tw-text-sm">
+                        {r.documentName}
+                      </Typography.Text>
+                      <Typography.Text
+                        type="secondary"
+                        className="!tw-block tw-truncate tw-text-xs"
+                      >
                         {approvalRequestTypeLabelKo(r.requestType)}
                       </Typography.Text>
                     </button>
@@ -1203,7 +1252,8 @@ function DocumentFormPicker({
             const Icon = REQUEST_TYPE_ICON[t];
             const expanded = categoryExpanded[t] ?? false;
             const hasOverflow = list.length > FORM_PICKER_CATEGORY_INITIAL;
-            const visibleList = hasOverflow && !expanded ? list.slice(0, FORM_PICKER_CATEGORY_INITIAL) : list;
+            const visibleList =
+              hasOverflow && !expanded ? list.slice(0, FORM_PICKER_CATEGORY_INITIAL) : list;
             return (
               <Card
                 key={t}
@@ -1217,10 +1267,16 @@ function DocumentFormPicker({
                     <Icon />
                   </span>
                   <div className="tw-min-w-0 tw-flex-1">
-                    <Typography.Text strong className="!tw-block tw-font-mono tw-text-sm tw-tracking-tight tw-text-slate-900">
+                    <Typography.Text
+                      strong
+                      className="!tw-block tw-font-mono tw-text-sm tw-tracking-tight tw-text-slate-900"
+                    >
                       {t}
                     </Typography.Text>
-                    <Typography.Text type="secondary" className="!tw-mt-0.5 !tw-block tw-text-xs tw-leading-snug">
+                    <Typography.Text
+                      type="secondary"
+                      className="!tw-mt-0.5 !tw-block tw-text-xs tw-leading-snug"
+                    >
                       {REQUEST_TYPE_DESC[t]}
                     </Typography.Text>
                   </div>
@@ -1268,7 +1324,9 @@ function DocumentFormPicker({
                           size="small"
                           className="!tw-h-auto !tw-p-0 !tw-text-xs"
                           aria-expanded={expanded}
-                          onClick={() => setCategoryExpanded((prev) => ({ ...prev, [t]: !expanded }))}
+                          onClick={() =>
+                            setCategoryExpanded((prev) => ({ ...prev, [t]: !expanded }))
+                          }
                         >
                           {expanded
                             ? '접기'
@@ -1370,7 +1428,9 @@ function unreadViewerForMember(row: ApprovalRequestDetail, myMemberId?: string):
 function rowIsUpcomingForApprover(row: ApprovalRequestDetail, myMemberId?: string): boolean {
   const mid = myMemberId?.trim();
   if (!mid) return false;
-  const pendingLine = row.approvalLines.find((l) => String(l.approvalStatus).toUpperCase() === 'PENDING');
+  const pendingLine = row.approvalLines.find(
+    (l) => String(l.approvalStatus).toUpperCase() === 'PENDING',
+  );
   if (!pendingLine) return false;
   return !memberKeyEq(pendingLine.approverMemberId, mid);
 }
@@ -1381,7 +1441,9 @@ type SortableApprovalLineRowContextValue = {
   attributes: ReturnType<typeof useSortable>['attributes'];
 };
 
-const SortableApprovalLineRowContext = createContext<SortableApprovalLineRowContextValue | null>(null);
+const SortableApprovalLineRowContext = createContext<SortableApprovalLineRowContextValue | null>(
+  null,
+);
 
 /** 2×3 점 그리드 — 드래그로 결재 순서 변경 */
 function ApprovalLineDragHandle() {
@@ -1408,9 +1470,22 @@ type SortableApprovalTableRowProps = HTMLAttributes<HTMLTableRowElement> & {
   'data-row-key'?: Key;
 };
 
-function SortableApprovalTableRow({ children, style, className, ...rest }: SortableApprovalTableRowProps) {
+function SortableApprovalTableRow({
+  children,
+  style,
+  className,
+  ...rest
+}: SortableApprovalTableRowProps) {
   const id = String(rest['data-row-key'] ?? '');
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
     id,
   });
 
@@ -1442,7 +1517,10 @@ function SortableApprovalTableRow({ children, style, className, ...rest }: Sorta
   );
 }
 
-function findOrgChartNode(roots: OrgChartOrgNode[], organizationId: string): OrgChartOrgNode | null {
+function findOrgChartNode(
+  roots: OrgChartOrgNode[],
+  organizationId: string,
+): OrgChartOrgNode | null {
   for (const n of roots) {
     if (n.organizationId === organizationId) return n;
     const found = findOrgChartNode(n.children, organizationId);
@@ -1451,7 +1529,9 @@ function findOrgChartNode(roots: OrgChartOrgNode[], organizationId: string): Org
   return null;
 }
 
-function flattenOrgChartOrganizations(roots: OrgChartOrgNode[]): { value: string; label: string }[] {
+function flattenOrgChartOrganizations(
+  roots: OrgChartOrgNode[],
+): { value: string; label: string }[] {
   const out: { value: string; label: string }[] = [];
   const walk = (n: OrgChartOrgNode) => {
     out.push({ value: n.organizationId, label: n.name?.trim() || n.organizationId });
@@ -1464,7 +1544,9 @@ function flattenOrgChartOrganizations(roots: OrgChartOrgNode[]): { value: string
 function formatOfficialRecipientsSummary(row: ApprovalRequestDetail): string {
   const list = row.recipients ?? [];
   if (!list.length) return '—';
-  return list.map((r) => r.recipientOrganizationName?.trim() || r.recipientOrganizationId).join(', ');
+  return list
+    .map((r) => r.recipientOrganizationName?.trim() || r.recipientOrganizationId)
+    .join(', ');
 }
 
 /** 선택 노드 및 모든 하위 조직 소속 멤버(중복 제거) */
@@ -1473,14 +1555,14 @@ function collectOrgMemberRowsUnderNode(node: OrgChartOrgNode): OrgPickerMemberRo
   const seen = new Set<string>();
   const walk = (n: OrgChartOrgNode) => {
     for (const m of n.members) {
-        if (seen.has(m.memberId)) continue;
-        seen.add(m.memberId);
-        rows.push({
-          memberId: m.memberId,
-          name: m.name,
+      if (seen.has(m.memberId)) continue;
+      seen.add(m.memberId);
+      rows.push({
+        memberId: m.memberId,
+        name: m.name,
         jobTitleName: m.jobGradeName,
-          organizationName: n.name,
-        });
+        organizationName: n.name,
+      });
     }
     n.children.forEach(walk);
   };
@@ -1538,7 +1620,10 @@ export function ApprovalsPage() {
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
   const [cancelTarget, setCancelTarget] = useState<ApprovalRequestDetail | null>(null);
   const [cancelReason, setCancelReason] = useState('');
-  const [approvalAction, setApprovalAction] = useState<{ approvalId: string; mode: 'approve' | 'reject' } | null>(null);
+  const [approvalAction, setApprovalAction] = useState<{
+    approvalId: string;
+    mode: 'approve' | 'reject';
+  } | null>(null);
   const [approvalComment, setApprovalComment] = useState('');
   const [orgTreeSelectedKey, setOrgTreeSelectedKey] = useState<string>();
   const [approvalLineDrafts, setApprovalLineDrafts] = useState<ApprovalLineDraft[]>([]);
@@ -1546,7 +1631,12 @@ export function ApprovalsPage() {
   const [composeApprovalInfoModalOpen, setComposeApprovalInfoModalOpen] = useState(false);
   const [composePreviewOpen, setComposePreviewOpen] = useState(false);
   const [composeHomeMoreModal, setComposeHomeMoreModal] = useState<
-    | { kind: 'iframe'; panel: ComposeHomeEmbedPanel; composeDraftId?: string; prefillDocumentId?: string }
+    | {
+        kind: 'iframe';
+        panel: ComposeHomeEmbedPanel;
+        composeDraftId?: string;
+        prefillDocumentId?: string;
+      }
     | { kind: 'pending-inbox'; title: string }
     | null
   >(null);
@@ -1554,7 +1644,9 @@ export function ApprovalsPage() {
   const [quickHomeFormsSettingOpen, setQuickHomeFormsSettingOpen] = useState(false);
   const [quickHomeFormsDraft, setQuickHomeFormsDraft] = useState<string[]>([]);
   const [composeFormSelectModalOpen, setComposeFormSelectModalOpen] = useState(false);
-  const [composeFormSelectInitialId, setComposeFormSelectInitialId] = useState<string | undefined>(undefined);
+  const [composeFormSelectInitialId, setComposeFormSelectInitialId] = useState<string | undefined>(
+    undefined,
+  );
   // 근태정정신청 자동 모달 - corrDate 진입 시 기존 결재 모달 흐름과 동일한 모양으로 띄움
   const [correctionEmbedSrc, setCorrectionEmbedSrc] = useState<string | null>(null);
   /** 저장 시 업로드할 로컬 파일 — 임시저장/제출 직후 POST /approval/attachments */
@@ -1606,7 +1698,10 @@ export function ApprovalsPage() {
   const authMemberId =
     user?.id?.trim() || getRefreshIdentityHeaders()['X-User-UUID']?.trim() || undefined;
 
-  const allowedTabs = useMemo(() => ['compose', 'my', 'pending', 'acted', ...(canAdmin ? ['admin'] : [])], [canAdmin]);
+  const allowedTabs = useMemo(
+    () => ['compose', 'my', 'pending', 'acted', ...(canAdmin ? ['admin'] : [])],
+    [canAdmin],
+  );
 
   const tab = useMemo(() => {
     const rawTab = routeSearch.tab;
@@ -1619,20 +1714,32 @@ export function ApprovalsPage() {
   const isOvertimeEntry = Boolean(routeSearch.otDate);
   const isEarlyLeaveEntry = Boolean(routeSearch.elDate);
   const isAutoComposeEntry = String(routeSearch.autoCompose ?? '') === '1';
-  const isAutoOpenEntry = isCorrectionEntry || isOvertimeEntry || isEarlyLeaveEntry || isAutoComposeEntry;
+  const isAutoOpenEntry =
+    isCorrectionEntry || isOvertimeEntry || isEarlyLeaveEntry || isAutoComposeEntry;
   const navigateToComposeWorkbench = useCallback(() => {
     navigate({
       to: '/app/approvals',
-      search: { tab: 'compose', sideNav: APPROVAL_COMPOSE_WORKBENCH_SIDE_NAV, ...embedSearchSuffix },
+      search: {
+        tab: 'compose',
+        sideNav: APPROVAL_COMPOSE_WORKBENCH_SIDE_NAV,
+        ...embedSearchSuffix,
+      },
       replace: true,
     });
   }, [embedSearchSuffix, navigate]);
-  const onComposeHub = tab === 'compose' && !isEmbedComposeModal && (sideNav === '' || sideNav === 'request-compose');
+  const onComposeHub =
+    tab === 'compose' && !isEmbedComposeModal && (sideNav === '' || sideNav === 'request-compose');
   const approvalNotificationModal = useMemo<ApprovalNotificationModal | null>(() => {
     const raw = String(routeSearch.approvalModal ?? '')
       .trim()
       .toLowerCase();
-    if (raw === 'pending' || raw === 'my-all' || raw === 'viewers' || raw === 'official' || raw === 'draft') {
+    if (
+      raw === 'pending' ||
+      raw === 'my-all' ||
+      raw === 'viewers' ||
+      raw === 'official' ||
+      raw === 'draft'
+    ) {
       return raw;
     }
     return null;
@@ -1646,7 +1753,12 @@ export function ApprovalsPage() {
       return;
     }
     setComposeHomeMoreModal({ kind: 'iframe', panel: approvalNotificationModal });
-  }, [onComposeHub, approvalNotificationModal, routeSearch.approvalOpenAt, routeSearch.approvalRequestId]);
+  }, [
+    onComposeHub,
+    approvalNotificationModal,
+    routeSearch.approvalOpenAt,
+    routeSearch.approvalRequestId,
+  ]);
 
   useEffect(() => {
     if (!onComposeHub) return;
@@ -1678,7 +1790,8 @@ export function ApprovalsPage() {
   const requestStatusFilter = useMemo<ApprovalRequestStatus | 'ALL'>(() => {
     if (tab !== 'my') return 'ALL';
     const box = typeof routeSearch.box === 'string' ? routeSearch.box : undefined;
-    if (box === 'per-draft' || String(routeSearch.myStatus).toUpperCase() === 'DRAFT') return 'DRAFT';
+    if (box === 'per-draft' || String(routeSearch.myStatus).toUpperCase() === 'DRAFT')
+      return 'DRAFT';
     if (box === 'per-viewers') return 'ALL';
     const ms = routeSearch.myStatus;
     if (ms === 'ALL' || ms === undefined || ms === '') return 'ALL';
@@ -1795,8 +1908,8 @@ export function ApprovalsPage() {
   }, [myAllowanceHistory]);
   const allowanceFixedAmountByTemplate = useMemo(() => {
     const byTemplate = new Map<string, number>();
-    const sorted = [...myAllowanceHistory].sort(
-      (a, b) => (b.effectiveFrom ?? '').localeCompare(a.effectiveFrom ?? ''),
+    const sorted = [...myAllowanceHistory].sort((a, b) =>
+      (b.effectiveFrom ?? '').localeCompare(a.effectiveFrom ?? ''),
     );
     for (const row of sorted) {
       const templateId = row.salaryItemTemplateId ?? '';
@@ -1886,9 +1999,13 @@ export function ApprovalsPage() {
   );
   const quickHomeFormDocs = useMemo(() => {
     const byId = new Map(composeHubVisibleDocuments.map((doc) => [doc.documentId, doc]));
-    const picked = quickHomeForms.map((id) => byId.get(id)).filter((doc): doc is ApprovalDocument => doc != null);
+    const picked = quickHomeForms
+      .map((id) => byId.get(id))
+      .filter((doc): doc is ApprovalDocument => doc != null);
     if (picked.length >= 2) return picked.slice(0, 3);
-    const fallback = composeHubVisibleDocuments.filter((doc) => !picked.some((p) => p.documentId === doc.documentId));
+    const fallback = composeHubVisibleDocuments.filter(
+      (doc) => !picked.some((p) => p.documentId === doc.documentId),
+    );
     return [...picked, ...fallback].slice(0, Math.min(3, composeHubVisibleDocuments.length));
   }, [composeHubVisibleDocuments, quickHomeForms]);
   const quickHomeDraftDocs = useMemo(() => {
@@ -1921,11 +2038,16 @@ export function ApprovalsPage() {
     [selectedDocument],
   );
   const vacationLeaveKindField = useMemo(
-    () => findApprovalFormFieldByLabel(selectedSchema.fields, APPROVAL_VACATION_LEAVE_KIND_FIELD_LABEL),
+    () =>
+      findApprovalFormFieldByLabel(selectedSchema.fields, APPROVAL_VACATION_LEAVE_KIND_FIELD_LABEL),
     [selectedSchema.fields],
   );
   const familyEventSubtypeField = useMemo(
-    () => findApprovalFormFieldByLabel(selectedSchema.fields, APPROVAL_FAMILY_EVENT_SUBTYPE_FIELD_LABEL),
+    () =>
+      findApprovalFormFieldByLabel(
+        selectedSchema.fields,
+        APPROVAL_FAMILY_EVENT_SUBTYPE_FIELD_LABEL,
+      ),
     [selectedSchema.fields],
   );
   /** `useWatch`는 동적 namePath를 권장하지 않음 — `content`만 구독 후 필드명으로 조회 */
@@ -1936,7 +2058,8 @@ export function ApprovalsPage() {
       : undefined;
   const showFamilyEventSubtypeInCompose =
     familyEventSubtypeField != null &&
-    (vacationLeaveKindField == null || watchedVacationLeaveKind === APPROVAL_FAMILY_EVENT_LEAVE_KIND_OPTION);
+    (vacationLeaveKindField == null ||
+      watchedVacationLeaveKind === APPROVAL_FAMILY_EVENT_LEAVE_KIND_OPTION);
   const composeSelectedOfficial = useMemo(
     () =>
       selectedDocument != null &&
@@ -2042,12 +2165,13 @@ export function ApprovalsPage() {
     composePhase === 'fill' &&
     routeSearch.sideNav !== 'request-compose';
 
-  const { data: composeRemoteAttachments = [], isFetching: composeRemoteAttachmentsLoading } = useQuery({
-    queryKey: ['approval', 'attachments', composeEditingRequestId],
-    queryFn: () => approvalAttachmentsApi.listAttachments(composeEditingRequestId!),
-    enabled: composeAttachmentsListEnabled,
-    staleTime: 30_000,
-  });
+  const { data: composeRemoteAttachments = [], isFetching: composeRemoteAttachmentsLoading } =
+    useQuery({
+      queryKey: ['approval', 'attachments', composeEditingRequestId],
+      queryFn: () => approvalAttachmentsApi.listAttachments(composeEditingRequestId!),
+      enabled: composeAttachmentsListEnabled,
+      staleTime: 30_000,
+    });
 
   const mySubmittedInProgressCount = useMemo(
     () =>
@@ -2058,7 +2182,9 @@ export function ApprovalsPage() {
     [myRequestsAllForSummary],
   );
   const myRejectedCount = useMemo(
-    () => myRequestsAllForSummary.filter((r) => String(r.requestStatus).toUpperCase() === 'REJECTED').length,
+    () =>
+      myRequestsAllForSummary.filter((r) => String(r.requestStatus).toUpperCase() === 'REJECTED')
+        .length,
     [myRequestsAllForSummary],
   );
   const unreadViewerCount = useMemo(
@@ -2066,7 +2192,9 @@ export function ApprovalsPage() {
       [...viewerCcRequests, ...viewerCirculationRequests].filter((row) => {
         const mine = row.viewers?.filter((v) => memberKeyEq(v.viewerMemberId, authMemberId));
         if (!mine?.length) return false;
-        return mine.some((v) => String(v.viewerReadStatus).toUpperCase() !== 'READ' || !v.viewedAt?.trim());
+        return mine.some(
+          (v) => String(v.viewerReadStatus).toUpperCase() !== 'READ' || !v.viewedAt?.trim(),
+        );
       }).length,
     [authMemberId, viewerCcRequests, viewerCirculationRequests],
   );
@@ -2136,7 +2264,9 @@ export function ApprovalsPage() {
     staleTime: 60_000,
   });
   const myOrganizationIdForDept = useMemo(() => {
-    const fromDetail = (drafterProfile as { organizationId?: string } | undefined)?.organizationId?.trim();
+    const fromDetail = (
+      drafterProfile as { organizationId?: string } | undefined
+    )?.organizationId?.trim();
     if (fromDetail) return fromDetail;
     if (authMemberId && orgChart?.organizations?.length) {
       return findMemberOrganizationId(orgChart.organizations, authMemberId) ?? '';
@@ -2184,13 +2314,7 @@ export function ApprovalsPage() {
       default:
         return myRequests;
     }
-  }, [
-    onMyTab,
-    guideBox,
-    myRequests,
-    viewerCcRequests,
-    viewerCirculationRequests,
-  ]);
+  }, [onMyTab, guideBox, myRequests, viewerCcRequests, viewerCirculationRequests]);
 
   const pendingTableLoading =
     !onPendingTab || !guideBox
@@ -2249,7 +2373,11 @@ export function ApprovalsPage() {
           } catch {
             // ignore
           }
-          navigate({ to: '/app/approvals', search: { tab: 'my', box: 'per-all', ...embedSearchSuffix }, replace: true });
+          navigate({
+            to: '/app/approvals',
+            search: { tab: 'my', box: 'per-all', ...embedSearchSuffix },
+            replace: true,
+          });
           return;
         }
         hardReloadToMyInbox();
@@ -2278,7 +2406,11 @@ export function ApprovalsPage() {
         } catch {
           // ignore
         }
-        navigate({ to: '/app/approvals', search: { tab: 'my', box: 'per-all', ...embedSearchSuffix }, replace: true });
+        navigate({
+          to: '/app/approvals',
+          search: { tab: 'my', box: 'per-all', ...embedSearchSuffix },
+          replace: true,
+        });
         return;
       }
       hardReloadToMyInbox();
@@ -2319,7 +2451,11 @@ export function ApprovalsPage() {
           } catch {
             // ignore
           }
-          navigate({ to: '/app/approvals', search: { tab: 'my', box: 'per-all', ...embedSearchSuffix }, replace: true });
+          navigate({
+            to: '/app/approvals',
+            search: { tab: 'my', box: 'per-all', ...embedSearchSuffix },
+            replace: true,
+          });
           return;
         }
         hardReloadToMyInbox();
@@ -2348,7 +2484,11 @@ export function ApprovalsPage() {
         } catch {
           // ignore
         }
-        navigate({ to: '/app/approvals', search: { tab: 'my', box: 'per-all', ...embedSearchSuffix }, replace: true });
+        navigate({
+          to: '/app/approvals',
+          search: { tab: 'my', box: 'per-all', ...embedSearchSuffix },
+          replace: true,
+        });
         return;
       }
       hardReloadToMyInbox();
@@ -2407,8 +2547,14 @@ export function ApprovalsPage() {
         const draftFields = parseFormSchema(doc.formSchema).fields;
         const content = parseDetailContentJson(detail);
         stripNonPersistedApprovalContentFields(content, draftFields);
-        const draftLeaveKind = findApprovalFormFieldByLabel(draftFields, APPROVAL_VACATION_LEAVE_KIND_FIELD_LABEL);
-        const draftFamilySubtype = findApprovalFormFieldByLabel(draftFields, APPROVAL_FAMILY_EVENT_SUBTYPE_FIELD_LABEL);
+        const draftLeaveKind = findApprovalFormFieldByLabel(
+          draftFields,
+          APPROVAL_VACATION_LEAVE_KIND_FIELD_LABEL,
+        );
+        const draftFamilySubtype = findApprovalFormFieldByLabel(
+          draftFields,
+          APPROVAL_FAMILY_EVENT_SUBTYPE_FIELD_LABEL,
+        );
         if (draftLeaveKind && draftFamilySubtype) {
           const k = content[draftLeaveKind.name];
           if (k !== APPROVAL_FAMILY_EVENT_LEAVE_KIND_OPTION) {
@@ -2575,37 +2721,37 @@ export function ApprovalsPage() {
 
   const applyPolicyLineDrafts = useCallback(
     async (doc?: ApprovalDocument | null) => {
-    if (composeEditingRequestId) return;
+      if (composeEditingRequestId) return;
       if (!doc) {
-      setApprovalLineDrafts([]);
-      return;
-    }
+        setApprovalLineDrafts([]);
+        return;
+      }
       try {
         const candidateLines = await qc.fetchQuery({
           queryKey: ['approval', 'policy-lines', 'candidates', doc.documentId],
           queryFn: () => approvalApi.getPolicyLineCandidates(doc.documentId),
           staleTime: 60_000,
         });
-    const nextDrafts = [...candidateLines]
-      .sort((a, b) => a.stepOrder - b.stepOrder)
-      .map((line): ApprovalLineDraft | null => {
-        const first = line.candidates[0];
-        if (!first) return null;
+        const nextDrafts = [...candidateLines]
+          .sort((a, b) => a.stepOrder - b.stepOrder)
+          .map((line): ApprovalLineDraft | null => {
+            const first = line.candidates[0];
+            if (!first) return null;
             const multi = line.candidates.length > 1;
-        return {
-          kind: 'member',
-          id: `policy-${line.policyLineId}`,
-          stepOrder: line.stepOrder,
-          approverMemberId: first.memberId,
-          approverMemberPositionId: first.memberPositionId,
-          memberName: first.memberName,
-          jobTitleName: first.jobTitleName,
-          organizationName: first.organizationName,
-          source: 'policy',
+            return {
+              kind: 'member',
+              id: `policy-${line.policyLineId}`,
+              stepOrder: line.stepOrder,
+              approverMemberId: first.memberId,
+              approverMemberPositionId: first.memberPositionId,
+              memberName: first.memberName,
+              jobTitleName: first.jobTitleName,
+              organizationName: first.organizationName,
+              source: 'policy',
               policyLineId: line.policyLineId,
               ...(multi ? { policyCandidates: line.candidates } : {}),
-        };
-      });
+            };
+          });
         setApprovalLineDrafts(nextDrafts.filter((v) => v != null) as ApprovalLineDraft[]);
       } catch {
         setApprovalLineDrafts([]);
@@ -2994,14 +3140,18 @@ export function ApprovalsPage() {
       // 결재 승인 후 기안자가 [발송] 누르면 회사 모든 부서 부서문서함에 노출
       if (Array.isArray(parsed.recipients) && parsed.recipients.length > 0) {
         setOfficialRecipients(
-          parsed.recipients.map((r) => ({
-            recipientOrganizationId: String(r.recipientOrganizationId ?? '').trim(),
-            recipientOrganizationName: String(r.recipientOrganizationName ?? '').trim(),
-          })).filter((r) => r.recipientOrganizationId),
+          parsed.recipients
+            .map((r) => ({
+              recipientOrganizationId: String(r.recipientOrganizationId ?? '').trim(),
+              recipientOrganizationName: String(r.recipientOrganizationName ?? '').trim(),
+            }))
+            .filter((r) => r.recipientOrganizationId),
         );
       }
       personnelOrderPrefillAppliedRef.current = true;
-      message.success('조직 개편 시뮬 변경 사항을 결재 양식에 채웠습니다. 결재선만 지정해 신청하세요.');
+      message.success(
+        '조직 개편 시뮬 변경 사항을 결재 양식에 채웠습니다. 결재선만 지정해 신청하세요.',
+      );
     } catch {
       // ignore bad payload
     } finally {
@@ -3015,8 +3165,9 @@ export function ApprovalsPage() {
   // (부모가 먼저 비워버리면 iframe 까지 prefill 데이터가 도달 못 함)
   useEffect(() => {
     if (tab !== 'compose' || composePhase !== 'fill') return;
-    const raw = localStorage.getItem(LEAVE_REQUEST_PREFILL_STORAGE_KEY)
-      ?? sessionStorage.getItem(LEAVE_REQUEST_PREFILL_STORAGE_KEY);
+    const raw =
+      localStorage.getItem(LEAVE_REQUEST_PREFILL_STORAGE_KEY) ??
+      sessionStorage.getItem(LEAVE_REQUEST_PREFILL_STORAGE_KEY);
     if (!raw) return;
     try {
       const parsed = JSON.parse(raw) as {
@@ -3024,7 +3175,8 @@ export function ApprovalsPage() {
         content?: Record<string, unknown>;
       };
       if (!parsed.documentId || parsed.documentId !== selectedDocumentId) return;
-      if (!parsed.content || typeof parsed.content !== 'object' || Array.isArray(parsed.content)) return;
+      if (!parsed.content || typeof parsed.content !== 'object' || Array.isArray(parsed.content))
+        return;
       const normalizedContent =
         selectedDocument?.documentName === '휴가신청서'
           ? normalizeLeavePrefillContent(parsed.content, companyHolidaySet)
@@ -3036,7 +3188,9 @@ export function ApprovalsPage() {
           ...normalizedContent,
         },
       });
-      message.success('휴가 계획에서 가져온 날짜가 자동 입력되었습니다. 결재선 지정 후 신청하세요.');
+      message.success(
+        '휴가 계획에서 가져온 날짜가 자동 입력되었습니다. 결재선 지정 후 신청하세요.',
+      );
       // iframe(embed) 컨텍스트에서만 storage 비움. 부모가 비우면 iframe 에 데이터 도달 못 함
       if (isEmbedComposeModal) {
         localStorage.removeItem(LEAVE_REQUEST_PREFILL_STORAGE_KEY);
@@ -3048,7 +3202,16 @@ export function ApprovalsPage() {
         sessionStorage.removeItem(LEAVE_REQUEST_PREFILL_STORAGE_KEY);
       }
     }
-  }, [composePhase, form, isEmbedComposeModal, message, selectedDocument, selectedDocumentId, tab, companyHolidaySet]);
+  }, [
+    composePhase,
+    form,
+    isEmbedComposeModal,
+    message,
+    selectedDocument,
+    selectedDocumentId,
+    tab,
+    companyHolidaySet,
+  ]);
 
   // 챗봇 액션 prefill - sessionStorage 로 넘겨준 documentId+content 자동 입력
   useEffect(() => {
@@ -3061,7 +3224,8 @@ export function ApprovalsPage() {
         content?: Record<string, unknown>;
       };
       if (!parsed.documentId || parsed.documentId !== selectedDocumentId) return;
-      if (!parsed.content || typeof parsed.content !== 'object' || Array.isArray(parsed.content)) return;
+      if (!parsed.content || typeof parsed.content !== 'object' || Array.isArray(parsed.content))
+        return;
       const normalizedContent =
         selectedDocument?.documentName === '휴가신청서'
           ? normalizeLeavePrefillContent(parsed.content, companyHolidaySet)
@@ -3083,7 +3247,9 @@ export function ApprovalsPage() {
   const toggleBookmark = useCallback((requestId: string) => {
     setBookmarkedRequestIds((prev) => {
       const exists = prev.includes(requestId);
-      const next = exists ? prev.filter((id) => id !== requestId) : [requestId, ...prev].slice(0, 20);
+      const next = exists
+        ? prev.filter((id) => id !== requestId)
+        : [requestId, ...prev].slice(0, 20);
       try {
         localStorage.setItem(APPROVAL_HOME_BOOKMARKS_KEY, JSON.stringify(next));
       } catch {
@@ -3093,10 +3259,17 @@ export function ApprovalsPage() {
     });
   }, []);
 
-  const syncStepOrder = (rows: ApprovalLineDraft[]) => rows.map((r, idx) => ({ ...r, stepOrder: idx + 1 }));
+  const syncStepOrder = (rows: ApprovalLineDraft[]) =>
+    rows.map((r, idx) => ({ ...r, stepOrder: idx + 1 }));
 
-  const orderedApprovalLineDrafts = useMemo(() => syncStepOrder([...approvalLineDrafts]), [approvalLineDrafts]);
-  const approvalLineSortableIds = useMemo(() => orderedApprovalLineDrafts.map((r) => r.id), [orderedApprovalLineDrafts]);
+  const orderedApprovalLineDrafts = useMemo(
+    () => syncStepOrder([...approvalLineDrafts]),
+    [approvalLineDrafts],
+  );
+  const approvalLineSortableIds = useMemo(
+    () => orderedApprovalLineDrafts.map((r) => r.id),
+    [orderedApprovalLineDrafts],
+  );
 
   const approvalLineSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -3180,13 +3353,19 @@ export function ApprovalsPage() {
     }
     if (authMemberId?.trim() && memberKeyEq(memberId, authMemberId)) {
       message.warning(
-        viewerType === 'CC' ? '기안자 본인은 참조자로 추가할 수 없습니다.' : '기안자 본인은 공람자로 추가할 수 없습니다.',
+        viewerType === 'CC'
+          ? '기안자 본인은 참조자로 추가할 수 없습니다.'
+          : '기안자 본인은 공람자로 추가할 수 없습니다.',
       );
       return;
     }
     const list = viewerType === 'CC' ? ccViewers : circulationViewers;
     if (collectViewerMemberIds(list).has(memberId)) {
-      message.info(viewerType === 'CC' ? '이미 참조자로 추가된 멤버입니다.' : '이미 공람자로 추가된 멤버입니다.');
+      message.info(
+        viewerType === 'CC'
+          ? '이미 참조자로 추가된 멤버입니다.'
+          : '이미 공람자로 추가된 멤버입니다.',
+      );
       return;
     }
     try {
@@ -3210,7 +3389,6 @@ export function ApprovalsPage() {
       message.error(e instanceof Error ? e.message : '멤버 정보를 불러오지 못했습니다.');
     }
   };
-
 
   const bulkAddApproversFromOrg = useCallback(
     async (organizationId: string) => {
@@ -3255,7 +3433,9 @@ export function ApprovalsPage() {
         const existing = collectApproverMemberIds(prev);
         const toAdd = newMembers.filter((m) => !existing.has(m.approverMemberId));
         if (!toAdd.length) return prev;
-        const orgIdx = prev.findIndex((r) => r.kind === 'org' && r.organizationId === organizationId);
+        const orgIdx = prev.findIndex(
+          (r) => r.kind === 'org' && r.organizationId === organizationId,
+        );
         if (orgIdx >= 0) {
           const orgRow = prev[orgIdx] as ApprovalLineOrgDraft;
           const merged = [...orgRow.members];
@@ -3334,7 +3514,9 @@ export function ApprovalsPage() {
         const existing = collectViewerMemberIds(prev);
         const toAdd = newMembers.filter((m) => !existing.has(m.viewerMemberId));
         if (!toAdd.length) return prev;
-        const orgIdx = prev.findIndex((r) => r.kind === 'org' && r.organizationId === organizationId);
+        const orgIdx = prev.findIndex(
+          (r) => r.kind === 'org' && r.organizationId === organizationId,
+        );
         if (orgIdx >= 0) {
           const orgRow = prev[orgIdx] as ViewerOrgDraft;
           const merged = [...orgRow.members];
@@ -3358,7 +3540,9 @@ export function ApprovalsPage() {
         return [...prev, orgRow];
       });
       if (addedCount === 0) {
-        message.info(viewerType === 'CC' ? '모든 멤버가 이미 참조자입니다.' : '모든 멤버가 이미 공람자입니다.');
+        message.info(
+          viewerType === 'CC' ? '모든 멤버가 이미 참조자입니다.' : '모든 멤버가 이미 공람자입니다.',
+        );
       } else {
         message.success(
           viewerType === 'CC'
@@ -3371,7 +3555,9 @@ export function ApprovalsPage() {
   );
 
   const addFromOrgPickerByCurrentTab = useCallback(
-    async (payload: { kind: 'member'; memberId: string } | { kind: 'org'; organizationId: string }) => {
+    async (
+      payload: { kind: 'member'; memberId: string } | { kind: 'org'; organizationId: string },
+    ) => {
       if (lineInfoTab === 'approval') {
         if (payload.kind === 'member') await addApproverFromOrg(payload.memberId);
         else await bulkAddApproversFromOrg(payload.organizationId);
@@ -3381,11 +3567,20 @@ export function ApprovalsPage() {
       if (payload.kind === 'member') await addViewerFromOrg(payload.memberId, viewerType);
       else await bulkAddViewersFromOrg(payload.organizationId, viewerType);
     },
-    [addApproverFromOrg, addViewerFromOrg, bulkAddApproversFromOrg, bulkAddViewersFromOrg, lineInfoTab],
+    [
+      addApproverFromOrg,
+      addViewerFromOrg,
+      bulkAddApproversFromOrg,
+      bulkAddViewersFromOrg,
+      lineInfoTab,
+    ],
   );
 
   const composeAttachmentAcceptAttr = useMemo(
-    () => Array.from(APPROVAL_ATTACHMENT_ALLOWED_EXT).map((ext) => `.${ext}`).join(','),
+    () =>
+      Array.from(APPROVAL_ATTACHMENT_ALLOWED_EXT)
+        .map((ext) => `.${ext}`)
+        .join(','),
     [],
   );
   const composeAttachmentSlotsLeft = Math.max(
@@ -3444,7 +3639,10 @@ export function ApprovalsPage() {
       } else {
         await form.validateFields(['documentId']);
       }
-      const values = form.getFieldsValue(true) as { documentId?: string; content?: Record<string, unknown> };
+      const values = form.getFieldsValue(true) as {
+        documentId?: string;
+        content?: Record<string, unknown>;
+      };
       if (!selectedDocument) {
         message.warning('양식을 선택해 주세요.');
         return;
@@ -3461,7 +3659,9 @@ export function ApprovalsPage() {
         if (selectedTemplateId) {
           const fixedAmount = allowanceFixedAmountByTemplate.get(selectedTemplateId);
           if (fixedAmount == null) {
-            message.warning('선택한 수당의 회사 고정 금액을 찾을 수 없습니다. 관리자에게 확인해 주세요.');
+            message.warning(
+              '선택한 수당의 회사 고정 금액을 찾을 수 없습니다. 관리자에게 확인해 주세요.',
+            );
             return;
           }
           contentForSubmit.amount = fixedAmount;
@@ -3498,7 +3698,9 @@ export function ApprovalsPage() {
         composeRemoteAttachments.length + composeAttachmentFiles.length + meetingAudioSlot >
         APPROVAL_ATTACHMENT_MAX_COUNT
       ) {
-        message.warning('첨부는 최대 3개입니다. 회의 녹음을 첨부하려면 일반 첨부 개수를 줄여 주세요.');
+        message.warning(
+          '첨부는 최대 3개입니다. 회의 녹음을 첨부하려면 일반 첨부 개수를 줄여 주세요.',
+        );
         return;
       }
 
@@ -3585,8 +3787,7 @@ export function ApprovalsPage() {
         });
       }
 
-      const attachMeeting =
-        wantsMeetingAudio && pendingMeetingBlob && pendingMeetingBlob.size > 0;
+      const attachMeeting = wantsMeetingAudio && pendingMeetingBlob && pendingMeetingBlob.size > 0;
       if (attachMeeting) {
         try {
           const file = new File([pendingMeetingBlob], `meeting_${Date.now()}.webm`, {
@@ -3594,7 +3795,9 @@ export function ApprovalsPage() {
           });
           await approvalAttachmentsApi.uploadAttachments(resultDetail.requestId, [file]);
           composeMeetingAudioBlobRef.current = null;
-          void qc.invalidateQueries({ queryKey: ['approval', 'attachments', resultDetail.requestId] });
+          void qc.invalidateQueries({
+            queryKey: ['approval', 'attachments', resultDetail.requestId],
+          });
         } catch (e) {
           const detail = e instanceof Error ? e.message : String(e);
           message.warning(
@@ -3632,12 +3835,24 @@ export function ApprovalsPage() {
           </Button>
         ) : null}
         {showCancel ? (
-          <Button type="link" size="small" className="!tw-h-7 !tw-px-2" danger onClick={() => setCancelTarget(row)}>
+          <Button
+            type="link"
+            size="small"
+            className="!tw-h-7 !tw-px-2"
+            danger
+            onClick={() => setCancelTarget(row)}
+          >
             {st === 'DRAFT' ? '삭제' : '취소'}
           </Button>
         ) : null}
         {showOfficialPreSendCancel ? (
-          <Button type="link" size="small" className="!tw-h-7 !tw-px-2" danger onClick={() => setCancelTarget(row)}>
+          <Button
+            type="link"
+            size="small"
+            className="!tw-h-7 !tw-px-2"
+            danger
+            onClick={() => setCancelTarget(row)}
+          >
             발송 취소
           </Button>
         ) : null}
@@ -3699,7 +3914,13 @@ export function ApprovalsPage() {
         >
           이어쓰기
         </Button>
-        <Button type="link" size="small" className="!tw-h-7 !tw-px-2" danger onClick={() => setCancelTarget(row)}>
+        <Button
+          type="link"
+          size="small"
+          className="!tw-h-7 !tw-px-2"
+          danger
+          onClick={() => setCancelTarget(row)}
+        >
           삭제
         </Button>
       </div>
@@ -3872,7 +4093,9 @@ export function ApprovalsPage() {
       key: 'proxyKind',
       width: 88,
       render: (_: unknown, row: ApprovalRequestDetail) => {
-        const myLine = row.approvalLines.find((l) => String(l.approvalStatus).toUpperCase() === 'PENDING');
+        const myLine = row.approvalLines.find(
+          (l) => String(l.approvalStatus).toUpperCase() === 'PENDING',
+        );
         if (!myLine) return '—';
         return isPendingApprovalLineForProxyActor(myLine, myPositionIdForProxy) ? (
           <Tag color="purple">대결</Tag>
@@ -3893,7 +4116,9 @@ export function ApprovalsPage() {
       key: 'myLine',
       width: 150,
       render: (_: unknown, row: ApprovalRequestDetail) => {
-        const myLine = row.approvalLines.find((l) => String(l.approvalStatus).toUpperCase() === 'PENDING');
+        const myLine = row.approvalLines.find(
+          (l) => String(l.approvalStatus).toUpperCase() === 'PENDING',
+        );
         if (!myLine) return '—';
         return `${myLine.stepOrder}단계`;
       },
@@ -3903,14 +4128,18 @@ export function ApprovalsPage() {
       key: 'actions',
       width: 200,
       render: (_: unknown, row: ApprovalRequestDetail) => {
-        const myLine = row.approvalLines.find((l) => String(l.approvalStatus).toUpperCase() === 'PENDING');
+        const myLine = row.approvalLines.find(
+          (l) => String(l.approvalStatus).toUpperCase() === 'PENDING',
+        );
         return (
           <Space size="small" wrap onClick={(e) => e.stopPropagation()}>
             <Button
               type="primary"
               size="small"
               disabled={!myLine}
-              onClick={() => myLine && setApprovalAction({ approvalId: myLine.approvalId, mode: 'approve' })}
+              onClick={() =>
+                myLine && setApprovalAction({ approvalId: myLine.approvalId, mode: 'approve' })
+              }
             >
               승인
             </Button>
@@ -3918,7 +4147,9 @@ export function ApprovalsPage() {
               danger
               size="small"
               disabled={!myLine}
-              onClick={() => myLine && setApprovalAction({ approvalId: myLine.approvalId, mode: 'reject' })}
+              onClick={() =>
+                myLine && setApprovalAction({ approvalId: myLine.approvalId, mode: 'reject' })
+              }
             >
               반려
             </Button>
@@ -3935,7 +4166,8 @@ export function ApprovalsPage() {
         title: '제목',
         key: 'subject',
         ellipsis: true,
-        render: (_: unknown, row: ApprovalRequestDetail) => getApprovalRequestSubjectLine(row) || '—',
+        render: (_: unknown, row: ApprovalRequestDetail) =>
+          getApprovalRequestSubjectLine(row) || '—',
       },
       { title: '양식', dataIndex: 'documentName', key: 'documentName', ellipsis: true },
       {
@@ -3953,7 +4185,11 @@ export function ApprovalsPage() {
         key: 'read',
         width: 88,
         render: (_: unknown, row: ApprovalRequestDetail) =>
-          unreadViewerForMember(row, authMemberId) ? <Tag color="error">미열람</Tag> : <Tag>열람</Tag>,
+          unreadViewerForMember(row, authMemberId) ? (
+            <Tag color="error">미열람</Tag>
+          ) : (
+            <Tag>열람</Tag>
+          ),
       },
       {
         title: '기안일',
@@ -4001,7 +4237,9 @@ export function ApprovalsPage() {
           expandedKeys={orgTreeExpandedKeys}
           onExpand={(keys) => setOrgTreeExpandedKeys(keys)}
           selectedKeys={
-            orgTreeSelectedKey && !String(orgTreeSelectedKey).startsWith('member:') ? [orgTreeSelectedKey] : []
+            orgTreeSelectedKey && !String(orgTreeSelectedKey).startsWith('member:')
+              ? [orgTreeSelectedKey]
+              : []
           }
           onSelect={(keys) => {
             const key = typeof keys[0] === 'string' ? keys[0] : undefined;
@@ -4047,7 +4285,9 @@ export function ApprovalsPage() {
         />
       </div>
       <Typography.Paragraph type="secondary" className="!tw-mb-2 !tw-mt-2 !tw-text-xs">
-        조직·멤버 노드를 클릭하거나 오른쪽 목록으로 드래그해 추가하세요. 조직 이름을 클릭하면 하위 부서와 소속 멤버가 펼쳐집니다. 오른쪽에는 조직 단위로 표시되며, 제출 시 해당 조직(하위 부서 포함) 소속 멤버 전원에게 반영됩니다.
+        조직·멤버 노드를 클릭하거나 오른쪽 목록으로 드래그해 추가하세요. 조직 이름을 클릭하면 하위
+        부서와 소속 멤버가 펼쳐집니다. 오른쪽에는 조직 단위로 표시되며, 제출 시 해당 조직(하위 부서
+        포함) 소속 멤버 전원에게 반영됩니다.
       </Typography.Paragraph>
       <Divider className="!tw-my-3" />
       <Typography.Text type="secondary" className="tw-mb-2 tw-block tw-text-xs">
@@ -4067,7 +4307,9 @@ export function ApprovalsPage() {
                   );
                   e.dataTransfer.effectAllowed = 'copy';
                 }}
-                onClick={() => void addFromOrgPickerByCurrentTab({ kind: 'member', memberId: m.memberId })}
+                onClick={() =>
+                  void addFromOrgPickerByCurrentTab({ kind: 'member', memberId: m.memberId })
+                }
                 className="tw-flex tw-cursor-grab tw-select-none tw-items-center tw-rounded-lg tw-bg-slate-50/70 tw-px-2 tw-py-1.5 tw-transition-colors hover:tw-bg-slate-100/80"
               >
                 <span className="tw-truncate tw-pr-2 tw-text-sm">
@@ -4113,7 +4355,9 @@ export function ApprovalsPage() {
                 row.kind === 'org' ? (
                   <Tag color="green">조직</Tag>
                 ) : (
-                  <Tag color={viewerType === 'CC' ? 'default' : 'blue'}>{viewerType === 'CC' ? '참조' : '공람'}</Tag>
+                  <Tag color={viewerType === 'CC' ? 'default' : 'blue'}>
+                    {viewerType === 'CC' ? '참조' : '공람'}
+                  </Tag>
                 ),
             },
             {
@@ -4134,7 +4378,8 @@ export function ApprovalsPage() {
               title: '부서',
               key: 'organizationName',
               width: 140,
-              render: (_, row) => (row.kind === 'org' ? row.organizationName : row.organizationName || '—'),
+              render: (_, row) =>
+                row.kind === 'org' ? row.organizationName : row.organizationName || '—',
             },
             {
               title: '관리',
@@ -4201,7 +4446,8 @@ export function ApprovalsPage() {
   const viewerInitial = (name: string) => (name.trim().charAt(0) || '?').toUpperCase();
 
   const sidebarDrafterName = drafterProfile?.name?.trim() || user?.name?.trim() || '—';
-  const sidebarDrafterOrg = drafterProfile?.organizationName?.trim() || user?.departmentName?.trim() || '—';
+  const sidebarDrafterOrg =
+    drafterProfile?.organizationName?.trim() || user?.departmentName?.trim() || '—';
   const sidebarDrafterTitle = drafterProfile?.jobTitleName?.trim() || user?.jobTitle?.trim() || '';
 
   const composeToolbarGhostBtn =
@@ -4221,7 +4467,12 @@ export function ApprovalsPage() {
             </Tag>
           ) : null}
           {composeEditingRequestId ? (
-            <Button type="text" size="small" className={composeToolbarGhostBtn} onClick={() => resetComposeToNew()}>
+            <Button
+              type="text"
+              size="small"
+              className={composeToolbarGhostBtn}
+              onClick={() => resetComposeToNew()}
+            >
               새 작성
             </Button>
           ) : null}
@@ -4267,31 +4518,37 @@ export function ApprovalsPage() {
   const renderComposeDocumentSidebar = (opts?: { variant?: 'card' | 'flush' }) => {
     const variant = opts?.variant ?? 'card';
     return (
-    <div
-      className={clsx(
-        composeApprovalInfoAsideClass,
-        variant === 'flush'
-          ? 'tw-flex tw-h-full tw-min-h-0 tw-flex-col tw-overflow-hidden tw-rounded-lg tw-border tw-border-[#e0e0e0] tw-bg-white tw-shadow-[0_1px_6px_rgba(0,0,0,0.06)]'
-          : 'tw-overflow-hidden tw-rounded-xl tw-border tw-border-slate-200 tw-bg-white tw-shadow-[0_1px_4px_rgba(15,23,42,0.06)]',
-      )}
-    >
-      <div className="tw-flex tw-items-center tw-border-b tw-border-[#e5e7eb] tw-bg-white tw-px-3 tw-py-3">
-        <Typography.Text strong className="!tw-text-sm !tw-text-[#111827]">
-          결재정보
-        </Typography.Text>
-      </div>
-      <div className={clsx('tw-p-2 sm:tw-p-3', variant === 'flush' ? 'tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-bg-[#f5f6f8]' : 'tw-bg-[#f5f6f8]')}>
-        <Tabs
-          size="small"
-          activeKey={composeSidebarTab}
-          onChange={(k) => setComposeSidebarTab(k as 'line' | 'doc')}
-          tabBarStyle={{ marginBottom: 8 }}
-          items={[
-            {
-              key: 'line',
-              label: '결재선',
-              children: (
-                <div className="tw-space-y-2">
+      <div
+        className={clsx(
+          composeApprovalInfoAsideClass,
+          variant === 'flush'
+            ? 'tw-flex tw-h-full tw-min-h-0 tw-flex-col tw-overflow-hidden tw-rounded-lg tw-border tw-border-[#e0e0e0] tw-bg-white tw-shadow-[0_1px_6px_rgba(0,0,0,0.06)]'
+            : 'tw-overflow-hidden tw-rounded-xl tw-border tw-border-slate-200 tw-bg-white tw-shadow-[0_1px_4px_rgba(15,23,42,0.06)]',
+        )}
+      >
+        <div className="tw-flex tw-items-center tw-border-b tw-border-[#e5e7eb] tw-bg-white tw-px-3 tw-py-3">
+          <Typography.Text strong className="!tw-text-sm !tw-text-[#111827]">
+            결재정보
+          </Typography.Text>
+        </div>
+        <div
+          className={clsx(
+            'tw-p-2 sm:tw-p-3',
+            variant === 'flush'
+              ? 'tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-bg-[#f5f6f8]'
+              : 'tw-bg-[#f5f6f8]',
+          )}
+        >
+          <Tabs
+            size="small"
+            activeKey={composeSidebarTab}
+            onChange={(k) => setComposeSidebarTab(k as 'line' | 'doc')}
+            items={[
+              {
+                key: 'line',
+                label: '결재선',
+                children: (
+                  <div className="tw-space-y-2">
                     <>
                       <button
                         type="button"
@@ -4299,15 +4556,24 @@ export function ApprovalsPage() {
                         className="tw-w-full tw-overflow-hidden tw-rounded-lg tw-border tw-border-slate-200 tw-bg-white tw-p-0 tw-text-left tw-shadow-sm tw-transition-colors hover:tw-bg-slate-50 focus:tw-outline-none focus-visible:tw-ring-2 focus-visible:tw-ring-blue-400"
                       >
                         <div className="tw-flex tw-gap-3 tw-p-3">
-                          <Avatar className="tw-h-12 tw-w-12 tw-shrink-0 tw-bg-slate-400 tw-text-base" src={drafterProfile?.profileUrl ?? undefined}>
+                          <Avatar
+                            className="tw-h-12 tw-w-12 tw-shrink-0 tw-bg-slate-400 tw-text-base"
+                            src={drafterProfile?.profileUrl ?? undefined}
+                          >
                             {viewerInitial(sidebarDrafterName)}
                           </Avatar>
                           <div className="tw-min-w-0 tw-flex-1">
-                            <Typography.Text strong className="!tw-block !tw-text-sm !tw-text-[#111827]">
+                            <Typography.Text
+                              strong
+                              className="!tw-block !tw-text-sm !tw-text-[#111827]"
+                            >
                               {sidebarDrafterName}
                               {sidebarDrafterTitle ? ` ${sidebarDrafterTitle}` : ''}
                             </Typography.Text>
-                            <Typography.Text type="secondary" className="!tw-mt-0.5 !tw-block !tw-text-xs !tw-text-[#666]">
+                            <Typography.Text
+                              type="secondary"
+                              className="!tw-mt-0.5 !tw-block !tw-text-xs !tw-text-[#666]"
+                            >
                               {sidebarDrafterOrg}
                             </Typography.Text>
                           </div>
@@ -4330,7 +4596,9 @@ export function ApprovalsPage() {
                           >
                             <div className="tw-flex tw-gap-3">
                               <Avatar className="tw-h-11 tw-w-11 tw-shrink-0 tw-bg-slate-400 tw-text-base">
-                                {row.kind === 'org' ? viewerInitial(row.organizationName) : viewerInitial(row.memberName)}
+                                {row.kind === 'org'
+                                  ? viewerInitial(row.organizationName)
+                                  : viewerInitial(row.memberName)}
                               </Avatar>
                               <div className="tw-min-w-0 tw-flex-1">
                                 <Typography.Text strong className="!tw-block !tw-text-sm">
@@ -4338,10 +4606,16 @@ export function ApprovalsPage() {
                                     ? `${row.organizationName} (${row.members.length}명)`
                                     : `${row.memberName}${row.jobTitleName ? ` ${row.jobTitleName}` : ''}`}
                                 </Typography.Text>
-                                <Typography.Text type="secondary" className="!tw-mt-0.5 !tw-block !tw-text-xs">
+                                <Typography.Text
+                                  type="secondary"
+                                  className="!tw-mt-0.5 !tw-block !tw-text-xs"
+                                >
                                   {row.kind === 'org' ? '조직' : row.organizationName || '—'}
                                 </Typography.Text>
-                                <Typography.Text type="secondary" className="!tw-mt-1 !tw-block !tw-text-[11px] tw-text-slate-400">
+                                <Typography.Text
+                                  type="secondary"
+                                  className="!tw-mt-1 !tw-block !tw-text-[11px] tw-text-slate-400"
+                                >
                                   결재 예정 · {row.stepOrder}단계
                                 </Typography.Text>
                               </div>
@@ -4360,153 +4634,190 @@ export function ApprovalsPage() {
                         </Button>
                       </div>
                     </>
-                </div>
-              ),
-            },
-            {
-              key: 'doc',
-              label: '문서정보',
-              children: selectedDocument ? (
-                <div className="tw-space-y-3">
-                  <Descriptions size="small" column={1} bordered className="!tw-bg-white">
-                    <Descriptions.Item label="양식명">
-                      {formatApprovalDocumentName(selectedDocument.documentName)}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="유형">
-                      {approvalRequestTypeLabelKo(selectedDocument.requestType)}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="기안자">{sidebarDrafterName}</Descriptions.Item>
-                    <Descriptions.Item label="소속">{sidebarDrafterOrg}</Descriptions.Item>
-                  </Descriptions>
-                  <Divider className="!tw-my-1" />
-                  <Typography.Text strong className="!tw-text-xs !tw-text-slate-700">
-                    참조
-                  </Typography.Text>
-                  <div className="tw-space-y-2">
-                    {countViewerDraftMembers(ccViewers) === 0 ? (
-                      <div className="tw-rounded-lg tw-border tw-border-dashed tw-border-slate-300 tw-bg-white tw-py-4 tw-text-center tw-text-xs tw-text-slate-500">
-                        참조자 없음
-                      </div>
-                    ) : (
-                      ccViewers.map((v) =>
-                        v.kind === 'org' ? (
-                          <div
-                            key={v.id}
-                            className="tw-flex tw-gap-2 tw-rounded-lg tw-border tw-border-slate-200 tw-bg-white tw-p-2 tw-shadow-sm"
-                          >
-                            <Avatar size="small" className="tw-shrink-0 tw-bg-slate-400">
-                              {viewerInitial(v.organizationName)}
-                            </Avatar>
-                            <div className="tw-min-w-0">
-                              <Typography.Text strong className="!tw-text-xs">
-                                {v.organizationName} ({v.members.length}명)
-                              </Typography.Text>
-                              <Typography.Text type="secondary" className="!tw-mt-0.5 !tw-block !tw-text-[11px]">
-                                조직
-                              </Typography.Text>
-                            </div>
-                          </div>
-                        ) : (
-                          <div
-                            key={v.viewerMemberId}
-                            className="tw-flex tw-gap-2 tw-rounded-lg tw-border tw-border-slate-200 tw-bg-white tw-p-2 tw-shadow-sm"
-                          >
-                            <Avatar size="small" className="tw-shrink-0 tw-bg-slate-400">
-                              {viewerInitial(v.name)}
-                            </Avatar>
-                            <div className="tw-min-w-0">
-                              <Typography.Text strong className="!tw-text-xs">
-                                {v.name}
-                                {v.jobTitleName ? ` ${v.jobTitleName}` : ''}
-                              </Typography.Text>
-                              <Typography.Text type="secondary" className="!tw-mt-0.5 !tw-block !tw-text-[11px]">
-                                {v.organizationName || '—'}
-                              </Typography.Text>
-                            </div>
-                          </div>
-                        ),
-                      )
-                    )}
                   </div>
-                  <Button type="link" size="small" className="!tw-h-auto !tw-p-0 !tw-text-xs" onClick={() => openComposeApprovalModal('cc')}>
-                    참조자 편집
-                  </Button>
-                  <Divider className="!tw-my-1" />
-                  <Typography.Text strong className="!tw-text-xs !tw-text-slate-700">
-                    공람
-                  </Typography.Text>
-                  <Typography.Text type="secondary" className="!tw-mb-1 !tw-block !tw-text-[11px]">
-                    공람자는 제출 후 열람합니다. 결재 정보에서 지정합니다.
-                  </Typography.Text>
-                  <div className="tw-space-y-2">
-                    {countViewerDraftMembers(circulationViewers) === 0 ? (
-                      <div className="tw-rounded-lg tw-border tw-border-dashed tw-border-slate-300 tw-bg-white tw-py-4 tw-text-center tw-text-xs tw-text-slate-500">
-                        공람자 없음
-                      </div>
-                    ) : (
-                      circulationViewers.map((v) =>
-                        v.kind === 'org' ? (
-                          <div
-                            key={v.id}
-                            className="tw-flex tw-gap-2 tw-rounded-lg tw-border tw-border-slate-200 tw-bg-white tw-p-2 tw-shadow-sm"
-                          >
-                            <Avatar size="small" className="tw-shrink-0 tw-bg-slate-400">
-                              {viewerInitial(v.organizationName)}
-                            </Avatar>
-                            <div className="tw-min-w-0">
-                              <Typography.Text strong className="!tw-text-xs">
-                                {v.organizationName} ({v.members.length}명)
-                              </Typography.Text>
-                              <Typography.Text type="secondary" className="!tw-mt-0.5 !tw-block !tw-text-[11px]">
-                                조직
-                              </Typography.Text>
+                ),
+              },
+              {
+                key: 'doc',
+                label: '문서정보',
+                children: selectedDocument ? (
+                  <div className="tw-space-y-3">
+                    <Descriptions size="small" column={1} bordered className="!tw-bg-white">
+                      <Descriptions.Item label="양식명">
+                        {formatApprovalDocumentName(selectedDocument.documentName)}
+                      </Descriptions.Item>
+                      <Descriptions.Item label="유형">
+                        {approvalRequestTypeLabelKo(selectedDocument.requestType)}
+                      </Descriptions.Item>
+                      <Descriptions.Item label="기안자">{sidebarDrafterName}</Descriptions.Item>
+                      <Descriptions.Item label="소속">{sidebarDrafterOrg}</Descriptions.Item>
+                    </Descriptions>
+                    <Divider className="!tw-my-1" />
+                    <Typography.Text strong className="!tw-text-xs !tw-text-slate-700">
+                      참조
+                    </Typography.Text>
+                    <div className="tw-space-y-2">
+                      {countViewerDraftMembers(ccViewers) === 0 ? (
+                        <div className="tw-rounded-lg tw-border tw-border-dashed tw-border-slate-300 tw-bg-white tw-py-4 tw-text-center tw-text-xs tw-text-slate-500">
+                          참조자 없음
+                        </div>
+                      ) : (
+                        ccViewers.map((v) =>
+                          v.kind === 'org' ? (
+                            <div
+                              key={v.id}
+                              className="tw-flex tw-gap-2 tw-rounded-lg tw-border tw-border-slate-200 tw-bg-white tw-p-2 tw-shadow-sm"
+                            >
+                              <Avatar size="small" className="tw-shrink-0 tw-bg-slate-400">
+                                {viewerInitial(v.organizationName)}
+                              </Avatar>
+                              <div className="tw-min-w-0">
+                                <Typography.Text strong className="!tw-text-xs">
+                                  {v.organizationName} ({v.members.length}명)
+                                </Typography.Text>
+                                <Typography.Text
+                                  type="secondary"
+                                  className="!tw-mt-0.5 !tw-block !tw-text-[11px]"
+                                >
+                                  조직
+                                </Typography.Text>
+                              </div>
                             </div>
-                          </div>
-                        ) : (
-                          <div
-                            key={v.viewerMemberId}
-                            className="tw-flex tw-gap-2 tw-rounded-lg tw-border tw-border-slate-200 tw-bg-white tw-p-2 tw-shadow-sm"
-                          >
-                            <Avatar size="small" className="tw-shrink-0 tw-bg-slate-400">
-                              {viewerInitial(v.name)}
-                            </Avatar>
-                            <div className="tw-min-w-0">
-                              <Typography.Text strong className="!tw-text-xs">
-                                {v.name}
-                                {v.jobTitleName ? ` ${v.jobTitleName}` : ''}
-                              </Typography.Text>
-                              <Typography.Text type="secondary" className="!tw-mt-0.5 !tw-block !tw-text-[11px]">
-                                {v.organizationName || '—'}
-                              </Typography.Text>
+                          ) : (
+                            <div
+                              key={v.viewerMemberId}
+                              className="tw-flex tw-gap-2 tw-rounded-lg tw-border tw-border-slate-200 tw-bg-white tw-p-2 tw-shadow-sm"
+                            >
+                              <Avatar size="small" className="tw-shrink-0 tw-bg-slate-400">
+                                {viewerInitial(v.name)}
+                              </Avatar>
+                              <div className="tw-min-w-0">
+                                <Typography.Text strong className="!tw-text-xs">
+                                  {v.name}
+                                  {v.jobTitleName ? ` ${v.jobTitleName}` : ''}
+                                </Typography.Text>
+                                <Typography.Text
+                                  type="secondary"
+                                  className="!tw-mt-0.5 !tw-block !tw-text-[11px]"
+                                >
+                                  {v.organizationName || '—'}
+                                </Typography.Text>
+                              </div>
                             </div>
-                          </div>
-                        ),
-                      )
-                    )}
+                          ),
+                        )
+                      )}
+                    </div>
+                    <Button
+                      type="link"
+                      size="small"
+                      className="!tw-h-auto !tw-p-0 !tw-text-xs"
+                      onClick={() => openComposeApprovalModal('cc')}
+                    >
+                      참조자 편집
+                    </Button>
+                    <Divider className="!tw-my-1" />
+                    <Typography.Text strong className="!tw-text-xs !tw-text-slate-700">
+                      공람
+                    </Typography.Text>
+                    <Typography.Text
+                      type="secondary"
+                      className="!tw-mb-1 !tw-block !tw-text-[11px]"
+                    >
+                      공람자는 제출 후 열람합니다. 결재 정보에서 지정합니다.
+                    </Typography.Text>
+                    <div className="tw-space-y-2">
+                      {countViewerDraftMembers(circulationViewers) === 0 ? (
+                        <div className="tw-rounded-lg tw-border tw-border-dashed tw-border-slate-300 tw-bg-white tw-py-4 tw-text-center tw-text-xs tw-text-slate-500">
+                          공람자 없음
+                        </div>
+                      ) : (
+                        circulationViewers.map((v) =>
+                          v.kind === 'org' ? (
+                            <div
+                              key={v.id}
+                              className="tw-flex tw-gap-2 tw-rounded-lg tw-border tw-border-slate-200 tw-bg-white tw-p-2 tw-shadow-sm"
+                            >
+                              <Avatar size="small" className="tw-shrink-0 tw-bg-slate-400">
+                                {viewerInitial(v.organizationName)}
+                              </Avatar>
+                              <div className="tw-min-w-0">
+                                <Typography.Text strong className="!tw-text-xs">
+                                  {v.organizationName} ({v.members.length}명)
+                                </Typography.Text>
+                                <Typography.Text
+                                  type="secondary"
+                                  className="!tw-mt-0.5 !tw-block !tw-text-[11px]"
+                                >
+                                  조직
+                                </Typography.Text>
+                              </div>
+                            </div>
+                          ) : (
+                            <div
+                              key={v.viewerMemberId}
+                              className="tw-flex tw-gap-2 tw-rounded-lg tw-border tw-border-slate-200 tw-bg-white tw-p-2 tw-shadow-sm"
+                            >
+                              <Avatar size="small" className="tw-shrink-0 tw-bg-slate-400">
+                                {viewerInitial(v.name)}
+                              </Avatar>
+                              <div className="tw-min-w-0">
+                                <Typography.Text strong className="!tw-text-xs">
+                                  {v.name}
+                                  {v.jobTitleName ? ` ${v.jobTitleName}` : ''}
+                                </Typography.Text>
+                                <Typography.Text
+                                  type="secondary"
+                                  className="!tw-mt-0.5 !tw-block !tw-text-[11px]"
+                                >
+                                  {v.organizationName || '—'}
+                                </Typography.Text>
+                              </div>
+                            </div>
+                          ),
+                        )
+                      )}
+                    </div>
+                    <Button
+                      type="link"
+                      size="small"
+                      className="!tw-h-auto !tw-p-0 !tw-text-xs"
+                      onClick={() => openComposeApprovalModal('circulation')}
+                    >
+                      공람자 편집
+                    </Button>
+                    <Divider className="!tw-my-1" />
+                    <Typography.Text
+                      strong
+                      className="!tw-mb-1 !tw-block !tw-text-xs !tw-text-slate-700"
+                    >
+                      변경이력
+                    </Typography.Text>
+                    <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-text-xs">
+                      작성 중인 문서에는 변경 이력이 없습니다. 제출 후 상세에서 확인할 수 있습니다.
+                    </Typography.Paragraph>
                   </div>
-                  <Button type="link" size="small" className="!tw-h-auto !tw-p-0 !tw-text-xs" onClick={() => openComposeApprovalModal('circulation')}>
-                    공람자 편집
-                  </Button>
-                  <Divider className="!tw-my-1" />
-                  <Typography.Text strong className="!tw-mb-1 !tw-block !tw-text-xs !tw-text-slate-700">
-                    변경이력
-                  </Typography.Text>
-                  <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-text-xs">
-                    작성 중인 문서에는 변경 이력이 없습니다. 제출 후 상세에서 확인할 수 있습니다.
-                  </Typography.Paragraph>
-                </div>
-              ) : null,
-            },
-          ]}
-        />
+                ) : null,
+              },
+            ]}
+          />
+        </div>
       </div>
-    </div>
     );
   };
 
   const renderComposeApprovalLineTable = () => (
-    <Card size="small" title="내 결재선" variant="borderless" className={APPROVAL_COMPOSE_CARD_CLASS}>
-      <DndContext sensors={approvalLineSensors} collisionDetection={closestCenter} onDragEnd={onApprovalLineDragEnd}>
+    <Card
+      size="small"
+      title="내 결재선"
+      variant="borderless"
+      className={APPROVAL_COMPOSE_CARD_CLASS}
+    >
+      <DndContext
+        sensors={approvalLineSensors}
+        collisionDetection={closestCenter}
+        onDragEnd={onApprovalLineDragEnd}
+      >
         <SortableContext items={approvalLineSortableIds} strategy={verticalListSortingStrategy}>
           <Table<ApprovalLineDraft>
             rowKey="id"
@@ -4534,7 +4845,9 @@ export function ApprovalsPage() {
                     <span className="tw-whitespace-nowrap [word-break:keep-all]">
                       {row.organizationName} ({row.members.length}명)
                     </span>
-                  ) : row.source === 'policy' && row.policyCandidates && row.policyCandidates.length > 1 ? (
+                  ) : row.source === 'policy' &&
+                    row.policyCandidates &&
+                    row.policyCandidates.length > 1 ? (
                     <Select
                       size="small"
                       className="tw-min-w-[14rem] tw-max-w-[min(100%,22rem)]"
@@ -4558,7 +4871,8 @@ export function ApprovalsPage() {
                 title: '부서',
                 key: 'organizationName',
                 width: 120,
-                render: (_, row) => (row.kind === 'org' ? row.organizationName : row.organizationName || '—'),
+                render: (_, row) =>
+                  row.kind === 'org' ? row.organizationName : row.organizationName || '—',
               },
               {
                 title: '관리',
@@ -4591,7 +4905,7 @@ export function ApprovalsPage() {
                       ) : (
                         deleteBtn
                       )}
-                  </Space>
+                    </Space>
                   );
                 },
               },
@@ -4613,26 +4927,27 @@ export function ApprovalsPage() {
         activeKey={lineInfoTab}
         onChange={(k) => setLineInfoTab(k as 'approval' | 'cc' | 'circulation')}
         items={[
-                {
-                  key: 'approval',
-                  label: '결재선',
-                  children: (
-                    <>
-                      <Typography.Paragraph type="secondary" className="!tw-mb-3 !tw-text-sm">
-                        정책라인 결재선을 기본으로 불러옴십니다. 조직도에서 멤버·조직을 오른쪽 목록으로 드래그해 추가하고, 관리 열의 드래그 핸들로 순서를 조정하세요.
-                      </Typography.Paragraph>
-                      <div className={approvalGridClass}>
-                        {renderOrgMemberPicker()}
-                        <ApprovalOrgDropZone
-                          onDropMember={(id) => void addApproverFromOrg(id)}
-                          onDropOrg={(oid) => void bulkAddApproversFromOrg(oid)}
-                        >
-                          {renderComposeApprovalLineTable()}
-                        </ApprovalOrgDropZone>
-                      </div>
-                    </>
-                  ),
-                },
+          {
+            key: 'approval',
+            label: '결재선',
+            children: (
+              <>
+                <Typography.Paragraph type="secondary" className="!tw-mb-3 !tw-text-sm">
+                  정책라인 결재선을 기본으로 불러옴십니다. 조직도에서 멤버·조직을 오른쪽 목록으로
+                  드래그해 추가하고, 관리 열의 드래그 핸들로 순서를 조정하세요.
+                </Typography.Paragraph>
+                <div className={approvalGridClass}>
+                  {renderOrgMemberPicker()}
+                  <ApprovalOrgDropZone
+                    onDropMember={(id) => void addApproverFromOrg(id)}
+                    onDropOrg={(oid) => void bulkAddApproversFromOrg(oid)}
+                  >
+                    {renderComposeApprovalLineTable()}
+                  </ApprovalOrgDropZone>
+                </div>
+              </>
+            ),
+          },
           {
             key: 'cc',
             label: '참조자',
@@ -4648,12 +4963,15 @@ export function ApprovalsPage() {
     );
   };
 
-  const isComposeHubEntry = tab === 'compose' && !isEmbedComposeModal && (sideNav === '' || sideNav === 'request-compose');
-  const composePhaseView = isEmbedComposeModal ? 'fill' : isComposeHubEntry ? 'select' : composePhase;
+  const isComposeHubEntry =
+    tab === 'compose' && !isEmbedComposeModal && (sideNav === '' || sideNav === 'request-compose');
+  const composePhaseView = isEmbedComposeModal
+    ? 'fill'
+    : isComposeHubEntry
+      ? 'select'
+      : composePhase;
   const isComposeFormMounted =
-    tab === 'compose' &&
-    !isComposeHubEntry &&
-    !(isEmbedComposeModal && !selectedDocument);
+    tab === 'compose' && !isComposeHubEntry && !(isEmbedComposeModal && !selectedDocument);
   const showComposeWorkbench =
     composePhaseView === 'fill' && selectedDocument != null && selectedSchema.fields.length > 0;
 
@@ -4697,8 +5015,10 @@ export function ApprovalsPage() {
     },
   ) => {
     const accentClass =
-      options?.accent === 'blue' ? 'tw-bg-blue-50/60 tw-border-blue-100' : 'tw-bg-slate-50/80 tw-border-slate-200';
-  return (
+      options?.accent === 'blue'
+        ? 'tw-bg-blue-50/60 tw-border-blue-100'
+        : 'tw-bg-slate-50/80 tw-border-slate-200';
+    return (
       <Card className={clsx(APPROVAL_HOME_GRID_DOC_CARD_CLASS, options?.cardClassName)}>
         <div className="tw-mb-3 tw-flex tw-items-center tw-justify-between">
           <Typography.Text strong>{title}</Typography.Text>
@@ -4716,7 +5036,7 @@ export function ApprovalsPage() {
           >
             전체
           </Button>
-      </div>
+        </div>
         {rows.length === 0 ? (
           <Typography.Text type="secondary">{emptyText}</Typography.Text>
         ) : (
@@ -4726,7 +5046,9 @@ export function ApprovalsPage() {
                 <div
                   key={row.requestId}
                   className={`tw-flex tw-items-center tw-justify-between tw-gap-2 tw-rounded-lg tw-border tw-px-3 tw-py-2 ${accentClass} ${
-                    options?.onAction ? '' : 'tw-cursor-pointer tw-transition-colors hover:tw-bg-white/60'
+                    options?.onAction
+                      ? ''
+                      : 'tw-cursor-pointer tw-transition-colors hover:tw-bg-white/60'
                   }`}
                   onClick={
                     options?.onAction
@@ -4753,7 +5075,8 @@ export function ApprovalsPage() {
                       {row.documentName || '—'}
                     </Typography.Text>
                     <Typography.Text type="secondary" className="!tw-block tw-text-xs">
-                      {(row.requesterName || '요청자 미상')} · {formatDateTime(row.updatedAt || row.createdAt)}
+                      {row.requesterName || '요청자 미상'} ·{' '}
+                      {formatDateTime(row.updatedAt || row.createdAt)}
                     </Typography.Text>
                   </div>
                   {options?.onAction ? (
@@ -4779,20 +5102,23 @@ export function ApprovalsPage() {
   const renderHomeApprovalFormsCard = () => {
     return (
       <Card
-        className={clsx(
-          APPROVAL_HOME_COMPOSE_FORMS_CARD_CLASS,
-          'tw-flex tw-w-full tw-flex-col',
-        )}
+        className={clsx(APPROVAL_HOME_COMPOSE_FORMS_CARD_CLASS, 'tw-flex tw-w-full tw-flex-col')}
         styles={{
           body: { display: 'flex', flexDirection: 'column', padding: 16 },
         }}
       >
         <div className="tw-mb-3 tw-flex tw-shrink-0 tw-items-start tw-justify-between tw-gap-3">
           <div className="tw-min-w-0">
-            <Typography.Text strong className="!tw-block !tw-text-[15px] !tw-leading-5 !tw-text-slate-900">
+            <Typography.Text
+              strong
+              className="!tw-block !tw-text-[15px] !tw-leading-5 !tw-text-slate-900"
+            >
               빠른 기안
             </Typography.Text>
-            <Typography.Text type="secondary" className="!tw-mt-0.5 !tw-block !tw-text-[11px] !tw-leading-4">
+            <Typography.Text
+              type="secondary"
+              className="!tw-mt-0.5 !tw-block !tw-text-[11px] !tw-leading-4"
+            >
               자주 쓰는 양식을 바로 작성합니다.
             </Typography.Text>
           </div>
@@ -4836,7 +5162,10 @@ export function ApprovalsPage() {
                     }}
                   >
                     <div className="tw-min-w-0 tw-flex-1 tw-leading-tight">
-                      <Typography.Text strong className="!tw-mb-0 !tw-block !tw-text-[13px] !tw-leading-5 !tw-text-slate-900 tw-truncate">
+                      <Typography.Text
+                        strong
+                        className="!tw-mb-0 !tw-block !tw-text-[13px] !tw-leading-5 !tw-text-slate-900 tw-truncate"
+                      >
                         {doc.documentName?.trim() || '—'}
                       </Typography.Text>
                       <Typography.Text
@@ -4860,7 +5189,10 @@ export function ApprovalsPage() {
   };
 
   const renderComposeHomeDashboard = () => {
-    const viewerMergedRows = mergeRequestsByRequestId([viewerCcRequests, viewerCirculationRequests]);
+    const viewerMergedRows = mergeRequestsByRequestId([
+      viewerCcRequests,
+      viewerCirculationRequests,
+    ]);
     const composeInboxLineOpts = {
       myMemberId: authMemberId,
       myMemberPositionId: drafterProfile?.memberPositionId?.trim(),
@@ -4878,22 +5210,40 @@ export function ApprovalsPage() {
         </colgroup>
         <thead>
           <tr className="tw-border-b tw-border-slate-200">
-            <th scope="col" className="tw-pb-2 tw-px-2 tw-text-xs tw-font-semibold tw-text-slate-500">
+            <th
+              scope="col"
+              className="tw-pb-2 tw-px-2 tw-text-xs tw-font-semibold tw-text-slate-500"
+            >
               문서 상태
             </th>
-            <th scope="col" className="tw-pb-2 tw-px-2 tw-text-xs tw-font-semibold tw-text-slate-500">
+            <th
+              scope="col"
+              className="tw-pb-2 tw-px-2 tw-text-xs tw-font-semibold tw-text-slate-500"
+            >
               제목
             </th>
-            <th scope="col" className="tw-pb-2 tw-px-2 tw-text-xs tw-font-semibold tw-text-slate-500">
+            <th
+              scope="col"
+              className="tw-pb-2 tw-px-2 tw-text-xs tw-font-semibold tw-text-slate-500"
+            >
               요청자
             </th>
-            <th scope="col" className="tw-pb-2 tw-px-2 tw-text-center tw-text-xs tw-font-semibold tw-text-slate-500">
+            <th
+              scope="col"
+              className="tw-pb-2 tw-px-2 tw-text-center tw-text-xs tw-font-semibold tw-text-slate-500"
+            >
               결재선
             </th>
-            <th scope="col" className="tw-pb-2 tw-px-2 tw-text-xs tw-font-semibold tw-text-slate-500">
+            <th
+              scope="col"
+              className="tw-pb-2 tw-px-2 tw-text-xs tw-font-semibold tw-text-slate-500"
+            >
               기안일
             </th>
-            <th scope="col" className="tw-pb-2 tw-px-2 tw-text-xs tw-font-semibold tw-text-slate-500">
+            <th
+              scope="col"
+              className="tw-pb-2 tw-px-2 tw-text-xs tw-font-semibold tw-text-slate-500"
+            >
               결재 처리
             </th>
           </tr>
@@ -4901,7 +5251,10 @@ export function ApprovalsPage() {
         <tbody>
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={6} className="tw-border tw-border-dashed tw-border-slate-200 tw-bg-slate-50/50 tw-p-6 tw-text-center">
+              <td
+                colSpan={6}
+                className="tw-border tw-border-dashed tw-border-slate-200 tw-bg-slate-50/50 tw-p-6 tw-text-center"
+              >
                 <Typography.Text type="secondary">결재 대기·예정 문서가 없습니다.</Typography.Text>
               </td>
             </tr>
@@ -4913,77 +5266,92 @@ export function ApprovalsPage() {
                 inboxSt === 'PENDING' &&
                 myLine != null &&
                 !isInlineSyntheticApprovalId(myLine.approvalId);
-              const showUpcomingTag = inboxSt === 'WAITING' || rowIsUpcomingForApprover(row, authMemberId);
+              const showUpcomingTag =
+                inboxSt === 'WAITING' || rowIsUpcomingForApprover(row, authMemberId);
               const openPendingRowDetail = () => setSelectedRequestId(row.requestId);
               return (
-              <tr
-                key={row.requestId}
-                className="tw-cursor-pointer tw-border-b tw-border-slate-200 tw-bg-white tw-transition-colors hover:tw-bg-slate-50/90"
-                role="button"
-                tabIndex={0}
-                onClick={openPendingRowDetail}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    openPendingRowDetail();
-                  }
-                }}
-              >
-                <td className="tw-px-2 tw-py-2.5 tw-align-middle">
-                  <div className="tw-flex tw-justify-center">
-                    {isMyTurnPending ? (
-                      <Tag color="gold" className="!tw-m-0">
-                        결재대기
-                      </Tag>
-                    ) : showUpcomingTag ? (
-                      <Tag color="processing" className="!tw-m-0">
-                        결재 예정
-                      </Tag>
-                    ) : (
-                      <Tag className="!tw-m-0">—</Tag>
-                    )}
-                  </div>
-                </td>
-                <td className="tw-min-w-0 tw-px-2 tw-py-2.5 tw-align-middle">
-                  <Typography.Text strong className="!tw-block tw-min-w-0 tw-truncate tw-text-center">
-                    {getApprovalRequestSubjectLine(row) || row.documentName?.trim() || '—'}
-                  </Typography.Text>
-                </td>
-                <td className="tw-px-2 tw-py-2.5 tw-align-middle">
-                  <Typography.Text type="secondary" className="!tw-block tw-truncate tw-text-center tw-text-xs">
-                    {row.requesterName || '요청자 미상'}
-                  </Typography.Text>
-                </td>
-                <td className="tw-min-w-0 tw-overflow-hidden tw-px-2 tw-py-2 tw-text-left tw-align-middle">
-                  <PendingHomeApprovalLineStrip lines={row.approvalLines} visibleSlots={2} />
-                </td>
-                <td className="tw-px-2 tw-py-2.5 tw-align-middle">
-                  <Typography.Text className="tw-text-center tw-text-xs tw-text-slate-500">
-                    {formatDateTime(row.createdAt)}
-                  </Typography.Text>
-                </td>
-                <td className="tw-px-2 tw-py-2.5 tw-align-middle">
-                  <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-center tw-gap-2" onClick={(e) => e.stopPropagation()}>
-                    <Button
-                      type="primary"
-                      size="small"
-                      disabled={!isMyTurnPending || !myLine}
-                      onClick={() => {
-                        if (!isMyTurnPending || !myLine) return;
-                        setApprovalAction({ approvalId: myLine.approvalId, mode: 'approve' });
-                      }}
+                <tr
+                  key={row.requestId}
+                  className="tw-cursor-pointer tw-border-b tw-border-slate-200 tw-bg-white tw-transition-colors hover:tw-bg-slate-50/90"
+                  role="button"
+                  tabIndex={0}
+                  onClick={openPendingRowDetail}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      openPendingRowDetail();
+                    }
+                  }}
+                >
+                  <td className="tw-px-2 tw-py-2.5 tw-align-middle">
+                    <div className="tw-flex tw-justify-center">
+                      {isMyTurnPending ? (
+                        <Tag color="gold" className="!tw-m-0">
+                          결재대기
+                        </Tag>
+                      ) : showUpcomingTag ? (
+                        <Tag color="processing" className="!tw-m-0">
+                          결재 예정
+                        </Tag>
+                      ) : (
+                        <Tag className="!tw-m-0">—</Tag>
+                      )}
+                    </div>
+                  </td>
+                  <td className="tw-min-w-0 tw-px-2 tw-py-2.5 tw-align-middle">
+                    <Typography.Text
+                      strong
+                      className="!tw-block tw-min-w-0 tw-truncate tw-text-center"
                     >
-                      승인
-                    </Button>
-                    <Button danger size="small" disabled={!isMyTurnPending || !myLine} onClick={() => {
-                        if (!isMyTurnPending || !myLine) return;
-                        setApprovalAction({ approvalId: myLine.approvalId, mode: 'reject' });
-                      }}>
-                      반려
-                    </Button>
-                  </div>
-                </td>
-              </tr>
+                      {getApprovalRequestSubjectLine(row) || row.documentName?.trim() || '—'}
+                    </Typography.Text>
+                  </td>
+                  <td className="tw-px-2 tw-py-2.5 tw-align-middle">
+                    <Typography.Text
+                      type="secondary"
+                      className="!tw-block tw-truncate tw-text-center tw-text-xs"
+                    >
+                      {row.requesterName || '요청자 미상'}
+                    </Typography.Text>
+                  </td>
+                  <td className="tw-min-w-0 tw-overflow-hidden tw-px-2 tw-py-2 tw-text-left tw-align-middle">
+                    <PendingHomeApprovalLineStrip lines={row.approvalLines} visibleSlots={2} />
+                  </td>
+                  <td className="tw-px-2 tw-py-2.5 tw-align-middle">
+                    <Typography.Text className="tw-text-center tw-text-xs tw-text-slate-500">
+                      {formatDateTime(row.createdAt)}
+                    </Typography.Text>
+                  </td>
+                  <td className="tw-px-2 tw-py-2.5 tw-align-middle">
+                    <div
+                      className="tw-flex tw-flex-wrap tw-items-center tw-justify-center tw-gap-2"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Button
+                        type="primary"
+                        size="small"
+                        disabled={!isMyTurnPending || !myLine}
+                        onClick={() => {
+                          if (!isMyTurnPending || !myLine) return;
+                          setApprovalAction({ approvalId: myLine.approvalId, mode: 'approve' });
+                        }}
+                      >
+                        승인
+                      </Button>
+                      <Button
+                        danger
+                        size="small"
+                        disabled={!isMyTurnPending || !myLine}
+                        onClick={() => {
+                          if (!isMyTurnPending || !myLine) return;
+                          setApprovalAction({ approvalId: myLine.approvalId, mode: 'reject' });
+                        }}
+                      >
+                        반려
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
               );
             })
           )}
@@ -4993,188 +5361,211 @@ export function ApprovalsPage() {
 
     return (
       <>
-      <div className="tw-flex tw-min-w-0 tw-flex-col tw-gap-4">
-        <div className="tw-grid tw-grid-cols-1 tw-gap-4 xl:tw-grid-cols-3 xl:tw-items-stretch">
-          <div className="tw-w-full tw-min-w-0 xl:tw-col-span-2">
-            <Card
-              className="tw-h-full tw-w-full tw-rounded-2xl tw-border tw-border-slate-200/90 tw-shadow-sm tw-shadow-slate-900/5"
-              styles={{
-                body: { display: 'flex', flexDirection: 'column', height: '100%' },
-              }}
-            >
-            <div className="tw-mb-2 tw-flex tw-items-center tw-justify-between">
-              <Typography.Text strong>결재 대기·예정 문서</Typography.Text>
-              <Button
-                type="link"
-                size="small"
-                onClick={() =>
-                  setComposeHomeMoreModal({
-                    kind: 'pending-inbox',
-                    title: '결재 대기·예정 문서 전체',
-                  })
-                }
+        <div className="tw-flex tw-min-w-0 tw-flex-col tw-gap-4">
+          <div className="tw-grid tw-grid-cols-1 tw-gap-4 xl:tw-grid-cols-3 xl:tw-items-stretch">
+            <div className="tw-w-full tw-min-w-0 xl:tw-col-span-2">
+              <Card
+                className="tw-w-full tw-rounded-2xl tw-border tw-border-slate-200/90 tw-shadow-sm tw-shadow-slate-900/5"
+                styles={{
+                  body: { display: 'flex', flexDirection: 'column' },
+                }}
               >
-                전체
-              </Button>
+                <div className="tw-mb-2 tw-flex tw-items-center tw-justify-between">
+                  <Typography.Text strong>결재 대기·예정 문서</Typography.Text>
+                  <Button
+                    type="link"
+                    size="small"
+                    onClick={() =>
+                      setComposeHomeMoreModal({
+                        kind: 'pending-inbox',
+                        title: '결재 대기·예정 문서 전체',
+                      })
+                    }
+                  >
+                    전체
+                  </Button>
+                </div>
+                <div className="tw-max-h-[min(18rem,42vh)] tw-overflow-y-auto wf-scrollbar tw-pr-1 [scrollbar-gutter:stable]">
+                  <Spin spinning={pendingLoading || waitingLoading}>
+                    {composeHomePendingTable(composeHubInboxPreviewRows.slice(0, 20))}
+                  </Spin>
+                </div>
+              </Card>
             </div>
-            <div className="tw-max-h-[min(18rem,42vh)] tw-overflow-y-auto wf-scrollbar tw-pr-1 [scrollbar-gutter:stable]">
-              <Spin spinning={pendingLoading || waitingLoading}>
-                {composeHomePendingTable(composeHubInboxPreviewRows.slice(0, 20))}
-              </Spin>
+            <div className="tw-flex tw-min-h-0 tw-w-full tw-min-w-0 xl:tw-col-span-1">
+              {renderHomeApprovalFormsCard()}
             </div>
+          </div>
+
+          <div className="tw-grid tw-grid-cols-1 tw-gap-4 md:tw-grid-cols-2 xl:tw-grid-cols-3">
+            {renderHomeDocListCard(
+              '내 기안 문서함',
+              myRequestsAllForSummary,
+              '기안 문서가 없습니다.',
+              {
+                fullListEmbed: { panel: 'my-all' },
+              },
+            )}
+            {renderHomeDocListCard(
+              '참조/공람 문서',
+              viewerMergedRows,
+              '참조/공람 문서가 없습니다.',
+              {
+                fullListEmbed: { panel: 'viewers' },
+              },
+            )}
+            {renderHomeDocListCard(
+              '부서 문서함',
+              homeDepartmentRequests,
+              myOrganizationIdForDept
+                ? '부서 문서가 없습니다.'
+                : '조직 정보가 없어 부서 문서함을 불러올 수 없습니다.',
+              {
+                fullListEmbed: { panel: 'department' },
+              },
+            )}
+            {renderHomeDocListCard(
+              '공문 수신함',
+              officialReceivedRequests,
+              '수신한 공문이 없습니다.',
+              {
+                fullListEmbed: { panel: 'official' },
+              },
+            )}
+            {renderHomeDocListCard(
+              '임시 저장 문서',
+              myDraftRequests,
+              '임시 저장 문서가 없습니다.',
+              {
+                accent: 'blue',
+                actionLabel: '이어쓰기',
+                onAction: (row) =>
+                  setComposeHomeMoreModal({
+                    kind: 'iframe',
+                    panel: 'draft',
+                    composeDraftId: row.requestId,
+                  }),
+                fullListEmbed: { panel: 'draft' },
+              },
+            )}
+            <Card className={APPROVAL_HOME_GRID_DOC_CARD_CLASS}>
+              <div className="tw-mb-3 tw-flex tw-items-center tw-justify-between">
+                <Typography.Text strong>부재 위임</Typography.Text>
+                <Button
+                  type="link"
+                  size="small"
+                  onClick={() => setComposeHomeMoreModal({ kind: 'iframe', panel: 'absence' })}
+                >
+                  전체
+                </Button>
+              </div>
+              {homeAbsenceMinePreview.length === 0 && homeAbsenceDelegatedPreview.length === 0 ? (
+                <Typography.Text type="secondary">
+                  내가 등록한 위임과 나에게 위임된 일정이 없습니다.
+                </Typography.Text>
+              ) : (
+                <div className={APPROVAL_HOME_CARD_SCROLL}>
+                  <Space direction="vertical" size={12} className="tw-w-full">
+                    {homeAbsenceMinePreview.length > 0 ? (
+                      <div className="tw-w-full tw-space-y-2">
+                        <Typography.Text type="secondary" className="!tw-text-xs">
+                          내가 등록한 위임
+                        </Typography.Text>
+                        <Space direction="vertical" size={8} className="tw-w-full">
+                          {homeAbsenceMinePreview.map((row) => {
+                            const accentClass = 'tw-bg-slate-50/80 tw-border-slate-200';
+                            const sid = row.substituteId?.trim() ?? '';
+                            const substituteName = absenceHubMemberNameById.get(sid) || '대결자';
+                            return (
+                              <div
+                                key={`mine-${row.proxyId}`}
+                                className={`tw-flex tw-items-center tw-justify-between tw-gap-2 tw-rounded-lg tw-border tw-px-3 tw-py-2 ${accentClass}`}
+                              >
+                                <div className="tw-min-w-0">
+                                  <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
+                                    <Typography.Text strong className="!tw-block tw-truncate">
+                                      대결: {substituteName}
+                                    </Typography.Text>
+                                    {absenceProxyDashboardTag(row)}
+                                  </div>
+                                  <Typography.Text
+                                    type="secondary"
+                                    className="!tw-block tw-text-xs"
+                                  >
+                                    {formatAbsenceProxyRange(row.startDate, row.endDate)}
+                                  </Typography.Text>
+                                </div>
+                                <Button
+                                  size="small"
+                                  onClick={() =>
+                                    navigate({
+                                      to: '/app/approvals/absence-proxy',
+                                      search: { ...embedSearchSuffix },
+                                      replace: true,
+                                    })
+                                  }
+                                >
+                                  보기
+                                </Button>
+                              </div>
+                            );
+                          })}
+                        </Space>
+                      </div>
+                    ) : null}
+                    {homeAbsenceDelegatedPreview.length > 0 ? (
+                      <div className="tw-w-full tw-space-y-2">
+                        <Typography.Text type="secondary" className="!tw-text-xs">
+                          나에게 위임된 목록
+                        </Typography.Text>
+                        <Space direction="vertical" size={8} className="tw-w-full">
+                          {homeAbsenceDelegatedPreview.map((row) => {
+                            const accentClass = 'tw-bg-slate-50/80 tw-border-slate-200';
+                            const mid = row.memberId?.trim() ?? '';
+                            const absentName = absenceHubMemberNameById.get(mid) || '부재자';
+                            return (
+                              <div
+                                key={`delegated-${row.proxyId}`}
+                                className={`tw-flex tw-items-center tw-justify-between tw-gap-2 tw-rounded-lg tw-border tw-px-3 tw-py-2 ${accentClass}`}
+                              >
+                                <div className="tw-min-w-0">
+                                  <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
+                                    <Typography.Text strong className="!tw-block tw-truncate">
+                                      부재자: {absentName}
+                                    </Typography.Text>
+                                    {absenceProxyDashboardTag(row)}
+                                  </div>
+                                  <Typography.Text
+                                    type="secondary"
+                                    className="!tw-block tw-text-xs"
+                                  >
+                                    {formatAbsenceProxyRange(row.startDate, row.endDate)}
+                                  </Typography.Text>
+                                </div>
+                                <Button
+                                  size="small"
+                                  onClick={() =>
+                                    navigate({
+                                      to: '/app/approvals/absence-proxy',
+                                      search: { ...embedSearchSuffix },
+                                      replace: true,
+                                    })
+                                  }
+                                >
+                                  보기
+                                </Button>
+                              </div>
+                            );
+                          })}
+                        </Space>
+                      </div>
+                    ) : null}
+                  </Space>
+                </div>
+              )}
             </Card>
           </div>
-          <div className="tw-flex tw-min-h-0 tw-w-full tw-min-w-0 xl:tw-col-span-1">
-            {renderHomeApprovalFormsCard()}
-          </div>
         </div>
-
-        <div className="tw-grid tw-grid-cols-1 tw-gap-4 md:tw-grid-cols-2 xl:tw-grid-cols-3">
-          {renderHomeDocListCard('내 기안 문서함', myRequestsAllForSummary, '기안 문서가 없습니다.', {
-            fullListEmbed: { panel: 'my-all' },
-          })}
-          {renderHomeDocListCard('참조/공람 문서', viewerMergedRows, '참조/공람 문서가 없습니다.', {
-            fullListEmbed: { panel: 'viewers' },
-          })}
-          {renderHomeDocListCard(
-            '부서 문서함',
-            homeDepartmentRequests,
-            myOrganizationIdForDept ? '부서 문서가 없습니다.' : '조직 정보가 없어 부서 문서함을 불러올 수 없습니다.',
-            {
-              fullListEmbed: { panel: 'department' },
-            },
-          )}
-          {renderHomeDocListCard('공문 수신함', officialReceivedRequests, '수신한 공문이 없습니다.', {
-            fullListEmbed: { panel: 'official' },
-          })}
-          {renderHomeDocListCard(
-            '임시 저장 문서',
-            myDraftRequests,
-            '임시 저장 문서가 없습니다.',
-            {
-              accent: 'blue',
-              actionLabel: '이어쓰기',
-              onAction: (row) =>
-                setComposeHomeMoreModal({
-                  kind: 'iframe',
-                  panel: 'draft',
-                  composeDraftId: row.requestId,
-                }),
-              fullListEmbed: { panel: 'draft' },
-            },
-          )}
-          <Card className={APPROVAL_HOME_GRID_DOC_CARD_CLASS}>
-            <div className="tw-mb-3 tw-flex tw-items-center tw-justify-between">
-              <Typography.Text strong>부재 위임</Typography.Text>
-              <Button
-                type="link"
-                size="small"
-                onClick={() => setComposeHomeMoreModal({ kind: 'iframe', panel: 'absence' })}
-              >
-                전체
-              </Button>
-            </div>
-            {homeAbsenceMinePreview.length === 0 && homeAbsenceDelegatedPreview.length === 0 ? (
-              <Typography.Text type="secondary">
-                내가 등록한 위임과 나에게 위임된 일정이 없습니다.
-              </Typography.Text>
-            ) : (
-              <div className={APPROVAL_HOME_CARD_SCROLL}>
-                <Space direction="vertical" size={12} className="tw-w-full">
-                  {homeAbsenceMinePreview.length > 0 ? (
-                    <div className="tw-w-full tw-space-y-2">
-                      <Typography.Text type="secondary" className="!tw-text-xs">
-                        내가 등록한 위임
-                      </Typography.Text>
-                      <Space direction="vertical" size={8} className="tw-w-full">
-                        {homeAbsenceMinePreview.map((row) => {
-                          const accentClass = 'tw-bg-slate-50/80 tw-border-slate-200';
-                          const sid = row.substituteId?.trim() ?? '';
-                          const substituteName = absenceHubMemberNameById.get(sid) || '대결자';
-                          return (
-                            <div
-                              key={`mine-${row.proxyId}`}
-                              className={`tw-flex tw-items-center tw-justify-between tw-gap-2 tw-rounded-lg tw-border tw-px-3 tw-py-2 ${accentClass}`}
-                            >
-                              <div className="tw-min-w-0">
-                                <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
-                                  <Typography.Text strong className="!tw-block tw-truncate">
-                                    대결: {substituteName}
-                                  </Typography.Text>
-                                  {absenceProxyDashboardTag(row)}
-                                </div>
-                                <Typography.Text type="secondary" className="!tw-block tw-text-xs">
-                                  {formatAbsenceProxyRange(row.startDate, row.endDate)}
-                                </Typography.Text>
-                              </div>
-                              <Button
-                                size="small"
-                                onClick={() =>
-                                  navigate({
-                                    to: '/app/approvals/absence-proxy',
-                                    search: { ...embedSearchSuffix },
-                                    replace: true,
-                                  })
-                                }
-                              >
-                                보기
-                              </Button>
-                            </div>
-                          );
-                        })}
-                      </Space>
-                    </div>
-                  ) : null}
-                  {homeAbsenceDelegatedPreview.length > 0 ? (
-                    <div className="tw-w-full tw-space-y-2">
-                      <Typography.Text type="secondary" className="!tw-text-xs">
-                        나에게 위임된 목록
-                      </Typography.Text>
-                      <Space direction="vertical" size={8} className="tw-w-full">
-                        {homeAbsenceDelegatedPreview.map((row) => {
-                          const accentClass = 'tw-bg-slate-50/80 tw-border-slate-200';
-                          const mid = row.memberId?.trim() ?? '';
-                          const absentName = absenceHubMemberNameById.get(mid) || '부재자';
-                          return (
-                            <div
-                              key={`delegated-${row.proxyId}`}
-                              className={`tw-flex tw-items-center tw-justify-between tw-gap-2 tw-rounded-lg tw-border tw-px-3 tw-py-2 ${accentClass}`}
-                            >
-                              <div className="tw-min-w-0">
-                                <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
-                                  <Typography.Text strong className="!tw-block tw-truncate">
-                                    부재자: {absentName}
-                                  </Typography.Text>
-                                  {absenceProxyDashboardTag(row)}
-                                </div>
-                                <Typography.Text type="secondary" className="!tw-block tw-text-xs">
-                                  {formatAbsenceProxyRange(row.startDate, row.endDate)}
-                                </Typography.Text>
-                              </div>
-                              <Button
-                                size="small"
-                                onClick={() =>
-                                  navigate({
-                                    to: '/app/approvals/absence-proxy',
-                                    search: { ...embedSearchSuffix },
-                                    replace: true,
-                                  })
-                                }
-                              >
-                                보기
-                              </Button>
-                            </div>
-                          );
-                        })}
-                      </Space>
-                    </div>
-                  ) : null}
-                </Space>
-              </div>
-            )}
-          </Card>
-        </div>
-      </div>
 
         <AppModal
           title={
@@ -5263,7 +5654,9 @@ export function ApprovalsPage() {
           open={quickHomeFormsSettingOpen}
           onClose={() => setQuickHomeFormsSettingOpen(false)}
           onConfirm={() => {
-            const picked = Array.from(new Set(quickHomeFormsDraft.map((v) => v.trim()).filter(Boolean))).slice(0, 3);
+            const picked = Array.from(
+              new Set(quickHomeFormsDraft.map((v) => v.trim()).filter(Boolean)),
+            ).slice(0, 3);
             if (picked.length < 2) {
               message.warning('퀵 메뉴 양식을 최소 2개 선택해 주세요.');
               return;
@@ -5277,63 +5670,66 @@ export function ApprovalsPage() {
           destroyOnHidden
         >
           <div className="tw-px-5 tw-py-4">
-          <Typography.Paragraph type="secondary" className="!tw-mb-2 !tw-text-sm">
-            슬롯 3개 중 2~3개를 채워 빠르게 실행할 양식을 구성하세요.
-          </Typography.Paragraph>
-          <div className="tw-mb-3 tw-flex tw-items-center tw-justify-between tw-text-xs tw-text-slate-500">
-            <span>선택된 양식</span>
-            <span>{quickHomeDraftDocs.length}/3</span>
-          </div>
-          <div className="tw-space-y-2">
-            {quickHomeDraftDocs.map((doc) => {
-              return (
-                <div key={doc.documentId} className="tw-flex tw-items-center tw-justify-between tw-rounded-md tw-border tw-border-slate-200 tw-bg-slate-50 tw-px-3 tw-py-2">
-                  <div className="tw-min-w-0">
-                    <Typography.Text strong className="!tw-block tw-truncate tw-text-sm">
-                      {formatApprovalDocumentName(doc.documentName)}
-                    </Typography.Text>
-                    <Typography.Text type="secondary" className="!tw-block tw-text-xs">
-                      {approvalRequestTypeLabelKo(doc.requestType)}
-                    </Typography.Text>
-                  </div>
-                  <Button
-                    type="text"
-                    size="small"
-                    icon={<DeleteOutlined />}
-                    aria-label={`${formatApprovalDocumentName(doc.documentName)} 제거`}
-                    onClick={() =>
-                      setQuickHomeFormsDraft((prev) => prev.filter((id) => id !== doc.documentId))
-                    }
-                  />
-                </div>
-              );
-            })}
-          </div>
-          {quickHomeDraftDocs.length < 3 ? (
-            <div className="tw-mt-3">
-              <Select
-                className="tw-w-full"
-                value={undefined}
-                options={quickHomeDraftRemainingOptions}
-                placeholder="양식 추가 (최대 3개)"
-                optionFilterProp="label"
-                onSelect={(val) =>
-                  setQuickHomeFormsDraft((prev) =>
-                    typeof val !== 'string' || prev.includes(val) || prev.length >= 3
-                      ? prev
-                      : [...prev, val],
-                  )
-                }
-              />
+            <Typography.Paragraph type="secondary" className="!tw-mb-2 !tw-text-sm">
+              슬롯 3개 중 2~3개를 채워 빠르게 실행할 양식을 구성하세요.
+            </Typography.Paragraph>
+            <div className="tw-mb-3 tw-flex tw-items-center tw-justify-between tw-text-xs tw-text-slate-500">
+              <span>선택된 양식</span>
+              <span>{quickHomeDraftDocs.length}/3</span>
             </div>
-          ) : (
-            <Typography.Text type="secondary" className="tw-mt-3 tw-block tw-text-xs">
-              최대 3개까지 선택되었습니다.
-            </Typography.Text>
-          )}
+            <div className="tw-space-y-2">
+              {quickHomeDraftDocs.map((doc) => {
+                return (
+                  <div
+                    key={doc.documentId}
+                    className="tw-flex tw-items-center tw-justify-between tw-rounded-md tw-border tw-border-slate-200 tw-bg-slate-50 tw-px-3 tw-py-2"
+                  >
+                    <div className="tw-min-w-0">
+                      <Typography.Text strong className="!tw-block tw-truncate tw-text-sm">
+                        {formatApprovalDocumentName(doc.documentName)}
+                      </Typography.Text>
+                      <Typography.Text type="secondary" className="!tw-block tw-text-xs">
+                        {approvalRequestTypeLabelKo(doc.requestType)}
+                      </Typography.Text>
+                    </div>
+                    <Button
+                      type="text"
+                      size="small"
+                      icon={<DeleteOutlined />}
+                      aria-label={`${formatApprovalDocumentName(doc.documentName)} 제거`}
+                      onClick={() =>
+                        setQuickHomeFormsDraft((prev) => prev.filter((id) => id !== doc.documentId))
+                      }
+                    />
+                  </div>
+                );
+              })}
+            </div>
+            {quickHomeDraftDocs.length < 3 ? (
+              <div className="tw-mt-3">
+                <Select
+                  className="tw-w-full"
+                  value={undefined}
+                  options={quickHomeDraftRemainingOptions}
+                  placeholder="양식 추가 (최대 3개)"
+                  optionFilterProp="label"
+                  onSelect={(val) =>
+                    setQuickHomeFormsDraft((prev) =>
+                      typeof val !== 'string' || prev.includes(val) || prev.length >= 3
+                        ? prev
+                        : [...prev, val],
+                    )
+                  }
+                />
+              </div>
+            ) : (
+              <Typography.Text type="secondary" className="tw-mt-3 tw-block tw-text-xs">
+                최대 3개까지 선택되었습니다.
+              </Typography.Text>
+            )}
           </div>
         </AppDoubleActionModal>
-    </>
+      </>
     );
   };
 
@@ -5407,7 +5803,12 @@ export function ApprovalsPage() {
                 }
               />
             ) : null}
-            <AppWorkspacePageTitle className="!tw-mb-0" eyebrow="Approvals" title={pageTitle} subtitle={pageDescription} />
+            <AppWorkspacePageTitle
+              className="!tw-mb-0"
+              eyebrow="Approvals"
+              title={pageTitle}
+              subtitle={pageDescription}
+            />
           </div>
           {tab === 'compose' && onComposeHub ? (
             <Button
@@ -5430,795 +5831,1005 @@ export function ApprovalsPage() {
       ) : null}
 
       {tab === 'compose' && isComposeHubEntry ? (
-        <div className="tw-flex tw-min-w-0 tw-flex-col">
-          {renderComposeHomeDashboard()}
-        </div>
+        <div className="tw-flex tw-min-w-0 tw-flex-col">{renderComposeHomeDashboard()}</div>
       ) : tab === 'compose' ? (
-              <Card
-                className={clsx(
-                  'tw-border-slate-200/80 tw-shadow-sm',
-                  showComposeWorkbench && '!tw-rounded-lg tw-border-slate-300 !tw-p-0 tw-shadow-md',
-                )}
-                styles={{ body: { padding: showComposeWorkbench ? 0 : undefined } }}
-              >
+        <Card
+          className={clsx(
+            'tw-border-slate-200/80 tw-shadow-sm',
+            showComposeWorkbench && '!tw-rounded-lg tw-border-slate-300 !tw-p-0 tw-shadow-md',
+          )}
+          styles={{ body: { padding: showComposeWorkbench ? 0 : undefined } }}
+        >
           {isEmbedComposeModal && !selectedDocument ? (
             <div className="tw-flex tw-min-h-[260px] tw-items-center tw-justify-center tw-bg-white">
               <Spin size="large" />
             </div>
           ) : (
-                <Form
-                  form={form}
-                  layout="vertical"
-                  initialValues={{ content: {} }}
-                  onValuesChange={(changed) => {
-                    if (composeDraftHydratingRef.current) return;
-                    if ('documentId' in changed) {
-                      setComposeEditingRequestId(null);
-                      setApprovalLineDrafts([]);
-                      setOrgTreeSelectedKey(undefined);
-                      setCcViewers([]);
-                      setCirculationViewers([]);
-                setOfficialRecipients([]);
-                setComposeDeptVisibleYn('Y');
-                const nextDocId =
-                  typeof changed.documentId === 'string' && changed.documentId.trim().length > 0
-                    ? changed.documentId
+            <Form
+              form={form}
+              layout="vertical"
+              initialValues={{ content: {} }}
+              onValuesChange={(changed) => {
+                if (composeDraftHydratingRef.current) return;
+                if ('documentId' in changed) {
+                  setComposeEditingRequestId(null);
+                  setApprovalLineDrafts([]);
+                  setOrgTreeSelectedKey(undefined);
+                  setCcViewers([]);
+                  setCirculationViewers([]);
+                  setOfficialRecipients([]);
+                  setComposeDeptVisibleYn('Y');
+                  const nextDocId =
+                    typeof changed.documentId === 'string' && changed.documentId.trim().length > 0
+                      ? changed.documentId
+                      : undefined;
+                  const nextDoc = nextDocId
+                    ? activeDocuments.find((d) => d.documentId === nextDocId)
                     : undefined;
-                const nextDoc = nextDocId ? activeDocuments.find((d) => d.documentId === nextDocId) : undefined;
-                form.setFieldValue(
-                  'content',
-                  nextDoc
-                    ? composeContentPatchWithDefaultTitle(
-                        nextDoc.formSchema,
-                        formatApprovalDocumentName(nextDoc.documentName),
-                      )
-                    : {},
-                );
-                setSelectedDocumentId(nextDocId);
-                setComposeSidebarTab('line');
-                setLineInfoTab('approval');
-                void applyPolicyLineDrafts(nextDoc ?? null);
-                return;
-              }
-              if (vacationLeaveKindField && familyEventSubtypeField) {
-                const cv = changed as { content?: Record<string, unknown> };
-                const chContent = cv.content;
-                if (chContent && vacationLeaveKindField.name in chContent) {
-                  const v = chContent[vacationLeaveKindField.name];
-                  if (v !== APPROVAL_FAMILY_EVENT_LEAVE_KIND_OPTION) {
-                    form.setFieldValue(['content', familyEventSubtypeField.name], undefined);
+                  form.setFieldValue(
+                    'content',
+                    nextDoc
+                      ? composeContentPatchWithDefaultTitle(
+                          nextDoc.formSchema,
+                          formatApprovalDocumentName(nextDoc.documentName),
+                        )
+                      : {},
+                  );
+                  setSelectedDocumentId(nextDocId);
+                  setComposeSidebarTab('line');
+                  setLineInfoTab('approval');
+                  void applyPolicyLineDrafts(nextDoc ?? null);
+                  return;
+                }
+                if (vacationLeaveKindField && familyEventSubtypeField) {
+                  const cv = changed as { content?: Record<string, unknown> };
+                  const chContent = cv.content;
+                  if (chContent && vacationLeaveKindField.name in chContent) {
+                    const v = chContent[vacationLeaveKindField.name];
+                    if (v !== APPROVAL_FAMILY_EVENT_LEAVE_KIND_OPTION) {
+                      form.setFieldValue(['content', familyEventSubtypeField.name], undefined);
+                    }
                   }
                 }
-                    }
-                  }}
-                >
-                  {!showComposeWorkbench ? (
-                    <Steps
-                      size="small"
-                current={composePhaseView === 'select' ? 0 : 1}
-                      className="tw-mb-6"
-                      items={[
-                        { title: '양식 선택', description: '카테고리·문서' },
-                        { title: '작성·결재', description: '내용·결재선·참조' },
-                      ]}
-                    />
-                  ) : null}
+              }}
+            >
+              {!showComposeWorkbench ? (
+                <Steps
+                  size="small"
+                  current={composePhaseView === 'select' ? 0 : 1}
+                  className="tw-mb-6"
+                  items={[
+                    { title: '양식 선택', description: '카테고리·문서' },
+                    { title: '작성·결재', description: '내용·결재선·참조' },
+                  ]}
+                />
+              ) : null}
 
-            {composePhaseView === 'fill' && selectedDocument && !showComposeWorkbench
-              ? renderComposeToolbar({ showDocumentTitle: true })
-              : null}
+              {composePhaseView === 'fill' && selectedDocument && !showComposeWorkbench
+                ? renderComposeToolbar({ showDocumentTitle: true })
+                : null}
 
-                  <Form.Item
-                    name="documentId"
-              label={composePhaseView === 'select' ? '문서 양식' : undefined}
-                    rules={[{ required: true, message: '카테고리에서 양식을 선택해 주세요.' }]}
-              style={composePhaseView === 'fill' ? { display: 'none' } : undefined}
-                  >
-              {composePhaseView === 'select' ? (
-                      <DocumentFormPicker
-                        documents={pickerDocuments}
-                        loading={docsLoading}
-                  onAfterPick={(documentId, doc) => {
-                    if (isComposeHubEntry) {
-                      navigateToComposeWorkbench();
-                    }
-                    setSelectedDocumentId(documentId);
-                    setComposeSidebarTab('line');
-                    setLineInfoTab('approval');
-                    void applyPolicyLineDrafts(doc);
-                          setComposePhase((p) => (p === 'select' ? 'fill' : p));
-                          queueMicrotask(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
-                        }}
-                      />
-                    ) : (
-                      <Input type="hidden" />
-                    )}
-                  </Form.Item>
-
-            {composePhaseView === 'select' ? (
-                    <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-4 !tw-text-center !tw-text-sm">
-                      양식을 누르면 작성·결재 화면으로 이동합니다.
-                    </Typography.Paragraph>
-                  ) : null}
-
-            {composePhaseView === 'select' ? (
-                    <Card
-                      size="small"
-                      title={
-                        <Space size={8}>
-                          <FolderOpenOutlined />
-                          <span>임시저장함</span>
-                          {myDraftRequests.length > 0 ? (
-                            <Tag color="gold" className="!tw-m-0">
-                              {myDraftRequests.length}
-                            </Tag>
-                          ) : null}
-                        </Space>
+              <Form.Item
+                name="documentId"
+                label={composePhaseView === 'select' ? '문서 양식' : undefined}
+                rules={[{ required: true, message: '카테고리에서 양식을 선택해 주세요.' }]}
+                style={composePhaseView === 'fill' ? { display: 'none' } : undefined}
+              >
+                {composePhaseView === 'select' ? (
+                  <DocumentFormPicker
+                    documents={pickerDocuments}
+                    loading={docsLoading}
+                    onAfterPick={(documentId, doc) => {
+                      if (isComposeHubEntry) {
+                        navigateToComposeWorkbench();
                       }
-                      className="!tw-mt-4 tw-border-slate-200/90 tw-shadow-sm"
-                      styles={{ body: { padding: 12 } }}
+                      setSelectedDocumentId(documentId);
+                      setComposeSidebarTab('line');
+                      setLineInfoTab('approval');
+                      void applyPolicyLineDrafts(doc);
+                      setComposePhase((p) => (p === 'select' ? 'fill' : p));
+                      queueMicrotask(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
+                    }}
+                  />
+                ) : (
+                  <Input type="hidden" />
+                )}
+              </Form.Item>
+
+              {composePhaseView === 'select' ? (
+                <Typography.Paragraph
+                  type="secondary"
+                  className="!tw-mb-0 !tw-mt-4 !tw-text-center !tw-text-sm"
+                >
+                  양식을 누르면 작성·결재 화면으로 이동합니다.
+                </Typography.Paragraph>
+              ) : null}
+
+              {composePhaseView === 'select' ? (
+                <section className="tw-mt-4 tw-rounded-xl tw-border tw-border-slate-200/90 tw-bg-slate-50/60 tw-p-3">
+                  <div className="tw-mb-3 tw-flex tw-items-center tw-justify-between tw-gap-2">
+                    <Space size={8}>
+                      <FolderOpenOutlined className="tw-text-slate-500" />
+                      <Typography.Text strong className="tw-text-sm tw-text-slate-800">
+                        임시저장함
+                      </Typography.Text>
+                    </Space>
+                    {myDraftRequests.length > 0 ? (
+                      <Tag color="gold" className="!tw-m-0">
+                        {myDraftRequests.length}
+                      </Tag>
+                    ) : null}
+                  </div>
+                  {myDraftsLoading ? (
+                    <div className="tw-flex tw-justify-center tw-py-6">
+                      <Spin size="small" />
+                    </div>
+                  ) : myDraftRequests.length === 0 ? (
+                    <Typography.Text type="secondary" className="tw-text-xs">
+                      저장된 임시 문서가 없습니다. 작성 중 &quot;임시저장&quot;하면 여기에서 이어서
+                      작업할 수 있습니다.
+                    </Typography.Text>
+                  ) : (
+                    <ul className="tw-m-0 tw-list-none tw-space-y-2 tw-p-0">
+                      {myDraftRequests.map((d) => (
+                        <li
+                          key={d.requestId}
+                          className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2 tw-rounded-lg tw-border tw-border-slate-100 tw-bg-white tw-px-3 tw-py-2"
+                        >
+                          <div className="tw-min-w-0 tw-flex-1">
+                            <Typography.Text strong className="!tw-block tw-truncate tw-text-sm">
+                              {d.documentName || '—'}
+                            </Typography.Text>
+                            <Typography.Text type="secondary" className="!tw-block tw-text-xs">
+                              {formatDateTime(d.updatedAt || d.createdAt)}
+                            </Typography.Text>
+                          </div>
+                          <Button
+                            type="primary"
+                            size="small"
+                            icon={<FolderOpenOutlined />}
+                            onClick={() => void openDraftForCompose(d.requestId)}
+                          >
+                            불러오기
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+              ) : null}
+
+              {composePhaseView === 'fill' &&
+              selectedDocument &&
+              selectedSchema.fields.length === 0 ? (
+                <Alert
+                  type="warning"
+                  showIcon
+                  message="양식 스키마(formSchema)를 해석할 수 없거나 필드가 없습니다. 관리자에게 문의하거나 다른 양식을 선택해 주세요."
+                />
+              ) : null}
+
+              {composePhaseView === 'fill' &&
+              selectedDocument &&
+              selectedSchema.fields.length > 0 ? (
+                <div
+                  className={clsx(
+                    'tw-flex tw-flex-col lg:tw-flex-row lg:tw-items-start',
+                    isEmbedComposeModal && 'tw-min-h-0 tw-flex-1 tw-overflow-hidden',
+                  )}
+                >
+                  <div
+                    className={clsx(
+                      'tw-min-w-0 tw-flex-1 tw-bg-white tw-p-2 sm:tw-p-3',
+                      isEmbedComposeModal && 'tw-flex tw-min-h-0 tw-flex-col',
+                    )}
+                  >
+                    {renderComposeToolbar()}
+                    <div
+                      className={clsx(
+                        'tw-rounded-none tw-bg-white',
+                        isEmbedComposeModal && 'tw-min-h-0 tw-flex-1 tw-overflow-auto wf-scrollbar',
+                      )}
                     >
-                      {myDraftsLoading ? (
-                        <div className="tw-flex tw-justify-center tw-py-6">
-                          <Spin size="small" />
-                        </div>
-                      ) : myDraftRequests.length === 0 ? (
-                        <Typography.Text type="secondary" className="tw-text-xs">
-                          저장된 임시 문서가 없습니다. 작성 중 &quot;임시저장&quot;하면 여기에서 이어서 작업할 수 있습니다.
-                        </Typography.Text>
-                      ) : (
-                        <ul className="tw-m-0 tw-list-none tw-space-y-2 tw-p-0">
-                          {myDraftRequests.map((d) => (
-                            <li
-                              key={d.requestId}
-                              className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2 tw-rounded-lg tw-border tw-border-slate-100 tw-bg-slate-50/80 tw-px-3 tw-py-2"
-                            >
-                              <div className="tw-min-w-0 tw-flex-1">
-                                <Typography.Text strong className="!tw-block tw-truncate tw-text-sm">
-                                  {d.documentName || '—'}
-                                </Typography.Text>
-                                <Typography.Text type="secondary" className="!tw-block tw-text-xs">
-                                  {formatDateTime(d.updatedAt || d.createdAt)}
-                                </Typography.Text>
-                              </div>
-                              <Button
-                                type="primary"
-                                size="small"
-                                icon={<FolderOpenOutlined />}
-                                onClick={() => void openDraftForCompose(d.requestId)}
-                              >
-                                불러오기
-                              </Button>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </Card>
-                  ) : null}
-
-            {composePhaseView === 'fill' && selectedDocument && selectedSchema.fields.length === 0 ? (
-                    <Alert type="warning" showIcon message="양식 스키마(formSchema)를 해석할 수 없거나 필드가 없습니다. 관리자에게 문의하거나 다른 양식을 선택해 주세요." />
-                  ) : null}
-
-            {composePhaseView === 'fill' && selectedDocument && selectedSchema.fields.length > 0 ? (
-                    <div className="tw-flex tw-min-h-[min(100vh-220px,920px)] tw-flex-col tw-overflow-hidden lg:tw-flex-row lg:tw-items-stretch">
-                      <div className="tw-flex tw-min-h-0 tw-min-w-0 tw-flex-1 tw-flex-col tw-bg-white tw-p-2 sm:tw-p-3">
-                        {renderComposeToolbar()}
-                  <div className="tw-min-h-0 tw-flex-1 tw-overflow-auto tw-rounded-none tw-bg-white wf-scrollbar">
-                    <div className="tw-flex tw-flex-col tw-gap-4 tw-p-2 sm:tw-p-3">
-                      {selectedSchema.formDescription?.trim() ? (
-                        <Alert
-                          type="info"
-                          showIcon
-                          message="인사팀 안내"
-                          description={
-                            <span className="tw-whitespace-pre-wrap tw-text-sm">
-                              {selectedSchema.formDescription.trim()}
-                            </span>
+                      <div className="tw-flex tw-flex-col tw-gap-4 tw-p-2 sm:tw-p-3">
+                        {selectedSchema.formDescription?.trim() ? (
+                          <Alert
+                            type="info"
+                            showIcon
+                            message="인사팀 안내"
+                            description={
+                              <span className="tw-whitespace-pre-wrap tw-text-sm">
+                                {selectedSchema.formDescription.trim()}
+                              </span>
+                            }
+                          />
+                        ) : null}
+                        {selectedDocument.documentName === '출퇴근시간 변경 신청서' && (
+                          <Alert
+                            type="warning"
+                            showIcon
+                            message="동일 대상 연월에 2번 이상 신청할 경우, 가장 마지막에 승인된 신청 내용이 적용됩니다."
+                          />
+                        )}
+                        <ApprovalFormPaperLayout
+                          documentName={formatApprovalDocumentName(selectedDocument.documentName)}
+                          categoryLabel={approvalRequestTypeLabelKo(selectedDocument.requestType)}
+                          requestTypeCode={normalizeApprovalRequestType(
+                            selectedDocument.requestType,
+                          )}
+                          drafterName={drafterProfile?.name?.trim() || user?.name?.trim() || '—'}
+                          drafterOrg={
+                            drafterProfile?.organizationName?.trim() ||
+                            user?.departmentName?.trim() ||
+                            '—'
                           }
-                        />
-                      ) : null}
-                      {selectedDocument.documentName === '출퇴근시간 변경 신청서' && (
-                        <Alert
-                          type="warning"
-                          showIcon
-                          message="동일 대상 연월에 2번 이상 신청할 경우, 가장 마지막에 승인된 신청 내용이 적용됩니다."
-                        />
-                      )}
-                      <ApprovalFormPaperLayout
-                        documentName={formatApprovalDocumentName(selectedDocument.documentName)}
-                              categoryLabel={approvalRequestTypeLabelKo(selectedDocument.requestType)}
-                              requestTypeCode={normalizeApprovalRequestType(selectedDocument.requestType)}
-                              drafterName={drafterProfile?.name?.trim() || user?.name?.trim() || '—'}
-                              drafterOrg={
-                                drafterProfile?.organizationName?.trim() || user?.departmentName?.trim() || '—'
+                          drafterJobTitle={
+                            drafterProfile?.jobTitleName?.trim() ||
+                            user?.jobTitle?.trim() ||
+                            undefined
+                          }
+                          writtenDate={dayjs().format('YYYY-MM-DD')}
+                          stampColumn={
+                            <ApprovalFormStampColumn
+                              drafterName={
+                                drafterProfile?.name?.trim() || user?.name?.trim() || '—'
                               }
                               drafterJobTitle={
-                                drafterProfile?.jobTitleName?.trim() || user?.jobTitle?.trim() || undefined
+                                drafterProfile?.jobTitleName?.trim() ||
+                                user?.jobTitle?.trim() ||
+                                undefined
                               }
-                              writtenDate={dayjs().format('YYYY-MM-DD')}
-                              stampColumn={
-                                  <ApprovalFormStampColumn
-                                    drafterName={drafterProfile?.name?.trim() || user?.name?.trim() || '—'}
-                                    drafterJobTitle={
-                                      drafterProfile?.jobTitleName?.trim() || user?.jobTitle?.trim() || undefined
+                              applicationWrittenDateIso={dayjs().format('YYYY-MM-DD')}
+                              approvers={orderedApprovalLineDrafts.map((r) =>
+                                r.kind === 'org'
+                                  ? {
+                                      id: r.id,
+                                      memberName: `${r.organizationName} (${r.members.length}명)`,
+                                      jobTitleName: '조직',
                                     }
-                                    applicationWrittenDateIso={dayjs().format('YYYY-MM-DD')}
-                                    approvers={orderedApprovalLineDrafts.map((r) =>
-                                      r.kind === 'org'
-                                        ? {
-                                            id: r.id,
-                                            memberName: `${r.organizationName} (${r.members.length}명)`,
-                                            jobTitleName: '조직',
-                                          }
-                                        : {
-                                            id: r.id,
-                                            memberName: r.memberName,
-                                            jobTitleName: r.jobTitleName,
-                                          },
-                                    )}
-                                    onOpenEdit={() => openComposeApprovalModal('approval')}
+                                  : {
+                                      id: r.id,
+                                      memberName: r.memberName,
+                                      jobTitleName: r.jobTitleName,
+                                    },
+                              )}
+                              onOpenEdit={() => openComposeApprovalModal('approval')}
+                            />
+                          }
+                        >
+                          {selectedSchema.fields
+                            .filter(
+                              (field) =>
+                                !familyEventSubtypeField ||
+                                field.name !== familyEventSubtypeField.name ||
+                                showFamilyEventSubtypeInCompose,
+                            )
+                            .map((field) => {
+                              const isAllowanceChangeDocument =
+                                selectedDocument.documentName === '수당 변경 신청';
+                              // 수당 변경 신청은 회사 고정 금액을 사용하므로 신청 금액 입력 UI는 숨긴다.
+                              if (isAllowanceChangeDocument && field.name === 'amount') return null;
+                              // hidden 필드는 제출 시 프론트가 auto-populate (예: leaveRequestId), UI 에 미표시
+                              if (field.type === 'hidden') return null;
+                              if (field.type === 'static_note') {
+                                return (
+                                  <ApprovalFormPaperStaticNoteRow
+                                    key={field.name}
+                                    title={field.label?.trim() || undefined}
+                                    body={field.staticText?.trim() ?? ''}
                                   />
-                        }
-                      >
-                        {selectedSchema.fields
-                          .filter(
-                            (field) =>
-                              !familyEventSubtypeField ||
-                              field.name !== familyEventSubtypeField.name ||
-                              showFamilyEventSubtypeInCompose,
-                          )
-                          .map((field) => {
-                          const isAllowanceChangeDocument = selectedDocument.documentName === '수당 변경 신청';
-                          // 수당 변경 신청은 회사 고정 금액을 사용하므로 신청 금액 입력 UI는 숨긴다.
-                          if (isAllowanceChangeDocument && field.name === 'amount') return null;
-                          // hidden 필드는 제출 시 프론트가 auto-populate (예: leaveRequestId), UI 에 미표시
-                          if (field.type === 'hidden') return null;
-                          if (field.type === 'static_note') {
-                            return (
-                              <ApprovalFormPaperStaticNoteRow
-                                key={field.name}
-                                title={field.label?.trim() || undefined}
-                                body={field.staticText?.trim() ?? ''}
-                              />
-                            );
-                          }
-                          // 근태정정신청 출/퇴근시각 - 기존 회사에 이전 datetime-local 로 박혀있는 schema 호환, 강제 time(HH:mm) 렌더
-                          if (
-                            selectedDocument.documentName === '근태정정신청' &&
-                            (field.name === 'requestedClockIn' || field.name === 'requestedClockOut')
-                          ) {
-                            const fieldLockedCorr = field.locked === true;
-                            const inputRulesCorr = fieldLockedCorr
-                              ? [{ required: true as const, message: `${field.label} 입력` }]
-                              : [];
-                            return (
-                              <ApprovalFormPaperFieldRow key={field.name} label={field.label} required={fieldLockedCorr}>
-                                <Form.Item name={['content', field.name]} rules={inputRulesCorr} className="!tw-mb-0">
-                                  <Input type="time" className="!tw-max-w-xs" step={60} />
-                                </Form.Item>
-                              </ApprovalFormPaperFieldRow>
-                            );
-                          }
-                          const namePath: (string | number)[] = ['content', field.name];
-                          const ph = field.placeholder;
-                          const fieldLocked = field.locked === true;
-                          if (field.type === 'ai_transcribe') {
-                            return (
-                              <ApprovalFormPaperFieldRow
-                                key={field.name}
-                                label={field.label}
-                                required={fieldLocked}
-                              >
-                                <ApprovalAiTranscribeField
-                                  field={field}
-                                  onPendingAudioBlobChange={(blob) => {
-                                    composeMeetingAudioBlobRef.current = blob;
-                                  }}
-                                />
-                              </ApprovalFormPaperFieldRow>
-                            );
-                          }
-                          const inputRules = fieldLocked
-                            ? [{ required: true as const, message: `${field.label} 입력` }]
-                            : [];
-                          const selectRules = fieldLocked
-                            ? [{ required: true as const, message: `${field.label} 선택` }]
-                            : [];
-                                if (field.type === 'personnel_order_items') {
-                                  // 인사발령품의서 전용 - 직원/부서/직급/직책 선택 패널, contentJsonText 에는 사람 읽기용 요약만 들어감
-                                  return (
-                                    <ApprovalFormPaperFieldRow key={field.name} label={field.label} required={fieldLocked}>
-                                      <PersonnelOrderItemsField />
-                                    </ApprovalFormPaperFieldRow>
-                                  );
-                                }
-                                if (field.type === 'textarea') {
-                                  return (
-                              <ApprovalFormPaperFieldRow key={field.name} label={field.label} required={fieldLocked}>
-                                <Form.Item name={namePath} rules={inputRules} className="!tw-mb-0">
-                                        <Input.TextArea rows={4} className="!tw-max-w-full" placeholder={ph} />
-                                      </Form.Item>
-                                    </ApprovalFormPaperFieldRow>
-                                  );
-                                }
-                                if (field.type === 'number') {
-                                  return (
-                              <ApprovalFormPaperFieldRow key={field.name} label={field.label} required={fieldLocked}>
-                                <Form.Item name={namePath} rules={inputRules} className="!tw-mb-0">
-                                  <Input type="number" className="!tw-max-w-xs" placeholder={ph} />
-                                </Form.Item>
-                              </ApprovalFormPaperFieldRow>
-                            );
-                          }
-                          if (field.type === 'date') {
-                            // 근태정정신청 정정 일자 - 내 근태 행별 버튼(corrDate 있음) 진입 시만 disabled, 전자결재 메뉴 직접 진입은 자유 선택
-                            const dateDisabled =
-                              selectedDocument.documentName === '근태정정신청' &&
-                              field.name === 'attendanceDate' &&
-                              Boolean(routeSearch.corrDate);
-                            // 휴가신청서는 시작일/종료일 입력을 숨기고 아래 "휴가 날짜" multi DatePicker 하나로 통합 처리
-                            // 제출 시 PRE_ACTION_CONFIGS 가 plannedDates 의 first/last 로 startDate/endDate 자동 도출
-                            const isLeaveRangeField =
-                              selectedDocument.documentName === '휴가신청서'
-                              && (field.name === 'startDate' || field.name === 'endDate');
-                            if (isLeaveRangeField) return null;
-                            return (
-                              <ApprovalFormPaperFieldRow key={field.name} label={field.label} required={fieldLocked}>
-                                <Form.Item name={namePath} rules={inputRules} className="!tw-mb-0">
-                                  <Input type="date" className="!tw-max-w-xs" disabled={dateDisabled} />
-                                </Form.Item>
-                              </ApprovalFormPaperFieldRow>
-                            );
-                          }
-                          if (field.type === 'datetime-local') {
-                            return (
-                              <ApprovalFormPaperFieldRow key={field.name} label={field.label} required={fieldLocked}>
-                                <Form.Item name={namePath} rules={inputRules} className="!tw-mb-0">
-                                        <Input type="datetime-local" className="!tw-max-w-xs" />
-                                      </Form.Item>
-                                    </ApprovalFormPaperFieldRow>
-                                  );
-                                }
-                                if (field.type === 'time') {
-                                  return (
-                              <ApprovalFormPaperFieldRow key={field.name} label={field.label} required={fieldLocked}>
-                                <Form.Item name={namePath} rules={inputRules} className="!tw-mb-0">
-                                        <Input type="time" className="!tw-max-w-xs" step={60} />
-                                      </Form.Item>
-                                    </ApprovalFormPaperFieldRow>
-                                  );
-                                }
-                                if (field.type === 'select') {
-                            // source 지정된 select 는 API 로드 옵션 사용, 기본은 정적 options
-                            const normalizedLabel = String(field.label ?? '')
-                              .trim()
-                              .replace(/\s+/g, '')
-                              .toUpperCase();
-                            const leaveKindLabel = APPROVAL_VACATION_LEAVE_KIND_FIELD_LABEL
-                              .trim()
-                              .replace(/\s+/g, '')
-                              .toUpperCase();
-                            const normalizedSource = String(field.source ?? '')
-                              .trim()
-                              .toLowerCase()
-                              .replace(/[-_\s]/g, '');
-                            const isCompanyLeaveTypeSource =
-                              normalizedSource === 'companyleavetype' ||
-                              normalizedSource === 'companyleavetypes' ||
-                              normalizedSource === 'leavetype' ||
-                              normalizedSource === 'leavetypes';
-                            const isLeaveKindFieldByLabel = normalizedLabel === leaveKindLabel;
-                            const dynamicOptions =
-                              (isCompanyLeaveTypeSource || isLeaveKindFieldByLabel) ? companyLeaveTypeOptions
-                              : field.source === 'salaryItemTemplate' ? salaryItemTemplateOptions
-                              : field.source === 'flexibleTimeSlot' ? flexibleTimeSlotOptions
-                              : null;
-                            const selectOptions = dynamicOptions
-                              ? dynamicOptions
-                              : (field.options ?? []).map((opt) => ({ value: opt, label: opt }));
-                            // flexibleTimeSlot select 는 선택된 슬롯의 출퇴근/점심 시간을 카드로 보여준다
-                            const showSlotInfo = field.source === 'flexibleTimeSlot';
-                            return (
-                              <ApprovalFormPaperFieldRow key={field.name} label={field.label} required={fieldLocked}>
-                                <Form.Item name={namePath} rules={selectRules} className="!tw-mb-0">
-                                        <Select
-                                          className="!tw-max-w-md"
-                                          placeholder={ph}
-                                    options={selectOptions}
-                                    showSearch
-                                    optionFilterProp="label"
-                                  />
-                                </Form.Item>
-                                {showSlotInfo && (
-                                  <Form.Item
-                                    shouldUpdate={(prev, next) =>
-                                      JSON.stringify(prev?.content?.[field.name]) !== JSON.stringify(next?.content?.[field.name])
-                                    }
-                                    noStyle
+                                );
+                              }
+                              // 근태정정신청 출/퇴근시각 - 기존 회사에 이전 datetime-local 로 박혀있는 schema 호환, 강제 time(HH:mm) 렌더
+                              if (
+                                selectedDocument.documentName === '근태정정신청' &&
+                                (field.name === 'requestedClockIn' ||
+                                  field.name === 'requestedClockOut')
+                              ) {
+                                const fieldLockedCorr = field.locked === true;
+                                const inputRulesCorr = fieldLockedCorr
+                                  ? [{ required: true as const, message: `${field.label} 입력` }]
+                                  : [];
+                                return (
+                                  <ApprovalFormPaperFieldRow
+                                    key={field.name}
+                                    label={field.label}
+                                    required={fieldLockedCorr}
                                   >
-                                    {() => {
-                                      const slotId = form.getFieldValue(namePath) as string | undefined;
-                                      if (!slotId) return null;
-                                      const slot = flexibleSlotById.get(slotId);
-                                      if (!slot) return null;
-                                      const work = slot.startTime && slot.endTime
-                                        ? `${slot.startTime.slice(0, 5)} ~ ${slot.endTime.slice(0, 5)}`
-                                        : '미설정';
-                                      const lunch = slot.breakStart && slot.breakEnd
-                                        ? `${slot.breakStart.slice(0, 5)} ~ ${slot.breakEnd.slice(0, 5)}`
-                                        : '미설정';
-                                      return (
-                                        <div className="tw-mt-2 tw-flex tw-flex-wrap tw-gap-2">
-                                          <span className="tw-inline-flex tw-items-center tw-gap-1 tw-rounded-md tw-border tw-border-blue-200 tw-bg-blue-50/60 tw-px-2.5 tw-py-1 tw-text-xs tw-text-slate-700">
-                                            <span className="tw-text-[11px] tw-text-slate-500">출퇴근</span>
-                                            <span className="tw-font-semibold">{work}</span>
-                                          </span>
-                                          <span className="tw-inline-flex tw-items-center tw-gap-1 tw-rounded-md tw-border tw-border-amber-200 tw-bg-amber-50/60 tw-px-2.5 tw-py-1 tw-text-xs tw-text-slate-700">
-                                            <span className="tw-text-[11px] tw-text-slate-500">점심</span>
-                                            <span className="tw-font-semibold">{lunch}</span>
-                                          </span>
-                                        </div>
-                                      );
-                                    }}
-                                  </Form.Item>
-                                )}
-                              </ApprovalFormPaperFieldRow>
-                            );
-                          }
-                          // 대상 연월 (targetYearMonth) -> 월 선택 DatePicker 로 보강. 저장은 YYYY-MM 문자열.
-                          // 출퇴근시간 변경 신청서는 다음달만 신청 가능하므로 disabled (개인 근무 스케줄 진입 시 prefill 로 다음달 자동 입력)
-                          if (field.name === 'targetYearMonth') {
-                            const ymDisabled =
-                              selectedDocument.documentName === '출퇴근시간 변경 신청서';
-                            return (
-                              <ApprovalFormPaperFieldRow key={field.name} label={field.label} required={fieldLocked}>
-                                <Form.Item
-                                  name={namePath}
-                                  rules={inputRules}
-                                  className="!tw-mb-0"
-                                  getValueProps={(v) => ({ value: v ? dayjs(v as string, 'YYYY-MM') : null })}
-                                  getValueFromEvent={(d: dayjs.Dayjs | null) => (d ? d.format('YYYY-MM') : '')}
-                                >
-                                  <DatePicker
-                                    picker="month"
-                                    format="YYYY-MM"
-                                    placeholder="대상 연월 선택"
-                                    className="!tw-max-w-xs"
-                                    disabled={ymDisabled}
-                                  />
-                                </Form.Item>
-                              </ApprovalFormPaperFieldRow>
-                            );
-                          }
-                          return (
-                            <ApprovalFormPaperFieldRow key={field.name} label={field.label} required={fieldLocked}>
-                              <Form.Item name={namePath} rules={inputRules} className="!tw-mb-0">
-                                      <Input
+                                    <Form.Item
+                                      name={['content', field.name]}
+                                      rules={inputRulesCorr}
+                                      className="!tw-mb-0"
+                                    >
+                                      <Input type="time" className="!tw-max-w-xs" step={60} />
+                                    </Form.Item>
+                                  </ApprovalFormPaperFieldRow>
+                                );
+                              }
+                              const namePath: (string | number)[] = ['content', field.name];
+                              const ph = field.placeholder;
+                              const fieldLocked = field.locked === true;
+                              if (field.type === 'ai_transcribe') {
+                                return (
+                                  <ApprovalFormPaperFieldRow
+                                    key={field.name}
+                                    label={field.label}
+                                    required={fieldLocked}
+                                  >
+                                    <ApprovalAiTranscribeField
+                                      field={field}
+                                      onPendingAudioBlobChange={(blob) => {
+                                        composeMeetingAudioBlobRef.current = blob;
+                                      }}
+                                    />
+                                  </ApprovalFormPaperFieldRow>
+                                );
+                              }
+                              const inputRules = fieldLocked
+                                ? [{ required: true as const, message: `${field.label} 입력` }]
+                                : [];
+                              const selectRules = fieldLocked
+                                ? [{ required: true as const, message: `${field.label} 선택` }]
+                                : [];
+                              if (field.type === 'personnel_order_items') {
+                                // 인사발령품의서 전용 - 직원/부서/직급/직책 선택 패널, contentJsonText 에는 사람 읽기용 요약만 들어감
+                                return (
+                                  <ApprovalFormPaperFieldRow
+                                    key={field.name}
+                                    label={field.label}
+                                    required={fieldLocked}
+                                  >
+                                    <PersonnelOrderItemsField />
+                                  </ApprovalFormPaperFieldRow>
+                                );
+                              }
+                              if (field.type === 'textarea') {
+                                return (
+                                  <ApprovalFormPaperFieldRow
+                                    key={field.name}
+                                    label={field.label}
+                                    required={fieldLocked}
+                                  >
+                                    <Form.Item
+                                      name={namePath}
+                                      rules={inputRules}
+                                      className="!tw-mb-0"
+                                    >
+                                      <Input.TextArea
+                                        rows={4}
                                         className="!tw-max-w-full"
                                         placeholder={ph}
-                                        onFocus={
-                                          field.name === 'title'
-                                            ? (e) => {
-                                                const el = e.target as HTMLInputElement;
-                                                if (typeof el.select === 'function') el.select();
-                                              }
-                                            : undefined
-                                        }
                                       />
                                     </Form.Item>
                                   </ApprovalFormPaperFieldRow>
                                 );
-                              })}
-                              {/* 휴가신청서 - 휴가 날짜 multi DatePicker (단일/연속/비연속 모두 한 번에 처리) */}
-                              {/* 시작일/종료일 양식 필드는 위에서 숨김 처리, 사용 일수 = 선택한 날짜 개수 */}
-                              {/* 주말/회사 공휴일은 disabledDate 로 선택 차단 + 휴가 종류별 잔여 한도 사전 검증 */}
-                              {selectedDocument.documentName === '휴가신청서' && (
-                                <Form.Item
-                                  shouldUpdate={(prev, next) =>
-                                    prev?.content?.vacationType !== next?.content?.vacationType
-                                    || JSON.stringify(prev?.content?.plannedDates) !== JSON.stringify(next?.content?.plannedDates)
-                                  }
-                                  noStyle
+                              }
+                              if (field.type === 'number') {
+                                return (
+                                  <ApprovalFormPaperFieldRow
+                                    key={field.name}
+                                    label={field.label}
+                                    required={fieldLocked}
+                                  >
+                                    <Form.Item
+                                      name={namePath}
+                                      rules={inputRules}
+                                      className="!tw-mb-0"
+                                    >
+                                      <Input
+                                        type="number"
+                                        className="!tw-max-w-xs"
+                                        placeholder={ph}
+                                      />
+                                    </Form.Item>
+                                  </ApprovalFormPaperFieldRow>
+                                );
+                              }
+                              if (field.type === 'date') {
+                                // 근태정정신청 정정 일자 - 내 근태 행별 버튼(corrDate 있음) 진입 시만 disabled, 전자결재 메뉴 직접 진입은 자유 선택
+                                const dateDisabled =
+                                  selectedDocument.documentName === '근태정정신청' &&
+                                  field.name === 'attendanceDate' &&
+                                  Boolean(routeSearch.corrDate);
+                                // 휴가신청서는 시작일/종료일 입력을 숨기고 아래 "휴가 날짜" multi DatePicker 하나로 통합 처리
+                                // 제출 시 PRE_ACTION_CONFIGS 가 plannedDates 의 first/last 로 startDate/endDate 자동 도출
+                                const isLeaveRangeField =
+                                  selectedDocument.documentName === '휴가신청서' &&
+                                  (field.name === 'startDate' || field.name === 'endDate');
+                                if (isLeaveRangeField) return null;
+                                return (
+                                  <ApprovalFormPaperFieldRow
+                                    key={field.name}
+                                    label={field.label}
+                                    required={fieldLocked}
+                                  >
+                                    <Form.Item
+                                      name={namePath}
+                                      rules={inputRules}
+                                      className="!tw-mb-0"
+                                    >
+                                      <Input
+                                        type="date"
+                                        className="!tw-max-w-xs"
+                                        disabled={dateDisabled}
+                                      />
+                                    </Form.Item>
+                                  </ApprovalFormPaperFieldRow>
+                                );
+                              }
+                              if (field.type === 'datetime-local') {
+                                return (
+                                  <ApprovalFormPaperFieldRow
+                                    key={field.name}
+                                    label={field.label}
+                                    required={fieldLocked}
+                                  >
+                                    <Form.Item
+                                      name={namePath}
+                                      rules={inputRules}
+                                      className="!tw-mb-0"
+                                    >
+                                      <Input type="datetime-local" className="!tw-max-w-xs" />
+                                    </Form.Item>
+                                  </ApprovalFormPaperFieldRow>
+                                );
+                              }
+                              if (field.type === 'time') {
+                                return (
+                                  <ApprovalFormPaperFieldRow
+                                    key={field.name}
+                                    label={field.label}
+                                    required={fieldLocked}
+                                  >
+                                    <Form.Item
+                                      name={namePath}
+                                      rules={inputRules}
+                                      className="!tw-mb-0"
+                                    >
+                                      <Input type="time" className="!tw-max-w-xs" step={60} />
+                                    </Form.Item>
+                                  </ApprovalFormPaperFieldRow>
+                                );
+                              }
+                              if (field.type === 'select') {
+                                // source 지정된 select 는 API 로드 옵션 사용, 기본은 정적 options
+                                const normalizedLabel = String(field.label ?? '')
+                                  .trim()
+                                  .replace(/\s+/g, '')
+                                  .toUpperCase();
+                                const leaveKindLabel =
+                                  APPROVAL_VACATION_LEAVE_KIND_FIELD_LABEL.trim()
+                                    .replace(/\s+/g, '')
+                                    .toUpperCase();
+                                const normalizedSource = String(field.source ?? '')
+                                  .trim()
+                                  .toLowerCase()
+                                  .replace(/[-_\s]/g, '');
+                                const isCompanyLeaveTypeSource =
+                                  normalizedSource === 'companyleavetype' ||
+                                  normalizedSource === 'companyleavetypes' ||
+                                  normalizedSource === 'leavetype' ||
+                                  normalizedSource === 'leavetypes';
+                                const isLeaveKindFieldByLabel = normalizedLabel === leaveKindLabel;
+                                const dynamicOptions =
+                                  isCompanyLeaveTypeSource || isLeaveKindFieldByLabel
+                                    ? companyLeaveTypeOptions
+                                    : field.source === 'salaryItemTemplate'
+                                      ? salaryItemTemplateOptions
+                                      : field.source === 'flexibleTimeSlot'
+                                        ? flexibleTimeSlotOptions
+                                        : null;
+                                const selectOptions = dynamicOptions
+                                  ? dynamicOptions
+                                  : (field.options ?? []).map((opt) => ({
+                                      value: opt,
+                                      label: opt,
+                                    }));
+                                // flexibleTimeSlot select 는 선택된 슬롯의 출퇴근/점심 시간을 카드로 보여준다
+                                const showSlotInfo = field.source === 'flexibleTimeSlot';
+                                return (
+                                  <ApprovalFormPaperFieldRow
+                                    key={field.name}
+                                    label={field.label}
+                                    required={fieldLocked}
+                                  >
+                                    <Form.Item
+                                      name={namePath}
+                                      rules={selectRules}
+                                      className="!tw-mb-0"
+                                    >
+                                      <Select
+                                        className="!tw-max-w-md"
+                                        placeholder={ph}
+                                        options={selectOptions}
+                                        showSearch
+                                        optionFilterProp="label"
+                                      />
+                                    </Form.Item>
+                                    {showSlotInfo && (
+                                      <Form.Item
+                                        shouldUpdate={(prev, next) =>
+                                          JSON.stringify(prev?.content?.[field.name]) !==
+                                          JSON.stringify(next?.content?.[field.name])
+                                        }
+                                        noStyle
+                                      >
+                                        {() => {
+                                          const slotId = form.getFieldValue(namePath) as
+                                            | string
+                                            | undefined;
+                                          if (!slotId) return null;
+                                          const slot = flexibleSlotById.get(slotId);
+                                          if (!slot) return null;
+                                          const work =
+                                            slot.startTime && slot.endTime
+                                              ? `${slot.startTime.slice(0, 5)} ~ ${slot.endTime.slice(0, 5)}`
+                                              : '미설정';
+                                          const lunch =
+                                            slot.breakStart && slot.breakEnd
+                                              ? `${slot.breakStart.slice(0, 5)} ~ ${slot.breakEnd.slice(0, 5)}`
+                                              : '미설정';
+                                          return (
+                                            <div className="tw-mt-2 tw-flex tw-flex-wrap tw-gap-2">
+                                              <span className="tw-inline-flex tw-items-center tw-gap-1 tw-rounded-md tw-border tw-border-blue-200 tw-bg-blue-50/60 tw-px-2.5 tw-py-1 tw-text-xs tw-text-slate-700">
+                                                <span className="tw-text-[11px] tw-text-slate-500">
+                                                  출퇴근
+                                                </span>
+                                                <span className="tw-font-semibold">{work}</span>
+                                              </span>
+                                              <span className="tw-inline-flex tw-items-center tw-gap-1 tw-rounded-md tw-border tw-border-amber-200 tw-bg-amber-50/60 tw-px-2.5 tw-py-1 tw-text-xs tw-text-slate-700">
+                                                <span className="tw-text-[11px] tw-text-slate-500">
+                                                  점심
+                                                </span>
+                                                <span className="tw-font-semibold">{lunch}</span>
+                                              </span>
+                                            </div>
+                                          );
+                                        }}
+                                      </Form.Item>
+                                    )}
+                                  </ApprovalFormPaperFieldRow>
+                                );
+                              }
+                              // 대상 연월 (targetYearMonth) -> 월 선택 DatePicker 로 보강. 저장은 YYYY-MM 문자열.
+                              // 출퇴근시간 변경 신청서는 다음달만 신청 가능하므로 disabled (개인 근무 스케줄 진입 시 prefill 로 다음달 자동 입력)
+                              if (field.name === 'targetYearMonth') {
+                                const ymDisabled =
+                                  selectedDocument.documentName === '출퇴근시간 변경 신청서';
+                                return (
+                                  <ApprovalFormPaperFieldRow
+                                    key={field.name}
+                                    label={field.label}
+                                    required={fieldLocked}
+                                  >
+                                    <Form.Item
+                                      name={namePath}
+                                      rules={inputRules}
+                                      className="!tw-mb-0"
+                                      getValueProps={(v) => ({
+                                        value: v ? dayjs(v as string, 'YYYY-MM') : null,
+                                      })}
+                                      getValueFromEvent={(d: dayjs.Dayjs | null) =>
+                                        d ? d.format('YYYY-MM') : ''
+                                      }
+                                    >
+                                      <DatePicker
+                                        picker="month"
+                                        format="YYYY-MM"
+                                        placeholder="대상 연월 선택"
+                                        className="!tw-max-w-xs"
+                                        disabled={ymDisabled}
+                                      />
+                                    </Form.Item>
+                                  </ApprovalFormPaperFieldRow>
+                                );
+                              }
+                              return (
+                                <ApprovalFormPaperFieldRow
+                                  key={field.name}
+                                  label={field.label}
+                                  required={fieldLocked}
                                 >
-                                  {() => {
-                                    const vacationTypeId = form.getFieldValue(['content', 'vacationType']) as string | undefined;
-                                    const selectedType = companyLeaveTypes.find((t) => t.companyLeaveTypeId === vacationTypeId);
-                                    const daysPerUse = selectedType?.daysPerUse ?? 1.0;
-                                    // 잔여 일수 계산 - balanceType 기준 (ANNUAL/CARRYOVER 합산 또는 MONTHLY)
-                                    // 시스템 기본 휴가는 code 기반, 커스텀은 balanceType 컬럼 사용 가정
-                                    const code = (selectedType?.code ?? '').toUpperCase();
-                                    const wantedBalanceTypes = (() => {
-                                      if (!selectedType) return [] as string[];
-                                      if (code === 'MONTHLY') return ['MONTHLY'];
-                                      if (code === 'ANNUAL' || code === 'HALF_AM' || code === 'HALF_PM') return ['ANNUAL', 'CARRYOVER'];
-                                      const bt = (selectedType as unknown as { balanceType?: string | null }).balanceType;
-                                      if (bt) return [bt];
-                                      return [] as string[]; // 경조/병가 등 - 잔여 차감 없음
-                                    })();
-                                    const remainingDays = wantedBalanceTypes.length === 0
-                                      ? null  // 잔여 차감 없음 표시 X
-                                      : myBalances
-                                          .filter((b) => wantedBalanceTypes.includes(b.balanceType ?? ''))
-                                          .reduce((s, b) => s + (b.remaining ?? 0), 0);
-                                    const maxDaysPerYear = selectedType?.maxDaysPerYear ?? null;
-                                    const planned = (form.getFieldValue(['content', 'plannedDates']) as string[] | undefined) ?? [];
-                                    const usageDays = planned.length * daysPerUse;
-                                    const exceedsBalance = remainingDays != null && usageDays > remainingDays;
-                                    const exceedsYearLimit = maxDaysPerYear != null && usageDays > maxDaysPerYear;
-                                    return (
-                                      <ApprovalFormPaperFieldRow label="휴가 날짜" required>
-                                        <Form.Item
-                                          name={['content', 'plannedDates']}
-                                          className="!tw-mb-0"
-                                          rules={[
-                                            {
-                                              validator: (_, v) => {
-                                                if (!Array.isArray(v) || v.length === 0) {
-                                                  return Promise.reject(new Error('휴가 날짜를 1개 이상 선택해 주세요.'));
-                                                }
-                                                if (!vacationTypeId) {
-                                                  return Promise.reject(new Error('휴가 종류를 먼저 선택해 주세요.'));
-                                                }
-                                                const used = v.length * daysPerUse;
-                                                if (remainingDays != null && used > remainingDays) {
-                                                  return Promise.reject(new Error(
-                                                    `잔여 ${remainingDays}일을 초과합니다 (요청 ${used}일).`,
-                                                  ));
-                                                }
-                                                if (maxDaysPerYear != null && used > maxDaysPerYear) {
-                                                  return Promise.reject(new Error(
-                                                    `${selectedType?.name ?? '해당 휴가'} 연간 한도 ${maxDaysPerYear}일을 초과합니다.`,
-                                                  ));
-                                                }
-                                                return Promise.resolve();
-                                              },
-                                            },
-                                          ]}
-                                          getValueProps={(v) => ({
-                                            value: Array.isArray(v)
-                                              ? (v as string[])
-                                                  .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))
-                                                  .map((d) => dayjs(d, 'YYYY-MM-DD'))
-                                              : null,
-                                          })}
-                                          getValueFromEvent={(d: dayjs.Dayjs[] | dayjs.Dayjs | null) => {
-                                            if (!d) return undefined;
-                                            const arr = Array.isArray(d) ? d : [d];
-                                            const out = arr
-                                              .filter((x) => x && x.isValid())
-                                              .map((x) => x.format('YYYY-MM-DD'))
-                                              .sort();
-                                            return out.length > 0 ? out : undefined;
-                                          }}
-                                        >
-                                          <DatePicker
-                                            multiple
-                                            maxTagCount={10}
-                                            format="YYYY-MM-DD"
-                                            placeholder="휴가일을 클릭해 하나씩 선택 (주말/공휴일 제외)"
-                                            className="!tw-max-w-lg tw-w-full"
-                                            // 주말 + 회사 공휴일 + 과거 일자(오늘 이전) 비활성
-                                            disabledDate={(current) => {
-                                              if (!current || !current.isValid()) return false;
-                                              const dow = current.day();
-                                              if (dow === 0 || dow === 6) return true;
-                                              const ymd = current.format('YYYY-MM-DD');
-                                              if (companyHolidaySet.has(ymd)) return true;
-                                              return false;
-                                            }}
-                                          />
-                                        </Form.Item>
-                                        {/* 잔여 정보 안내 */}
-                                        <div className="!tw-mt-1.5 tw-flex tw-flex-wrap tw-items-center tw-gap-2">
-                                          {selectedType ? (
-                                            <>
-                                              <Typography.Text type="secondary" className="!tw-text-[11px]">
-                                                {selectedType.name} · 1회 {daysPerUse}일
-                                              </Typography.Text>
-                                              {remainingDays != null && (
-                                                <Tag
-                                                  color={exceedsBalance ? 'red' : 'blue'}
-                                                  className="!tw-m-0 !tw-text-[11px]"
-                                                >
-                                                  잔여 {remainingDays}일
-                                                </Tag>
-                                              )}
-                                              {maxDaysPerYear != null && (
-                                                <Tag
-                                                  color={exceedsYearLimit ? 'red' : 'default'}
-                                                  className="!tw-m-0 !tw-text-[11px]"
-                                                >
-                                                  연 한도 {maxDaysPerYear}일
-                                                </Tag>
-                                              )}
-                                              <Typography.Text
-                                                type="secondary"
-                                                className={`!tw-text-[11px] ${exceedsBalance || exceedsYearLimit ? '!tw-text-rose-600' : ''}`}
-                                              >
-                                                요청 {usageDays}일
-                                              </Typography.Text>
-                                            </>
-                                          ) : (
-                                            <Typography.Text type="secondary" className="!tw-text-[11px]">
-                                              휴가 종류를 먼저 선택하면 잔여 일수가 표시됩니다.
-                                            </Typography.Text>
+                                  <Form.Item
+                                    name={namePath}
+                                    rules={inputRules}
+                                    className="!tw-mb-0"
+                                  >
+                                    <Input
+                                      className="!tw-max-w-full"
+                                      placeholder={ph}
+                                      onFocus={
+                                        field.name === 'title'
+                                          ? (e) => {
+                                              const el = e.target as HTMLInputElement;
+                                              if (typeof el.select === 'function') el.select();
+                                            }
+                                          : undefined
+                                      }
+                                    />
+                                  </Form.Item>
+                                </ApprovalFormPaperFieldRow>
+                              );
+                            })}
+                          {/* 휴가신청서 - 휴가 날짜 multi DatePicker (단일/연속/비연속 모두 한 번에 처리) */}
+                          {/* 시작일/종료일 양식 필드는 위에서 숨김 처리, 사용 일수 = 선택한 날짜 개수 */}
+                          {/* 주말/회사 공휴일은 disabledDate 로 선택 차단 + 휴가 종류별 잔여 한도 사전 검증 */}
+                          {selectedDocument.documentName === '휴가신청서' && (
+                            <Form.Item
+                              shouldUpdate={(prev, next) =>
+                                prev?.content?.vacationType !== next?.content?.vacationType ||
+                                JSON.stringify(prev?.content?.plannedDates) !==
+                                  JSON.stringify(next?.content?.plannedDates)
+                              }
+                              noStyle
+                            >
+                              {() => {
+                                const vacationTypeId = form.getFieldValue([
+                                  'content',
+                                  'vacationType',
+                                ]) as string | undefined;
+                                const selectedType = companyLeaveTypes.find(
+                                  (t) => t.companyLeaveTypeId === vacationTypeId,
+                                );
+                                const daysPerUse = selectedType?.daysPerUse ?? 1.0;
+                                // 잔여 일수 계산 - balanceType 기준 (ANNUAL/CARRYOVER 합산 또는 MONTHLY)
+                                // 시스템 기본 휴가는 code 기반, 커스텀은 balanceType 컬럼 사용 가정
+                                const code = (selectedType?.code ?? '').toUpperCase();
+                                const wantedBalanceTypes = (() => {
+                                  if (!selectedType) return [] as string[];
+                                  if (code === 'MONTHLY') return ['MONTHLY'];
+                                  if (code === 'ANNUAL' || code === 'HALF_AM' || code === 'HALF_PM')
+                                    return ['ANNUAL', 'CARRYOVER'];
+                                  const bt = (
+                                    selectedType as unknown as { balanceType?: string | null }
+                                  ).balanceType;
+                                  if (bt) return [bt];
+                                  return [] as string[]; // 경조/병가 등 - 잔여 차감 없음
+                                })();
+                                const remainingDays =
+                                  wantedBalanceTypes.length === 0
+                                    ? null // 잔여 차감 없음 표시 X
+                                    : myBalances
+                                        .filter((b) =>
+                                          wantedBalanceTypes.includes(b.balanceType ?? ''),
+                                        )
+                                        .reduce((s, b) => s + (b.remaining ?? 0), 0);
+                                const maxDaysPerYear = selectedType?.maxDaysPerYear ?? null;
+                                const planned =
+                                  (form.getFieldValue(['content', 'plannedDates']) as
+                                    | string[]
+                                    | undefined) ?? [];
+                                const usageDays = planned.length * daysPerUse;
+                                const exceedsBalance =
+                                  remainingDays != null && usageDays > remainingDays;
+                                const exceedsYearLimit =
+                                  maxDaysPerYear != null && usageDays > maxDaysPerYear;
+                                return (
+                                  <ApprovalFormPaperFieldRow label="휴가 날짜" required>
+                                    <Form.Item
+                                      name={['content', 'plannedDates']}
+                                      className="!tw-mb-0"
+                                      rules={[
+                                        {
+                                          validator: (_, v) => {
+                                            if (!Array.isArray(v) || v.length === 0) {
+                                              return Promise.reject(
+                                                new Error('휴가 날짜를 1개 이상 선택해 주세요.'),
+                                              );
+                                            }
+                                            if (!vacationTypeId) {
+                                              return Promise.reject(
+                                                new Error('휴가 종류를 먼저 선택해 주세요.'),
+                                              );
+                                            }
+                                            const used = v.length * daysPerUse;
+                                            if (remainingDays != null && used > remainingDays) {
+                                              return Promise.reject(
+                                                new Error(
+                                                  `잔여 ${remainingDays}일을 초과합니다 (요청 ${used}일).`,
+                                                ),
+                                              );
+                                            }
+                                            if (maxDaysPerYear != null && used > maxDaysPerYear) {
+                                              return Promise.reject(
+                                                new Error(
+                                                  `${selectedType?.name ?? '해당 휴가'} 연간 한도 ${maxDaysPerYear}일을 초과합니다.`,
+                                                ),
+                                              );
+                                            }
+                                            return Promise.resolve();
+                                          },
+                                        },
+                                      ]}
+                                      getValueProps={(v) => ({
+                                        value: Array.isArray(v)
+                                          ? (v as string[])
+                                              .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))
+                                              .map((d) => dayjs(d, 'YYYY-MM-DD'))
+                                          : null,
+                                      })}
+                                      getValueFromEvent={(
+                                        d: dayjs.Dayjs[] | dayjs.Dayjs | null,
+                                      ) => {
+                                        if (!d) return undefined;
+                                        const arr = Array.isArray(d) ? d : [d];
+                                        const out = arr
+                                          .filter((x) => x && x.isValid())
+                                          .map((x) => x.format('YYYY-MM-DD'))
+                                          .sort();
+                                        return out.length > 0 ? out : undefined;
+                                      }}
+                                    >
+                                      <DatePicker
+                                        multiple
+                                        maxTagCount={10}
+                                        format="YYYY-MM-DD"
+                                        placeholder="휴가일을 클릭해 하나씩 선택 (주말/공휴일 제외)"
+                                        className="!tw-max-w-lg tw-w-full"
+                                        // 주말 + 회사 공휴일 + 과거 일자(오늘 이전) 비활성
+                                        disabledDate={(current) => {
+                                          if (!current || !current.isValid()) return false;
+                                          const dow = current.day();
+                                          if (dow === 0 || dow === 6) return true;
+                                          const ymd = current.format('YYYY-MM-DD');
+                                          if (companyHolidaySet.has(ymd)) return true;
+                                          return false;
+                                        }}
+                                      />
+                                    </Form.Item>
+                                    {/* 잔여 정보 안내 */}
+                                    <div className="!tw-mt-1.5 tw-flex tw-flex-wrap tw-items-center tw-gap-2">
+                                      {selectedType ? (
+                                        <>
+                                          <Typography.Text
+                                            type="secondary"
+                                            className="!tw-text-[11px]"
+                                          >
+                                            {selectedType.name} · 1회 {daysPerUse}일
+                                          </Typography.Text>
+                                          {remainingDays != null && (
+                                            <Tag
+                                              color={exceedsBalance ? 'red' : 'blue'}
+                                              className="!tw-m-0 !tw-text-[11px]"
+                                            >
+                                              잔여 {remainingDays}일
+                                            </Tag>
                                           )}
-                                        </div>
-                                      </ApprovalFormPaperFieldRow>
-                                    );
-                                  }}
-                                </Form.Item>
-                              )}
-                            </ApprovalFormPaperLayout>
-                  {composeSelectedOfficial ? (
-                    <Card size="small" title="수신 부서 (공문 필수)" className="tw-border-slate-200">
-                        <Alert
-                          type="info"
-                          showIcon
-                          className="tw-mb-3"
-                          message="상신 시 수신 부서를 최소 1곳 지정해야 합니다. 부서명은 스냅샷으로 저장됩니다."
-                        />
-                        <Select
-                          mode="multiple"
-                          className="tw-w-full"
-                          placeholder="조직도 기준 수신 부서를 검색·선택하세요"
-                          options={officialOrgSelectOptions}
-                          value={officialRecipients.map((r) => r.recipientOrganizationId)}
-                          onChange={(ids: string[]) => {
-                            const labelById = new Map(officialOrgSelectOptions.map((o) => [o.value, o.label]));
-                            setOfficialRecipients(
-                              ids.map((id) => ({
-                                recipientOrganizationId: id,
-                                recipientOrganizationName: labelById.get(id)?.trim() || id,
-                              })),
-                            );
-                          }}
-                          showSearch
-                          optionFilterProp="label"
-                        />
-                    </Card>
-                  ) : null}
-                  <Card size="small" title="부서 문서함 공개" className="tw-border-slate-200">
-                      <Space direction="vertical" size="small" className="tw-w-full">
-                        <Typography.Paragraph type="secondary" className="!tw-mb-0 tw-text-sm">
-                          켜두면 같은 부서 구성원이 부서 문서함에서 제목과 내용을 볼 수 있습니다. 끄면 작성자만 전체를 열람할 수 있고, 다른 부서원에게는 목록에서만 일부 정보가 표시됩니다.
-                        </Typography.Paragraph>
-                        <Space align="center">
-                          <Switch
-                            checked={composeSelectedOfficial ? true : composeDeptVisibleYn === 'Y'}
-                            disabled={composeSelectedOfficial}
-                            onChange={(checked) =>
-                              setComposeDeptVisibleYn(checked ? 'Y' : 'N')
-                            }
-                            aria-label="부서 문서함에 공개"
-                          />
-                          <Typography.Text className="tw-text-sm">
-                            {composeSelectedOfficial || composeDeptVisibleYn === 'Y' ? '공개' : '비공개'}
-                          </Typography.Text>
-                        </Space>
+                                          {maxDaysPerYear != null && (
+                                            <Tag
+                                              color={exceedsYearLimit ? 'red' : 'default'}
+                                              className="!tw-m-0 !tw-text-[11px]"
+                                            >
+                                              연 한도 {maxDaysPerYear}일
+                                            </Tag>
+                                          )}
+                                          <Typography.Text
+                                            type="secondary"
+                                            className={`!tw-text-[11px] ${exceedsBalance || exceedsYearLimit ? '!tw-text-rose-600' : ''}`}
+                                          >
+                                            요청 {usageDays}일
+                                          </Typography.Text>
+                                        </>
+                                      ) : (
+                                        <Typography.Text
+                                          type="secondary"
+                                          className="!tw-text-[11px]"
+                                        >
+                                          휴가 종류를 먼저 선택하면 잔여 일수가 표시됩니다.
+                                        </Typography.Text>
+                                      )}
+                                    </div>
+                                  </ApprovalFormPaperFieldRow>
+                                );
+                              }}
+                            </Form.Item>
+                          )}
+                        </ApprovalFormPaperLayout>
                         {composeSelectedOfficial ? (
+                          <section className="tw-rounded-xl tw-border tw-border-slate-200 tw-bg-white tw-p-4">
+                            <Typography.Text strong className="tw-mb-3 tw-block tw-text-sm">
+                              수신 부서 (공문 필수)
+                            </Typography.Text>
+                            <Alert
+                              type="info"
+                              showIcon
+                              className="tw-mb-3"
+                              message="상신 시 수신 부서를 최소 1곳 지정해야 합니다. 부서명은 스냅샷으로 저장됩니다."
+                            />
+                            <Select
+                              mode="multiple"
+                              className="tw-w-full"
+                              placeholder="조직도 기준 수신 부서를 검색·선택하세요"
+                              options={officialOrgSelectOptions}
+                              value={officialRecipients.map((r) => r.recipientOrganizationId)}
+                              onChange={(ids: string[]) => {
+                                const labelById = new Map(
+                                  officialOrgSelectOptions.map((o) => [o.value, o.label]),
+                                );
+                                setOfficialRecipients(
+                                  ids.map((id) => ({
+                                    recipientOrganizationId: id,
+                                    recipientOrganizationName: labelById.get(id)?.trim() || id,
+                                  })),
+                                );
+                              }}
+                              showSearch
+                              optionFilterProp="label"
+                            />
+                          </section>
+                        ) : null}
+                        <section className="tw-rounded-xl tw-border tw-border-slate-200 tw-bg-white tw-p-4">
+                          <Typography.Text strong className="tw-mb-3 tw-block tw-text-sm">
+                            부서 문서함 공개
+                          </Typography.Text>
+                          <Space direction="vertical" size="small" className="tw-w-full">
+                            <Typography.Paragraph type="secondary" className="!tw-mb-0 tw-text-sm">
+                              켜두면 같은 부서 구성원이 부서 문서함에서 제목과 내용을 볼 수
+                              있습니다. 끄면 작성자만 전체를 열람할 수 있고, 다른 부서원에게는
+                              목록에서만 일부 정보가 표시됩니다.
+                            </Typography.Paragraph>
+                            <Space align="center">
+                              <Switch
+                                checked={
+                                  composeSelectedOfficial ? true : composeDeptVisibleYn === 'Y'
+                                }
+                                disabled={composeSelectedOfficial}
+                                onChange={(checked) => setComposeDeptVisibleYn(checked ? 'Y' : 'N')}
+                                aria-label="부서 문서함에 공개"
+                              />
+                              <Typography.Text className="tw-text-sm">
+                                {composeSelectedOfficial || composeDeptVisibleYn === 'Y'
+                                  ? '공개'
+                                  : '비공개'}
+                              </Typography.Text>
+                            </Space>
+                            {composeSelectedOfficial ? (
+                              <Alert
+                                type="info"
+                                showIcon
+                                className="!tw-mb-0"
+                                message="공문은 부서 문서함에 항상 공개됩니다."
+                              />
+                            ) : null}
+                          </Space>
+                        </section>
+                        {composeEditingRequestId ? (
                           <Alert
-                            type="info"
+                            type="warning"
                             showIcon
-                            className="!tw-mb-0"
-                            message="공문은 부서 문서함에 항상 공개됩니다."
+                            className="tw-mb-3"
+                            message="임시저장을 다시 저장하면 서버에서 기존 첨부가 비워질 수 있습니다. 저장 후 필요한 파일을 다시 올려 주세요."
                           />
                         ) : null}
-                      </Space>
-                  </Card>
-                  {composeEditingRequestId ? (
-                    <Alert
-                      type="warning"
-                      showIcon
-                      className="tw-mb-3"
-                      message="임시저장을 다시 저장하면 서버에서 기존 첨부가 비워질 수 있습니다. 저장 후 필요한 파일을 다시 올려 주세요."
-                    />
-                  ) : null}
-                  <div className="tw-mt-3 tw-rounded-sm tw-border tw-border-dashed tw-border-slate-400 tw-bg-white tw-px-3 tw-py-4">
-                    {composeAttachmentSlotsLeft > 0 ? (
-                      <Upload.Dragger {...composeAttachmentDraggerProps} className="!tw-bg-transparent">
-                        <p className="ant-upload-drag-icon">
-                          <InboxOutlined />
-                        </p>
-                        <p className="ant-upload-text">클릭하거나 파일을 여기로 끌어다 놓으세요</p>
-                        <p className="ant-upload-hint">
-                          최대 {APPROVAL_ATTACHMENT_MAX_COUNT}개, 파일당 10MB 이하, 합계 50MB 이하 (jpg, png, pdf,
-                          Office, hwp, zip 등)
-                        </p>
-                      </Upload.Dragger>
-                    ) : (
-                      <div
-                        role="presentation"
-                        className="tw-cursor-not-allowed tw-min-h-[5.5rem] tw-py-6 tw-text-center tw-opacity-70"
-                        onClick={() =>
-                          void message.warning(
-                            `첨부는 최대 ${APPROVAL_ATTACHMENT_MAX_COUNT}개까지 등록할 수 있습니다.`,
-                          )
-                        }
-                      >
-                          <PaperClipOutlined className="tw-text-2xl tw-text-slate-400" />
-                          <div className="tw-mt-2 tw-text-sm tw-leading-relaxed tw-text-[#333]">
-                          첨부 스케줄이 가득 찼습니다.
-                        </div>
-                        <Typography.Paragraph type="secondary" className="!tw-mb-0 tw-mt-1 tw-text-xs">
-                          최대 {APPROVAL_ATTACHMENT_MAX_COUNT}개, 파일당 10MB 이하, 합계 50MB 이하 (jpg, png, pdf, Office,
-                          hwp, zip 등)
-                        </Typography.Paragraph>
-                      </div>
-                    )}
-                    {composeRemoteAttachmentsLoading ? (
-                      <div className="tw-py-2 tw-text-center tw-text-sm tw-text-slate-500">첨부 목록 불러오는 중…</div>
-                    ) : null}
-                    {(composeRemoteAttachments.length > 0 || composeAttachmentFiles.length > 0) && (
-                      <ul className="tw-mb-0 tw-mt-3 tw-list-none tw-space-y-2 tw-border-t tw-border-slate-200 tw-pt-3 tw-pl-0">
-                        {composeRemoteAttachments.map((a) => (
-                          <li
-                            key={a.attachmentId}
-                            className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2 tw-text-sm"
-                          >
-                            <span className="tw-min-w-0 tw-truncate tw-text-slate-800" title={a.fileName}>
-                              {a.fileName}
-                            </span>
-                            <Space size={8} wrap>
-                              <Typography.Text type="secondary" className="tw-text-xs">
-                                {formatApprovalAttachmentBytes(a.fileSize)}
-                              </Typography.Text>
-                            <Button
-                              type="link"
-                              size="small"
-                                className="!tw-p-0"
-                                onClick={() => window.open(a.approvalUrl, '_blank', 'noopener,noreferrer')}
+                        <div className="tw-mt-3 tw-rounded-sm tw-border tw-border-dashed tw-border-slate-400 tw-bg-white tw-px-3 tw-py-4">
+                          {composeAttachmentSlotsLeft > 0 ? (
+                            <Upload.Dragger
+                              {...composeAttachmentDraggerProps}
+                              className="!tw-bg-transparent"
+                            >
+                              <p className="ant-upload-drag-icon">
+                                <InboxOutlined />
+                              </p>
+                              <p className="ant-upload-text">
+                                클릭하거나 파일을 여기로 끌어다 놓으세요
+                              </p>
+                              <p className="ant-upload-hint">
+                                최대 {APPROVAL_ATTACHMENT_MAX_COUNT}개, 파일당 10MB 이하, 합계 50MB
+                                이하 (jpg, png, pdf, Office, hwp, zip 등)
+                              </p>
+                            </Upload.Dragger>
+                          ) : (
+                            <div
+                              role="presentation"
+                              className="tw-cursor-not-allowed tw-min-h-[5.5rem] tw-py-6 tw-text-center tw-opacity-70"
+                              onClick={() =>
+                                void message.warning(
+                                  `첨부는 최대 ${APPROVAL_ATTACHMENT_MAX_COUNT}개까지 등록할 수 있습니다.`,
+                                )
+                              }
+                            >
+                              <PaperClipOutlined className="tw-text-2xl tw-text-slate-400" />
+                              <div className="tw-mt-2 tw-text-sm tw-leading-relaxed tw-text-[#333]">
+                                첨부 스케줄이 가득 찼습니다.
+                              </div>
+                              <Typography.Paragraph
+                                type="secondary"
+                                className="!tw-mb-0 tw-mt-1 tw-text-xs"
                               >
-                                다운로드
-                              </Button>
-                              <Button
-                                type="link"
-                                size="small"
-                                danger
-                                className="!tw-p-0"
-                                loading={deleteComposeRemoteAttachmentM.isPending}
-                                disabled={deleteComposeRemoteAttachmentM.isPending}
-                                onClick={() => void deleteComposeRemoteAttachmentM.mutateAsync(a.attachmentId)}
-                              >
-                                삭제
-                              </Button>
-                            </Space>
-                          </li>
-                        ))}
-                        {composeAttachmentFiles.map((f, idx) => (
-                          <li
-                            key={`${f.name}-${f.size}-${f.lastModified}-${idx}`}
-                            className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2 tw-text-sm"
-                          >
-                            <span className="tw-min-w-0 tw-truncate tw-text-slate-800" title={f.name}>
-                              {f.name}{' '}
-                              <Typography.Text type="secondary" className="tw-text-xs">
-                                (저장 시 업로드)
-                              </Typography.Text>
-                            </span>
-                            <Space size={8}>
-                              <Typography.Text type="secondary" className="tw-text-xs">
-                                {formatApprovalAttachmentBytes(f.size)}
-                              </Typography.Text>
-                              <Button
-                                type="link"
-                                size="small"
-                                danger
-                                className="!tw-p-0"
-                                onClick={() =>
-                                  setComposeAttachmentFiles((prev) => prev.filter((_, i) => i !== idx))
-                                }
-                              >
-                                제거
-                              </Button>
-                            </Space>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    <div className="tw-mt-2 tw-text-center tw-text-xs tw-text-slate-500">
-                      남은 첨부 슬롯 {composeAttachmentSlotsLeft}개
+                                최대 {APPROVAL_ATTACHMENT_MAX_COUNT}개, 파일당 10MB 이하, 합계 50MB
+                                이하 (jpg, png, pdf, Office, hwp, zip 등)
+                              </Typography.Paragraph>
+                            </div>
+                          )}
+                          {composeRemoteAttachmentsLoading ? (
+                            <div className="tw-py-2 tw-text-center tw-text-sm tw-text-slate-500">
+                              첨부 목록 불러오는 중…
+                            </div>
+                          ) : null}
+                          {(composeRemoteAttachments.length > 0 ||
+                            composeAttachmentFiles.length > 0) && (
+                            <ul className="tw-mb-0 tw-mt-3 tw-list-none tw-space-y-2 tw-border-t tw-border-slate-200 tw-pt-3 tw-pl-0">
+                              {composeRemoteAttachments.map((a) => (
+                                <li
+                                  key={a.attachmentId}
+                                  className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2 tw-text-sm"
+                                >
+                                  <span
+                                    className="tw-min-w-0 tw-truncate tw-text-slate-800"
+                                    title={a.fileName}
+                                  >
+                                    {a.fileName}
+                                  </span>
+                                  <Space size={8} wrap>
+                                    <Typography.Text type="secondary" className="tw-text-xs">
+                                      {formatApprovalAttachmentBytes(a.fileSize)}
+                                    </Typography.Text>
+                                    <Button
+                                      type="link"
+                                      size="small"
+                                      className="!tw-p-0"
+                                      onClick={() =>
+                                        window.open(a.approvalUrl, '_blank', 'noopener,noreferrer')
+                                      }
+                                    >
+                                      다운로드
+                                    </Button>
+                                    <Button
+                                      type="link"
+                                      size="small"
+                                      danger
+                                      className="!tw-p-0"
+                                      loading={deleteComposeRemoteAttachmentM.isPending}
+                                      disabled={deleteComposeRemoteAttachmentM.isPending}
+                                      onClick={() =>
+                                        void deleteComposeRemoteAttachmentM.mutateAsync(
+                                          a.attachmentId,
+                                        )
+                                      }
+                                    >
+                                      삭제
+                                    </Button>
+                                  </Space>
+                                </li>
+                              ))}
+                              {composeAttachmentFiles.map((f, idx) => (
+                                <li
+                                  key={`${f.name}-${f.size}-${f.lastModified}-${idx}`}
+                                  className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2 tw-text-sm"
+                                >
+                                  <span
+                                    className="tw-min-w-0 tw-truncate tw-text-slate-800"
+                                    title={f.name}
+                                  >
+                                    {f.name}{' '}
+                                    <Typography.Text type="secondary" className="tw-text-xs">
+                                      (저장 시 업로드)
+                                    </Typography.Text>
+                                  </span>
+                                  <Space size={8}>
+                                    <Typography.Text type="secondary" className="tw-text-xs">
+                                      {formatApprovalAttachmentBytes(f.size)}
+                                    </Typography.Text>
+                                    <Button
+                                      type="link"
+                                      size="small"
+                                      danger
+                                      className="!tw-p-0"
+                                      onClick={() =>
+                                        setComposeAttachmentFiles((prev) =>
+                                          prev.filter((_, i) => i !== idx),
+                                        )
+                                      }
+                                    >
+                                      제거
+                                    </Button>
+                                  </Space>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                          <div className="tw-mt-2 tw-text-center tw-text-xs tw-text-slate-500">
+                            남은 첨부 슬롯 {composeAttachmentSlotsLeft}개
                           </div>
                         </div>
                         <div className="tw-mt-2 tw-flex tw-flex-wrap tw-items-center tw-gap-2 tw-rounded-sm tw-border tw-border-slate-300 tw-bg-white tw-px-3 tw-py-2">
@@ -6234,28 +6845,29 @@ export function ApprovalsPage() {
                             문서 검색
                           </Button>
                         </div>
-                    </div>
-                  </div>
-                        {renderComposeDraftSubmitActions()}
                       </div>
-                      <aside
-                        className={clsx(
-                          composeApprovalInfoAsideClass,
-                          'tw-max-h-[50vh] tw-shrink-0 tw-overflow-hidden tw-border-t tw-border-[#e5e7eb] tw-bg-white tw-p-0 lg:tw-max-h-none lg:tw-self-stretch lg:tw-border-l lg:tw-border-t-0',
-                        )}
-                      >
-                  {renderComposeDocumentSidebar({ variant: 'flush' })}
-                      </aside>
                     </div>
-                  ) : null}
+                    {renderComposeDraftSubmitActions()}
+                  </div>
+                  <aside
+                    className={clsx(
+                      composeApprovalInfoAsideClass,
+                      'tw-max-h-[50vh] tw-shrink-0 tw-overflow-hidden tw-border-t tw-border-[#e5e7eb] tw-bg-white tw-p-0 lg:tw-max-h-none lg:tw-self-stretch lg:tw-border-l lg:tw-border-t-0',
+                    )}
+                  >
+                    {renderComposeDocumentSidebar({ variant: 'flush' })}
+                  </aside>
+                </div>
+              ) : null}
 
-            {composePhaseView === 'fill' && selectedDocument && selectedSchema.fields.length === 0 ? (
-              <div className="tw-mb-4 tw-max-w-lg">{renderComposeDocumentSidebar()}</div>
-                  ) : null}
-
-                </Form>
+              {composePhaseView === 'fill' &&
+              selectedDocument &&
+              selectedSchema.fields.length === 0 ? (
+                <div className="tw-mb-4 tw-max-w-lg">{renderComposeDocumentSidebar()}</div>
+              ) : null}
+            </Form>
           )}
-              </Card>
+        </Card>
       ) : tab === 'admin' && canAdmin ? (
         <ApprovalsAdminPage />
       ) : (
@@ -6269,11 +6881,20 @@ export function ApprovalsPage() {
               size="small"
               className={clsx(
                 'tw-rounded-lg tw-border-slate-200/80 tw-shadow-sm',
-                isEmbedComposeModal && 'tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-hidden',
+                isEmbedComposeModal &&
+                  'tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-hidden',
               )}
               styles={
                 isEmbedComposeModal
-                  ? { body: { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 16 } }
+                  ? {
+                      body: {
+                        flex: 1,
+                        minHeight: 0,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        padding: 16,
+                      },
+                    }
                   : undefined
               }
             >
@@ -6308,26 +6929,25 @@ export function ApprovalsPage() {
                         activeKey={requestStatusFilter}
                         onChange={(k) => {
                           const next = k as 'ALL' | ApprovalRequestStatus;
-                      navigate({
-                        to: '/app/approvals',
-                        search: {
-                          tab: 'my',
+                          navigate({
+                            to: '/app/approvals',
+                            search: {
+                              tab: 'my',
                               box: 'per-official',
                               ...(next === 'ALL' ? {} : { myStatus: next }),
                               ...embedSearchSuffix,
-                        },
-                        replace: true,
-                      });
-                    }}
+                            },
+                            replace: true,
+                          });
+                        }}
                         items={OFFICIAL_INBOX_FILTER_TABS.map(({ key, label }) => ({ key, label }))}
                       />
                     ) : null}
-                </div>
+                  </div>
                   <div className="tw-min-h-0 tw-flex-1 tw-overflow-auto">
                     {guideBox === 'per-viewers' ? (
                       <Tabs
                         size="small"
-                        tabBarStyle={{ marginBottom: 12 }}
                         activeKey={viewerInboxTabKey}
                         onChange={navigateViewerInboxTab}
                         items={[
@@ -6335,31 +6955,31 @@ export function ApprovalsPage() {
                             key: 'cc',
                             label: '참조',
                             children: (
-                <Table<ApprovalRequestDetail>
+                              <Table<ApprovalRequestDetail>
                                 size="small"
-                  rowKey="requestId"
+                                rowKey="requestId"
                                 loading={myTableLoading}
                                 columns={viewerCcOnlyColumns}
                                 dataSource={viewerCcRequests}
-                  pagination={{ pageSize: 10 }}
+                                pagination={{ pageSize: 10 }}
                                 onRow={(record) => ({
                                   onClick: () => setSelectedRequestId(record.requestId),
                                   style: { cursor: 'pointer' },
                                 })}
-                />
-            ),
-          },
-          {
+                              />
+                            ),
+                          },
+                          {
                             key: 'circ',
                             label: '공람',
-            children: (
-                <Table<ApprovalRequestDetail>
+                            children: (
+                              <Table<ApprovalRequestDetail>
                                 size="small"
-                  rowKey="requestId"
+                                rowKey="requestId"
                                 loading={myTableLoading}
                                 columns={viewerCcOnlyColumns}
                                 dataSource={viewerCirculationRequests}
-                  pagination={{ pageSize: 10 }}
+                                pagination={{ pageSize: 10 }}
                                 onRow={(record) => ({
                                   onClick: () => setSelectedRequestId(record.requestId),
                                   style: { cursor: 'pointer' },
@@ -6444,15 +7064,14 @@ export function ApprovalsPage() {
                   ) : null}
                   {guideBox === 'per-viewers' ? (
                     <Tabs
-                      tabBarStyle={{ marginBottom: 12 }}
                       activeKey={viewerInboxTabKey}
                       onChange={navigateViewerInboxTab}
                       items={[
                         {
                           key: 'cc',
                           label: '참조',
-            children: (
-                <Table<ApprovalRequestDetail>
+                          children: (
+                            <Table<ApprovalRequestDetail>
                               rowKey="requestId"
                               loading={myTableLoading}
                               columns={viewerCcOnlyColumns}
@@ -6513,11 +7132,20 @@ export function ApprovalsPage() {
               size="small"
               className={clsx(
                 'tw-rounded-lg tw-border-slate-200/80 tw-shadow-sm',
-                isEmbedComposeModal && 'tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-hidden',
+                isEmbedComposeModal &&
+                  'tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-hidden',
               )}
               styles={
                 isEmbedComposeModal
-                  ? { body: { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 16 } }
+                  ? {
+                      body: {
+                        flex: 1,
+                        minHeight: 0,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        padding: 16,
+                      },
+                    }
                   : undefined
               }
             >
@@ -6549,11 +7177,20 @@ export function ApprovalsPage() {
               size="small"
               className={clsx(
                 'tw-rounded-lg tw-border-slate-200/80 tw-shadow-sm',
-                isEmbedComposeModal && 'tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-hidden',
+                isEmbedComposeModal &&
+                  'tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-hidden',
               )}
               styles={
                 isEmbedComposeModal
-                  ? { body: { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 16 } }
+                  ? {
+                      body: {
+                        flex: 1,
+                        minHeight: 0,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        padding: 16,
+                      },
+                    }
                   : undefined
               }
             >
@@ -6561,41 +7198,41 @@ export function ApprovalsPage() {
                 const actedTable = (
                   <Table<ApprovalRequestDetail>
                     size={isEmbedComposeModal ? 'small' : undefined}
-                  rowKey="requestId"
-                  loading={actedLoading}
-                  columns={[
-                    { title: '양식', dataIndex: 'documentName', key: 'documentName' },
-                    {
-                      title: '처리',
-                      key: 'proxyAct',
-                      width: 88,
-                      render: (_: unknown, row: ApprovalRequestDetail) =>
-                        requestIncludesMyProxyAct(row, {
-                          myMemberId: authMemberId,
-                          myMemberPositionId: myPositionIdForProxy,
-                        }) ? (
-                          <Tag color="purple">대결</Tag>
-                        ) : (
-                          <Tag>직접</Tag>
-                        ),
-                    },
-                    {
-                      title: '요청 상태',
-                      dataIndex: 'requestStatus',
-                      key: 'requestStatus',
-                      width: 130,
-                      render: (status: string) => statusTag(status),
-                    },
-                    {
-                      title: '최종 수정일',
-                      dataIndex: 'updatedAt',
-                      key: 'updatedAt',
-                      width: 180,
-                      render: (v: string) => formatDateTime(v),
-                    },
-                  ]}
-                  dataSource={actedRequests}
-                  pagination={{ pageSize: 10 }}
+                    rowKey="requestId"
+                    loading={actedLoading}
+                    columns={[
+                      { title: '양식', dataIndex: 'documentName', key: 'documentName' },
+                      {
+                        title: '처리',
+                        key: 'proxyAct',
+                        width: 88,
+                        render: (_: unknown, row: ApprovalRequestDetail) =>
+                          requestIncludesMyProxyAct(row, {
+                            myMemberId: authMemberId,
+                            myMemberPositionId: myPositionIdForProxy,
+                          }) ? (
+                            <Tag color="purple">대결</Tag>
+                          ) : (
+                            <Tag>직접</Tag>
+                          ),
+                      },
+                      {
+                        title: '요청 상태',
+                        dataIndex: 'requestStatus',
+                        key: 'requestStatus',
+                        width: 130,
+                        render: (status: string) => statusTag(status),
+                      },
+                      {
+                        title: '최종 수정일',
+                        dataIndex: 'updatedAt',
+                        key: 'updatedAt',
+                        width: 180,
+                        render: (v: string) => formatDateTime(v),
+                      },
+                    ]}
+                    dataSource={actedRequests}
+                    pagination={{ pageSize: 10 }}
                     onRow={(record) => ({
                       onClick: () => setSelectedRequestId(record.requestId),
                       style: { cursor: 'pointer' },
@@ -6608,21 +7245,28 @@ export function ApprovalsPage() {
                   actedTable
                 );
               })()}
-              </Card>
+            </Card>
           ) : null}
         </div>
       )}
 
-
       <AppSingleActionModal
         title="미리보기"
-        open={composePreviewOpen && composePhaseView === 'fill' && selectedDocument != null && tab === 'compose'}
+        open={
+          composePreviewOpen &&
+          composePhaseView === 'fill' &&
+          selectedDocument != null &&
+          tab === 'compose'
+        }
         onClose={() => setComposePreviewOpen(false)}
         onSubmit={() => setComposePreviewOpen(false)}
         submitText="닫기"
         width={720}
       >
-        {composePreviewOpen && composePhaseView === 'fill' && selectedDocument != null && tab === 'compose' ? (
+        {composePreviewOpen &&
+        composePhaseView === 'fill' &&
+        selectedDocument != null &&
+        tab === 'compose' ? (
           <div className="tw-px-5 tw-py-4">
             <Typography.Paragraph className="!tw-mb-2">
               <strong>{selectedDocument.documentName}</strong>
@@ -6637,7 +7281,10 @@ export function ApprovalsPage() {
       <AppDoubleActionModal
         title="결재 정보"
         open={
-          composeApprovalInfoModalOpen && composePhaseView === 'fill' && selectedDocument != null && tab === 'compose'
+          composeApprovalInfoModalOpen &&
+          composePhaseView === 'fill' &&
+          selectedDocument != null &&
+          tab === 'compose'
         }
         onClose={() => setComposeApprovalInfoModalOpen(false)}
         onConfirm={() => setComposeApprovalInfoModalOpen(false)}
@@ -6647,7 +7294,7 @@ export function ApprovalsPage() {
         width={1000}
       >
         <div className="tw-px-5 tw-py-2">
-        {selectedDocument ? renderComposeApprovalInfoContent({ stacked: false }) : null}
+          {selectedDocument ? renderComposeApprovalInfoContent({ stacked: false }) : null}
         </div>
       </AppDoubleActionModal>
 
@@ -6717,16 +7364,16 @@ export function ApprovalsPage() {
               승인된 공문이 수신 부서로 발송되기 전에만 취소할 수 있습니다.
             </Typography.Paragraph>
           ) : null}
-        <Input.TextArea
-          rows={4}
-          value={cancelReason}
-          onChange={(e) => setCancelReason(e.target.value)}
-          placeholder={
-            cancelTarget && String(cancelTarget.requestStatus).toUpperCase() === 'DRAFT'
-              ? '삭제 사유를 입력하세요.'
-              : '취소 사유를 입력하세요.'
-          }
-        />
+          <Input.TextArea
+            rows={4}
+            value={cancelReason}
+            onChange={(e) => setCancelReason(e.target.value)}
+            placeholder={
+              cancelTarget && String(cancelTarget.requestStatus).toUpperCase() === 'DRAFT'
+                ? '삭제 사유를 입력하세요.'
+                : '취소 사유를 입력하세요.'
+            }
+          />
         </div>
       </AppDoubleActionModal>
 
@@ -6740,14 +7387,20 @@ export function ApprovalsPage() {
         onConfirm={() => {
           if (!approvalAction) return;
           if (approvalAction.mode === 'approve') {
-            void approveM.mutateAsync({ approvalId: approvalAction.approvalId, comment: approvalComment.trim() || undefined });
+            void approveM.mutateAsync({
+              approvalId: approvalAction.approvalId,
+              comment: approvalComment.trim() || undefined,
+            });
             return;
           }
           if (!approvalComment.trim()) {
             message.warning('반려 사유를 입력해 주세요.');
             return;
           }
-          void rejectM.mutateAsync({ approvalId: approvalAction.approvalId, comment: approvalComment.trim() });
+          void rejectM.mutateAsync({
+            approvalId: approvalAction.approvalId,
+            comment: approvalComment.trim(),
+          });
         }}
         confirmText={approvalAction?.mode === 'approve' ? '승인' : '반려'}
         cancelText="닫기"
@@ -6755,12 +7408,12 @@ export function ApprovalsPage() {
         confirmDanger={approvalAction?.mode === 'reject'}
       >
         <div className="tw-px-5 tw-py-4">
-        <Input.TextArea
-          rows={4}
-          value={approvalComment}
-          onChange={(e) => setApprovalComment(e.target.value)}
-          placeholder={approvalAction?.mode === 'approve' ? '승인 의견(선택)' : '반려 사유(필수)'}
-        />
+          <Input.TextArea
+            rows={4}
+            value={approvalComment}
+            onChange={(e) => setApprovalComment(e.target.value)}
+            placeholder={approvalAction?.mode === 'approve' ? '승인 의견(선택)' : '반려 사유(필수)'}
+          />
         </div>
       </AppDoubleActionModal>
     </div>

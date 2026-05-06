@@ -1,4 +1,12 @@
-import { DeleteOutlined, EditOutlined, EyeOutlined, FormOutlined, PlusOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons';
+import {
+  DeleteOutlined,
+  EditOutlined,
+  EyeOutlined,
+  FormOutlined,
+  PlusOutlined,
+  ReloadOutlined,
+  UploadOutlined,
+} from '@ant-design/icons';
 import {
   DndContext,
   KeyboardSensor,
@@ -8,7 +16,13 @@ import {
   useSensors,
   type DragEndEvent,
 } from '@dnd-kit/core';
-import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -30,7 +44,17 @@ import {
   Tooltip,
   Typography,
 } from 'antd';
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type HTMLAttributes, type Key } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type HTMLAttributes,
+  type Key,
+} from 'react';
 import {
   APPROVAL_REQUEST_TYPES,
   approvalApi,
@@ -71,9 +95,7 @@ type DocForm = {
 const NAVY_BUTTON_CLASS =
   '!tw-border-0 !tw-bg-[#1e3a5f] !tw-text-white hover:!tw-bg-[#152a45] hover:!tw-text-white disabled:!tw-opacity-60';
 const ADMIN_SHELL_CARD_CLASS =
-  'tw-overflow-hidden tw-rounded-2xl tw-border-slate-200/80 tw-bg-white tw-shadow-[0_1px_3px_rgba(15,23,42,0.06)] [&_.ant-card-body]:tw-px-5 [&_.ant-card-body]:tw-pb-8 [&_.ant-card-body]:tw-pt-6 sm:[&_.ant-card-body]:tw-px-7';
-const ADMIN_TABS_CLASS =
-  '[&_.ant-tabs-nav]:tw-mb-4 [&_.ant-tabs-tab]:!tw-text-slate-600 [&_.ant-tabs-tab-active_.ant-tabs-tab-btn]:!tw-font-semibold [&_.ant-tabs-tab-active_.ant-tabs-tab-btn]:!tw-text-[#1e3a5f] [&_.ant-tabs-ink-bar]:!tw-bg-[#1e3a5f]';
+  'tw-rounded-2xl tw-border-slate-200/80 tw-bg-white tw-shadow-[0_1px_3px_rgba(15,23,42,0.06)] [&_.ant-card-body]:tw-px-5 [&_.ant-card-body]:tw-pb-8 [&_.ant-card-body]:tw-pt-6 sm:[&_.ant-card-body]:tw-px-7';
 
 type PolicyLineDraft = {
   key: string;
@@ -91,7 +113,12 @@ function parseJobTitleOptions(raw: Array<Record<string, unknown>>): JobTitleOpti
   return raw
     .map((row) => {
       const idRaw =
-        row.jobTitleId ?? row.job_title_id ?? row.id ?? row.uuid ?? row.jobTitleUuid ?? row.job_title_uuid;
+        row.jobTitleId ??
+        row.job_title_id ??
+        row.id ??
+        row.uuid ??
+        row.jobTitleUuid ??
+        row.job_title_uuid;
       const nameRaw = row.jobTitleName ?? row.job_title_name ?? row.name ?? row.title;
       const value = typeof idRaw === 'string' ? idRaw.trim() : '';
       const name = typeof nameRaw === 'string' ? nameRaw.trim() : '';
@@ -198,7 +225,10 @@ function PolicyLineDragHandle() {
     >
       <span className="tw-inline-grid tw-grid-cols-2 tw-gap-[3px]" aria-hidden>
         {Array.from({ length: 6 }).map((_, index) => (
-          <span key={index} className="tw-block tw-h-[3px] tw-w-[3px] tw-rounded-full tw-bg-current" />
+          <span
+            key={index}
+            className="tw-block tw-h-[3px] tw-w-[3px] tw-rounded-full tw-bg-current"
+          />
         ))}
       </span>
     </span>
@@ -209,9 +239,22 @@ type SortablePolicyLineTableRowProps = HTMLAttributes<HTMLTableRowElement> & {
   'data-row-key'?: Key;
 };
 
-function SortablePolicyLineTableRow({ children, style, className, ...rest }: SortablePolicyLineTableRowProps) {
+function SortablePolicyLineTableRow({
+  children,
+  style,
+  className,
+  ...rest
+}: SortablePolicyLineTableRowProps) {
   const id = String(rest['data-row-key'] ?? '');
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
     id,
   });
 
@@ -250,7 +293,9 @@ export function ApprovalsAdminPage() {
   const { user } = useAuth();
   const isSystemAdmin = user?.isSystemAdmin === true;
   const [createOpen, setCreateOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'documents' | 'policy-lines' | 'contract-templates' | 'seal-management'>('documents');
+  const [activeTab, setActiveTab] = useState<
+    'documents' | 'policy-lines' | 'contract-templates' | 'seal-management'
+  >('documents');
   const [selectedDocumentId, setSelectedDocumentId] = useState<string>('');
   const [policyDrafts, setPolicyDrafts] = useState<PolicyLineDraft[]>([]);
   const [policyEditing, setPolicyEditing] = useState(false);
@@ -344,7 +389,10 @@ export function ApprovalsAdminPage() {
     [documents, selectedDocumentId],
   );
   const policyPreviewDocument = useMemo(
-    () => (policyPreviewDocumentId ? documents.find((doc) => doc.documentId === policyPreviewDocumentId) ?? null : null),
+    () =>
+      policyPreviewDocumentId
+        ? (documents.find((doc) => doc.documentId === policyPreviewDocumentId) ?? null)
+        : null,
     [documents, policyPreviewDocumentId],
   );
 
@@ -366,7 +414,10 @@ export function ApprovalsAdminPage() {
     () => [...policyDrafts].sort((a, b) => a.stepOrder - b.stepOrder),
     [policyDrafts],
   );
-  const policyLineSortableIds = useMemo(() => sortedPolicyDrafts.map((row) => row.key), [sortedPolicyDrafts]);
+  const policyLineSortableIds = useMemo(
+    () => sortedPolicyDrafts.map((row) => row.key),
+    [sortedPolicyDrafts],
+  );
   const policyLineSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -519,7 +570,10 @@ export function ApprovalsAdminPage() {
   };
 
   const editingDocument = useMemo(
-    () => (editingDocumentId ? documents.find((d) => d.documentId === editingDocumentId) ?? null : null),
+    () =>
+      editingDocumentId
+        ? (documents.find((d) => d.documentId === editingDocumentId) ?? null)
+        : null,
     [documents, editingDocumentId],
   );
 
@@ -573,7 +627,11 @@ export function ApprovalsAdminPage() {
         message.warning('캘린더 연동 시 시작일 필드는 필수입니다.');
         return;
       }
-      const startErr = calendarDateFieldTypeError(editSchemaFields, editCalStartField, '시작일 필드');
+      const startErr = calendarDateFieldTypeError(
+        editSchemaFields,
+        editCalStartField,
+        '시작일 필드',
+      );
       if (startErr) {
         message.warning(startErr);
         return;
@@ -593,8 +651,10 @@ export function ApprovalsAdminPage() {
         isCalendarVisibleYn,
         calendarDisplayName: editCalVisible ? editCalDisplayName.trim() : null,
         calendarStartField: editCalVisible ? editCalStartField!.trim() : null,
-        calendarEndField: editCalVisible && editCalEndField !== CAL_FIELD_NONE ? editCalEndField : null,
-        calendarTitleField: editCalVisible && editCalTitleField !== CAL_FIELD_NONE ? editCalTitleField : null,
+        calendarEndField:
+          editCalVisible && editCalEndField !== CAL_FIELD_NONE ? editCalEndField : null,
+        calendarTitleField:
+          editCalVisible && editCalTitleField !== CAL_FIELD_NONE ? editCalTitleField : null,
       });
     } catch {
       // validation
@@ -641,7 +701,8 @@ export function ApprovalsAdminPage() {
               calendarDisplayName: createCalDisplayName.trim(),
               calendarStartField: createCalStartField!.trim(),
               calendarEndField: createCalEndField !== CAL_FIELD_NONE ? createCalEndField : null,
-              calendarTitleField: createCalTitleField !== CAL_FIELD_NONE ? createCalTitleField : null,
+              calendarTitleField:
+                createCalTitleField !== CAL_FIELD_NONE ? createCalTitleField : null,
             }
           : {}),
       });
@@ -676,7 +737,10 @@ export function ApprovalsAdminPage() {
     [createSchemaOptions, createCalTitleField],
   );
 
-  const editSchemaOptions = useMemo(() => buildSchemaFieldOptions(editSchemaFields), [editSchemaFields]);
+  const editSchemaOptions = useMemo(
+    () => buildSchemaFieldOptions(editSchemaFields),
+    [editSchemaFields],
+  );
   const editDateFieldOptions = useMemo(
     () => buildCalendarDateFieldOptions(editSchemaFields),
     [editSchemaFields],
@@ -745,10 +809,12 @@ export function ApprovalsAdminPage() {
       message.warning('양식을 먼저 선택해 주세요.');
       return;
     }
-    const sorted = [...policyDrafts].sort((a, b) => a.stepOrder - b.stepOrder).map((row, index) => ({
-      ...row,
-      stepOrder: index + 1,
-    }));
+    const sorted = [...policyDrafts]
+      .sort((a, b) => a.stepOrder - b.stepOrder)
+      .map((row, index) => ({
+        ...row,
+        stepOrder: index + 1,
+      }));
     const errorMessage = validatePolicyLines(sorted);
     if (errorMessage) {
       message.warning(errorMessage);
@@ -798,165 +864,194 @@ export function ApprovalsAdminPage() {
   return (
     <div className="tw-w-full">
       {!canRead ? (
-        <Alert type="warning" showIcon message="결재 관리자 화면을 보려면 조회 권한이 필요합니다." />
+        <Alert
+          type="warning"
+          showIcon
+          message="결재 관리자 화면을 보려면 조회 권한이 필요합니다."
+        />
       ) : (
         <Card variant="borderless" className={ADMIN_SHELL_CARD_CLASS}>
           <Tabs
             activeKey={activeTab}
-            onChange={(key) => setActiveTab(key as 'documents' | 'policy-lines' | 'contract-templates' | 'seal-management')}
-            className={ADMIN_TABS_CLASS}
+            onChange={(key) =>
+              setActiveTab(
+                key as 'documents' | 'policy-lines' | 'contract-templates' | 'seal-management',
+              )
+            }
             items={[
-            {
-              key: 'documents',
-              label: '결재 양식 관리',
-              children: (
-                <div className="tw-space-y-4">
-                  <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-3">
-                    <div className="tw-min-w-0">
-                      <Typography.Text type="secondary" className="tw-block tw-text-sm">
-                        결재 요청에 사용할 양식을 관리합니다.
-                      </Typography.Text>
-                      <div className="tw-mt-2 tw-flex tw-flex-wrap tw-items-center tw-gap-2">
-                        <span className="tw-inline-flex tw-h-7 tw-items-center tw-rounded-full tw-bg-slate-100 tw-px-3 tw-text-xs tw-font-semibold tw-text-slate-700">
-                          전체 {documents.length}개
-                        </span>
-                        <span className="tw-inline-flex tw-h-7 tw-items-center tw-rounded-full tw-bg-blue-50 tw-px-3 tw-text-xs tw-font-semibold tw-text-blue-700">
-                          활성 {activeDocuments.length}개
-                        </span>
+              {
+                key: 'documents',
+                label: '결재 양식 관리',
+                children: (
+                  <div className="tw-space-y-4">
+                    <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-3">
+                      <div className="tw-min-w-0">
+                        <Typography.Text type="secondary" className="tw-block tw-text-sm">
+                          결재 요청에 사용할 양식을 관리합니다.
+                        </Typography.Text>
+                        <div className="tw-mt-2 tw-flex tw-flex-wrap tw-items-center tw-gap-2">
+                          <span className="tw-inline-flex tw-h-7 tw-items-center tw-rounded-full tw-bg-slate-100 tw-px-3 tw-text-xs tw-font-semibold tw-text-slate-700">
+                            전체 {documents.length}개
+                          </span>
+                          <span className="tw-inline-flex tw-h-7 tw-items-center tw-rounded-full tw-bg-blue-50 tw-px-3 tw-text-xs tw-font-semibold tw-text-blue-700">
+                            활성 {activeDocuments.length}개
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                    <Space wrap size={8}>
-                      {canCreate ? (
-                        <Button type="primary" icon={<PlusOutlined />} className={NAVY_BUTTON_CLASS} onClick={handleOpenCreate}>
-                          양식 추가
+                      <Space wrap size={8}>
+                        {canCreate ? (
+                          <Button
+                            type="primary"
+                            icon={<PlusOutlined />}
+                            className={NAVY_BUTTON_CLASS}
+                            onClick={handleOpenCreate}
+                          >
+                            양식 추가
+                          </Button>
+                        ) : null}
+                        <Button
+                          icon={<ReloadOutlined />}
+                          className="!tw-rounded-xl"
+                          onClick={() => void refreshAll()}
+                        >
+                          새로고침
                         </Button>
-                      ) : null}
-                      <Button icon={<ReloadOutlined />} className="!tw-rounded-xl" onClick={() => void refreshAll()}>
-                        새로고침
-                      </Button>
-                    </Space>
-                  </div>
+                      </Space>
+                    </div>
 
-                  <div className="tw-overflow-hidden tw-rounded-xl tw-border tw-border-slate-200">
-                    <Table
-                      rowKey="documentId"
-                      loading={docsLoading}
-                      dataSource={documents}
-                      pagination={false}
-                      className="[&_.ant-table]:!tw-bg-white [&_.ant-table-thead>tr>th]:!tw-border-slate-200 [&_.ant-table-thead>tr>th]:!tw-bg-slate-50 [&_.ant-table-thead>tr>th]:!tw-px-4 [&_.ant-table-thead>tr>th]:!tw-py-3 [&_.ant-table-thead>tr>th]:!tw-text-xs [&_.ant-table-thead>tr>th]:!tw-font-semibold [&_.ant-table-thead>tr>th]:!tw-text-slate-600 [&_.ant-table-tbody>tr>td]:!tw-border-slate-100 [&_.ant-table-tbody>tr>td]:!tw-px-4 [&_.ant-table-tbody>tr>td]:!tw-py-4 [&_.ant-table-tbody>tr:hover>td]:!tw-bg-slate-50/70"
-                      columns={[
-                        {
-                          title: '양식명',
-                          dataIndex: 'documentName',
-                          key: 'documentName',
-                          width: 280,
-                          render: (name: string, row) => (
-                            <button
-                              type="button"
-                              className="tw-block tw-w-full tw-truncate tw-border-0 tw-bg-transparent tw-p-0 tw-text-left tw-font-semibold tw-text-[#1e3a5f] hover:tw-underline"
-                              onClick={() => handleOpenEdit(row)}
-                            >
-                              {name}
-                            </button>
-                          ),
-                        },
-                        {
-                          title: '요청 유형',
-                          dataIndex: 'requestType',
-                          key: 'requestType',
-                          width: 160,
-                          render: (type: string) => <Tag className="!tw-m-0 !tw-rounded-lg">{approvalRequestTypeLabelKo(type)}</Tag>,
-                        },
-                        {
-                          title: '사용 상태',
-                          dataIndex: 'isActiveYn',
-                          key: 'isActiveYn',
-                          width: 140,
-                          render: (value: 'Y' | 'N', row) => (
-                            <Space size={8}>
-                              <Switch
-                                size="small"
-                                checked={value === 'Y'}
-                                disabled={!canUpdate}
-                                loading={
-                                  (value === 'Y' && deactivateM.isPending) ||
-                                  (value !== 'Y' && activateM.isPending)
-                                }
-                                onChange={(checked) =>
-                                  checked ? activateM.mutate(row.documentId) : deactivateM.mutate(row.documentId)
-                                }
-                              />
-                              <Typography.Text className="tw-text-xs tw-font-semibold tw-text-slate-600">
-                                {value === 'Y' ? '활성' : '비활성'}
-                              </Typography.Text>
-                            </Space>
-                          ),
-                        },
-                        {
-                          title: '작업',
-                          key: 'actions',
-                          width: 260,
-                          render: (_, row) => (
-                            <div className="tw-flex tw-items-center tw-gap-2 tw-whitespace-nowrap">
-                              {canUpdate ? (
+                    <div className="tw-overflow-hidden tw-rounded-xl tw-border tw-border-slate-200">
+                      <Table
+                        rowKey="documentId"
+                        loading={docsLoading}
+                        dataSource={documents}
+                        pagination={false}
+                        className="[&_.ant-table]:!tw-bg-white [&_.ant-table-thead>tr>th]:!tw-border-slate-200 [&_.ant-table-thead>tr>th]:!tw-bg-slate-50 [&_.ant-table-thead>tr>th]:!tw-px-4 [&_.ant-table-thead>tr>th]:!tw-py-3 [&_.ant-table-thead>tr>th]:!tw-text-xs [&_.ant-table-thead>tr>th]:!tw-font-semibold [&_.ant-table-thead>tr>th]:!tw-text-slate-600 [&_.ant-table-tbody>tr>td]:!tw-border-slate-100 [&_.ant-table-tbody>tr>td]:!tw-px-4 [&_.ant-table-tbody>tr>td]:!tw-py-4 [&_.ant-table-tbody>tr:hover>td]:!tw-bg-slate-50/70"
+                        columns={[
+                          {
+                            title: '양식명',
+                            dataIndex: 'documentName',
+                            key: 'documentName',
+                            width: 280,
+                            render: (name: string, row) => (
+                              <button
+                                type="button"
+                                className="tw-block tw-w-full tw-truncate tw-border-0 tw-bg-transparent tw-p-0 tw-text-left tw-font-semibold tw-text-[#1e3a5f] hover:tw-underline"
+                                onClick={() => handleOpenEdit(row)}
+                              >
+                                {name}
+                              </button>
+                            ),
+                          },
+                          {
+                            title: '요청 유형',
+                            dataIndex: 'requestType',
+                            key: 'requestType',
+                            width: 160,
+                            render: (type: string) => (
+                              <Tag className="!tw-m-0 !tw-rounded-lg">
+                                {approvalRequestTypeLabelKo(type)}
+                              </Tag>
+                            ),
+                          },
+                          {
+                            title: '사용 상태',
+                            dataIndex: 'isActiveYn',
+                            key: 'isActiveYn',
+                            width: 140,
+                            render: (value: 'Y' | 'N', row) => (
+                              <Space size={8}>
+                                <Switch
+                                  size="small"
+                                  checked={value === 'Y'}
+                                  disabled={!canUpdate}
+                                  loading={
+                                    (value === 'Y' && deactivateM.isPending) ||
+                                    (value !== 'Y' && activateM.isPending)
+                                  }
+                                  onChange={(checked) =>
+                                    checked
+                                      ? activateM.mutate(row.documentId)
+                                      : deactivateM.mutate(row.documentId)
+                                  }
+                                />
+                                <Typography.Text className="tw-text-xs tw-font-semibold tw-text-slate-600">
+                                  {value === 'Y' ? '활성' : '비활성'}
+                                </Typography.Text>
+                              </Space>
+                            ),
+                          },
+                          {
+                            title: '작업',
+                            key: 'actions',
+                            width: 260,
+                            render: (_, row) => (
+                              <div className="tw-flex tw-items-center tw-gap-2 tw-whitespace-nowrap">
+                                {canUpdate ? (
+                                  <Button
+                                    size="small"
+                                    icon={<FormOutlined />}
+                                    className="!tw-h-8 !tw-rounded-full !tw-border-slate-200 !tw-bg-white !tw-px-3 !tw-text-xs !tw-font-semibold !tw-text-slate-700 hover:!tw-border-[#1e3a5f]/30 hover:!tw-bg-slate-50 hover:!tw-text-[#1e3a5f]"
+                                    onClick={() => handleOpenEdit(row)}
+                                  >
+                                    양식 수정
+                                  </Button>
+                                ) : null}
                                 <Button
                                   size="small"
-                                  icon={<FormOutlined />}
+                                  icon={<EyeOutlined />}
                                   className="!tw-h-8 !tw-rounded-full !tw-border-slate-200 !tw-bg-white !tw-px-3 !tw-text-xs !tw-font-semibold !tw-text-slate-700 hover:!tw-border-[#1e3a5f]/30 hover:!tw-bg-slate-50 hover:!tw-text-[#1e3a5f]"
-                                  onClick={() => handleOpenEdit(row)}
+                                  onClick={() => setPolicyPreviewDocumentId(row.documentId)}
                                 >
-                                  양식 수정
+                                  정책라인 확인
                                 </Button>
-                              ) : null}
-                              <Button
-                                size="small"
-                                icon={<EyeOutlined />}
-                                className="!tw-h-8 !tw-rounded-full !tw-border-slate-200 !tw-bg-white !tw-px-3 !tw-text-xs !tw-font-semibold !tw-text-slate-700 hover:!tw-border-[#1e3a5f]/30 hover:!tw-bg-slate-50 hover:!tw-text-[#1e3a5f]"
-                                onClick={() => setPolicyPreviewDocumentId(row.documentId)}
-                              >
-                                정책라인 확인
-                              </Button>
-                            </div>
-                          ),
-                        },
-                      ]}
-                    />
-                  </div>
-                </div>
-              ),
-            },
-            {
-              key: 'policy-lines',
-              label: '정책라인 관리',
-              children: (
-                <div className="tw-space-y-4">
-                  <div className="tw-flex tw-flex-wrap tw-items-start tw-justify-between tw-gap-3">
-                    <div className="tw-min-w-[320px] tw-flex-1">
-                      <Typography.Text type="secondary" className="tw-block tw-text-sm">
-                        양식별 결재 직책과 결재 순서를 설정합니다. 저장 시 기존 정책라인은 전체 교체됩니다.
-                      </Typography.Text>
-                      <div className="tw-mt-4 tw-flex tw-flex-wrap tw-items-center tw-gap-3">
-                        <Typography.Text className="tw-text-xs tw-font-semibold tw-text-slate-500">양식 선택</Typography.Text>
-                        <Select
-                          value={selectedDocumentId || undefined}
-                          onChange={(v) => {
-                            setSelectedDocumentId(v);
-                            setPolicyEditing(false);
-                          }}
-                          placeholder="양식을 선택하세요"
-                          className="tw-min-w-[320px]"
-                          options={documents.map((doc) => ({
-                            value: doc.documentId,
-                            label: `${doc.documentName} (${approvalRequestTypeLabelKo(String(doc.requestType))})`,
-                          }))}
-                        />
-                      </div>
+                              </div>
+                            ),
+                          },
+                        ]}
+                      />
                     </div>
-                    <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-end tw-gap-2">
+                  </div>
+                ),
+              },
+              {
+                key: 'policy-lines',
+                label: '정책라인 관리',
+                children: (
+                  <div className="tw-space-y-4">
+                    <div className="tw-flex tw-flex-wrap tw-items-start tw-justify-between tw-gap-3">
+                      <div className="tw-min-w-[320px] tw-flex-1">
+                        <Typography.Text type="secondary" className="tw-block tw-text-sm">
+                          양식별 결재 직책과 결재 순서를 설정합니다. 저장 시 기존 정책라인은 전체
+                          교체됩니다.
+                        </Typography.Text>
+                        <div className="tw-mt-4 tw-flex tw-flex-wrap tw-items-center tw-gap-3">
+                          <Typography.Text className="tw-text-xs tw-font-semibold tw-text-slate-500">
+                            양식 선택
+                          </Typography.Text>
+                          <Select
+                            value={selectedDocumentId || undefined}
+                            onChange={(v) => {
+                              setSelectedDocumentId(v);
+                              setPolicyEditing(false);
+                            }}
+                            placeholder="양식을 선택하세요"
+                            className="tw-min-w-[320px]"
+                            options={documents.map((doc) => ({
+                              value: doc.documentId,
+                              label: `${doc.documentName} (${approvalRequestTypeLabelKo(String(doc.requestType))})`,
+                            }))}
+                          />
+                        </div>
+                      </div>
+                      <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-end tw-gap-2">
                         {policyEditing ? (
                           <>
                             {canEditPolicyLines ? (
-                              <Button icon={<PlusOutlined />} className="!tw-rounded-xl" onClick={handleAddPolicyLine}>
+                              <Button
+                                icon={<PlusOutlined />}
+                                className="!tw-rounded-xl"
+                                onClick={handleAddPolicyLine}
+                              >
                                 결재선 등록
                               </Button>
                             ) : null}
@@ -1007,14 +1102,19 @@ export function ApprovalsAdminPage() {
 
                     {selectedDocument ? (
                       <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2 tw-rounded-xl tw-border tw-border-slate-200 tw-bg-slate-50/70 tw-px-4 tw-py-3">
-                        <span className="tw-text-xs tw-font-semibold tw-text-slate-500">선택 양식</span>
+                        <span className="tw-text-xs tw-font-semibold tw-text-slate-500">
+                          선택 양식
+                        </span>
                         <Typography.Text strong className="tw-text-slate-900">
                           {selectedDocument.documentName}
                         </Typography.Text>
                         <Tag className="!tw-m-0 !tw-rounded-lg">
                           {approvalRequestTypeLabelKo(String(selectedDocument.requestType))}
                         </Tag>
-                        <Tag color={selectedDocument.isActiveYn === 'Y' ? 'success' : 'default'} className="!tw-m-0 !tw-rounded-lg">
+                        <Tag
+                          color={selectedDocument.isActiveYn === 'Y' ? 'success' : 'default'}
+                          className="!tw-m-0 !tw-rounded-lg"
+                        >
                           {selectedDocument.isActiveYn === 'Y' ? '활성' : '비활성'}
                         </Tag>
                         <span className="tw-ml-auto tw-inline-flex tw-h-7 tw-items-center tw-rounded-full tw-bg-white tw-px-3 tw-text-xs tw-font-semibold tw-text-slate-600">
@@ -1023,266 +1123,307 @@ export function ApprovalsAdminPage() {
                       </div>
                     ) : null}
 
-                  <div className="tw-overflow-hidden tw-rounded-xl tw-border tw-border-slate-200">
-                    <DndContext sensors={policyLineSensors} collisionDetection={closestCenter} onDragEnd={handlePolicyLineDragEnd}>
-                      <SortableContext items={policyLineSortableIds} strategy={verticalListSortingStrategy}>
-                        <Table<PolicyLineDraft>
-                          rowKey="key"
-                          loading={policyLoading}
-                          dataSource={sortedPolicyDrafts}
-                          pagination={false}
-                          components={policyEditing ? { body: { row: SortablePolicyLineTableRow } } : undefined}
-                          className="[&_.ant-table]:!tw-bg-white [&_.ant-table-thead>tr>th]:!tw-border-slate-200 [&_.ant-table-thead>tr>th]:!tw-bg-slate-50 [&_.ant-table-thead>tr>th]:!tw-px-4 [&_.ant-table-thead>tr>th]:!tw-py-3 [&_.ant-table-thead>tr>th]:!tw-text-xs [&_.ant-table-thead>tr>th]:!tw-font-semibold [&_.ant-table-thead>tr>th]:!tw-text-slate-600 [&_.ant-table-tbody>tr>td]:!tw-border-slate-100 [&_.ant-table-tbody>tr>td]:!tw-px-4 [&_.ant-table-tbody>tr>td]:!tw-py-4 [&_.ant-table-tbody>tr:hover>td]:!tw-bg-slate-50/70"
-                          columns={[
-                        {
-                          title: '순서',
-                          dataIndex: 'stepOrder',
-                          key: 'stepOrder',
-                          width: 120,
-                          render: (value: number, row) => (
-                            <div className="tw-flex tw-items-center tw-gap-2">
-                              {policyEditing ? <PolicyLineDragHandle /> : null}
-                              <span className="tw-inline-flex tw-h-7 tw-min-w-7 tw-items-center tw-justify-center tw-rounded-lg tw-bg-slate-100 tw-px-2 tw-text-xs tw-font-semibold tw-text-slate-700">
-                                {value}
-                              </span>
+                    <div className="tw-overflow-hidden tw-rounded-xl tw-border tw-border-slate-200">
+                      <DndContext
+                        sensors={policyLineSensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={handlePolicyLineDragEnd}
+                      >
+                        <SortableContext
+                          items={policyLineSortableIds}
+                          strategy={verticalListSortingStrategy}
+                        >
+                          <Table<PolicyLineDraft>
+                            rowKey="key"
+                            loading={policyLoading}
+                            dataSource={sortedPolicyDrafts}
+                            pagination={false}
+                            components={
+                              policyEditing
+                                ? { body: { row: SortablePolicyLineTableRow } }
+                                : undefined
+                            }
+                            className="[&_.ant-table]:!tw-bg-white [&_.ant-table-thead>tr>th]:!tw-border-slate-200 [&_.ant-table-thead>tr>th]:!tw-bg-slate-50 [&_.ant-table-thead>tr>th]:!tw-px-4 [&_.ant-table-thead>tr>th]:!tw-py-3 [&_.ant-table-thead>tr>th]:!tw-text-xs [&_.ant-table-thead>tr>th]:!tw-font-semibold [&_.ant-table-thead>tr>th]:!tw-text-slate-600 [&_.ant-table-tbody>tr>td]:!tw-border-slate-100 [&_.ant-table-tbody>tr>td]:!tw-px-4 [&_.ant-table-tbody>tr>td]:!tw-py-4 [&_.ant-table-tbody>tr:hover>td]:!tw-bg-slate-50/70"
+                            columns={[
+                              {
+                                title: '순서',
+                                dataIndex: 'stepOrder',
+                                key: 'stepOrder',
+                                width: 120,
+                                render: (value: number, row) => (
+                                  <div className="tw-flex tw-items-center tw-gap-2">
+                                    {policyEditing ? <PolicyLineDragHandle /> : null}
+                                    <span className="tw-inline-flex tw-h-7 tw-min-w-7 tw-items-center tw-justify-center tw-rounded-lg tw-bg-slate-100 tw-px-2 tw-text-xs tw-font-semibold tw-text-slate-700">
+                                      {value}
+                                    </span>
+                                  </div>
+                                ),
+                              },
+                              {
+                                title: '직책',
+                                dataIndex: 'jobTitleId',
+                                key: 'jobTitleId',
+                                render: (value: string, row) =>
+                                  policyEditing ? (
+                                    <Select
+                                      value={value || undefined}
+                                      className="tw-min-w-[220px]"
+                                      placeholder="직책 선택"
+                                      options={jobTitleOptions}
+                                      onChange={(next) =>
+                                        setPolicyDrafts((prev) =>
+                                          prev.map((item) =>
+                                            item.key === row.key
+                                              ? { ...item, jobTitleId: next }
+                                              : item,
+                                          ),
+                                        )
+                                      }
+                                    />
+                                  ) : (
+                                    <Typography.Text className="tw-text-sm tw-font-semibold tw-text-slate-900">
+                                      {jobTitleLabelById.get(value) ?? value}
+                                    </Typography.Text>
+                                  ),
+                              },
+                              {
+                                title: '조직(선택)',
+                                dataIndex: 'organizationId',
+                                key: 'organizationId',
+                                render: (value: string | null, row) =>
+                                  policyEditing ? (
+                                    <Select
+                                      allowClear
+                                      value={value ?? undefined}
+                                      className="tw-min-w-[250px]"
+                                      placeholder="조직 제한 없음"
+                                      options={orgOptions}
+                                      onChange={(next) =>
+                                        setPolicyDrafts((prev) =>
+                                          prev.map((item) =>
+                                            item.key === row.key
+                                              ? { ...item, organizationId: next ?? null }
+                                              : item,
+                                          ),
+                                        )
+                                      }
+                                    />
+                                  ) : value ? (
+                                    <Typography.Text className="tw-text-sm tw-text-slate-700">
+                                      {orgLabelById.get(value) ?? value}
+                                    </Typography.Text>
+                                  ) : (
+                                    <Typography.Text type="secondary" className="tw-text-sm">
+                                      전체 조직
+                                    </Typography.Text>
+                                  ),
+                              },
+                              {
+                                title: '관리',
+                                key: 'actions',
+                                width: 90,
+                                render: (_, row) =>
+                                  policyEditing ? (
+                                    <Tooltip title="삭제">
+                                      <Button
+                                        danger
+                                        type="text"
+                                        size="small"
+                                        icon={<DeleteOutlined />}
+                                        className="!tw-inline-flex !tw-h-8 !tw-w-8 !tw-items-center !tw-justify-center !tw-rounded-lg !tw-text-red-500 hover:!tw-bg-red-50"
+                                        disabled={!canEditPolicyLines}
+                                        onClick={() =>
+                                          setPolicyDrafts((prev) =>
+                                            prev
+                                              .filter((item) => item.key !== row.key)
+                                              .sort((a, b) => a.stepOrder - b.stepOrder)
+                                              .map((item, index) => ({
+                                                ...item,
+                                                stepOrder: index + 1,
+                                              })),
+                                          )
+                                        }
+                                      />
+                                    </Tooltip>
+                                  ) : null,
+                              },
+                            ]}
+                            locale={{
+                              emptyText: selectedDocumentId
+                                ? '정책라인이 없습니다.'
+                                : '양식을 먼저 선택하세요.',
+                            }}
+                          />
+                        </SortableContext>
+                      </DndContext>
+                    </div>
+                  </div>
+                ),
+              },
+              {
+                key: 'contract-templates',
+                label: '전자계약 양식 관리',
+                children: (
+                  <div className="tw-min-w-0">
+                    <ContractTemplatesAdminPanel showTemplateSection showSendSection={false} />
+                  </div>
+                ),
+              },
+              {
+                key: 'seal-management',
+                label: '인감 관리',
+                children: (
+                  <div className="tw-space-y-4">
+                    <div className="tw-flex tw-flex-wrap tw-items-start tw-justify-between tw-gap-3">
+                      <div className="tw-min-w-0">
+                        <Typography.Text type="secondary" className="tw-block tw-text-sm">
+                          결재 및 계약 문서에 사용할 공식 인감을 등록하고 관리합니다.
+                        </Typography.Text>
+                      </div>
+                      <span
+                        className={`tw-inline-flex tw-h-7 tw-items-center tw-rounded-full tw-px-3 tw-text-xs tw-font-semibold ${
+                          companyInfo?.sealImageUrl
+                            ? 'tw-bg-blue-50 tw-text-blue-700'
+                            : 'tw-bg-slate-100 tw-text-slate-600'
+                        }`}
+                      >
+                        {companyInfoLoading
+                          ? '확인 중'
+                          : companyInfo?.sealImageUrl
+                            ? '등록됨'
+                            : '미등록'}
+                      </span>
+                    </div>
+
+                    <div className="tw-grid tw-grid-cols-1 tw-gap-4 tw-rounded-xl tw-border tw-border-slate-200 tw-bg-white tw-p-4 lg:tw-grid-cols-[220px_minmax(0,1fr)]">
+                      <div className="tw-min-w-0">
+                        <Typography.Text className="tw-mb-2 tw-block tw-text-xs tw-font-semibold tw-text-slate-500">
+                          미리보기
+                        </Typography.Text>
+                        <div className="tw-flex tw-aspect-square tw-w-full tw-items-center tw-justify-center tw-rounded-xl tw-border tw-border-slate-200 tw-bg-slate-50 tw-p-3">
+                          {currentSealUrl && currentSealIsImage ? (
+                            <img
+                              src={currentSealUrl}
+                              alt="회사 인감"
+                              className="tw-h-full tw-w-full tw-rounded-lg tw-object-contain"
+                            />
+                          ) : (
+                            <div className="tw-text-center">
+                              <Typography.Text className="tw-block tw-text-sm tw-font-semibold tw-text-slate-400">
+                                미리보기 없음
+                              </Typography.Text>
+                              <Typography.Text
+                                type="secondary"
+                                className="tw-mt-1 tw-block tw-text-xs"
+                              >
+                                {currentSealUrl
+                                  ? 'PDF 파일은 저장 후 문서에서 확인합니다.'
+                                  : '등록된 인감 이미지가 없습니다.'}
+                              </Typography.Text>
                             </div>
-                          ),
-                        },
-                        {
-                          title: '직책',
-                          dataIndex: 'jobTitleId',
-                          key: 'jobTitleId',
-                          render: (value: string, row) => (
-                            policyEditing ? (
-                              <Select
-                                value={value || undefined}
-                                className="tw-min-w-[220px]"
-                                placeholder="직책 선택"
-                                options={jobTitleOptions}
-                                onChange={(next) =>
-                                  setPolicyDrafts((prev) =>
-                                    prev.map((item) => (item.key === row.key ? { ...item, jobTitleId: next } : item)),
-                                  )
-                                }
-                              />
-                            ) : (
-                              <Typography.Text className="tw-text-sm tw-font-semibold tw-text-slate-900">
-                                {jobTitleLabelById.get(value) ?? value}
-                              </Typography.Text>
-                            )
-                          ),
-                        },
-                        {
-                          title: '조직(선택)',
-                          dataIndex: 'organizationId',
-                          key: 'organizationId',
-                          render: (value: string | null, row) => (
-                            policyEditing ? (
-                              <Select
-                                allowClear
-                                value={value ?? undefined}
-                                className="tw-min-w-[250px]"
-                                placeholder="조직 제한 없음"
-                                options={orgOptions}
-                                onChange={(next) =>
-                                  setPolicyDrafts((prev) =>
-                                    prev.map((item) =>
-                                      item.key === row.key ? { ...item, organizationId: next ?? null } : item,
-                                    ),
-                                  )
-                                }
-                              />
-                            ) : value ? (
-                              <Typography.Text className="tw-text-sm tw-text-slate-700">
-                                {orgLabelById.get(value) ?? value}
-                              </Typography.Text>
-                            ) : (
-                              <Typography.Text type="secondary" className="tw-text-sm">
-                                전체 조직
-                              </Typography.Text>
-                            )
-                          ),
-                        },
-                        {
-                          title: '관리',
-                          key: 'actions',
-                          width: 90,
-                          render: (_, row) =>
-                            policyEditing ? (
-                              <Tooltip title="삭제">
-                                <Button
-                                  danger
-                                  type="text"
-                                  size="small"
-                                  icon={<DeleteOutlined />}
-                                  className="!tw-inline-flex !tw-h-8 !tw-w-8 !tw-items-center !tw-justify-center !tw-rounded-lg !tw-text-red-500 hover:!tw-bg-red-50"
-                                  disabled={!canEditPolicyLines}
-                                  onClick={() =>
-                                    setPolicyDrafts((prev) =>
-                                      prev
-                                        .filter((item) => item.key !== row.key)
-                                        .sort((a, b) => a.stepOrder - b.stepOrder)
-                                        .map((item, index) => ({ ...item, stepOrder: index + 1 })),
-                                    )
-                                  }
-                                />
-                              </Tooltip>
-                            ) : null,
-                        },
-                          ]}
-                          locale={{ emptyText: selectedDocumentId ? '정책라인이 없습니다.' : '양식을 먼저 선택하세요.' }}
-                        />
-                      </SortableContext>
-                    </DndContext>
-                    </div>
-                  </div>
-              ),
-            },
-            {
-              key: 'contract-templates',
-              label: '전자계약 양식 관리',
-              children: (
-                <div className="tw-min-h-0 tw-flex-1 tw-overflow-y-auto wf-scrollbar">
-                  <ContractTemplatesAdminPanel showTemplateSection showSendSection={false} />
-                </div>
-              ),
-            },
-            {
-              key: 'seal-management',
-              label: '인감 관리',
-              children: (
-                <div className="tw-space-y-4">
-                  <div className="tw-flex tw-flex-wrap tw-items-start tw-justify-between tw-gap-3">
-                    <div className="tw-min-w-0">
-                      <Typography.Text type="secondary" className="tw-block tw-text-sm">
-                        결재 및 계약 문서에 사용할 공식 인감을 등록하고 관리합니다.
-                      </Typography.Text>
-                    </div>
-                    <span
-                      className={`tw-inline-flex tw-h-7 tw-items-center tw-rounded-full tw-px-3 tw-text-xs tw-font-semibold ${
-                        companyInfo?.sealImageUrl
-                          ? 'tw-bg-blue-50 tw-text-blue-700'
-                          : 'tw-bg-slate-100 tw-text-slate-600'
-                      }`}
-                    >
-                      {companyInfoLoading ? '확인 중' : companyInfo?.sealImageUrl ? '등록됨' : '미등록'}
-                    </span>
-                  </div>
-
-                  <div className="tw-grid tw-grid-cols-1 tw-gap-4 tw-rounded-xl tw-border tw-border-slate-200 tw-bg-white tw-p-4 lg:tw-grid-cols-[220px_minmax(0,1fr)]">
-                    <div className="tw-min-w-0">
-                      <Typography.Text className="tw-mb-2 tw-block tw-text-xs tw-font-semibold tw-text-slate-500">
-                        미리보기
-                      </Typography.Text>
-                      <div className="tw-flex tw-aspect-square tw-w-full tw-items-center tw-justify-center tw-rounded-xl tw-border tw-border-slate-200 tw-bg-slate-50 tw-p-3">
-                        {currentSealUrl && currentSealIsImage ? (
-                          <img src={currentSealUrl} alt="회사 인감" className="tw-h-full tw-w-full tw-rounded-lg tw-object-contain" />
-                        ) : (
-                          <div className="tw-text-center">
-                            <Typography.Text className="tw-block tw-text-sm tw-font-semibold tw-text-slate-400">
-                              미리보기 없음
-                            </Typography.Text>
-                            <Typography.Text type="secondary" className="tw-mt-1 tw-block tw-text-xs">
-                              {currentSealUrl ? 'PDF 파일은 저장 후 문서에서 확인합니다.' : '등록된 인감 이미지가 없습니다.'}
-                            </Typography.Text>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="tw-min-w-0 tw-space-y-4">
-                      <div>
-                        <Typography.Text className="tw-block tw-text-sm tw-font-semibold tw-text-slate-900">
-                          인감 이미지 업로드
-                        </Typography.Text>
-                        <Typography.Text type="secondary" className="tw-mt-1 tw-block tw-text-sm">
-                          투명 배경 PNG 또는 JPG 파일을 권장합니다. PDF 업로드도 지원합니다.
-                        </Typography.Text>
-                        <Typography.Text type="secondary" className="tw-mt-1 tw-block tw-text-xs">
-                          최대 5MB까지 업로드할 수 있고, 저장 시 기존 인감은 새 파일로 교체됩니다.
-                        </Typography.Text>
+                          )}
+                        </div>
                       </div>
 
-                      {sealFile ? (
-                        <div className="tw-rounded-lg tw-border tw-border-blue-100 tw-bg-blue-50 tw-px-3 tw-py-2">
-                          <Typography.Text className="tw-block tw-truncate tw-text-xs tw-font-semibold tw-text-blue-700">
-                            선택 파일: {sealFile.name}
+                      <div className="tw-min-w-0 tw-space-y-4">
+                        <div>
+                          <Typography.Text className="tw-block tw-text-sm tw-font-semibold tw-text-slate-900">
+                            인감 이미지 업로드
+                          </Typography.Text>
+                          <Typography.Text type="secondary" className="tw-mt-1 tw-block tw-text-sm">
+                            투명 배경 PNG 또는 JPG 파일을 권장합니다. PDF 업로드도 지원합니다.
+                          </Typography.Text>
+                          <Typography.Text type="secondary" className="tw-mt-1 tw-block tw-text-xs">
+                            최대 5MB까지 업로드할 수 있고, 저장 시 기존 인감은 새 파일로 교체됩니다.
                           </Typography.Text>
                         </div>
-                      ) : null}
 
-                      <input
-                        ref={sealInputRef}
-                        type="file"
-                        accept=".png,.jpg,.jpeg,.gif,.pdf,image/png,image/jpeg,image/gif,application/pdf"
-                        className="tw-hidden"
-                        onChange={(e) => {
-                          const next = e.target.files?.[0] ?? null;
-                          handleSealFilePicked(next);
-                          e.currentTarget.value = '';
-                        }}
-                      />
+                        {sealFile ? (
+                          <div className="tw-rounded-lg tw-border tw-border-blue-100 tw-bg-blue-50 tw-px-3 tw-py-2">
+                            <Typography.Text className="tw-block tw-truncate tw-text-xs tw-font-semibold tw-text-blue-700">
+                              선택 파일: {sealFile.name}
+                            </Typography.Text>
+                          </div>
+                        ) : null}
 
-                      <Space wrap size={8}>
-                        <Button
-                          type="primary"
-                          icon={<UploadOutlined />}
-                          className={NAVY_BUTTON_CLASS}
-                          onClick={() => sealInputRef.current?.click()}
-                        >
-                          파일 선택
-                        </Button>
-                        <Button
-                          danger
-                          className="!tw-rounded-xl !tw-font-semibold"
-                          onClick={() => {
-                            if (sealFile) {
-                              setSealFile(null);
-                              return;
-                            }
-                            message.info('삭제 API는 아직 제공되지 않아 파일 교체 방식만 지원합니다.');
+                        <input
+                          ref={sealInputRef}
+                          type="file"
+                          accept=".png,.jpg,.jpeg,.gif,.pdf,image/png,image/jpeg,image/gif,application/pdf"
+                          className="tw-hidden"
+                          onChange={(e) => {
+                            const next = e.target.files?.[0] ?? null;
+                            handleSealFilePicked(next);
+                            e.currentTarget.value = '';
                           }}
-                        >
-                          {sealFile ? '선택 해제' : '삭제'}
-                        </Button>
-                        <Button
-                          type="primary"
-                          className={NAVY_BUTTON_CLASS}
-                          loading={updateSealM.isPending}
-                          disabled={!sealFile}
-                          onClick={() => {
-                            if (!sealFile) {
-                              message.info('먼저 업로드할 인감 파일을 선택해 주세요.');
-                              return;
-                            }
-                            void updateSealM.mutateAsync(sealFile);
-                          }}
-                        >
-                          저장
-                        </Button>
-                      </Space>
+                        />
 
-                      <div className="tw-rounded-xl tw-bg-slate-50 tw-px-3 tw-py-2">
-                        <Typography.Text type="secondary" className="tw-text-xs">
-                          {companyInfoLoading
-                            ? '회사 인감 정보를 불러오는 중입니다.'
-                            : companyInfo?.sealImageUrl
-                              ? '현재 등록된 인감이 있습니다.'
-                              : '현재 등록된 인감이 없습니다.'}
-                        </Typography.Text>
+                        <Space wrap size={8}>
+                          <Button
+                            type="primary"
+                            icon={<UploadOutlined />}
+                            className={NAVY_BUTTON_CLASS}
+                            onClick={() => sealInputRef.current?.click()}
+                          >
+                            파일 선택
+                          </Button>
+                          <Button
+                            danger
+                            className="!tw-rounded-xl !tw-font-semibold"
+                            onClick={() => {
+                              if (sealFile) {
+                                setSealFile(null);
+                                return;
+                              }
+                              message.info(
+                                '삭제 API는 아직 제공되지 않아 파일 교체 방식만 지원합니다.',
+                              );
+                            }}
+                          >
+                            {sealFile ? '선택 해제' : '삭제'}
+                          </Button>
+                          <Button
+                            type="primary"
+                            className={NAVY_BUTTON_CLASS}
+                            loading={updateSealM.isPending}
+                            disabled={!sealFile}
+                            onClick={() => {
+                              if (!sealFile) {
+                                message.info('먼저 업로드할 인감 파일을 선택해 주세요.');
+                                return;
+                              }
+                              void updateSealM.mutateAsync(sealFile);
+                            }}
+                          >
+                            저장
+                          </Button>
+                        </Space>
+
+                        <div className="tw-rounded-xl tw-bg-slate-50 tw-px-3 tw-py-2">
+                          <Typography.Text type="secondary" className="tw-text-xs">
+                            {companyInfoLoading
+                              ? '회사 인감 정보를 불러오는 중입니다.'
+                              : companyInfo?.sealImageUrl
+                                ? '현재 등록된 인감이 있습니다.'
+                                : '현재 등록된 인감이 없습니다.'}
+                          </Typography.Text>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ),
-            },
+                ),
+              },
             ]}
           />
         </Card>
       )}
 
       <AppSingleActionModal
-        title={policyPreviewDocument ? `정책라인 확인 - ${policyPreviewDocument.documentName}` : '정책라인 확인'}
+        title={
+          policyPreviewDocument
+            ? `정책라인 확인 - ${policyPreviewDocument.documentName}`
+            : '정책라인 확인'
+        }
         open={Boolean(policyPreviewDocumentId)}
         onClose={() => setPolicyPreviewDocumentId(null)}
         onSubmit={() => setPolicyPreviewDocumentId(null)}
@@ -1381,93 +1522,105 @@ export function ApprovalsAdminPage() {
         width={1120}
       >
         <div className="tw-px-6 tw-py-5 sm:tw-px-7">
-        <Form<DocForm> form={form} layout="vertical">
-          <Form.Item label="기안 입력 항목" required>
-            <ApprovalFormSchemaBuilder
-              value={schemaFields}
-              onChange={setSchemaFields}
-              paperPreviewMeta={createPaperPreviewMeta}
-              sidebarTop={
-                <>
-                  <Form.Item name="documentName" label="양식명" rules={[{ required: true, message: '양식명을 입력해 주세요.' }]}>
-                    <Input placeholder="예: 연차신청서" maxLength={100} showCount />
-                  </Form.Item>
-                  <Form.Item name="requestType" label="요청 유형" rules={[{ required: true, message: '요청 유형을 선택해 주세요.' }]}>
-                    <Select
-                      options={APPROVAL_REQUEST_TYPES.map((type) => ({
-                        value: type,
-                        label: APPROVAL_REQUEST_TYPE_LABEL_KO[type],
-                      }))}
-                    />
-                  </Form.Item>
-                </>
-              }
-              belowHelpSlot={
-                <div className="tw-rounded-lg tw-border tw-border-slate-200 tw-bg-slate-50/70 tw-p-3">
-                  <Checkbox checked={createCalVisible} onChange={(e) => setCreateCalVisible(e.target.checked)}>
-                    캘린더에 일정 자동 반영 (최종 승인 시)
-                  </Checkbox>
-                  {createCalVisible ? (
-                    <div className="tw-mt-3 tw-space-y-3">
-                      <div>
-                        <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
-                          캘린더 표시명 <Typography.Text type="danger">*</Typography.Text>
-                        </Typography.Text>
-                        <Input
-                          placeholder="예: 연차, 출장"
-                          maxLength={100}
-                          showCount
-                          value={createCalDisplayName}
-                          onChange={(e) => setCreateCalDisplayName(e.target.value)}
-                        />
+          <Form<DocForm> form={form} layout="vertical">
+            <Form.Item label="기안 입력 항목" required>
+              <ApprovalFormSchemaBuilder
+                value={schemaFields}
+                onChange={setSchemaFields}
+                paperPreviewMeta={createPaperPreviewMeta}
+                sidebarTop={
+                  <>
+                    <Form.Item
+                      name="documentName"
+                      label="양식명"
+                      rules={[{ required: true, message: '양식명을 입력해 주세요.' }]}
+                    >
+                      <Input placeholder="예: 연차신청서" maxLength={100} showCount />
+                    </Form.Item>
+                    <Form.Item
+                      name="requestType"
+                      label="요청 유형"
+                      rules={[{ required: true, message: '요청 유형을 선택해 주세요.' }]}
+                    >
+                      <Select
+                        options={APPROVAL_REQUEST_TYPES.map((type) => ({
+                          value: type,
+                          label: APPROVAL_REQUEST_TYPE_LABEL_KO[type],
+                        }))}
+                      />
+                    </Form.Item>
+                  </>
+                }
+                belowHelpSlot={
+                  <div className="tw-rounded-lg tw-border tw-border-slate-200 tw-bg-slate-50/70 tw-p-3">
+                    <Checkbox
+                      checked={createCalVisible}
+                      onChange={(e) => setCreateCalVisible(e.target.checked)}
+                    >
+                      캘린더에 일정 자동 반영 (최종 승인 시)
+                    </Checkbox>
+                    {createCalVisible ? (
+                      <div className="tw-mt-3 tw-space-y-3">
+                        <div>
+                          <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
+                            캘린더 표시명 <Typography.Text type="danger">*</Typography.Text>
+                          </Typography.Text>
+                          <Input
+                            placeholder="예: 연차, 출장"
+                            maxLength={100}
+                            showCount
+                            value={createCalDisplayName}
+                            onChange={(e) => setCreateCalDisplayName(e.target.value)}
+                          />
+                        </div>
+                        <div>
+                          <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
+                            시작일 필드 (contentJson 키){' '}
+                            <Typography.Text type="danger">*</Typography.Text>
+                          </Typography.Text>
+                          <Select
+                            className="tw-w-full"
+                            placeholder="필드 선택"
+                            options={createStartOptions}
+                            value={createCalStartField}
+                            onChange={(v) => setCreateCalStartField(v)}
+                            showSearch
+                            optionFilterProp="label"
+                          />
+                        </div>
+                        <div>
+                          <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
+                            종료일 필드 (선택, 없으면 당일)
+                          </Typography.Text>
+                          <Select
+                            className="tw-w-full"
+                            options={createEndOptions}
+                            value={createCalEndField}
+                            onChange={(v) => setCreateCalEndField(v)}
+                            showSearch
+                            optionFilterProp="label"
+                          />
+                        </div>
+                        <div>
+                          <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
+                            부가 제목 필드 (선택)
+                          </Typography.Text>
+                          <Select
+                            className="tw-w-full"
+                            options={createTitleOptions}
+                            value={createCalTitleField}
+                            onChange={(v) => setCreateCalTitleField(v)}
+                            showSearch
+                            optionFilterProp="label"
+                          />
+                        </div>
                       </div>
-                      <div>
-                        <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
-                          시작일 필드 (contentJson 키) <Typography.Text type="danger">*</Typography.Text>
-                        </Typography.Text>
-                        <Select
-                          className="tw-w-full"
-                          placeholder="필드 선택"
-                          options={createStartOptions}
-                          value={createCalStartField}
-                          onChange={(v) => setCreateCalStartField(v)}
-                          showSearch
-                          optionFilterProp="label"
-                        />
-                      </div>
-                      <div>
-                        <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
-                          종료일 필드 (선택, 없으면 당일)
-                        </Typography.Text>
-                        <Select
-                          className="tw-w-full"
-                          options={createEndOptions}
-                          value={createCalEndField}
-                          onChange={(v) => setCreateCalEndField(v)}
-                          showSearch
-                          optionFilterProp="label"
-                        />
-                      </div>
-                      <div>
-                        <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
-                          부가 제목 필드 (선택)
-                        </Typography.Text>
-                        <Select
-                          className="tw-w-full"
-                          options={createTitleOptions}
-                          value={createCalTitleField}
-                          onChange={(v) => setCreateCalTitleField(v)}
-                          showSearch
-                          optionFilterProp="label"
-                        />
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              }
-            />
-          </Form.Item>
-        </Form>
+                    ) : null}
+                  </div>
+                }
+              />
+            </Form.Item>
+          </Form>
         </div>
       </AppDoubleActionModal>
 
@@ -1492,79 +1645,83 @@ export function ApprovalsAdminPage() {
         width={1120}
       >
         <div className="tw-px-6 tw-py-5 sm:tw-px-7">
-        <Form layout="vertical">
-          <Form.Item label="기안 입력 항목" required>
-            <ApprovalFormSchemaBuilder
-              value={editSchemaFields}
-              onChange={setEditSchemaFields}
-              respectFieldLocks
-              paperPreviewMeta={editPaperPreviewMeta}
-              belowHelpSlot={
-                <div className="tw-rounded-lg tw-border tw-border-slate-200 tw-bg-slate-50/70 tw-p-3">
-                  <Checkbox checked={editCalVisible} onChange={(e) => setEditCalVisible(e.target.checked)}>
-                    캘린더에 일정 자동 반영 (최종 승인 시)
-                  </Checkbox>
-                  {editCalVisible ? (
-                    <div className="tw-mt-3 tw-space-y-3">
-                      <div>
-                        <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
-                          캘린더 표시명 <Typography.Text type="danger">*</Typography.Text>
-                        </Typography.Text>
-                        <Input
-                          placeholder="예: 연차, 출장"
-                          maxLength={100}
-                          showCount
-                          value={editCalDisplayName}
-                          onChange={(e) => setEditCalDisplayName(e.target.value)}
-                        />
+          <Form layout="vertical">
+            <Form.Item label="기안 입력 항목" required>
+              <ApprovalFormSchemaBuilder
+                value={editSchemaFields}
+                onChange={setEditSchemaFields}
+                respectFieldLocks
+                paperPreviewMeta={editPaperPreviewMeta}
+                belowHelpSlot={
+                  <div className="tw-rounded-lg tw-border tw-border-slate-200 tw-bg-slate-50/70 tw-p-3">
+                    <Checkbox
+                      checked={editCalVisible}
+                      onChange={(e) => setEditCalVisible(e.target.checked)}
+                    >
+                      캘린더에 일정 자동 반영 (최종 승인 시)
+                    </Checkbox>
+                    {editCalVisible ? (
+                      <div className="tw-mt-3 tw-space-y-3">
+                        <div>
+                          <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
+                            캘린더 표시명 <Typography.Text type="danger">*</Typography.Text>
+                          </Typography.Text>
+                          <Input
+                            placeholder="예: 연차, 출장"
+                            maxLength={100}
+                            showCount
+                            value={editCalDisplayName}
+                            onChange={(e) => setEditCalDisplayName(e.target.value)}
+                          />
+                        </div>
+                        <div>
+                          <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
+                            시작일 필드 (contentJson 키){' '}
+                            <Typography.Text type="danger">*</Typography.Text>
+                          </Typography.Text>
+                          <Select
+                            className="tw-w-full"
+                            placeholder="필드 선택"
+                            options={editStartOptions}
+                            value={editCalStartField}
+                            onChange={(v) => setEditCalStartField(v)}
+                            showSearch
+                            optionFilterProp="label"
+                          />
+                        </div>
+                        <div>
+                          <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
+                            종료일 필드 (선택, 없으면 당일)
+                          </Typography.Text>
+                          <Select
+                            className="tw-w-full"
+                            options={editEndOptions}
+                            value={editCalEndField}
+                            onChange={(v) => setEditCalEndField(v)}
+                            showSearch
+                            optionFilterProp="label"
+                          />
+                        </div>
+                        <div>
+                          <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
+                            부가 제목 필드 (선택)
+                          </Typography.Text>
+                          <Select
+                            className="tw-w-full"
+                            options={editTitleOptions}
+                            value={editCalTitleField}
+                            onChange={(v) => setEditCalTitleField(v)}
+                            showSearch
+                            optionFilterProp="label"
+                          />
+                        </div>
                       </div>
-                      <div>
-                        <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
-                          시작일 필드 (contentJson 키) <Typography.Text type="danger">*</Typography.Text>
-                        </Typography.Text>
-                        <Select
-                          className="tw-w-full"
-                          placeholder="필드 선택"
-                          options={editStartOptions}
-                          value={editCalStartField}
-                          onChange={(v) => setEditCalStartField(v)}
-                          showSearch
-                          optionFilterProp="label"
-                        />
-                      </div>
-                      <div>
-                        <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
-                          종료일 필드 (선택, 없으면 당일)
-                        </Typography.Text>
-                        <Select
-                          className="tw-w-full"
-                          options={editEndOptions}
-                          value={editCalEndField}
-                          onChange={(v) => setEditCalEndField(v)}
-                          showSearch
-                          optionFilterProp="label"
-                        />
-                      </div>
-                      <div>
-                        <Typography.Text className="tw-mb-1 tw-block tw-text-xs tw-text-slate-600">
-                          부가 제목 필드 (선택)
-                        </Typography.Text>
-                        <Select
-                          className="tw-w-full"
-                          options={editTitleOptions}
-                          value={editCalTitleField}
-                          onChange={(v) => setEditCalTitleField(v)}
-                          showSearch
-                          optionFilterProp="label"
-                        />
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              }
-            />
-          </Form.Item>
-        </Form>
+                    ) : null}
+                  </div>
+                }
+              />
+            </Form.Item>
+          </Form>
         </div>
       </AppDoubleActionModal>
     </div>

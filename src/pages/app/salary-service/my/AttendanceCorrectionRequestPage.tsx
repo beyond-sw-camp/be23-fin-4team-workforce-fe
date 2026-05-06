@@ -26,16 +26,16 @@ type CorrectionRow = {
   reason: string;
 };
 
-function makeEmptyRow(seedDate?: string, seedClockIn?: string, seedClockOut?: string): CorrectionRow {
+function makeEmptyRow(
+  seedDate?: string,
+  seedClockIn?: string,
+  seedClockOut?: string,
+): CorrectionRow {
   return {
     id: `row-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     date: seedDate ? dayjs(seedDate) : null,
-    clockIn: seedDate && seedClockIn
-      ? dayjs(`${seedDate}T${seedClockIn}`)
-      : null,
-    clockOut: seedDate && seedClockOut
-      ? dayjs(`${seedDate}T${seedClockOut}`)
-      : null,
+    clockIn: seedDate && seedClockIn ? dayjs(`${seedDate}T${seedClockIn}`) : null,
+    clockOut: seedDate && seedClockOut ? dayjs(`${seedDate}T${seedClockOut}`) : null,
     reason: '',
   };
 }
@@ -89,8 +89,7 @@ export function AttendanceCorrectionRequestPage() {
         }
         if (!r.reason.trim()) throw new Error(`${idx + 1}번째 행의 사유를 입력해 주세요.`);
         const dateStr = r.date.format('YYYY-MM-DD');
-        const composeIso = (t: Dayjs | null) =>
-          t ? `${dateStr}T${t.format('HH:mm:00')}` : null;
+        const composeIso = (t: Dayjs | null) => (t ? `${dateStr}T${t.format('HH:mm:00')}` : null);
         return {
           attendanceDate: dateStr,
           requestedClockIn: composeIso(r.clockIn),
@@ -127,7 +126,10 @@ export function AttendanceCorrectionRequestPage() {
     <Space direction="vertical" className="tw-w-full" size={16}>
       <div className="tw-flex tw-items-center tw-justify-between">
         <Space>
-          <Button icon={<ArrowLeftOutlined />} onClick={() => void navigate({ to: '/app/attendance' })}>
+          <Button
+            icon={<ArrowLeftOutlined />}
+            onClick={() => void navigate({ to: '/app/attendance' })}
+          >
             뒤로가기
           </Button>
           <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
@@ -175,13 +177,15 @@ export function AttendanceCorrectionRequestPage() {
       >
         <Space direction="vertical" className="tw-w-full" size={12}>
           {rows.map((row, idx) => (
-            <Card
+            <div
               key={row.id}
-              size="small"
-              className="tw-border-slate-200/80"
-              title={`${idx + 1}번째 정정`}
-              extra={
-                rows.length > 1 ? (
+              className="tw-rounded-xl tw-border tw-border-slate-200/80 tw-bg-white tw-p-4"
+            >
+              <div className="tw-mb-3 tw-flex tw-items-center tw-justify-between tw-gap-3">
+                <Typography.Text strong className="tw-text-sm tw-text-slate-800">
+                  {idx + 1}번째 정정
+                </Typography.Text>
+                {rows.length > 1 ? (
                   <Button
                     size="small"
                     type="text"
@@ -189,12 +193,13 @@ export function AttendanceCorrectionRequestPage() {
                     icon={<DeleteOutlined />}
                     onClick={() => handleRemoveRow(row.id)}
                   />
-                ) : null
-              }
-            >
+                ) : null}
+              </div>
               <div className="tw-grid tw-grid-cols-1 md:tw-grid-cols-3 tw-gap-3">
                 <div>
-                  <Typography.Text className="tw-text-xs tw-text-slate-500">정정 일자</Typography.Text>
+                  <Typography.Text className="tw-text-xs tw-text-slate-500">
+                    정정 일자
+                  </Typography.Text>
                   <DatePicker
                     style={{ width: '100%' }}
                     value={row.date}
@@ -204,7 +209,9 @@ export function AttendanceCorrectionRequestPage() {
                   />
                 </div>
                 <div>
-                  <Typography.Text className="tw-text-xs tw-text-slate-500">정정 출근시각</Typography.Text>
+                  <Typography.Text className="tw-text-xs tw-text-slate-500">
+                    정정 출근시각
+                  </Typography.Text>
                   <TimePicker
                     style={{ width: '100%' }}
                     value={row.clockIn}
@@ -214,7 +221,9 @@ export function AttendanceCorrectionRequestPage() {
                   />
                 </div>
                 <div>
-                  <Typography.Text className="tw-text-xs tw-text-slate-500">정정 퇴근시각</Typography.Text>
+                  <Typography.Text className="tw-text-xs tw-text-slate-500">
+                    정정 퇴근시각
+                  </Typography.Text>
                   <TimePicker
                     style={{ width: '100%' }}
                     value={row.clockOut}
@@ -225,7 +234,9 @@ export function AttendanceCorrectionRequestPage() {
                 </div>
               </div>
               <div className="tw-mt-3">
-                <Typography.Text className="tw-text-xs tw-text-slate-500">정정 사유</Typography.Text>
+                <Typography.Text className="tw-text-xs tw-text-slate-500">
+                  정정 사유
+                </Typography.Text>
                 <Input.TextArea
                   rows={2}
                   value={row.reason}
@@ -235,7 +246,7 @@ export function AttendanceCorrectionRequestPage() {
                   showCount
                 />
               </div>
-            </Card>
+            </div>
           ))}
         </Space>
       </Card>
@@ -244,7 +255,7 @@ export function AttendanceCorrectionRequestPage() {
         <ApprovalLinePicker
           value={approvalLines}
           onChange={setApprovalLines}
-                excludeMemberId={user?.id ?? undefined}
+          excludeMemberId={user?.id ?? undefined}
         />
       </Card>
     </Space>

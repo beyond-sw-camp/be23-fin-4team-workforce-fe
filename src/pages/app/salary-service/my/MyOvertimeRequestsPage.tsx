@@ -32,8 +32,12 @@ import type { ColumnsType } from 'antd/es/table';
 import dayjs, { type Dayjs } from 'dayjs';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
+import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
-import type { OvertimeRequest, OvertimeRequestCreatePayload } from '@/features/salary-service/types';
+import type {
+  OvertimeRequest,
+  OvertimeRequestCreatePayload,
+} from '@/features/salary-service/types';
 import { approvalRequestApi } from '@/features/approvals/api/approvalRequestApi';
 
 type FormValues = {
@@ -132,7 +136,8 @@ export function MyOvertimeRequestsPage() {
   // 주간 근무시간 요약은 [내 근태 → 주간/월간] 탭으로 이동됨
 
   const createM = useMutation({
-    mutationFn: (payload: OvertimeRequestCreatePayload) => attendanceApi.overtimeRequest.createMy(payload),
+    mutationFn: (payload: OvertimeRequestCreatePayload) =>
+      attendanceApi.overtimeRequest.createMy(payload),
     onSuccess: () => {
       message.success('초과근무 신청이 등록되었습니다. (전자결재 자동 발의)');
       form.resetFields();
@@ -254,9 +259,7 @@ export function MyOvertimeRequestsPage() {
         width: 90,
         align: 'center',
         render: (v) => (
-          <Tag color={STATUS_COLOR[v ?? ''] ?? 'default'}>
-            {STATUS_KO[v ?? ''] ?? (v ?? '-')}
-          </Tag>
+          <Tag color={STATUS_COLOR[v ?? ''] ?? 'default'}>{STATUS_KO[v ?? ''] ?? v ?? '-'}</Tag>
         ),
       },
       {
@@ -297,20 +300,26 @@ export function MyOvertimeRequestsPage() {
 
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
-      {/* 헤더 - 신청 버튼은 내 근태 행별 [초과근무 신청] 결재 진입으로 통합 (자동 모달 useEffect 가 결재 진입 시 본 페이지에서도 모달 오픈) */}
-      <div className="tw-flex tw-flex-wrap tw-justify-between tw-items-center tw-gap-2">
-        <Typography.Title level={2} className="!tw-m-0 !tw-text-slate-900">
-          초과 근무 관리
-        </Typography.Title>
-      </div>
+      <AppWorkspacePageTitle
+        eyebrow="ATTENDANCE"
+        title="초과근무 관리"
+        subtitle="초과근무 신청 이력과 결재 진행 상태를 확인합니다."
+      />
 
       <Card title="초과 근무 관리 내역" className="tw-border-slate-200/80 tw-shadow-sm">
-
         <div className="tw-grid tw-grid-cols-2 md:tw-grid-cols-4 tw-gap-3 tw-mb-4">
-          <Card size="small"><Statistic title="전체" value={stats.total} suffix="건" /></Card>
-          <Card size="small"><Statistic title="대기" value={stats.pending} suffix="건" /></Card>
-          <Card size="small"><Statistic title="승인" value={stats.approved} suffix="건" /></Card>
-          <Card size="small"><Statistic title="반려" value={stats.rejected} suffix="건" /></Card>
+          <div className="tw-rounded-xl tw-border tw-border-slate-200/80 tw-bg-slate-50/60 tw-p-4">
+            <Statistic title="전체" value={stats.total} suffix="건" />
+          </div>
+          <div className="tw-rounded-xl tw-border tw-border-slate-200/80 tw-bg-slate-50/60 tw-p-4">
+            <Statistic title="대기" value={stats.pending} suffix="건" />
+          </div>
+          <div className="tw-rounded-xl tw-border tw-border-slate-200/80 tw-bg-slate-50/60 tw-p-4">
+            <Statistic title="승인" value={stats.approved} suffix="건" />
+          </div>
+          <div className="tw-rounded-xl tw-border tw-border-slate-200/80 tw-bg-slate-50/60 tw-p-4">
+            <Statistic title="반려" value={stats.rejected} suffix="건" />
+          </div>
         </div>
 
         {/* 필터 */}
@@ -323,7 +332,10 @@ export function MyOvertimeRequestsPage() {
             allowClear={false}
           />
           <Space size={6}>
-            <Button size="small" onClick={() => setPeriod([dayjs().startOf('week'), dayjs().endOf('week')])}>
+            <Button
+              size="small"
+              onClick={() => setPeriod([dayjs().startOf('week'), dayjs().endOf('week')])}
+            >
               이번 주
             </Button>
             <Button
@@ -337,7 +349,10 @@ export function MyOvertimeRequestsPage() {
             >
               지난 주
             </Button>
-            <Button size="small" onClick={() => setPeriod([dayjs().startOf('month'), dayjs().endOf('month')])}>
+            <Button
+              size="small"
+              onClick={() => setPeriod([dayjs().startOf('month'), dayjs().endOf('month')])}
+            >
               이번 달
             </Button>
           </Space>
@@ -355,10 +370,18 @@ export function MyOvertimeRequestsPage() {
             ]}
           />
           <Space size={6}>
-            <Button size="small" type={statusFilter === 'PENDING' ? 'primary' : 'default'} onClick={() => setStatusFilter('PENDING')}>
+            <Button
+              size="small"
+              type={statusFilter === 'PENDING' ? 'primary' : 'default'}
+              onClick={() => setStatusFilter('PENDING')}
+            >
               대기만
             </Button>
-            <Button size="small" type={statusFilter === 'APPROVED' ? 'primary' : 'default'} onClick={() => setStatusFilter('APPROVED')}>
+            <Button
+              size="small"
+              type={statusFilter === 'APPROVED' ? 'primary' : 'default'}
+              onClick={() => setStatusFilter('APPROVED')}
+            >
               승인만
             </Button>
             <Button size="small" onClick={() => setStatusFilter('ALL')}>
@@ -394,69 +417,87 @@ export function MyOvertimeRequestsPage() {
         width={620}
       >
         <div className="tw-px-5 tw-py-4">
-        <Typography.Paragraph type="secondary" className="!tw-text-xs">
-          신청 시 전자결재 시스템으로 이동됩니다.
-        </Typography.Paragraph>
-        <Alert
-          type="warning"
-          showIcon
-          className="tw-mb-3"
-          message="현재 시각 기준으로 종료 00:00은 다음날 00:00으로 처리됩니다."
-        />
-        <Form<FormValues>
-          form={form}
-          layout="vertical"
-          initialValues={{ targetDate: dayjs() }}
-          onFinish={(v) =>
-            (() => {
-              const now = dayjs();
-              const cutoff = now.startOf('day').hour(18);
-              const requestType: 'PRE' | 'POST' = now.isAfter(cutoff) ? 'POST' : 'PRE';
-              const minutes = calcMinutes(v.startTime, v.endTime);
-              createM.mutate({
-                targetDate: v.targetDate.format('YYYY-MM-DD'),
-                requestType,
-                plannedStartTime: requestType === 'PRE' ? v.startTime?.format('HH:mm') ?? null : null,
-                plannedEndTime: requestType === 'PRE' ? v.endTime?.format('HH:mm') ?? null : null,
-                requestedMinutes: requestType === 'PRE' ? minutes : null,
-                actualStartTime: requestType === 'POST' ? v.startTime?.format('HH:mm') ?? null : null,
-                actualEndTime: requestType === 'POST' ? v.endTime?.format('HH:mm') ?? null : null,
-                actualMinutes: requestType === 'POST' ? minutes : null,
-                reason: v.reason?.trim() || null,
-              });
-            })()
-          }
-        >
-          <Space wrap align="start" size={20} className="tw-w-full">
-            <Form.Item name="targetDate" label="대상일" rules={[{ required: true }]} style={{ minWidth: 160 }}>
-              <DatePicker format="YYYY-MM-DD" style={{ width: 160 }} />
-            </Form.Item>
-            <Form.Item name="startTime" label="시작" rules={[{ required: true }]} style={{ minWidth: 150 }}>
-              <TimePicker format="HH:mm" minuteStep={5} style={{ width: 140 }} />
-            </Form.Item>
+          <Typography.Paragraph type="secondary" className="!tw-text-xs">
+            신청 시 전자결재 시스템으로 이동됩니다.
+          </Typography.Paragraph>
+          <Alert
+            type="warning"
+            showIcon
+            className="tw-mb-3"
+            message="현재 시각 기준으로 종료 00:00은 다음날 00:00으로 처리됩니다."
+          />
+          <Form<FormValues>
+            form={form}
+            layout="vertical"
+            initialValues={{ targetDate: dayjs() }}
+            onFinish={(v) =>
+              (() => {
+                const now = dayjs();
+                const cutoff = now.startOf('day').hour(18);
+                const requestType: 'PRE' | 'POST' = now.isAfter(cutoff) ? 'POST' : 'PRE';
+                const minutes = calcMinutes(v.startTime, v.endTime);
+                createM.mutate({
+                  targetDate: v.targetDate.format('YYYY-MM-DD'),
+                  requestType,
+                  plannedStartTime:
+                    requestType === 'PRE' ? (v.startTime?.format('HH:mm') ?? null) : null,
+                  plannedEndTime:
+                    requestType === 'PRE' ? (v.endTime?.format('HH:mm') ?? null) : null,
+                  requestedMinutes: requestType === 'PRE' ? minutes : null,
+                  actualStartTime:
+                    requestType === 'POST' ? (v.startTime?.format('HH:mm') ?? null) : null,
+                  actualEndTime:
+                    requestType === 'POST' ? (v.endTime?.format('HH:mm') ?? null) : null,
+                  actualMinutes: requestType === 'POST' ? minutes : null,
+                  reason: v.reason?.trim() || null,
+                });
+              })()
+            }
+          >
+            <Space wrap align="start" size={20} className="tw-w-full">
+              <Form.Item
+                name="targetDate"
+                label="대상일"
+                rules={[{ required: true }]}
+                style={{ minWidth: 160 }}
+              >
+                <DatePicker format="YYYY-MM-DD" style={{ width: 160 }} />
+              </Form.Item>
+              <Form.Item
+                name="startTime"
+                label="시작"
+                rules={[{ required: true }]}
+                style={{ minWidth: 150 }}
+              >
+                <TimePicker format="HH:mm" minuteStep={5} style={{ width: 140 }} />
+              </Form.Item>
+              <Form.Item
+                name="endTime"
+                label="종료"
+                style={{ minWidth: 150 }}
+                rules={[
+                  { required: true },
+                  ({ getFieldValue }) => ({
+                    validator(_, value) {
+                      const start = getFieldValue('startTime') as dayjs.Dayjs | undefined;
+                      const mins = calcMinutes(start, value as dayjs.Dayjs | undefined);
+                      if (mins && mins > 0) return Promise.resolve();
+                      return Promise.reject(new Error('시작/종료 시간이 동일하면 안 됩니다.'));
+                    },
+                  }),
+                ]}
+              >
+                <TimePicker format="HH:mm" minuteStep={5} style={{ width: 140 }} />
+              </Form.Item>
+            </Space>
             <Form.Item
-              name="endTime"
-              label="종료"
-              style={{ minWidth: 150 }}
-              rules={[
-                { required: true },
-                ({ getFieldValue }) => ({
-                  validator(_, value) {
-                    const start = getFieldValue('startTime') as dayjs.Dayjs | undefined;
-                    const mins = calcMinutes(start, value as dayjs.Dayjs | undefined);
-                    if (mins && mins > 0) return Promise.resolve();
-                    return Promise.reject(new Error('시작/종료 시간이 동일하면 안 됩니다.'));
-                  },
-                }),
-              ]}
+              name="reason"
+              label="사유"
+              rules={[{ required: true, message: '사유를 입력하세요.' }]}
             >
-              <TimePicker format="HH:mm" minuteStep={5} style={{ width: 140 }} />
+              <Input.TextArea rows={3} maxLength={300} showCount />
             </Form.Item>
-          </Space>
-          <Form.Item name="reason" label="사유" rules={[{ required: true, message: '사유를 입력하세요.' }]}>
-            <Input.TextArea rows={3} maxLength={300} showCount />
-          </Form.Item>
-        </Form>
+          </Form>
         </div>
       </AppDoubleActionModal>
 
@@ -471,138 +512,157 @@ export function MyOvertimeRequestsPage() {
         destroyOnHidden
       >
         <div className="tw-px-5 tw-py-4">
-        {detailRow && (
-          <Descriptions column={1} bordered size="small">
-            <Descriptions.Item label="근무일">{detailRow.targetDate}</Descriptions.Item>
-            <Descriptions.Item label="구분">
-              {TYPE_KO[detailRow.requestType ?? ''] ?? detailRow.requestType}
-            </Descriptions.Item>
-            <Descriptions.Item label="시간">
-              {detailRow.requestType === 'POST'
-                ? `${detailRow.actualStartTime ?? '-'} ~ ${detailRow.actualEndTime ?? '-'}`
-                : `${detailRow.plannedStartTime ?? '-'} ~ ${detailRow.plannedEndTime ?? '-'}`}
-            </Descriptions.Item>
-            <Descriptions.Item label="시간(분)">
-              {detailRow.requestType === 'POST' ? detailRow.actualMinutes : detailRow.requestedMinutes}
-            </Descriptions.Item>
-            <Descriptions.Item label="상태">
-              <Tag color={STATUS_COLOR[detailRow.approvalStatus ?? ''] ?? 'default'}>
-                {STATUS_KO[detailRow.approvalStatus ?? ''] ?? detailRow.approvalStatus}
-              </Tag>
-            </Descriptions.Item>
-            <Descriptions.Item label="사유">{detailRow.reason ?? '-'}</Descriptions.Item>
-          </Descriptions>
-        )}
-        {detailRow && (() => {
-          const approval = detailApprovalQ.data;
-          const lines = approval?.approvalLines ?? [];
-          const sortedLines = [...lines].sort((a, b) => (a.stepOrder ?? 0) - (b.stepOrder ?? 0));
-          const currentStep = sortedLines.findIndex(
-            (ln) => (ln.approvalStatus ?? '') === 'PENDING' || (ln.approvalStatus ?? '') === 'WAITING',
-          );
-          const lastActed = [...sortedLines]
-            .reverse()
-            .find((ln) => Boolean(ln.comment) || ['APPROVED', 'REJECTED'].includes(String(ln.approvalStatus)));
+          {detailRow && (
+            <Descriptions column={1} bordered size="small">
+              <Descriptions.Item label="근무일">{detailRow.targetDate}</Descriptions.Item>
+              <Descriptions.Item label="구분">
+                {TYPE_KO[detailRow.requestType ?? ''] ?? detailRow.requestType}
+              </Descriptions.Item>
+              <Descriptions.Item label="시간">
+                {detailRow.requestType === 'POST'
+                  ? `${detailRow.actualStartTime ?? '-'} ~ ${detailRow.actualEndTime ?? '-'}`
+                  : `${detailRow.plannedStartTime ?? '-'} ~ ${detailRow.plannedEndTime ?? '-'}`}
+              </Descriptions.Item>
+              <Descriptions.Item label="시간(분)">
+                {detailRow.requestType === 'POST'
+                  ? detailRow.actualMinutes
+                  : detailRow.requestedMinutes}
+              </Descriptions.Item>
+              <Descriptions.Item label="상태">
+                <Tag color={STATUS_COLOR[detailRow.approvalStatus ?? ''] ?? 'default'}>
+                  {STATUS_KO[detailRow.approvalStatus ?? ''] ?? detailRow.approvalStatus}
+                </Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="사유">{detailRow.reason ?? '-'}</Descriptions.Item>
+            </Descriptions>
+          )}
+          {detailRow &&
+            (() => {
+              const approval = detailApprovalQ.data;
+              const lines = approval?.approvalLines ?? [];
+              const sortedLines = [...lines].sort(
+                (a, b) => (a.stepOrder ?? 0) - (b.stepOrder ?? 0),
+              );
+              const currentStep = sortedLines.findIndex(
+                (ln) =>
+                  (ln.approvalStatus ?? '') === 'PENDING' ||
+                  (ln.approvalStatus ?? '') === 'WAITING',
+              );
+              const lastActed = [...sortedLines]
+                .reverse()
+                .find(
+                  (ln) =>
+                    Boolean(ln.comment) ||
+                    ['APPROVED', 'REJECTED'].includes(String(ln.approvalStatus)),
+                );
 
-          return (
-            <>
-              <Descriptions column={1} bordered size="small">
-                <Descriptions.Item label="구분">
-                  <Tag color={detailRow.requestType === 'POST' ? 'orange' : 'blue'}>
-                    {TYPE_KO[detailRow.requestType ?? ''] ?? detailRow.requestType}
-                  </Tag>
-                  <Typography.Text type="secondary" className="!tw-text-xs">
-                    {detailRow.requestType === 'POST' ? '근무 후 사후 신청' : '근무 전 사전 신청'}
-                  </Typography.Text>
-                </Descriptions.Item>
-                <Descriptions.Item label="결재 상태">
-                  <Tag color={STATUS_COLOR[detailRow.approvalStatus ?? ''] ?? 'default'}>
-                    {STATUS_KO[detailRow.approvalStatus ?? ''] ?? detailRow.approvalStatus}
-                  </Tag>
-                </Descriptions.Item>
-                <Descriptions.Item label="신청 사유">{detailRow.reason ?? '-'}</Descriptions.Item>
-              </Descriptions>
+              return (
+                <>
+                  <Descriptions column={1} bordered size="small">
+                    <Descriptions.Item label="구분">
+                      <Tag color={detailRow.requestType === 'POST' ? 'orange' : 'blue'}>
+                        {TYPE_KO[detailRow.requestType ?? ''] ?? detailRow.requestType}
+                      </Tag>
+                      <Typography.Text type="secondary" className="!tw-text-xs">
+                        {detailRow.requestType === 'POST'
+                          ? '근무 후 사후 신청'
+                          : '근무 전 사전 신청'}
+                      </Typography.Text>
+                    </Descriptions.Item>
+                    <Descriptions.Item label="결재 상태">
+                      <Tag color={STATUS_COLOR[detailRow.approvalStatus ?? ''] ?? 'default'}>
+                        {STATUS_KO[detailRow.approvalStatus ?? ''] ?? detailRow.approvalStatus}
+                      </Tag>
+                    </Descriptions.Item>
+                    <Descriptions.Item label="신청 사유">
+                      {detailRow.reason ?? '-'}
+                    </Descriptions.Item>
+                  </Descriptions>
 
-              <Divider orientation="left" plain className="!tw-my-3 !tw-text-xs">
-                결재 진행
-              </Divider>
+                  <Divider orientation="left" plain className="!tw-my-3 !tw-text-xs">
+                    결재 진행
+                  </Divider>
 
-              {detailApprovalQ.isLoading ? (
-                <Typography.Text type="secondary">결재선 정보를 불러오는 중...</Typography.Text>
-              ) : !detailRow.approvalRequestId ? (
-                <Alert type="info" showIcon message="연결된 결재 문서가 없습니다." />
-              ) : sortedLines.length === 0 ? (
-                <Alert type="warning" showIcon message="결재선이 등록되지 않았습니다." />
-              ) : (
-                <Steps
-                  size="small"
-                  direction="vertical"
-                  current={currentStep === -1 ? sortedLines.length : currentStep}
-                  items={sortedLines.map((ln) => {
-                    const status = String(ln.approvalStatus ?? '');
-                    const isCancelled = detailRow.approvalStatus === 'CANCELLED';
-                    let stepStatus: 'wait' | 'process' | 'finish' | 'error' = 'wait';
-                    let stepLabel = '';
-                    if (isCancelled && !['APPROVED', 'REJECTED'].includes(status)) {
-                      // 신청자가 결재 진행 중 취소한 경우 - 미처리 라인은 모두 '취소'로 표시
-                      stepStatus = 'wait';
-                      stepLabel = '취소';
-                    } else if (status === 'APPROVED') {
-                      stepStatus = 'finish';
-                      stepLabel = '승인';
-                    } else if (status === 'REJECTED') {
-                      stepStatus = 'error';
-                      stepLabel = '반려';
-                    } else if (status === 'PENDING') {
-                      stepStatus = 'process';
-                      stepLabel = '결재 중';
-                    } else if (status === 'WAITING') {
-                      stepStatus = 'wait';
-                      stepLabel = '대기';
-                    } else if (status === 'CANCELED' || status === 'CANCELLED') {
-                      stepStatus = 'wait';
-                      stepLabel = '취소';
-                    }
-                    const name = ln.approverName ?? '-';
-                    const role = [ln.approverOrganizationName, ln.approverJobTitleName].filter(Boolean).join(' / ');
-                    return {
-                      title: (
-                        <Space size={6}>
-                          <span>{ln.stepOrder}단계</span>
-                          <Typography.Text strong>{name}</Typography.Text>
-                          {ln.isProxy ? <Tag color="purple">대결</Tag> : null}
-                        </Space>
-                      ),
-                      status: stepStatus,
-                      description: (
-                        <div className="tw-text-xs tw-text-slate-500">
-                          {role && <div>{role}</div>}
-                          <div>
-                            {stepLabel}
-                            {ln.actedAt && ` · ${dayjs(ln.actedAt).format('YYYY-MM-DD HH:mm')}`}
-                          </div>
-                          {ln.comment && (
-                            <div className="tw-mt-1 tw-text-slate-700">코멘트: {ln.comment}</div>
-                          )}
-                        </div>
-                      ),
-                    };
-                  })}
-                />
-              )}
+                  {detailApprovalQ.isLoading ? (
+                    <Typography.Text type="secondary">결재선 정보를 불러오는 중...</Typography.Text>
+                  ) : !detailRow.approvalRequestId ? (
+                    <Alert type="info" showIcon message="연결된 결재 문서가 없습니다." />
+                  ) : sortedLines.length === 0 ? (
+                    <Alert type="warning" showIcon message="결재선이 등록되지 않았습니다." />
+                  ) : (
+                    <Steps
+                      size="small"
+                      direction="vertical"
+                      current={currentStep === -1 ? sortedLines.length : currentStep}
+                      items={sortedLines.map((ln) => {
+                        const status = String(ln.approvalStatus ?? '');
+                        const isCancelled = detailRow.approvalStatus === 'CANCELLED';
+                        let stepStatus: 'wait' | 'process' | 'finish' | 'error' = 'wait';
+                        let stepLabel = '';
+                        if (isCancelled && !['APPROVED', 'REJECTED'].includes(status)) {
+                          // 신청자가 결재 진행 중 취소한 경우 - 미처리 라인은 모두 '취소'로 표시
+                          stepStatus = 'wait';
+                          stepLabel = '취소';
+                        } else if (status === 'APPROVED') {
+                          stepStatus = 'finish';
+                          stepLabel = '승인';
+                        } else if (status === 'REJECTED') {
+                          stepStatus = 'error';
+                          stepLabel = '반려';
+                        } else if (status === 'PENDING') {
+                          stepStatus = 'process';
+                          stepLabel = '결재 중';
+                        } else if (status === 'WAITING') {
+                          stepStatus = 'wait';
+                          stepLabel = '대기';
+                        } else if (status === 'CANCELED' || status === 'CANCELLED') {
+                          stepStatus = 'wait';
+                          stepLabel = '취소';
+                        }
+                        const name = ln.approverName ?? '-';
+                        const role = [ln.approverOrganizationName, ln.approverJobTitleName]
+                          .filter(Boolean)
+                          .join(' / ');
+                        return {
+                          title: (
+                            <Space size={6}>
+                              <span>{ln.stepOrder}단계</span>
+                              <Typography.Text strong>{name}</Typography.Text>
+                              {ln.isProxy ? <Tag color="purple">대결</Tag> : null}
+                            </Space>
+                          ),
+                          status: stepStatus,
+                          description: (
+                            <div className="tw-text-xs tw-text-slate-500">
+                              {role && <div>{role}</div>}
+                              <div>
+                                {stepLabel}
+                                {ln.actedAt && ` · ${dayjs(ln.actedAt).format('YYYY-MM-DD HH:mm')}`}
+                              </div>
+                              {ln.comment && (
+                                <div className="tw-mt-1 tw-text-slate-700">
+                                  코멘트: {ln.comment}
+                                </div>
+                              )}
+                            </div>
+                          ),
+                        };
+                      })}
+                    />
+                  )}
 
-              {lastActed?.comment && detailRow.approvalStatus === 'REJECTED' && (
-                <Alert
-                  className="tw-mt-3"
-                  type="error"
-                  showIcon
-                  message="반려 사유"
-                  description={lastActed.comment}
-                />
-              )}
-            </>
-          );
-        })()}
+                  {lastActed?.comment && detailRow.approvalStatus === 'REJECTED' && (
+                    <Alert
+                      className="tw-mt-3"
+                      type="error"
+                      showIcon
+                      message="반려 사유"
+                      description={lastActed.comment}
+                    />
+                  )}
+                </>
+              );
+            })()}
         </div>
       </AppSingleActionModal>
     </Space>

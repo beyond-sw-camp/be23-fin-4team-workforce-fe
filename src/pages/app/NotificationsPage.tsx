@@ -4,7 +4,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import dayjs from 'dayjs';
 import { useMemo, useState } from 'react';
-import { notificationApi, type NotificationItem } from '@/features/notification/api/notificationApi';
+import {
+  notificationApi,
+  type NotificationItem,
+} from '@/features/notification/api/notificationApi';
 import {
   buildApprovalNotificationNavigate,
   buildGoalBundleNotificationNavigate,
@@ -20,7 +23,9 @@ import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 type NotificationFilter = 'all' | 'unread' | 'read';
 
 function isApprovalNotification(type: string): boolean {
-  return String(type ?? '').toUpperCase().startsWith('APPROVAL_');
+  return String(type ?? '')
+    .toUpperCase()
+    .startsWith('APPROVAL_');
 }
 
 function isGoalBundleNotification(type: string, targetType?: string): boolean {
@@ -31,7 +36,9 @@ function isGoalBundleNotification(type: string, targetType?: string): boolean {
 
 function isLeavePromotionNotification(type: string): boolean {
   const t = String(type ?? '').toUpperCase();
-  return t === 'LEAVE_PROMOTION_FIRST' || t === 'LEAVE_PROMOTION_SECOND' || t === 'LEAVE_DESIGNATION';
+  return (
+    t === 'LEAVE_PROMOTION_FIRST' || t === 'LEAVE_PROMOTION_SECOND' || t === 'LEAVE_DESIGNATION'
+  );
 }
 
 function isRoutableNotification(item: NotificationItem): boolean {
@@ -96,7 +103,9 @@ function NotificationRow({ item, onRoute, onDelete, deleting }: NotificationRowP
       role={routable ? 'button' : undefined}
       tabIndex={routable ? 0 : undefined}
       className={`tw-flex tw-w-full tw-items-start tw-gap-4 tw-rounded-xl tw-border tw-px-4 tw-py-3 tw-transition-colors ${
-        unread ? 'tw-border-blue-200 tw-bg-blue-50/70 tw-opacity-100' : 'tw-border-slate-100 tw-bg-white tw-opacity-60'
+        unread
+          ? 'tw-border-blue-200 tw-bg-blue-50/70 tw-opacity-100'
+          : 'tw-border-slate-100 tw-bg-white tw-opacity-60'
       } ${routable ? 'tw-cursor-pointer hover:tw-border-slate-200 hover:tw-bg-slate-50 focus-visible:tw-outline focus-visible:tw-outline-2 focus-visible:tw-outline-blue-500' : ''}`}
       onClick={() => {
         if (routable) onRoute(item);
@@ -113,11 +122,16 @@ function NotificationRow({ item, onRoute, onDelete, deleting }: NotificationRowP
       </div>
       <div className="tw-min-w-0 tw-flex-1">
         <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
-          <Tag color={notificationTone(item)} className={`!tw-m-0 ${unread ? '' : '!tw-text-slate-500'}`}>
+          <Tag
+            color={notificationTone(item)}
+            className={`!tw-m-0 ${unread ? '' : '!tw-text-slate-500'}`}
+          >
             {item.title}
           </Tag>
         </div>
-        <div className={`tw-mt-2 tw-text-sm tw-leading-relaxed ${unread ? 'tw-font-medium tw-text-slate-900' : 'tw-text-slate-600'}`}>
+        <div
+          className={`tw-mt-2 tw-text-sm tw-leading-relaxed ${unread ? 'tw-font-medium tw-text-slate-900' : 'tw-text-slate-600'}`}
+        >
           {item.content || '알림 내용이 없습니다.'}
         </div>
         <div className="tw-mt-2 tw-text-xs tw-text-slate-400">
@@ -165,7 +179,10 @@ export function NotificationsPage() {
     if (filter === 'read') return notifications.filter((item) => item.isRead === 'YES');
     return notifications;
   }, [filter, notifications]);
-  const groupedNotifications = useMemo(() => groupByDay(filteredNotifications), [filteredNotifications]);
+  const groupedNotifications = useMemo(
+    () => groupByDay(filteredNotifications),
+    [filteredNotifications],
+  );
 
   const invalidateNotifications = () => {
     void queryClient.invalidateQueries({ queryKey: ['notifications'] });
@@ -272,11 +289,13 @@ export function NotificationsPage() {
         }
       />
 
-      <Card className="!tw-border-0 !tw-bg-transparent !tw-shadow-none" styles={{ body: { padding: 0 } }}>
+      <Card
+        className="!tw-border-0 !tw-bg-transparent !tw-shadow-none"
+        styles={{ body: { padding: 0 } }}
+      >
         <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-3">
           <Segmented
             size="middle"
-            className="!tw-rounded-lg !tw-border !tw-border-slate-200 !tw-bg-white !tw-p-0.5 [&_.ant-segmented-item]:!tw-min-h-8 [&_.ant-segmented-item-label]:!tw-min-h-7 [&_.ant-segmented-item-label]:!tw-px-3 [&_.ant-segmented-item-label]:!tw-py-0 [&_.ant-segmented-item-label]:!tw-text-xs [&_.ant-segmented-item-label]:!tw-font-medium [&_.ant-segmented-item-label]:!tw-leading-7 [&_.ant-segmented-item-label]:!tw-text-slate-600 [&_.ant-segmented-item-selected]:!tw-bg-blue-600 [&_.ant-segmented-item-selected_.ant-segmented-item-label]:!tw-text-white"
             value={filter}
             onChange={(value) => setFilter(value as NotificationFilter)}
             options={[
@@ -291,7 +310,10 @@ export function NotificationsPage() {
         </div>
       </Card>
 
-      <Card className="!tw-border-0 !tw-bg-transparent !tw-shadow-none" styles={{ body: { padding: 0 } }}>
+      <Card
+        className="!tw-border-0 !tw-bg-transparent !tw-shadow-none"
+        styles={{ body: { padding: 0 } }}
+      >
         <Spin spinning={isLoading}>
           {filteredNotifications.length === 0 ? (
             <div className="tw-py-12">
