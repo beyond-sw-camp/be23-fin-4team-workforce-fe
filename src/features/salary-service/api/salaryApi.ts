@@ -24,6 +24,7 @@ import type {
   RetroactivePayrollResult,
   BulkPayrollActionResult,
   RetirementPolicy,
+  MySalaryHistory,
   RetirementSimReq,
   RetirementSimRes,
   RetirementPolicyCreatePayload,
@@ -59,6 +60,30 @@ function unwrapMessage(payload: unknown): string | undefined {
     return typeof m === 'string' ? m : undefined;
   }
   return undefined;
+}
+
+/** 목록 API가 배열 대신 `data.content` 등으로 줄 때 대비 */
+function pickNegotiationArray(raw: unknown, depth = 0): unknown[] {
+  if (depth > 6) return [];
+  if (Array.isArray(raw)) return raw;
+  if (!raw || typeof raw !== 'object') return [];
+  const o = raw as Record<string, unknown>;
+  for (const key of ['data', 'items', 'list', 'content', 'result', 'rows', 'negotiations']) {
+    const next = o[key];
+    if (Array.isArray(next)) return next;
+    if (next && typeof next === 'object') {
+      const nested = pickNegotiationArray(next, depth + 1);
+      if (nested.length > 0) return nested;
+    }
+  }
+  return [];
+}
+
+function normalizeSalaryNegotiationListResponse(payload: unknown): SalaryNegotiation[] {
+  const unwrapped = unwrapApiResponse<unknown>(payload);
+  if (Array.isArray(unwrapped)) return unwrapped as SalaryNegotiation[];
+  const rows = pickNegotiationArray(unwrapped);
+  return rows as SalaryNegotiation[];
 }
 
 export const salaryApi = {
@@ -333,6 +358,13 @@ export const salaryApi = {
         `${BASE}/salary/salaries/member/${encodeURIComponent(memberId)}`,
       );
       const unwrapped = unwrapApiResponse<Salary[] | null>(data);
+      return Array.isArray(unwrapped) ? unwrapped : [];
+    },
+
+    /** 본인 급여 이력 (최신 적용일 우선) */
+    async listMine(): Promise<MySalaryHistory[]> {
+      const { data } = await httpClient.get(`${BASE}/salary/salaries/my`);
+      const unwrapped = unwrapApiResponse<MySalaryHistory[] | null>(data);
       return Array.isArray(unwrapped) ? unwrapped : [];
     },
 
@@ -704,16 +736,14 @@ export const salaryApi = {
   negotiation: {
     async listByCompany(): Promise<SalaryNegotiation[]> {
       const { data } = await httpClient.get(`${BASE}/salary/negotiations`);
-      const unwrapped = unwrapApiResponse<SalaryNegotiation[] | null>(data);
-      return Array.isArray(unwrapped) ? unwrapped : [];
+      return normalizeSalaryNegotiationListResponse(data);
     },
 
     async listByGroup(groupId: string): Promise<SalaryNegotiation[]> {
       const { data } = await httpClient.get(
         `${BASE}/salary/negotiations/group/${encodeURIComponent(groupId)}`,
       );
-      const unwrapped = unwrapApiResponse<SalaryNegotiation[] | null>(data);
-      return Array.isArray(unwrapped) ? unwrapped : [];
+      return normalizeSalaryNegotiationListResponse(data);
     },
 
     async findById(negotiationId: string): Promise<SalaryNegotiation> {
@@ -725,8 +755,7 @@ export const salaryApi = {
 
     async listMine(): Promise<SalaryNegotiation[]> {
       const { data } = await httpClient.get(`${BASE}/salary/negotiations/my`);
-      const unwrapped = unwrapApiResponse<SalaryNegotiation[] | null>(data);
-      return Array.isArray(unwrapped) ? unwrapped : [];
+      return normalizeSalaryNegotiationListResponse(data);
     },
 
     async create(payload: SalaryNegotiationCreatePayload): Promise<SalaryNegotiation> {

@@ -1005,6 +1005,61 @@ export function ContractTemplatesAdminPanel({
                     )}
                   </Form.List>
                 </Form>
+              <Form<BatchSendForm>
+                form={batchSendForm}
+                layout="vertical"
+                className="tw-pt-2"
+                initialValues={{ items: [{ employeeMemberId: '', adminInput: {} }] }}
+              >
+                <Form.Item name="templateId" label="템플릿" rules={[{ required: true, message: '템플릿을 선택해 주세요.' }]}>
+                  <Select
+                    showSearch
+                    optionFilterProp="label"
+                    loading={templateSelectLoading}
+                    placeholder="활성 템플릿 선택"
+                    options={activeTemplates.map((t) => ({
+                      value: t.templateId,
+                      label: `${t.templateName} (${CONTRACT_TYPE_LABEL[t.contractType as ContractType] ?? t.contractType})`,
+                    }))}
+                  />
+                </Form.Item>
+                <Form.Item name="batchName" label="발송 제목" rules={[{ required: true, message: '발송 제목을 입력해 주세요.' }]}>
+                  <Input placeholder="예: 2026년 연봉계약" maxLength={120} />
+                </Form.Item>
+                <Form.List name="items">
+                  {(fields, { add, remove }) => (
+                    <Space direction="vertical" className="tw-w-full" size={12}>
+                      <div className="tw-flex tw-items-center tw-justify-end">
+                        <Button onClick={() => setBatchRecipientPickerOpen(true)}>조직도에서 다중 추가</Button>
+                      </div>
+                      {fields.map((field, index) => (
+                        <Card
+                          key={field.key}
+                          size="small"
+                          title={`대상 ${index + 1}`}
+                          extra={
+                            fields.length > 1 ? (
+                              <Button type="link" danger size="small" onClick={() => remove(field.name)}>
+                                삭제
+                              </Button>
+                            ) : null
+                          }
+                        >
+                          <Form.Item name={[field.name, 'employeeMemberId']} label="직원" rules={[{ required: true, message: '직원을 선택해 주세요.' }]}>
+                            <Select showSearch optionFilterProp="label" placeholder="직원 선택" options={memberOptions} />
+                          </Form.Item>
+                          {batchAdminInputFields.map((adminField) => (
+                            <Form.Item key={`${field.key}-${adminField.name}`} name={[field.name, 'adminInput', adminField.name]} label={adminField.label}>
+                              <ContractAdminFormFieldInput field={adminField} textAreaRows={2} />
+                            </Form.Item>
+                          ))}
+                        </Card>
+                      ))}
+                      <Button onClick={() => add({ employeeMemberId: '', adminInput: {} })}>대상 직원 추가</Button>
+                    </Space>
+                  )}
+                </Form.List>
+              </Form>
               </div>
             </AppDoubleActionModal>
           </>
@@ -1113,11 +1168,7 @@ export function ContractTemplatesAdminPanel({
                       }))}
                     />
                   </Form.Item>
-                  <Form.Item
-                    name="batchName"
-                    label="배치 이름"
-                    rules={[{ required: true, message: '배치 이름을 입력해 주세요.' }]}
-                  >
+                  <Form.Item name="batchName" label="발송 제목" rules={[{ required: true, message: '발송 제목을 입력해 주세요.' }]}>
                     <Input placeholder="예: 2026년 연봉계약" maxLength={120} />
                   </Form.Item>
                   <Form.List name="items">

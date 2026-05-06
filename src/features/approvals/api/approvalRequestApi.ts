@@ -1,6 +1,24 @@
 import { httpClient } from '@/shared/api/httpClient';
 import { unwrapApiResponse } from '@/shared/api/response';
 
+function filenameFromContentDisposition(header: string | undefined, fallback: string): string {
+  if (!header || typeof header !== 'string') return fallback;
+  const star = /filename\*\s*=\s*([^']*)''([^;\s]+)/i.exec(header);
+  if (star?.[2]) {
+    const raw = star[2].replace(/"/g, '').trim();
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      return raw || fallback;
+    }
+  }
+  const quoted = /filename\s*=\s*"([^"]+)"/i.exec(header);
+  if (quoted?.[1]?.trim()) return quoted[1].trim();
+  const unquoted = /filename\s*=\s*([^;\s]+)/i.exec(header);
+  if (unquoted?.[1]) return unquoted[1].replace(/"/g, '').trim();
+  return fallback;
+}
+
 export const APPROVAL_REQUEST_STATUS = ['DRAFT', 'WAIT', 'PENDING', 'APPROVED', 'REJECTED', 'CANCELED'] as const;
 export type ApprovalRequestStatus = (typeof APPROVAL_REQUEST_STATUS)[number];
 export type ApprovalLineStatus = 'WAITING' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELED';
@@ -97,6 +115,8 @@ export type CreateApprovalRequestPayload = {
     stepOrder: number;
     approverMemberId: string;
     approverMemberPositionId: string;
+    /** 결재자 이름 (member-service join 대체) */
+    approverName: string;
   }>;
   viewers?: Array<{
     viewerMemberId: string;
@@ -538,6 +558,23 @@ export const approvalRequestApi = {
   async getRequest(requestId: string): Promise<ApprovalRequestDetail> {
     const response = await httpClient.get(`/approval/requests/${encodeURIComponent(requestId)}`);
     return unwrapSingle(unwrapApiResponse<unknown>(response.data));
+  },
+
+  /** 기안자 또는 결재선 멤버 — PDF 스트림 */
+  async downloadRequestPdf(requestId: string): Promise<{ blob: Blob; filename: string }> {
+    const id = requestId?.trim();
+    if (!id) throw new Error('요청 ID가 없습니다.');
+    const response = await httpClient.get(`/approval/requests/${encodeURIComponent(id)}/pdf`, {
+      responseType: 'blob',
+    });
+    const fallback = `approval-${id}.pdf`;
+    const rawCd =
+      response.headers['content-disposition'] ??
+      response.headers['Content-Disposition'] ??
+      (response.headers as Record<string, unknown>)['content-disposition'];
+    const cd = Array.isArray(rawCd) ? rawCd[0] : rawCd;
+    const filename = filenameFromContentDisposition(typeof cd === 'string' ? cd : undefined, fallback);
+    return { blob: response.data as Blob, filename };
   },
 
   async updateDraft(requestId: string, payload: CreateApprovalRequestPayload): Promise<ApprovalRequestDetail> {

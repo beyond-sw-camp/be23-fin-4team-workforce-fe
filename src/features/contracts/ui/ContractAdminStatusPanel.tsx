@@ -1,3 +1,4 @@
+import { DownloadOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
@@ -23,6 +24,7 @@ import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppModal } from '@/shared/ui/AppModal';
 import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
 import { useAuth } from '@/features/auth/useAuth';
+import { companyApi } from '@/features/organization/api/companyApi';
 import { PERM } from '@/features/permissions/backend-permissions';
 import { usePermissions } from '@/features/permissions/usePermissionsHook';
 import {
@@ -170,6 +172,12 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
     queryFn: () => contractTemplateApi.getContract(selectedContractId!),
     enabled: Boolean(selectedContractId),
   });
+  const { data: companyInfo } = useQuery({
+    queryKey: ['company', 'info'],
+    queryFn: () => companyApi.getCompanyInfo(),
+    staleTime: 60_000,
+  });
+  const companyDisplayName = companyInfo?.companyName?.trim() || '회사';
   const { data: batchContracts = [], isFetching: batchContractsLoading } = useQuery({
     queryKey: ['contract', 'admin', 'batch-contracts', selectedBatch?.batchId],
     queryFn: () => contractTemplateApi.getBatchContracts(selectedBatch!.batchId),
@@ -288,6 +296,42 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
       ]);
     },
     onError: (e: Error) => message.error(e.message || '계약 서명에 실패했습니다.'),
+  });
+
+  const contractPdfDownloadM = useMutation({
+    mutationFn: (id: string) => contractTemplateApi.downloadContractPdf(id),
+    onSuccess: ({ blob, filename }) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      message.success('PDF를 저장했습니다.');
+    },
+    onError: async (err: unknown) => {
+      let detail = '';
+      const e = err as { response?: { data?: unknown } };
+      const data = e?.response?.data;
+      if (data instanceof Blob) {
+        try {
+          const text = await data.text();
+          try {
+            const json = JSON.parse(text) as { message?: string; error?: string };
+            detail = json?.message || json?.error || text;
+          } catch {
+            detail = text;
+          }
+        } catch {
+          /* noop */
+        }
+      } else if (typeof data === 'object' && data !== null) {
+        detail = (data as { message?: string }).message || '';
+      }
+      void message.error(detail ? `계약 PDF 다운로드 실패: ${detail}` : '계약 PDF 다운로드에 실패했습니다.');
+    },
   });
 
   const rejectContractM = useMutation({
@@ -682,6 +726,21 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
                   이력 보기
                 </Button>
               ) : null}
+              {!detailLoading &&
+              contractDetail &&
+              String(contractDetail.contractStatus).toUpperCase() === 'SIGNED' ? (
+                <Button
+                  key="pdf"
+                  icon={<DownloadOutlined />}
+                  loading={
+                    contractPdfDownloadM.isPending &&
+                    contractPdfDownloadM.variables === contractDetail.contractId
+                  }
+                  onClick={() => void contractPdfDownloadM.mutateAsync(contractDetail.contractId)}
+                >
+                  PDF 다운로드
+                </Button>
+              ) : null}
               {!detailLoading && contractDetail && canShowResendButton ? (
                 <Button key="resend" onClick={() => setResendModalOpen(true)}>
                   재발송
@@ -821,7 +880,7 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
                           서명
                         </td>
                         <td className="tw-border tw-border-solid tw-border-black tw-bg-[#efefef] tw-px-2 tw-py-1 tw-text-center tw-text-xs tw-font-semibold">직원</td>
-                        <td className="tw-border tw-border-solid tw-border-black tw-bg-[#efefef] tw-px-2 tw-py-1 tw-text-center tw-text-xs tw-font-semibold">회사</td>
+                        <td className="tw-border tw-border-solid tw-border-black tw-bg-[#efefef] tw-px-2 tw-py-1 tw-text-center tw-text-xs tw-font-semibold">{companyDisplayName}</td>
                       </tr>
                       <tr>
                         <td className="tw-border tw-border-solid tw-border-black tw-bg-white tw-px-1 tw-py-1 tw-text-center tw-align-middle">
@@ -834,7 +893,6 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
                         </td>
                         <td className="tw-border tw-border-solid tw-border-black tw-bg-white tw-px-1 tw-py-1 tw-text-center tw-align-middle">
                           <div className="tw-flex tw-min-h-[3.2rem] tw-flex-col tw-items-center tw-justify-center tw-gap-1">
-                            <span className="tw-text-[11px] tw-font-semibold">{detailSignCells.company.label}</span>
                             {detailSignCells.company.imageUrl ? (
                               <img src={detailSignCells.company.imageUrl} alt="회사 직인" className="tw-max-h-8 tw-max-w-[3.25rem] tw-object-contain" />
                             ) : null}
@@ -1240,7 +1298,7 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
       >
         <div className="tw-px-5 tw-py-4">
         <Form form={batchResendForm} layout="vertical">
-          <Form.Item name="batchName" label="새 배치 이름" rules={[{ required: true, message: '배치 이름을 입력해 주세요.' }]}>
+          <Form.Item name="batchName" label="새 발송 제목" rules={[{ required: true, message: '발송 제목을 입력해 주세요.' }]}>
             <Input maxLength={120} placeholder="예: 2026년 상반기 근로계약 재발송" />
           </Form.Item>
           <Typography.Text type="secondary" className="tw-mb-2 tw-block tw-text-sm">

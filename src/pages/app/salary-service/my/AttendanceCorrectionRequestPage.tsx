@@ -111,6 +111,7 @@ export function AttendanceCorrectionRequestPage() {
           stepOrder: l.stepOrder,
           approverMemberId: l.approverMemberId,
           approverMemberPositionId: l.approverMemberPositionId,
+          approverName: l.memberName,
         })),
       });
     },
