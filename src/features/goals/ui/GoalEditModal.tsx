@@ -1,10 +1,24 @@
 ﻿import { useEffect, useMemo, useState } from 'react';
-import { App, Button, DatePicker, Form, Input, InputNumber, Radio, Select, Space, Switch, Typography } from 'antd';
+import {
+  App,
+  Button,
+  DatePicker,
+  Form,
+  Input,
+  InputNumber,
+  Select,
+  Space,
+  Switch,
+  Typography,
+} from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/features/auth/useAuth';
 import { memberApi } from '@/features/member/api/memberApi';
 import { SingleMemberOrgChartSelectModal } from '@/features/members/ui/SingleMemberOrgChartSelectModal';
+import { organizationApi } from '@/features/organization/api/organizationApi';
+import { findMemberOrganizationId } from '@/features/organization/lib/findMemberOrganizationInOrgChart';
+import { flattenOrganizationsWithMeta } from '@/features/organization/lib/flattenOrganizationTree';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { goalApi } from '../api/goalApi';
 import {
@@ -88,10 +102,54 @@ export function GoalEditModal({
     staleTime: 60_000,
   });
 
-  const defaultObjectiveOwnerId =
-    defaultOwnerType === 'ORGANIZATION'
-      ? currentMemberDetail?.organizationId || defaultOwnerId || ''
-      : defaultOwnerId || '';
+  const { data: organizationTree = [] } = useQuery({
+    queryKey: ['organizations', 'goal-owner-default'],
+    queryFn: () => organizationApi.list(),
+    enabled: open && defaultOwnerType === 'ORGANIZATION' && !!user?.id,
+    staleTime: 5 * 60_000,
+  });
+  const { data: orgChart } = useQuery({
+    queryKey: ['organizations', 'org-chart', 'goal-owner-default'],
+    queryFn: () => organizationApi.getOrgChart(),
+    enabled: open && defaultOwnerType === 'ORGANIZATION' && !!user?.id,
+    staleTime: 5 * 60_000,
+  });
+
+  const organizationRows = useMemo(
+    () => flattenOrganizationsWithMeta(organizationTree as any),
+    [organizationTree],
+  );
+  const organizationIds = useMemo(
+    () => new Set(organizationRows.map((row) => row.id)),
+    [organizationRows],
+  );
+  const organizationIdFromTree = useMemo(
+    () => (user?.id ? findMemberOrganizationId(orgChart?.organizations ?? [], user.id) : null),
+    [orgChart?.organizations, user?.id],
+  );
+  const defaultObjectiveOwnerId = useMemo(() => {
+    if (defaultOwnerType !== 'ORGANIZATION') return defaultOwnerId || '';
+    return (
+      currentMemberDetail?.organizationId ||
+      organizationIdFromTree ||
+      (defaultOwnerId && organizationIds.has(defaultOwnerId) ? defaultOwnerId : '') ||
+      ''
+    );
+  }, [
+    currentMemberDetail?.organizationId,
+    defaultOwnerId,
+    defaultOwnerType,
+    organizationIdFromTree,
+    organizationIds,
+  ]);
+  const defaultObjectiveOwnerName = useMemo(() => {
+    if (!defaultObjectiveOwnerId) return currentMemberDetail?.organizationName || '';
+    return (
+      organizationRows.find((row) => row.id === defaultObjectiveOwnerId)?.name ||
+      currentMemberDetail?.organizationName ||
+      ''
+    );
+  }, [currentMemberDetail?.organizationName, defaultObjectiveOwnerId, organizationRows]);
 
   const { data: availableObjectives = [], isLoading: isObjectivesLoading } = useQuery({
     queryKey: ['goal-my-objectives-for-create'],
@@ -111,6 +169,20 @@ export function GoalEditModal({
     () => availableObjectives.find((item) => item.goalId === selectedObjectiveId) ?? null,
     [availableObjectives, selectedObjectiveId],
   );
+  const currentMemberOwnerId = currentMemberDetail?.memberId || user?.id || defaultOwnerId || '';
+  const currentMemberOwnerLabel = currentMemberDetail
+    ? [
+        currentMemberDetail.name,
+        currentMemberDetail.organizationName,
+        currentMemberDetail.jobGradeName,
+      ]
+        .map((value) => value?.trim())
+        .filter(Boolean)
+        .join(' · ')
+    : [user?.name, user?.departmentName, user?.jobTitle]
+        .map((value) => value?.trim())
+        .filter(Boolean)
+        .join(' · ');
   const krSetupReady = isObjective || !!selectedObjective;
   const isKrCycleLocked = !isObjective && !!selectedObjective;
 
@@ -141,7 +213,10 @@ export function GoalEditModal({
     form.resetFields();
     form.setFieldsValue({
       ownerType: defaultOwnerType ?? 'MEMBER',
-      ownerId: defaultObjectiveOwnerId,
+      ownerId:
+        (defaultOwnerType ?? 'MEMBER') === 'ORGANIZATION'
+          ? defaultObjectiveOwnerId
+          : currentMemberOwnerId,
       alignedOrgGoalId: presetAlignedOrgGoalId ?? null,
       cycle: 'QUARTERLY',
       cycleYear: dayjs().year(),
@@ -153,17 +228,38 @@ export function GoalEditModal({
       gradeB: '',
       gradeC: '',
     });
-    setSelectedOwnerMemberLabel('');
-  }, [defaultObjectiveOwnerId, defaultOwnerType, form, goal, open, presetAlignedOrgGoalId]);
+    setSelectedOwnerMemberLabel(
+      (defaultOwnerType ?? 'MEMBER') === 'MEMBER' ? currentMemberOwnerLabel : '',
+    );
+  }, [
+    currentMemberOwnerId,
+    currentMemberOwnerLabel,
+    defaultObjectiveOwnerId,
+    defaultOwnerType,
+    form,
+    goal,
+    open,
+    presetAlignedOrgGoalId,
+  ]);
 
   useEffect(() => {
-    if (!open || isEdit || ownerType !== 'ORGANIZATION' || !currentMemberDetail?.organizationId) return;
+    if (!open || isEdit || ownerType !== 'ORGANIZATION' || !defaultObjectiveOwnerId) return;
     const currentOwnerId = form.getFieldValue('ownerId');
-    if (!currentOwnerId || currentOwnerId === defaultOwnerId) {
-      form.setFieldValue('ownerId', currentMemberDetail.organizationId);
+    if (currentOwnerId !== defaultObjectiveOwnerId) {
+      form.setFieldValue('ownerId', defaultObjectiveOwnerId);
       form.validateFields(['ownerId']).catch(() => undefined);
     }
-  }, [currentMemberDetail?.organizationId, defaultOwnerId, form, isEdit, open, ownerType]);
+  }, [defaultObjectiveOwnerId, form, isEdit, open, ownerType]);
+
+  useEffect(() => {
+    if (!open || isEdit || ownerType !== 'MEMBER' || !currentMemberOwnerId) return;
+    const currentOwnerId = form.getFieldValue('ownerId');
+    if (currentOwnerId !== currentMemberOwnerId) {
+      form.setFieldValue('ownerId', currentMemberOwnerId);
+      form.validateFields(['ownerId']).catch(() => undefined);
+    }
+    setSelectedOwnerMemberLabel(currentMemberOwnerLabel);
+  }, [currentMemberOwnerId, currentMemberOwnerLabel, form, isEdit, open, ownerType]);
 
   useEffect(() => {
     if (!open || isEdit || ownerType !== 'MEMBER' || !selectedObjective) return;
@@ -173,7 +269,10 @@ export function GoalEditModal({
       cycleYear: dayjs(selectedObjective.cycleStartDate).year(),
       cycleSegment: segment,
       manualPeriodEnabled: false,
-      manualCycleRange: [dayjs(selectedObjective.cycleStartDate), dayjs(selectedObjective.cycleEndDate)],
+      manualCycleRange: [
+        dayjs(selectedObjective.cycleStartDate),
+        dayjs(selectedObjective.cycleEndDate),
+      ],
       title: selectedObjective.title,
       description: selectedObjective.description || '',
     });
@@ -249,7 +348,8 @@ export function GoalEditModal({
     const payload: GoalCreatePayload = {
       ownerType: values.ownerType,
       ownerId: values.ownerId,
-      alignedOrgGoalId: values.ownerType === 'ORGANIZATION' ? null : values.alignedOrgGoalId || null,
+      alignedOrgGoalId:
+        values.ownerType === 'ORGANIZATION' ? null : values.alignedOrgGoalId || null,
       title: values.title,
       description: values.description,
       cycle: values.cycle,
@@ -280,14 +380,11 @@ export function GoalEditModal({
         <Form form={form} layout="vertical">
           <SectionHeader title="기본 정보" />
 
-          <div className="tw-grid tw-grid-cols-2 tw-gap-3">
-            <Form.Item label="목표 유형" name="ownerType" rules={[{ required: true }]}>
-              <Radio.Group disabled={isEdit}>
-                <Radio.Button value="MEMBER">개인 목표</Radio.Button>
-                <Radio.Button value="ORGANIZATION">조직 목표</Radio.Button>
-              </Radio.Group>
-            </Form.Item>
+          <Form.Item name="ownerType" rules={[{ required: true }]} hidden>
+            <Input type="hidden" />
+          </Form.Item>
 
+          <div className="tw-grid tw-grid-cols-1 tw-gap-3">
             <Form.Item shouldUpdate noStyle>
               {({ getFieldValue, setFieldValue }) => {
                 const currentOwnerType = getFieldValue('ownerType') as GoalOwnerType;
@@ -299,6 +396,7 @@ export function GoalEditModal({
                         value={ownerId}
                         onChange={(orgId) => setFieldValue('ownerId', orgId)}
                         placeholder="조직 목표를 소유할 조직을 선택하세요."
+                        selectedOrganizationName={defaultObjectiveOwnerName}
                       />
                     </Form.Item>
                   );
@@ -321,7 +419,11 @@ export function GoalEditModal({
                           <Input
                             readOnly
                             placeholder="개인 목표를 소유할 구성원을 선택하세요."
-                            value={ownerId ? selectedOwnerMemberLabel || '선택된 구성원' : ''}
+                            value={
+                              ownerId
+                                ? selectedOwnerMemberLabel || currentMemberOwnerLabel || '내 계정'
+                                : ''
+                            }
                           />
                           <Button onClick={() => setMemberPickerOpen(true)}>구성원 선택</Button>
                         </Space.Compact>
@@ -338,7 +440,12 @@ export function GoalEditModal({
               className="tw-mt-2"
               label="상위 조직 목표"
               name="alignedOrgGoalId"
-              rules={[{ required: true, message: '개인 목표는 상위 조직 목표와 반드시 연결되어야 합니다.' }]}
+              rules={[
+                {
+                  required: true,
+                  message: '개인 목표는 상위 조직 목표와 반드시 연결되어야 합니다.',
+                },
+              ]}
               tooltip="개인 목표는 상위 조직 목표의 S/A/B/C 기준을 그대로 참조합니다."
             >
               <Select
@@ -358,16 +465,27 @@ export function GoalEditModal({
           )}
 
           <Form.Item label="제목" name="title" rules={[{ required: true, max: 300 }]}>
-            <Input placeholder={isObjective ? '예: 2026 Q2 고객 경험 개선' : '예: 주요 고객 계약 성사율 90% 달성'} />
+            <Input
+              placeholder={
+                isObjective ? '예: 2026 Q2 고객 경험 개선' : '예: 주요 고객 계약 성사율 90% 달성'
+              }
+            />
           </Form.Item>
 
           <Form.Item label="설명" name="description" rules={[{ required: true }]}>
             <TextArea rows={3} placeholder="목표의 배경과 기대 결과를 적어 주세요." />
           </Form.Item>
 
-          <SectionHeader title={isObjective ? '목표 기간' : '목표 기간 / 가중치'} className="tw-mt-2" />
+          <SectionHeader
+            title={isObjective ? '목표 기간' : '목표 기간 / 가중치'}
+            className="tw-mt-2"
+          />
 
-          <div className={isObjective ? 'tw-grid tw-grid-cols-3 tw-gap-3' : 'tw-grid tw-grid-cols-4 tw-gap-3'}>
+          <div
+            className={
+              isObjective ? 'tw-grid tw-grid-cols-3 tw-gap-3' : 'tw-grid tw-grid-cols-4 tw-gap-3'
+            }
+          >
             <Form.Item label="기간 유형" name="cycle" rules={[{ required: true }]}>
               <Select
                 disabled={isEdit || (!isObjective && !krSetupReady) || isKrCycleLocked}
@@ -385,7 +503,11 @@ export function GoalEditModal({
               />
             </Form.Item>
 
-            <Form.Item label="연도" name="cycleYear" rules={[{ required: true, type: 'number', min: 2000, max: 2100 }]}>
+            <Form.Item
+              label="연도"
+              name="cycleYear"
+              rules={[{ required: true, type: 'number', min: 2000, max: 2100 }]}
+            >
               <InputNumber
                 disabled={isEdit || (!isObjective && !krSetupReady) || isKrCycleLocked}
                 min={2000}
@@ -399,7 +521,11 @@ export function GoalEditModal({
                 const cycle = getFieldValue('cycle') as KpiCycle;
                 if (cycle === 'YEARLY') return <div />;
                 return (
-                  <Form.Item label={cycle === 'QUARTERLY' ? '분기' : '반기'} name="cycleSegment" rules={[{ required: true }]}>
+                  <Form.Item
+                    label={cycle === 'QUARTERLY' ? '분기' : '반기'}
+                    name="cycleSegment"
+                    rules={[{ required: true }]}
+                  >
                     <Select
                       disabled={isEdit || (!isObjective && !krSetupReady) || isKrCycleLocked}
                       options={
@@ -442,14 +568,21 @@ export function GoalEditModal({
               const period = safeToCyclePeriod(cycle, year, segment);
               return (
                 <div className="tw-space-y-2">
-                  <Form.Item label="기간 직접 입력" name="manualPeriodEnabled" valuePropName="checked" style={{ marginBottom: 0 }}>
+                  <Form.Item
+                    label="기간 직접 입력"
+                    name="manualPeriodEnabled"
+                    valuePropName="checked"
+                    style={{ marginBottom: 0 }}
+                  >
                     <Switch disabled={isEdit || (!isObjective && !krSetupReady)} />
                   </Form.Item>
                   {!manual ? (
                     <div className="tw-rounded-xl tw-border tw-border-slate-200 tw-bg-slate-50 tw-p-3 tw-text-sm tw-text-slate-600">
                       자동 계산 기간:{' '}
                       <span className="tw-font-semibold">
-                        {period ? `${period.cycleStartDate} ~ ${period.cycleEndDate}` : '목표 기간을 먼저 선택해 주세요.'}
+                        {period
+                          ? `${period.cycleStartDate} ~ ${period.cycleEndDate}`
+                          : '목표 기간을 먼저 선택해 주세요.'}
                       </span>
                     </div>
                   ) : (
@@ -459,7 +592,10 @@ export function GoalEditModal({
                       rules={[{ required: true, message: '기간을 입력해 주세요.' }]}
                       style={{ marginBottom: 0 }}
                     >
-                      <DatePicker.RangePicker disabled={isEdit || (!isObjective && !krSetupReady)} style={{ width: '100%' }} />
+                      <DatePicker.RangePicker
+                        disabled={isEdit || (!isObjective && !krSetupReady)}
+                        style={{ width: '100%' }}
+                      />
                     </Form.Item>
                   )}
                 </div>
@@ -497,7 +633,8 @@ export function GoalEditModal({
                 ))}
               </div>
               <div className="tw-mt-3 tw-rounded-xl tw-border tw-border-blue-100 tw-bg-blue-50/60 tw-p-4 tw-text-sm tw-text-slate-600">
-                조직 목표가 S/A/B/C 평가 기준의 기준점이 됩니다. 같은 조직 목표에 연결된 모든 개인 목표가 이 기준을 공통으로 참조합니다.
+                조직 목표가 S/A/B/C 평가 기준의 기준점이 됩니다. 같은 조직 목표에 연결된 모든 개인
+                목표가 이 기준을 공통으로 참조합니다.
               </div>
             </>
           ) : null}
@@ -510,7 +647,9 @@ export function GoalEditModal({
         onClose={() => setMemberPickerOpen(false)}
         onSelect={(member) => {
           form.setFieldValue('ownerId', member.memberId);
-          setSelectedOwnerMemberLabel(`${member.name} · ${member.organizationName} · ${member.jobGradeName}`);
+          setSelectedOwnerMemberLabel(
+            `${member.name} · ${member.organizationName} · ${member.jobGradeName}`,
+          );
           setMemberPickerOpen(false);
         }}
       />
@@ -534,7 +673,7 @@ export function GoalEditModal({
     for (const [queryKey, data] of entries) {
       if (!Array.isArray(data)) continue;
       const hasGoalShape = data.some(
-        (item) => item && typeof item === 'object' && ('goalId' in (item as Record<string, unknown>)),
+        (item) => item && typeof item === 'object' && 'goalId' in (item as Record<string, unknown>),
       );
       if (!hasGoalShape) continue;
       queryClient.setQueryData(queryKey, (prev: unknown) => {
@@ -543,7 +682,12 @@ export function GoalEditModal({
         const next = prev.map((item) => {
           if (!item || typeof item !== 'object') return item;
           const record = item as Record<string, unknown>;
-          const recordId = typeof record.goalId === 'string' ? record.goalId : typeof record.id === 'string' ? record.id : '';
+          const recordId =
+            typeof record.goalId === 'string'
+              ? record.goalId
+              : typeof record.id === 'string'
+                ? record.id
+                : '';
           if (recordId !== targetGoalId) return item;
           touched = true;
           return { ...record, ...updatedGoal, goalId: targetGoalId };

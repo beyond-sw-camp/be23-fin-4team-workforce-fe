@@ -75,7 +75,7 @@ function calcNetWorkMinutes(
   return Math.max(total - breakMin, 0);
 }
 
-export function AdminWorkSchedulesPage() {
+export function AdminWorkSchedulesPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { message } = App.useApp();
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -104,14 +104,20 @@ export function AdminWorkSchedulesPage() {
   /** FLEXIBLE 일 때는 시간/점심 필드를 null 로 전송. 백엔드는 workType 분기로 검증. */
   const buildTimePayload = (v: FormValues) => {
     if (v.workType === 'FLEXIBLE' || !v.timeRange) {
-      return { startTime: null, endTime: null, workMinutes: null, breakStart: null, breakEnd: null };
+      return {
+        startTime: null,
+        endTime: null,
+        workMinutes: null,
+        breakStart: null,
+        breakEnd: null,
+      };
     }
     const breakRange =
       v.breakRange ??
-      ([
-        dayjs(`1970-01-01T${DEFAULT_BREAK_START}`),
-        dayjs(`1970-01-01T${DEFAULT_BREAK_END}`),
-      ] as [dayjs.Dayjs, dayjs.Dayjs]);
+      ([dayjs(`1970-01-01T${DEFAULT_BREAK_START}`), dayjs(`1970-01-01T${DEFAULT_BREAK_END}`)] as [
+        dayjs.Dayjs,
+        dayjs.Dayjs,
+      ]);
     return {
       startTime: v.timeRange[0].format('HH:mm:ss'),
       endTime: v.timeRange[1].format('HH:mm:ss'),
@@ -147,7 +153,9 @@ export function AdminWorkSchedulesPage() {
         workType: input.v.workType,
         ...buildTimePayload(input.v),
         effectiveFrom: input.v.effectiveRange[0].format('YYYY-MM-DD'),
-        effectiveTo: input.v.effectiveRange[1] ? input.v.effectiveRange[1].format('YYYY-MM-DD') : null,
+        effectiveTo: input.v.effectiveRange[1]
+          ? input.v.effectiveRange[1].format('YYYY-MM-DD')
+          : null,
       }),
     onSuccess: () => {
       message.success('수정되었습니다.');
@@ -208,9 +216,7 @@ export function AdminWorkSchedulesPage() {
                 <Tag color="blue">개인</Tag>
                 <span className="tw-text-sm tw-text-slate-700">{m.name}</span>
                 {m.department ? (
-                  <span className="tw-ml-1 tw-text-xs tw-text-slate-500">
-                    ({m.department})
-                  </span>
+                  <span className="tw-ml-1 tw-text-xs tw-text-slate-500">({m.department})</span>
                 ) : null}
               </span>
             </Tooltip>
@@ -297,17 +303,16 @@ export function AdminWorkSchedulesPage() {
                 const timeRange =
                   isFlexible || !r.startTime || !r.endTime
                     ? undefined
-                    : ([
-                        dayjs(`1970-01-01T${r.startTime}`),
-                        dayjs(`1970-01-01T${r.endTime}`),
-                      ] as [dayjs.Dayjs, dayjs.Dayjs]);
-                const breakRange: [dayjs.Dayjs, dayjs.Dayjs] | undefined =
-                  isFlexible
-                    ? undefined
-                    : ([
-                        dayjs(`1970-01-01T${r.breakStart ?? DEFAULT_BREAK_START}`),
-                        dayjs(`1970-01-01T${r.breakEnd ?? DEFAULT_BREAK_END}`),
-                      ] as [dayjs.Dayjs, dayjs.Dayjs]);
+                    : ([dayjs(`1970-01-01T${r.startTime}`), dayjs(`1970-01-01T${r.endTime}`)] as [
+                        dayjs.Dayjs,
+                        dayjs.Dayjs,
+                      ]);
+                const breakRange: [dayjs.Dayjs, dayjs.Dayjs] | undefined = isFlexible
+                  ? undefined
+                  : ([
+                      dayjs(`1970-01-01T${r.breakStart ?? DEFAULT_BREAK_START}`),
+                      dayjs(`1970-01-01T${r.breakEnd ?? DEFAULT_BREAK_END}`),
+                    ] as [dayjs.Dayjs, dayjs.Dayjs]);
                 form.setFieldsValue({
                   scheduleName: r.scheduleName ?? '',
                   workType: (r.workType as WorkTypeCode) ?? 'FIXED',
@@ -340,50 +345,61 @@ export function AdminWorkSchedulesPage() {
     [deleteM, form, memberMap],
   );
 
+  const pageActions = (
+    <Space>
+      <Button
+        onClick={() => {
+          void navigate({ to: '/app/attendance/flexible-slots' });
+        }}
+        disabled={!hasFlexibleSchedule}
+      >
+        시차 출퇴근 시간대 관리
+      </Button>
+      <AppButton
+        type="primary"
+        onClick={() => {
+          setEditing(null);
+          form.resetFields();
+          const defaultTimeRange: [dayjs.Dayjs, dayjs.Dayjs] = [
+            dayjs('1970-01-01T09:00:00'),
+            dayjs('1970-01-01T18:00:00'),
+          ];
+          const defaultBreakRange: [dayjs.Dayjs, dayjs.Dayjs] = [
+            dayjs(`1970-01-01T${DEFAULT_BREAK_START}`),
+            dayjs(`1970-01-01T${DEFAULT_BREAK_END}`),
+          ];
+          form.setFieldsValue({
+            workType: 'FIXED',
+            timeRange: defaultTimeRange,
+            breakRange: defaultBreakRange,
+            workMinutes: calcNetWorkMinutes(defaultTimeRange, defaultBreakRange),
+            effectiveRange: [dayjs(), null],
+          });
+          setOpen(true);
+        }}
+      >
+        스케줄 추가
+      </AppButton>
+    </Space>
+  );
+
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
-      <AppWorkspacePageTitle
-        eyebrow="Attendance"
-        title="근무 스케줄 관리"
-        subtitle="회사 전체에 공통으로 적용되는 기본 근무 스케줄을 등록·수정합니다. 적용 기간, 근무 유형, 출퇴근 시각을 설정하면 이후 일일 근태에 반영됩니다."
-        extra={(
-          <Space>
-            <Button
-              onClick={() => {
-                void navigate({ to: '/app/attendance/flexible-slots' });
-              }}
-              disabled={!hasFlexibleSchedule}
-            >
-              시차 출퇴근 시간대 관리
-            </Button>
-            <AppButton
-              type="primary"
-              onClick={() => {
-                setEditing(null);
-                form.resetFields();
-                const defaultTimeRange: [dayjs.Dayjs, dayjs.Dayjs] = [
-                  dayjs('1970-01-01T09:00:00'),
-                  dayjs('1970-01-01T18:00:00'),
-                ];
-                const defaultBreakRange: [dayjs.Dayjs, dayjs.Dayjs] = [
-                  dayjs(`1970-01-01T${DEFAULT_BREAK_START}`),
-                  dayjs(`1970-01-01T${DEFAULT_BREAK_END}`),
-                ];
-                form.setFieldsValue({
-                  workType: 'FIXED',
-                  timeRange: defaultTimeRange,
-                  breakRange: defaultBreakRange,
-                  workMinutes: calcNetWorkMinutes(defaultTimeRange, defaultBreakRange),
-                  effectiveRange: [dayjs(), null],
-                });
-                setOpen(true);
-              }}
-            >
-              스케줄 추가
-            </AppButton>
-          </Space>
-        )}
-      />
+      {embedded ? (
+        <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-3">
+          <Typography.Text className="!tw-text-sm !tw-text-slate-600">
+            회사 공통 근무 스케줄과 적용 기간을 등록합니다.
+          </Typography.Text>
+          {pageActions}
+        </div>
+      ) : (
+        <AppWorkspacePageTitle
+          eyebrow="Attendance"
+          title="근무 스케줄 관리"
+          subtitle="회사 전체에 공통으로 적용되는 기본 근무 스케줄을 등록·수정합니다. 적용 기간, 근무 유형, 출퇴근 시각을 설정하면 이후 일일 근태에 반영됩니다."
+          extra={pageActions}
+        />
+      )}
       {!hasFlexibleSchedule ? (
         <Typography.Text type="secondary">
           유연근무(시차출퇴근제) 스케줄을 먼저 생성하면 시차 출퇴근 시간대 관리 버튼이 활성화됩니다.
@@ -418,17 +434,17 @@ export function AdminWorkSchedulesPage() {
         width={560}
       >
         <div className="tw-px-5 tw-py-4">
-        <ScheduleForm
-          form={form}
-          editing={editing}
-          onSubmit={(v) => {
-            if (editing?.workScheduleId) updateM.mutate({ id: editing.workScheduleId, v });
-            else createM.mutate(v);
-          }}
-          onGoToFlexibleSlots={() => {
-            void navigate({ to: '/app/attendance/flexible-slots' });
-          }}
-        />
+          <ScheduleForm
+            form={form}
+            editing={editing}
+            onSubmit={(v) => {
+              if (editing?.workScheduleId) updateM.mutate({ id: editing.workScheduleId, v });
+              else createM.mutate(v);
+            }}
+            onGoToFlexibleSlots={() => {
+              void navigate({ to: '/app/attendance/flexible-slots' });
+            }}
+          />
         </div>
       </AppDoubleActionModal>
     </Space>

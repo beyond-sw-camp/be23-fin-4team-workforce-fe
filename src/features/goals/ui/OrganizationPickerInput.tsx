@@ -10,9 +10,16 @@ type Props = {
   onChange: (orgId: string) => void;
   placeholder?: string;
   allowedOrganizationIds?: string[];
+  selectedOrganizationName?: string;
 };
 
-export function OrganizationPickerInput({ value, onChange, placeholder, allowedOrganizationIds }: Props) {
+export function OrganizationPickerInput({
+  value,
+  onChange,
+  placeholder,
+  allowedOrganizationIds,
+  selectedOrganizationName,
+}: Props) {
   const [open, setOpen] = useState(false);
 
   const { data: tree = [] } = useQuery({
@@ -31,8 +38,8 @@ export function OrganizationPickerInput({ value, onChange, placeholder, allowedO
 
   const selectedName = useMemo(() => {
     if (!value) return '';
-    return rows.find((r) => r.id === value)?.name ?? '';
-  }, [rows, value]);
+    return rows.find((r) => r.id === value)?.name ?? selectedOrganizationName ?? value;
+  }, [rows, selectedOrganizationName, value]);
 
   return (
     <>

@@ -31,6 +31,7 @@ import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import { memberApi } from '@/features/member/api/memberApi';
 import { useAuth } from '@/features/auth/useAuth';
 import type { RetirementSimRes } from '@/features/salary-service/types';
+import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 
 const RETIREMENT_TYPE_KO: Record<string, string> = {
   LEGAL: '법정 퇴직금',
@@ -112,17 +113,16 @@ export function MyRetirementInquiryPage() {
 
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
-      {/* 상단 헤더 */}
-      <div className="tw-flex tw-flex-wrap tw-justify-between tw-items-center tw-gap-3">
-        <div>
-          <Typography.Title level={2} className="!tw-m-0 !tw-text-slate-900">
-            퇴직금 조회
-          </Typography.Title>
-        </div>
-        <Popover content={MID_SETTLE_INFO} trigger="click" placement="bottomRight">
-          <Button icon={<FileTextOutlined />}>중간정산 허용대상</Button>
-        </Popover>
-      </div>
+      <AppWorkspacePageTitle
+        eyebrow="PAYROLL"
+        title="퇴직금 조회"
+        subtitle="예상 퇴직일 기준 퇴직금을 시뮬레이션합니다."
+        extra={
+          <Popover content={MID_SETTLE_INFO} trigger="click" placement="bottomRight">
+            <Button icon={<FileTextOutlined />}>중간정산 허용대상</Button>
+          </Popover>
+        }
+      />
 
       <Row gutter={16}>
         {/* 좌측 — 예상 퇴직금 조회 입력 + 계산하기 버튼 */}
@@ -132,7 +132,9 @@ export function MyRetirementInquiryPage() {
             title={
               <Space size={6}>
                 <span>예상 퇴직금 조회</span>
-                <Typography.Text type="secondary" className="!tw-text-xs">ⓘ</Typography.Text>
+                <Typography.Text type="secondary" className="!tw-text-xs">
+                  ⓘ
+                </Typography.Text>
               </Space>
             }
           >
@@ -201,11 +203,15 @@ export function MyRetirementInquiryPage() {
                 <>
                   <span className="tw-text-slate-500">제도</span>
                   <span className="tw-text-right">
-                    <Tag color={
-                      result.retirementType === 'DC' ? 'green'
-                        : result.retirementType === 'DB' ? 'blue'
-                          : 'default'
-                    }>
+                    <Tag
+                      color={
+                        result.retirementType === 'DC'
+                          ? 'green'
+                          : result.retirementType === 'DB'
+                            ? 'blue'
+                            : 'default'
+                      }
+                    >
                       {RETIREMENT_TYPE_KO[result.retirementType] ?? result.retirementType}
                     </Tag>
                   </span>
@@ -234,20 +240,16 @@ export function MyRetirementInquiryPage() {
           items={[
             {
               key: 'detail',
-              label: <span className="tw-font-medium tw-text-slate-700">예상 퇴직금 상세 산출내역</span>,
+              label: (
+                <span className="tw-font-medium tw-text-slate-700">예상 퇴직금 상세 산출내역</span>
+              ),
               children: <RetirementBreakdown result={result} />,
             },
           ]}
         />
       )}
 
-      {result?.disclaimer && (
-        <Alert
-          type="info"
-          showIcon
-          message={result.disclaimer}
-        />
-      )}
+      {result?.disclaimer && <Alert type="info" showIcon message={result.disclaimer} />}
     </Space>
   );
 }
@@ -299,12 +301,16 @@ function RetirementBreakdown({ result }: { result: RetirementSimRes }) {
           labelStyle={{ width: '15%', backgroundColor: '#fafafa' }}
           contentStyle={{ width: '18.33%', textAlign: 'right' }}
           items={[
-            { key: 'avgSalary', label: '평균급여',     children: fmt(avgSalary) },
-            { key: 'avgBonus',  label: '평균상여',     children: fmt(avgBonus) },
-            { key: 'avgWage',   label: '평균임금',     children: fmt(avgWage) },
-            { key: 'avgPeriod', label: '평균 근속기간', children: `${days.toLocaleString('ko-KR')}일` },
-            { key: 'months',    label: '근속월수',     children: `${months.toLocaleString('ko-KR')}개월` },
-            { key: 'days',      label: '근속일수',     children: `${days.toLocaleString('ko-KR')}일` },
+            { key: 'avgSalary', label: '평균급여', children: fmt(avgSalary) },
+            { key: 'avgBonus', label: '평균상여', children: fmt(avgBonus) },
+            { key: 'avgWage', label: '평균임금', children: fmt(avgWage) },
+            {
+              key: 'avgPeriod',
+              label: '평균 근속기간',
+              children: `${days.toLocaleString('ko-KR')}일`,
+            },
+            { key: 'months', label: '근속월수', children: `${months.toLocaleString('ko-KR')}개월` },
+            { key: 'days', label: '근속일수', children: `${days.toLocaleString('ko-KR')}일` },
           ]}
         />
       </section>
@@ -321,8 +327,8 @@ function RetirementBreakdown({ result }: { result: RetirementSimRes }) {
           labelStyle={{ width: '15%', backgroundColor: '#fafafa' }}
           contentStyle={{ width: '18.33%', textAlign: 'right' }}
           items={[
-            { key: 'incomeTax',    label: '예상 퇴직 소득세',     children: fmt(incomeTax) },
-            { key: 'localTax',     label: '예상 퇴직 주민세',     children: fmt(localTax) },
+            { key: 'incomeTax', label: '예상 퇴직 소득세', children: fmt(incomeTax) },
+            { key: 'localTax', label: '예상 퇴직 주민세', children: fmt(localTax) },
             { key: 'npConversion', label: '국민연금 퇴직 전환금', children: fmt(npConversion) },
             {
               key: 'totalDeduction',
@@ -381,8 +387,7 @@ function AverageWageBreakdown({ result }: { result: RetirementSimRes }) {
     return null;
   }
 
-  const fmt = (n?: number) =>
-    n == null ? '—' : `${Number(n).toLocaleString('ko-KR')}원`;
+  const fmt = (n?: number) => (n == null ? '—' : `${Number(n).toLocaleString('ko-KR')}원`);
 
   const isAverage = result.appliedBasis === 'AVERAGE';
   const isOrdinary = result.appliedBasis === 'ORDINARY';
@@ -396,7 +401,8 @@ function AverageWageBreakdown({ result }: { result: RetirementSimRes }) {
         <Tag color="default">근로기준법 제2조 1항 6호</Tag>
         {(result.excludedLeaveDays ?? 0) > 0 && (
           <Tag color="orange">
-            휴직기간 {result.excludedLeaveDays}일 제외 ({result.excludedLeaveCount ?? 0}건) · 시행령 제2조
+            휴직기간 {result.excludedLeaveDays}일 제외 ({result.excludedLeaveCount ?? 0}건) · 시행령
+            제2조
           </Tag>
         )}
       </div>
@@ -424,7 +430,9 @@ function AverageWageBreakdown({ result }: { result: RetirementSimRes }) {
               if (excluded > 0) {
                 return (
                   <span>
-                    <Typography.Text delete type="secondary">{base}일</Typography.Text>
+                    <Typography.Text delete type="secondary">
+                      {base}일
+                    </Typography.Text>
                     {' → '}
                     <strong>{adjusted ?? base - excluded}일</strong>
                     <Typography.Text type="secondary" className="!tw-ml-1 !tw-text-xs">
@@ -494,9 +502,7 @@ function AverageWageBreakdown({ result }: { result: RetirementSimRes }) {
               </span>
             ),
             children: (
-              <span className="tw-font-bold tw-text-[#2563EB]">
-                {fmt(result.appliedDailyWage)}
-              </span>
+              <span className="tw-font-bold tw-text-[#2563EB]">{fmt(result.appliedDailyWage)}</span>
             ),
           },
           {

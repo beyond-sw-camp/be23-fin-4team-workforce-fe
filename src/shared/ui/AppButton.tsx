@@ -19,19 +19,19 @@ export const AppButton = forwardRef<HTMLButtonElement | HTMLAnchorElement, AppBu
     variant === 'primary'
       ? 'tw-border-0 !tw-bg-[#1e3a5f] hover:!tw-bg-[#152a45] disabled:!tw-cursor-not-allowed disabled:!tw-border disabled:!tw-border-slate-200 disabled:!tw-bg-white disabled:!tw-text-slate-400 disabled:!tw-opacity-100 disabled:!tw-shadow-none disabled:hover:!tw-bg-white disabled:hover:!tw-text-slate-400'
       : variant === 'secondary'
-        ? 'tw-border tw-border-slate-200 tw-bg-white tw-text-[#0F172A] hover:tw-border-[#2563EB]/30 hover:tw-bg-[#EFF6FF] hover:tw-text-[#2563EB]'
+        ? 'tw-border tw-border-slate-200 tw-bg-white tw-text-[#0F172A] hover:tw-border-slate-300 hover:tw-bg-slate-50 hover:tw-text-[#1e3a5f]'
         : variant === 'danger'
           ? 'tw-border-0 !tw-bg-rose-600 hover:!tw-bg-rose-700'
           : variant === 'text'
-            ? 'tw-h-auto tw-border-0 tw-bg-transparent tw-p-0 tw-text-[#2563EB] tw-shadow-none hover:tw-bg-transparent hover:tw-text-[#1D4ED8]'
-            : 'tw-border tw-border-transparent tw-bg-[#EFF6FF] tw-text-[#0F172A] hover:tw-bg-[#DBEAFE]';
+            ? 'tw-h-auto tw-border-0 tw-bg-transparent tw-p-0 tw-text-[#1e3a5f] tw-shadow-none hover:tw-bg-transparent hover:tw-text-[#152a45]'
+            : 'tw-border tw-border-transparent tw-bg-slate-100 tw-text-[#0F172A] hover:tw-bg-slate-200 hover:tw-text-[#1e3a5f]';
 
   return (
     <Button
       ref={ref}
       {...props}
       type={variant === 'primary' || variant === 'danger' ? 'primary' : 'default'}
-      className={twMerge('tw-h-11 tw-rounded-2xl tw-font-bold', variant === 'text' ? 'tw-rounded-none' : '', variantClassName, className)}
+      className={twMerge('tw-h-10 tw-rounded-xl tw-font-semibold', variant === 'text' ? 'tw-rounded-none' : '', variantClassName, className)}
     />
   );
 });

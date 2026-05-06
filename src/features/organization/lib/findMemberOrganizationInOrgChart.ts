@@ -12,12 +12,15 @@ export function findMemberOrganizationId(roots: OrgChartOrgNode[], memberId: str
   const id = memberId.trim();
   if (!id) return null;
   for (const node of roots) {
-    for (const g of node.jobGrades) {
-      for (const m of g.members) {
+    const jobGrades = Array.isArray(node.jobGrades) ? node.jobGrades : [];
+    for (const g of jobGrades) {
+      const members = Array.isArray(g.members) ? g.members : [];
+      for (const m of members) {
         if (eqMemberId(m.memberId, id)) return node.organizationId;
       }
     }
-    const sub = findMemberOrganizationId(node.children, memberId);
+    const children = Array.isArray(node.children) ? node.children : [];
+    const sub = findMemberOrganizationId(children, memberId);
     if (sub) return sub;
   }
   return null;

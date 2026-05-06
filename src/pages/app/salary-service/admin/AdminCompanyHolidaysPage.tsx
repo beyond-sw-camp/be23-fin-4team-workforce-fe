@@ -71,7 +71,7 @@ function apiErrorMessage(e: unknown): string {
   return '요청에 실패했습니다.';
 }
 
-export function AdminCompanyHolidaysPage() {
+export function AdminCompanyHolidaysPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { message } = App.useApp();
   const qc = useQueryClient();
   const [editing, setEditing] = useState<CompanyHoliday | null>(null);
@@ -99,9 +99,7 @@ export function AdminCompanyHolidaysPage() {
       message.success('공휴일이 등록되었습니다.');
       setOpen(false);
       form.resetFields();
-      qc.setQueryData<CompanyHoliday[]>(QK, (old) =>
-        sortHolidaysByDate([...(old ?? []), created]),
-      );
+      qc.setQueryData<CompanyHoliday[]>(QK, (old) => sortHolidaysByDate([...(old ?? []), created]));
     },
     onError: (e: unknown) => message.error(apiErrorMessage(e) || '등록에 실패했습니다.'),
   });
@@ -169,7 +167,8 @@ export function AdminCompanyHolidaysPage() {
       }
       void qc.invalidateQueries({ queryKey: QK });
     },
-    onError: (e: unknown) => message.error(apiErrorMessage(e) || '법정 공휴일 새로고침에 실패했습니다.'),
+    onError: (e: unknown) =>
+      message.error(apiErrorMessage(e) || '법정 공휴일 새로고침에 실패했습니다.'),
   });
 
   const dayHolidays = useMemo(() => holidaysOnDay(holidays, selectedDay), [holidays, selectedDay]);
@@ -185,7 +184,9 @@ export function AdminCompanyHolidaysPage() {
     setEditing(record);
     setOpen(true);
     form.setFieldsValue({
-      holidayDate: record.holidayDate ? dayjs(holidayDayKey(record) || record.holidayDate) : dayjs(),
+      holidayDate: record.holidayDate
+        ? dayjs(holidayDayKey(record) || record.holidayDate)
+        : dayjs(),
       holidayName: record.holidayName ?? '',
       isPaidYn: (record.isPaidYn as 'Y' | 'N') ?? 'Y',
     });
@@ -260,19 +261,34 @@ export function AdminCompanyHolidaysPage() {
     );
 
   const calendarLoading = listQ.isLoading || listQ.isFetching;
+  const pageActions = (
+    <Button
+      type="primary"
+      className={PRIMARY_BUTTON_CLASS}
+      onClick={() => openCreateForDay(selectedDay)}
+    >
+      공휴일 추가
+    </Button>
+  );
 
   return (
     <Space direction="vertical" className="tw-w-full" size={18}>
-      <AppWorkspacePageTitle
-        eyebrow="Attendance"
-        title="회사 공휴일 관리"
-        subtitle="월별 달력에서 공휴일을 확인합니다. 직접 등록한 휴일은 법정 공휴일만 다시 불러와도 유지됩니다."
-        extra={(
-          <Button type="primary" className={PRIMARY_BUTTON_CLASS} onClick={() => openCreateForDay(selectedDay)}>
-            공휴일 추가
-          </Button>
-        )}
-      />
+      {embedded ? (
+        <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-3">
+          <Typography.Text className="!tw-text-sm !tw-text-slate-600">
+            월별 달력에서 공휴일을 확인합니다. 직접 등록한 휴일은 법정 공휴일만 다시 불러와도
+            유지됩니다.
+          </Typography.Text>
+          {pageActions}
+        </div>
+      ) : (
+        <AppWorkspacePageTitle
+          eyebrow="Attendance"
+          title="회사 공휴일 관리"
+          subtitle="월별 달력에서 공휴일을 확인합니다. 직접 등록한 휴일은 법정 공휴일만 다시 불러와도 유지됩니다."
+          extra={pageActions}
+        />
+      )}
 
       <Card className={PANEL_CARD_CLASS} styles={{ body: { padding: 24 } }}>
         <div className="tw-flex tw-flex-col tw-gap-4">
@@ -290,15 +306,17 @@ export function AdminCompanyHolidaysPage() {
                 아래 연도는{' '}
                 <Typography.Text strong className="tw-text-slate-700">
                   법정 공휴일만
-                </Typography.Text>
-                {' '}
-                다시 수집할 때만 사용됩니다. 달력에서 보는 월과는 별도로, 가져올 연도를 지정한 뒤 새로고침하세요.
+                </Typography.Text>{' '}
+                다시 수집할 때만 사용됩니다. 달력에서 보는 월과는 별도로, 가져올 연도를 지정한 뒤
+                새로고침하세요.
               </Typography.Paragraph>
             </div>
           </div>
           <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-3 tw-rounded-xl tw-bg-slate-50 tw-p-4">
             <Space align="center" size={8}>
-              <Typography.Text className="tw-text-xs tw-font-medium tw-text-slate-600">법정 공휴일 대상 연도</Typography.Text>
+              <Typography.Text className="tw-text-xs tw-font-medium tw-text-slate-600">
+                법정 공휴일 대상 연도
+              </Typography.Text>
               <InputNumber
                 value={refreshYear}
                 min={2020}
@@ -419,7 +437,10 @@ export function AdminCompanyHolidaysPage() {
             />
           </Spin>
           {!calendarLoading && holidays.length === 0 ? (
-            <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-4 !tw-rounded-xl !tw-bg-slate-50 !tw-px-4 !tw-py-3 !tw-text-center !tw-text-xs">
+            <Typography.Paragraph
+              type="secondary"
+              className="!tw-mb-0 !tw-mt-4 !tw-rounded-xl !tw-bg-slate-50 !tw-px-4 !tw-py-3 !tw-text-center !tw-text-xs"
+            >
               등록된 공휴일이 없습니다. 상단에서 추가하거나 법정 공휴일을 불러오세요.
             </Typography.Paragraph>
           ) : null}
@@ -435,7 +456,12 @@ export function AdminCompanyHolidaysPage() {
                 {selectedDay.format('YYYY년 M월 D일')} ({WEEKDAY_KO[selectedDay.day()]})
               </Typography.Text>
             </div>
-            <Button type="primary" block className={PRIMARY_BUTTON_CLASS} onClick={() => openCreateForDay(selectedDay)}>
+            <Button
+              type="primary"
+              block
+              className={PRIMARY_BUTTON_CLASS}
+              onClick={() => openCreateForDay(selectedDay)}
+            >
               이 날짜에 공휴일 추가
             </Button>
             {dayHolidays.length === 0 ? (
@@ -497,26 +523,34 @@ export function AdminCompanyHolidaysPage() {
         destroyOnHidden
       >
         <div className="tw-px-5 tw-py-4">
-        <Form<FormValues>
-          form={form}
-          layout="vertical"
-          initialValues={{ isPaidYn: 'Y', holidayDate: dayjs() }}
-        >
-          <Form.Item label="날짜" name="holidayDate" rules={[{ required: true, message: '날짜를 선택하세요.' }]}>
-            <DatePicker style={{ width: '100%' }} format="YYYY-MM-DD" />
-          </Form.Item>
-          <Form.Item label="공휴일명" name="holidayName" rules={[{ required: true, message: '공휴일명을 입력하세요.' }]}>
-            <Input maxLength={50} placeholder="예: 임시 공휴일" />
-          </Form.Item>
-          <Form.Item label="유급 여부" name="isPaidYn" rules={[{ required: true }]}>
-            <Select
-              options={[
-                { value: 'Y', label: '유급' },
-                { value: 'N', label: '무급' },
-              ]}
-            />
-          </Form.Item>
-        </Form>
+          <Form<FormValues>
+            form={form}
+            layout="vertical"
+            initialValues={{ isPaidYn: 'Y', holidayDate: dayjs() }}
+          >
+            <Form.Item
+              label="날짜"
+              name="holidayDate"
+              rules={[{ required: true, message: '날짜를 선택하세요.' }]}
+            >
+              <DatePicker style={{ width: '100%' }} format="YYYY-MM-DD" />
+            </Form.Item>
+            <Form.Item
+              label="공휴일명"
+              name="holidayName"
+              rules={[{ required: true, message: '공휴일명을 입력하세요.' }]}
+            >
+              <Input maxLength={50} placeholder="예: 임시 공휴일" />
+            </Form.Item>
+            <Form.Item label="유급 여부" name="isPaidYn" rules={[{ required: true }]}>
+              <Select
+                options={[
+                  { value: 'Y', label: '유급' },
+                  { value: 'N', label: '무급' },
+                ]}
+              />
+            </Form.Item>
+          </Form>
         </div>
       </AppDoubleActionModal>
     </Space>

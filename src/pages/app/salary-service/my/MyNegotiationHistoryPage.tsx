@@ -12,7 +12,6 @@ import {
   Card,
   Empty,
   Input,
-  Modal,
   Popconfirm,
   Space,
   Statistic,
@@ -28,6 +27,8 @@ import type {
   NegotiationTypeCode,
   SalaryNegotiation,
 } from '@/features/salary-service/types';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
+import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 
 const NEG_TYPE_KO: Record<string, string> = {
   REGULAR: '정기',
@@ -240,15 +241,11 @@ export function MyNegotiationHistoryPage() {
 
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
-      <div>
-        <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
-          내 연봉 협상 이력
-        </Typography.Title>
-        <Typography.Text type="secondary" className="tw-text-xs">
-          관리자가 등록한 본인 협상안을 검토하고 수락 / 거절로 응답할 수 있습니다. 수락 시 관리자가 적용
-          처리하면 새 기본급이 다음 정기급여부터 반영됩니다.
-        </Typography.Text>
-      </div>
+      <AppWorkspacePageTitle
+        eyebrow="PAYROLL"
+        title="내 연봉 협상 이력"
+        subtitle="관리자가 등록한 협상안을 검토하고 수락 또는 거절로 응답할 수 있습니다."
+      />
 
       <div className="tw-grid tw-grid-cols-2 lg:tw-grid-cols-4 tw-gap-3">
         <Card size="small">
@@ -296,25 +293,26 @@ export function MyNegotiationHistoryPage() {
         />
       </Card>
 
-      <Modal
+      <AppDoubleActionModal
         open={rejectTarget !== null}
         title="협상 제안 거절"
-        okText="거절 확정"
-        okButtonProps={{ danger: true, disabled: !rejectReason.trim() }}
+        confirmText="거절 확정"
+        confirmDanger
+        confirmDisabled={!rejectReason.trim()}
         cancelText="취소"
         confirmLoading={rejectM.isPending}
-        onCancel={() => {
+        onClose={() => {
           setRejectTarget(null);
           setRejectReason('');
         }}
-        onOk={() => {
+        onConfirm={() => {
           if (!rejectTarget?.negotiationId || !rejectReason.trim()) return;
           rejectM.mutate({ id: rejectTarget.negotiationId, reason: rejectReason.trim() });
         }}
         destroyOnHidden
       >
         {rejectTarget && (
-          <Space direction="vertical" className="tw-w-full" size="middle">
+          <Space direction="vertical" className="tw-w-full tw-px-5 tw-py-4" size="middle">
             <div className="tw-rounded-md tw-bg-slate-50 tw-p-3 tw-text-sm">
               <div>
                 <Typography.Text type="secondary">현재 기본급: </Typography.Text>
@@ -322,7 +320,9 @@ export function MyNegotiationHistoryPage() {
               </div>
               <div>
                 <Typography.Text type="secondary">제안 기본급: </Typography.Text>
-                <Typography.Text strong>{formatWon(rejectTarget.proposedBaseSalary)}</Typography.Text>
+                <Typography.Text strong>
+                  {formatWon(rejectTarget.proposedBaseSalary)}
+                </Typography.Text>
               </div>
             </div>
             <div>
@@ -343,7 +343,7 @@ export function MyNegotiationHistoryPage() {
             </Typography.Text>
           </Space>
         )}
-      </Modal>
+      </AppDoubleActionModal>
     </Space>
   );
 }

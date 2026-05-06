@@ -7,15 +7,11 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Card, Empty, Space, Statistic, Tabs, Tag, Tooltip, Typography } from 'antd';
-import {
-  BankOutlined,
-  GiftOutlined,
-  PercentageOutlined,
-  TrophyOutlined,
-} from '@ant-design/icons';
+import { BankOutlined, GiftOutlined, PercentageOutlined, TrophyOutlined } from '@ant-design/icons';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import { useAuth } from '@/features/auth/useAuth';
 import type { BonusPolicy, Salary } from '@/features/salary-service/types';
+import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 
 function formatWon(n: number | null | undefined) {
   if (n == null || Number.isNaN(n)) return '—';
@@ -30,7 +26,7 @@ function activeAt(salary: Salary, today: string): boolean {
 
 function ComingSoon({ title, description }: { title: string; description: string }) {
   return (
-    <div className="tw-py-12">
+    <div className="tw-rounded-xl tw-border tw-border-dashed tw-border-slate-200 tw-bg-slate-50/70 tw-py-12">
       <Empty
         image={Empty.PRESENTED_IMAGE_SIMPLE}
         description={
@@ -82,32 +78,27 @@ function BonusForecastSection() {
     const regularCount = policy.regularBonusPaymentCount ?? 0;
     const regularPerPayment =
       regularUsed && baseSalary > 0 && regularCount > 0
-        ? Math.floor(baseSalary * (regularAnnualRate / 100) / regularCount)
+        ? Math.floor((baseSalary * (regularAnnualRate / 100)) / regularCount)
         : 0;
     const regularAnnualTotal =
-      regularUsed && baseSalary > 0
-        ? Math.floor(baseSalary * (regularAnnualRate / 100))
-        : 0;
+      regularUsed && baseSalary > 0 ? Math.floor(baseSalary * (regularAnnualRate / 100)) : 0;
 
     // 성과급 1회 최대
     const perfUsed = policy.usePerformanceBonusYn === 'Y';
     const perfMaxRate = policy.performanceBonusMaxRate ?? 0;
     const perfMaxAmount =
-      perfUsed && baseSalary > 0
-        ? Math.floor(baseSalary * (perfMaxRate / 100))
-        : 0;
+      perfUsed && baseSalary > 0 ? Math.floor(baseSalary * (perfMaxRate / 100)) : 0;
 
     // 명절상여 1회 예상
     const holidayUsed = policy.useHolidayBonusYn === 'Y';
     const holidayValue = policy.holidayBonusValue ?? 0;
-    const holidayPerPayment =
-      holidayUsed
-        ? policy.holidayBonusType === 'AMOUNT'
-          ? holidayValue
-          : baseSalary > 0
-            ? Math.floor(baseSalary * (holidayValue / 100))
-            : 0
-        : 0;
+    const holidayPerPayment = holidayUsed
+      ? policy.holidayBonusType === 'AMOUNT'
+        ? holidayValue
+        : baseSalary > 0
+          ? Math.floor(baseSalary * (holidayValue / 100))
+          : 0
+      : 0;
 
     return {
       policy,
@@ -148,8 +139,7 @@ function BonusForecastSection() {
   }
 
   const { policy } = forecast;
-  const allDisabled =
-    !forecast.regularUsed && !forecast.perfUsed && !forecast.holidayUsed;
+  const allDisabled = !forecast.regularUsed && !forecast.perfUsed && !forecast.holidayUsed;
 
   return (
     <Space direction="vertical" className="tw-w-full" size={12}>
@@ -260,9 +250,7 @@ function BonusForecastSection() {
             <Space direction="vertical" size={4} className="tw-w-full">
               <Statistic
                 title={
-                  forecast.holidayType === 'RATE'
-                    ? `기본급 ${forecast.holidayValue}%`
-                    : '정액 지급'
+                  forecast.holidayType === 'RATE' ? `기본급 ${forecast.holidayValue}%` : '정액 지급'
                 }
                 value={forecast.holidayPerPayment}
                 suffix="원"
@@ -280,7 +268,8 @@ function BonusForecastSection() {
       </div>
 
       <Typography.Text type="secondary" className="tw-text-xs">
-        * 위 금액은 회사 정책 기준 단순 계산 예상치이며, 실제 지급액은 평가 결과 / 회사 사정 / 세금 공제 등에 따라 달라질 수 있습니다.
+        * 위 금액은 회사 정책 기준 단순 계산 예상치이며, 실제 지급액은 평가 결과 / 회사 사정 / 세금
+        공제 등에 따라 달라질 수 있습니다.
       </Typography.Text>
     </Space>
   );
@@ -289,14 +278,11 @@ function BonusForecastSection() {
 export function MyIncomeManagementPage() {
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
-      <div>
-        <Typography.Title level={4} className="!tw-m-0 !tw-text-slate-900">
-          소득관리
-        </Typography.Title>
-        <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-sm">
-          본인 보너스 예상 / 급여 입금 계좌 / 원천징수 세액 조정을 한 곳에서 확인합니다
-        </Typography.Paragraph>
-      </div>
+      <AppWorkspacePageTitle
+        eyebrow="PAYROLL"
+        title="소득관리"
+        subtitle="본인 보너스 예상, 급여 입금 계좌, 원천징수 세액 조정을 한 곳에서 확인합니다."
+      />
 
       <Tabs
         defaultActiveKey="bonus-forecast"
@@ -304,7 +290,7 @@ export function MyIncomeManagementPage() {
           {
             key: 'bonus-forecast',
             label: (
-              <span>
+              <span className="wf-workspace-tab-label">
                 <TrophyOutlined /> 보너스 예상
               </span>
             ),
@@ -313,7 +299,7 @@ export function MyIncomeManagementPage() {
           {
             key: 'bank-account',
             label: (
-              <span>
+              <span className="wf-workspace-tab-label">
                 <BankOutlined /> 은행 계좌
               </span>
             ),
@@ -327,7 +313,7 @@ export function MyIncomeManagementPage() {
           {
             key: 'withholding-tax',
             label: (
-              <span>
+              <span className="wf-workspace-tab-label">
                 <PercentageOutlined /> 원천징수 세액 조정
               </span>
             ),

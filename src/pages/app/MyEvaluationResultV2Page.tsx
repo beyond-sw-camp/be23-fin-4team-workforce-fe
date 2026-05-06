@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { App, Card, Empty, Input, Modal, Select, Space, Tag, Typography } from 'antd';
+import { App, Card, Empty, Input, Select, Space, Tag, Typography } from 'antd';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import dayjs from 'dayjs';
@@ -261,34 +261,36 @@ function ObjectionModal({
   if (!target) return null;
 
   return (
-    <Modal
+    <AppDoubleActionModal
       open={open}
-      onCancel={onClose}
-      onOk={() => objectionMut.mutate()}
+      onClose={onClose}
+      onConfirm={() => objectionMut.mutate()}
       title="평가 결과 이의제기"
-      okText="등록"
+      confirmText="등록"
       cancelText="취소"
       confirmLoading={objectionMut.isPending}
-      okButtonProps={{ disabled: !content.trim() }}
+      confirmDisabled={!content.trim()}
     >
-      <Card className="tw-mb-3 tw-rounded-xl tw-border tw-border-slate-200/90 tw-bg-slate-50/60" styles={{ body: { padding: 14 } }}>
-        <div className="tw-flex tw-items-center tw-gap-3">
-          <span className="tw-text-xs tw-text-slate-500">최종 등급</span>
-          <Tag color={GRADE_COLOR[target.confirmedGrade as keyof typeof GRADE_COLOR] ?? 'default'} className="!tw-m-0 !tw-rounded-full !tw-px-3 !tw-py-0.5 !tw-text-sm !tw-font-bold">
-            {target.confirmedGrade ?? '-'}
-          </Tag>
-          <span className="tw-ml-auto tw-text-xs tw-text-slate-400">점수 {target.finalScoreSnapshot?.toFixed(2) ?? '-'}</span>
-        </div>
-      </Card>
-      <TextArea
-        rows={6}
-        value={content}
-        onChange={(event) => setContent(event.target.value)}
-        placeholder="어떤 부분을 다시 검토해 달라는 것인지 구체적으로 적어 주세요."
-        maxLength={5000}
-        showCount
-      />
-    </Modal>
+      <div className="tw-px-5 tw-py-4">
+        <Card className="tw-mb-3 tw-rounded-xl tw-border tw-border-slate-200/90 tw-bg-slate-50/60" styles={{ body: { padding: 14 } }}>
+          <div className="tw-flex tw-items-center tw-gap-3">
+            <span className="tw-text-xs tw-text-slate-500">최종 등급</span>
+            <Tag color={GRADE_COLOR[target.confirmedGrade as keyof typeof GRADE_COLOR] ?? 'default'} className="!tw-m-0 !tw-rounded-full !tw-px-3 !tw-py-0.5 !tw-text-sm !tw-font-bold">
+              {target.confirmedGrade ?? '-'}
+            </Tag>
+            <span className="tw-ml-auto tw-text-xs tw-text-slate-400">점수 {target.finalScoreSnapshot?.toFixed(2) ?? '-'}</span>
+          </div>
+        </Card>
+        <TextArea
+          rows={6}
+          value={content}
+          onChange={(event) => setContent(event.target.value)}
+          placeholder="어떤 부분을 다시 검토해 달라는 것인지 구체적으로 적어 주세요."
+          maxLength={5000}
+          showCount
+        />
+      </div>
+    </AppDoubleActionModal>
   );
 }
 

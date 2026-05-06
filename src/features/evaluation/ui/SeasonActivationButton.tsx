@@ -1,4 +1,4 @@
-import { App, Card, Modal, Tag, Tooltip } from 'antd';
+import { App, Card, Tag, Tooltip } from 'antd';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useMemberDisplayNames } from '@/features/members/hooks/useMemberDisplayNames';
@@ -99,39 +99,31 @@ export function SeasonActivationButton({ seasonId, disabled, disabledTooltip }: 
         button
       )}
 
-      <Modal
+      <AppSingleActionModal
         open={!!leadBlockMessage}
-        onCancel={() => setLeadBlockMessage(null)}
+        onClose={() => setLeadBlockMessage(null)}
+        onSubmit={() => setLeadBlockMessage(null)}
         title="최종 검토자가 필요합니다"
+        submitText="확인"
         width={520}
         destroyOnHidden
-        footer={
-          <div className="tw-flex tw-justify-end">
-            <AppButton variant="primary" onClick={() => setLeadBlockMessage(null)}>
-              확인
-            </AppButton>
-          </div>
-        }
       >
-        {leadBlockMessage ? <LeadFailureBody message={leadBlockMessage} /> : null}
-      </Modal>
+        <div className="tw-px-5 tw-py-4">
+          {leadBlockMessage ? <LeadFailureBody message={leadBlockMessage} /> : null}
+        </div>
+      </AppSingleActionModal>
 
-      <Modal
+      <AppSingleActionModal
         open={!!blocked}
-        onCancel={() => setBlocked(null)}
+        onClose={() => setBlocked(null)}
+        onSubmit={() => setBlocked(null)}
         title="평가 시작 전 확인이 필요합니다"
+        submitText="확인"
         width={700}
         destroyOnHidden
-        footer={
-          <div className="tw-flex tw-justify-end">
-            <AppButton variant="primary" onClick={() => setBlocked(null)}>
-              확인
-            </AppButton>
-          </div>
-        }
       >
         {blocked ? (
-          <div className="tw-space-y-4">
+          <div className="tw-space-y-4 tw-px-5 tw-py-4">
             <div className="tw-grid tw-grid-cols-1 tw-gap-3 md:tw-grid-cols-2">
               <SummaryCard
                 tone="slate"
@@ -155,7 +147,7 @@ export function SeasonActivationButton({ seasonId, disabled, disabledTooltip }: 
             <MemberSection label="개인 목표 없음" members={blocked.missingGoalsMembers} variant="slate" />
           </div>
         ) : null}
-      </Modal>
+      </AppSingleActionModal>
     </>
   );
 }
