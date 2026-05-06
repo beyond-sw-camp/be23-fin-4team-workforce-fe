@@ -131,10 +131,11 @@ const DEFAULT_CATALOG: DefaultSection[] = [
   },
   {
     key: 'female',
-    title: '여성 보호',
-    description: '회사 정책에 따라 선택하세요 (근로기준법 제73조).',
+    title: '여성 보호 / 출산',
+    description: '근로기준법 제73조(생리휴가), 제74조(출산전후휴가) 관련.',
     items: [
-      { code: 'MENSTRUATION', name: '생리휴가', defaultChecked: false },
+      { code: 'MATERNITY',     name: '출산휴가',  defaultChecked: true  },
+      { code: 'MENSTRUATION',  name: '생리휴가',  defaultChecked: false },
     ],
   },
 ];

@@ -521,12 +521,6 @@ function buildAppShellMenuItems(
                             title: APP_MENU_LABEL['/app/salary/settings'],
                         },
                         {
-                            key: '/app/admin/batch-schedule',
-                            icon: <ScheduleOutlined className="tw-text-lg"/>,
-                            label: APP_MENU_LABEL['/app/admin/batch-schedule'],
-                            title: APP_MENU_LABEL['/app/admin/batch-schedule'],
-                        },
-                        {
                             key: '/app/salary/retirement-policy',
                             icon: <BankOutlined className="tw-text-lg"/>,
                             label: APP_MENU_LABEL['/app/salary/retirement-policy'],
@@ -816,11 +810,18 @@ function useAppShellSiderMenuItems(currentPathname: string): {
             label: 'HR 정책 문서',
             title: 'HR 정책 문서',
         };
+        // 자동 작업 관리 - HR 정책 문서 다음 (시스템 설정 영역)
+        const batchSchedule = {
+            key: '/app/admin/batch-schedule',
+            icon: <ScheduleOutlined className="tw-text-lg"/>,
+            label: APP_MENU_LABEL['/app/admin/batch-schedule'],
+            title: APP_MENU_LABEL['/app/admin/batch-schedule'],
+        };
 
         if (esgMenuItem) {
-            return {items: [...items, esgMenuItem, doc], showSalaryNegotiationSubmenu};
+            return {items: [...items, esgMenuItem, doc, batchSchedule], showSalaryNegotiationSubmenu};
         }
-        return {items: [...items, doc], showSalaryNegotiationSubmenu};
+        return {items: [...items, doc, batchSchedule], showSalaryNegotiationSubmenu};
     }, [
         esgConfig,
         isAdmin,

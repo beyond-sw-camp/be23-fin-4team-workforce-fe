@@ -23,6 +23,7 @@ import {
   Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import { LeftOutlined, RightOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import { hasActivePayGradeSalaryPolicy } from '@/features/salary-service/lib/salaryPolicyAccess';
@@ -1668,21 +1669,23 @@ function SalaryItemTemplateTab() {
  * ====================================================================== */
 
 export function OvertimeUsageTab() {
-  // 검색 모드 - 기준일(특정일) vs 월(말일 기준)
-  const [searchMode, setSearchMode] = useState<'date' | 'month'>('date');
-  const [baseDate, setBaseDate] = useState<dayjs.Dayjs>(() => dayjs());
-  const [baseMonth, setBaseMonth] = useState<dayjs.Dayjs>(() => dayjs());
   // 누적 기간 단위 - 주 / 월
   const [periodMode, setPeriodMode] = useState<'WEEK' | 'MONTH'>('MONTH');
+  // 기준 시점 - periodMode 에 따라 주 picker 또는 월 picker
+  const [baseDate, setBaseDate] = useState<dayjs.Dayjs>(() => dayjs());
   // 이름 검색 - 클라이언트 필터
   const [nameKeyword, setNameKeyword] = useState<string>('');
   // 사용률 임계 필터 - 50%/80%/100% 이상
   const [thresholdPct, setThresholdPct] = useState<number>(0);
+  // 부서/직급 필터
+  const [orgFilter, setOrgFilter] = useState<string | undefined>(undefined);
+  const [jobGradeFilter, setJobGradeFilter] = useState<string | undefined>(undefined);
+  const [jobTitleFilter, setJobTitleFilter] = useState<string | undefined>(undefined);
 
-  // 월 모드면 해당 월의 말일을 baseDate 로 사용 (월간 누적 OT 가 같이 보이도록)
-  const effectiveDate = searchMode === 'month'
-    ? baseMonth.endOf('month')
-    : baseDate;
+  // periodMode WEEK 면 해당 주의 일요일, MONTH 면 그 달 말일
+  const effectiveDate = periodMode === 'WEEK'
+    ? baseDate.endOf('week')
+    : baseDate.endOf('month');
   const iso = effectiveDate.format('YYYY-MM-DD');
   const formatMinutes = (v?: number | null) =>
     v == null ? '—' : `${v.toLocaleString()}분 (${(v / 60).toFixed(1)}h)`;
@@ -1703,9 +1706,30 @@ export function OvertimeUsageTab() {
     return all.filter((r) => {
       if (kw && !(r.name ?? '').toLowerCase().includes(kw)) return false;
       if (thresholdPct > 0 && (r.usagePercent ?? 0) < thresholdPct) return false;
+      if (orgFilter && r.organizationName !== orgFilter) return false;
+      if (jobGradeFilter && r.jobGradeName !== jobGradeFilter) return false;
+      if (jobTitleFilter && r.jobTitleName !== jobTitleFilter) return false;
       return true;
     });
-  }, [listQ.data, nameKeyword, thresholdPct]);
+  }, [listQ.data, nameKeyword, thresholdPct, orgFilter, jobGradeFilter, jobTitleFilter]);
+
+  // 필터 옵션 - 조회된 데이터 기반 distinct
+  const filterOptions = useMemo(() => {
+    const all = listQ.data ?? [];
+    const orgs = new Set<string>();
+    const grades = new Set<string>();
+    const titles = new Set<string>();
+    all.forEach((r) => {
+      if (r.organizationName) orgs.add(r.organizationName);
+      if (r.jobGradeName) grades.add(r.jobGradeName);
+      if (r.jobTitleName) titles.add(r.jobTitleName);
+    });
+    return {
+      orgs: Array.from(orgs).sort().map((v) => ({ value: v, label: v })),
+      grades: Array.from(grades).sort().map((v) => ({ value: v, label: v })),
+      titles: Array.from(titles).sort().map((v) => ({ value: v, label: v })),
+    };
+  }, [listQ.data]);
 
   // 요약 - 위험/주의/정상 카운트
   const summary = useMemo(() => {
@@ -1772,65 +1796,96 @@ export function OvertimeUsageTab() {
       defaultSortOrder: 'descend',
     },
     {
-      title: '한도 초과분',
+      title: periodMode === 'WEEK' ? '주 한도 초과분' : '월 한도 초과분',
       dataIndex: 'exceedMinutes',
       key: 'exceedMinutes',
-      width: 130,
+      width: 140,
       align: 'right',
       render: (v: number | null) =>
         !v ? <Typography.Text type="secondary" className="tw-text-sm">—</Typography.Text>
             : <Tag color="red" className="!tw-text-sm">{v}분</Tag>,
     },
-  ], [periodLabel]);
+  ], [periodLabel, periodMode]);
+
+  // 기간 분할 단위별 동적 컬럼 (WEEK -> 7일, MONTH -> 주차별)
+  // 첫 행의 buckets 기준으로 컬럼 헤더 생성, 모든 직원이 동일 키 가짐 (BE 가 일자/주차 union 으로 채움)
+  const bucketCols = useMemo<ColumnsType<OvertimeUsage>>(() => {
+    const sample = (filteredRows[0] ?? listQ.data?.[0])?.buckets ?? [];
+    return sample.map((b) => ({
+      title: (
+        // BE Bucket.holiday 가 true 면 빨간색 헤더 (주말 + 회사 공휴일 + 법정공휴일)
+        <span style={{ color: b.holiday ? '#dc2626' : undefined }}>{b.label}</span>
+      ),
+      key: `bucket-${b.key}`,
+      width: periodMode === 'WEEK' ? 90 : 100,
+      align: 'right' as const,
+      render: (_: unknown, row: OvertimeUsage) => {
+        const found = row.buckets?.find((x) => x.key === b.key);
+        if (!found || (found.workedMinutes ?? 0) === 0) {
+          return <Typography.Text type="secondary" className="tw-text-xs">—</Typography.Text>;
+        }
+        const ot = found.overtimeMinutes ?? 0;
+        const worked = found.workedMinutes ?? 0;
+        // 초과근무 있으면 노랑/주황 배경
+        const bgClass = ot > 0
+          ? (ot >= 60 ? 'tw-bg-orange-100' : 'tw-bg-amber-50')
+          : '';
+        return (
+          <div className={`${bgClass} tw-rounded tw-px-1 tw-py-0.5`}>
+            <div className="tw-text-sm">{(worked / 60).toFixed(1)}h</div>
+            {ot > 0 ? (
+              <div className="tw-text-[10px] tw-text-orange-600">+{(ot / 60).toFixed(1)}h</div>
+            ) : null}
+          </div>
+        );
+      },
+    }));
+  }, [filteredRows, listQ.data, periodMode]);
+
+  // 최종 컬럼 = 기본 컬럼 + bucket 컬럼
+  const allCols = useMemo<ColumnsType<OvertimeUsage>>(() => [...cols, ...bucketCols], [cols, bucketCols]);
 
   return (
     <Space direction="vertical" className="tw-w-full" size={12}>
-      <Alert
-        type="info"
-        showIcon
-        message="이번 달 전 직원 초과근무 현황"
-        description="초과근무시간은 출퇴근 기록 기반 실제 초과근무이고, 승인된 연장근무는 결재 완료 기준이에요. 한도 대비 80% 이상은 주의(주황), 100% 이상은 위험(빨강)으로 표시됩니다."
-      />
-
       {/* 한도 카드 + 요약 카드 */}
       <div className="tw-grid tw-grid-cols-2 md:tw-grid-cols-5 tw-gap-3">
         <Card size="small" className="tw-border-slate-200/80 tw-shadow-sm">
-          <Typography.Text type="secondary" className="tw-text-xs">
-            회사 일 연장근로 한도
-          </Typography.Text>
-          <div className="tw-mt-1 tw-text-base tw-font-semibold tw-text-slate-900">
-            {formatMinutes(policyQ.data?.dailyOvertimeLimitMinutes)}
-          </div>
-        </Card>
-        <Card size="small" className="tw-border-slate-200/80 tw-shadow-sm">
-          <Typography.Text type="secondary" className="tw-text-xs">
+          <Typography.Text type="secondary" className="tw-text-sm">
             회사 월 연장근로 한도
           </Typography.Text>
-          <div className="tw-mt-1 tw-text-base tw-font-semibold tw-text-slate-900">
+          <div className="tw-mt-1 tw-text-lg tw-font-semibold tw-text-slate-900">
             {formatMinutes(policyQ.data?.monthlyOvertimeLimitMinutes)}
           </div>
         </Card>
+        <Card size="small" className="tw-border-slate-200/80 tw-shadow-sm">
+          <Typography.Text type="secondary" className="tw-text-sm">
+            회사 일 연장근로 한도
+          </Typography.Text>
+          <div className="tw-mt-1 tw-text-lg tw-font-semibold tw-text-slate-900">
+            {formatMinutes(policyQ.data?.dailyOvertimeLimitMinutes)}
+          </div>
+        </Card>
         <Card size="small" className="tw-border-rose-200 tw-bg-rose-50/40 tw-shadow-sm">
-          <Typography.Text type="secondary" className="tw-text-xs">
+          <Typography.Text type="secondary" className="tw-text-sm">
             한도 초과 (≥100%)
           </Typography.Text>
-          <div className="tw-mt-1 tw-text-base tw-font-semibold tw-text-rose-600">
+          <div className="tw-mt-1 tw-text-lg tw-font-semibold tw-text-rose-600">
             {summary.danger}명
           </div>
         </Card>
         <Card size="small" className="tw-border-amber-200 tw-bg-amber-50/40 tw-shadow-sm">
-          <Typography.Text type="secondary" className="tw-text-xs">
+          <Typography.Text type="secondary" className="tw-text-sm">
             임박 (80~99%)
           </Typography.Text>
-          <div className="tw-mt-1 tw-text-base tw-font-semibold tw-text-amber-600">
+          <div className="tw-mt-1 tw-text-lg tw-font-semibold tw-text-amber-600">
             {summary.warn}명
           </div>
         </Card>
         <Card size="small" className="tw-border-slate-200/80 tw-shadow-sm">
-          <Typography.Text type="secondary" className="tw-text-xs">
+          <Typography.Text type="secondary" className="tw-text-sm">
             관찰 대상 합계
           </Typography.Text>
-          <div className="tw-mt-1 tw-text-base tw-font-semibold tw-text-slate-900">
+          <div className="tw-mt-1 tw-text-lg tw-font-semibold tw-text-slate-900">
             {summary.total}명
           </div>
         </Card>
@@ -1838,8 +1893,8 @@ export function OvertimeUsageTab() {
 
       {/* 검색 필터 바 */}
       <Card size="small" className="tw-border-slate-200/80 tw-shadow-sm">
-        <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-3">
-          <Space size={6}>
+        <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-x-4 tw-gap-y-3">
+          <Space size={8}>
             <Typography.Text type="secondary" className="!tw-text-sm">집계 기간</Typography.Text>
             <Segmented
               value={periodMode}
@@ -1850,51 +1905,83 @@ export function OvertimeUsageTab() {
               ]}
             />
           </Space>
-          <Space size={6}>
-            <Typography.Text type="secondary" className="!tw-text-sm">기준일</Typography.Text>
-            <Segmented
-              value={searchMode}
-              onChange={(v) => setSearchMode(v as 'date' | 'month')}
-              options={[
-                { label: '특정일', value: 'date' },
-                { label: '월 말일', value: 'month' },
-              ]}
+          <Space.Compact>
+            <Button
+              icon={<LeftOutlined />}
+              onClick={() =>
+                setBaseDate((d) =>
+                  periodMode === 'WEEK' ? d.subtract(1, 'week') : d.subtract(1, 'month'),
+                )
+              }
+              title={periodMode === 'WEEK' ? '전 주' : '전 달'}
             />
-          </Space>
-          {searchMode === 'date' ? (
-            <DatePicker
-              value={baseDate}
-              onChange={(d) => d && setBaseDate(d)}
-              allowClear={false}
-              format="YYYY-MM-DD"
-              size="small"
+            {periodMode === 'WEEK' ? (
+              <DatePicker
+                picker="week"
+                value={baseDate}
+                onChange={(d) => d && setBaseDate(d)}
+                allowClear={false}
+                popupClassName="hide-week-num"
+                format={(v) => {
+                  const start = v.startOf('week');
+                  const end = v.endOf('week');
+                  return `${start.format('YYYY-MM-DD')} ~ ${end.format('YYYY-MM-DD')}`;
+                }}
+              />
+            ) : (
+              <DatePicker
+                picker="month"
+                value={baseDate}
+                onChange={(d) => d && setBaseDate(d)}
+                allowClear={false}
+                format="YYYY-MM"
+              />
+            )}
+            <Button
+              icon={<RightOutlined />}
+              onClick={() =>
+                setBaseDate((d) =>
+                  periodMode === 'WEEK' ? d.add(1, 'week') : d.add(1, 'month'),
+                )
+              }
+              title={periodMode === 'WEEK' ? '다음 주' : '다음 달'}
             />
-          ) : (
-            <DatePicker
-              picker="month"
-              value={baseMonth}
-              onChange={(d) => d && setBaseMonth(d)}
-              allowClear={false}
-              format="YYYY-MM"
-              size="small"
-            />
-          )}
-          <span className="tw-text-xs tw-text-slate-400">
-            적용 시점: {iso}
-          </span>
-          <div className="tw-mx-2 tw-h-5 tw-border-l tw-border-slate-200" />
+          </Space.Compact>
+          <div className="tw-mx-1 tw-h-6 tw-border-l tw-border-slate-200" />
           <Input
             allowClear
             placeholder="이름 검색"
             value={nameKeyword}
             onChange={(e) => setNameKeyword(e.target.value)}
-            size="small"
+            style={{ width: 180 }}
+          />
+          <Select
+            allowClear
+            placeholder="부서 전체"
+            value={orgFilter}
+            onChange={setOrgFilter}
+            options={filterOptions.orgs}
             style={{ width: 160 }}
           />
-          <Space size={4}>
-            <Typography.Text type="secondary" className="!tw-text-xs">사용률</Typography.Text>
+          <Select
+            allowClear
+            placeholder="직급 전체"
+            value={jobGradeFilter}
+            onChange={setJobGradeFilter}
+            options={filterOptions.grades}
+            style={{ width: 140 }}
+          />
+          <Select
+            allowClear
+            placeholder="직책 전체"
+            value={jobTitleFilter}
+            onChange={setJobTitleFilter}
+            options={filterOptions.titles}
+            style={{ width: 140 }}
+          />
+          <Space size={6}>
+            <Typography.Text type="secondary" className="!tw-text-sm">사용률</Typography.Text>
             <Segmented
-              size="small"
               value={thresholdPct}
               onChange={(v) => setThresholdPct(Number(v))}
               options={[
@@ -1905,7 +1992,7 @@ export function OvertimeUsageTab() {
               ]}
             />
           </Space>
-          <span className="tw-ml-auto tw-text-xs tw-text-slate-500">
+          <span className="tw-ml-auto tw-text-sm tw-text-slate-500">
             {filteredRows.length} / {summary.total}건
           </span>
         </div>
@@ -1915,7 +2002,8 @@ export function OvertimeUsageTab() {
         rowKey={(r) => r.memberId ?? `${r.name}-${r.approvedMinutes}`}
         loading={listQ.isLoading}
         dataSource={filteredRows}
-        columns={cols}
+        columns={allCols}
+        scroll={{ x: 'max-content' }}
         pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: [10, 20, 50] }}
         locale={{
           emptyText: (

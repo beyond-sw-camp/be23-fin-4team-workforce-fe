@@ -1222,6 +1222,17 @@ export type OvertimeUsage = {
   exceedMinutes?: number | null;
   /** 기간 총 근무시간 분 (정규 + 초과) */
   totalWorkMinutes?: number | null;
+  jobGradeName?: string | null;
+  jobTitleName?: string | null;
+  /** 기간 분할 단위별 근무 - WEEK 면 7일, MONTH 면 4~5주 */
+  buckets?: Array<{
+    key: string;
+    label: string;
+    workedMinutes: number;
+    overtimeMinutes: number;
+    /** 주말 또는 회사/법정 공휴일 여부 (WEEK 모드 한정) */
+    holiday?: boolean;
+  }>;
 };
 
 /** 호봉표 (PayGradeTable), 호봉 → 기본급 (직급 무관) */
