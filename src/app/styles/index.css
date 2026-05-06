@@ -1,6 +1,12 @@
 @import './tailwind.css';
 @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
 
+/* AntD week picker 의 좌측 주차 번호 컬럼 숨김 (popupClassName="hide-week-num" 사용 시) */
+.hide-week-num .ant-picker-content th:first-child,
+.hide-week-num .ant-picker-cell-week {
+  display: none;
+}
+
 :root {
   --wf-color-text: #0f172a;
   --wf-color-primary: #2563eb;

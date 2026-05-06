@@ -6,7 +6,7 @@ import dayjs from 'dayjs';
 import { useState } from 'react';
 import { companyBatchScheduleApi, type CompanyBatchSchedule } from '@/features/salary-service/api/companyBatchScheduleApi';
 
-type Frequency = 'hourly' | 'daily' | 'weekly' | 'monthly';
+type Frequency = 'hourly' | 'daily' | 'weekly' | 'monthly' | 'yearly';
 const WEEKDAYS = [
   { value: 1, label: '일요일' },
   { value: 2, label: '월요일' },
@@ -72,27 +72,32 @@ function parseCronToForm(expr: string | null): {
   time: dayjs.Dayjs;
   dayOfMonth: number;
   dayOfWeek: number;
+  monthOfYear: number;
 } {
-  const fallback = { frequency: 'daily' as Frequency, time: dayjs().hour(0).minute(0), dayOfMonth: 1, dayOfWeek: 2 };
+  const fallback = { frequency: 'daily' as Frequency, time: dayjs().hour(0).minute(0), dayOfMonth: 1, dayOfWeek: 2, monthOfYear: 1 };
   if (!expr) return fallback;
   const parts = expr.trim().split(/\s+/);
   if (parts.length < 6) return fallback;
-  const [, min, hour, day, , dow] = parts;
+  const [, min, hour, day, month, dow] = parts;
   const time = dayjs().hour(Number(hour) || 0).minute(Number(min) || 0);
   if (hour === '*' && (day === '*' || day === '?') && (dow === '*' || dow === '?')) {
-    return { frequency: 'hourly', time: dayjs().hour(0).minute(Number(min) || 0), dayOfMonth: 1, dayOfWeek: 2 };
+    return { frequency: 'hourly', time: dayjs().hour(0).minute(Number(min) || 0), dayOfMonth: 1, dayOfWeek: 2, monthOfYear: 1 };
   }
-  if (/^\d+$/.test(day)) return { frequency: 'monthly', time, dayOfMonth: Number(day), dayOfWeek: 2 };
-  if (/^\d+$/.test(dow)) return { frequency: 'weekly', time, dayOfMonth: 1, dayOfWeek: Number(dow) };
+  if (/^\d+$/.test(day) && /^\d+$/.test(month)) {
+    return { frequency: 'yearly', time, dayOfMonth: Number(day), dayOfWeek: 2, monthOfYear: Number(month) };
+  }
+  if (/^\d+$/.test(day)) return { frequency: 'monthly', time, dayOfMonth: Number(day), dayOfWeek: 2, monthOfYear: 1 };
+  if (/^\d+$/.test(dow)) return { frequency: 'weekly', time, dayOfMonth: 1, dayOfWeek: Number(dow), monthOfYear: 1 };
   return { ...fallback, time };
 }
 
-function formToCron(values: { frequency: Frequency; time: dayjs.Dayjs; dayOfMonth?: number; dayOfWeek?: number }): string {
+function formToCron(values: { frequency: Frequency; time: dayjs.Dayjs; dayOfMonth?: number; dayOfWeek?: number; monthOfYear?: number }): string {
   const h = values.time.hour();
   const m = values.time.minute();
   if (values.frequency === 'hourly') return `0 ${m} * * * ?`;
   if (values.frequency === 'daily') return `0 ${m} ${h} * * ?`;
   if (values.frequency === 'weekly') return `0 ${m} ${h} ? * ${values.dayOfWeek ?? 2}`;
+  if (values.frequency === 'yearly') return `0 ${m} ${h} ${values.dayOfMonth ?? 1} ${values.monthOfYear ?? 1} ?`;
   return `0 ${m} ${h} ${values.dayOfMonth ?? 1} * ?`;
 }
 
@@ -110,7 +115,7 @@ function Inner() {
   const qc = useQueryClient();
   const { message } = App.useApp();
   const [editing, setEditing] = useState<CompanyBatchSchedule | null>(null);
-  const [form] = Form.useForm<{ frequency: Frequency; time: dayjs.Dayjs; dayOfMonth?: number; dayOfWeek?: number }>();
+  const [form] = Form.useForm<{ frequency: Frequency; time: dayjs.Dayjs; dayOfMonth?: number; dayOfWeek?: number; monthOfYear?: number }>();
   const frequency = Form.useWatch('frequency', form);
   const [filter, setFilter] = useState<'all' | 'active' | 'paused'>('all');
   const [keyword, setKeyword] = useState('');
@@ -290,12 +295,17 @@ function Inner() {
                 onChange={(v) => {
                   if (v === 'weekly' && !form.getFieldValue('dayOfWeek')) form.setFieldValue('dayOfWeek', 2);
                   if (v === 'monthly' && !form.getFieldValue('dayOfMonth')) form.setFieldValue('dayOfMonth', 1);
+                  if (v === 'yearly') {
+                    if (!form.getFieldValue('dayOfMonth')) form.setFieldValue('dayOfMonth', 1);
+                    if (!form.getFieldValue('monthOfYear')) form.setFieldValue('monthOfYear', 1);
+                  }
                 }}
                 options={[
                   { value: 'hourly', label: '매시간' },
                   { value: 'daily', label: '매일' },
                   { value: 'weekly', label: '매주' },
                   { value: 'monthly', label: '매월' },
+                  { value: 'yearly', label: '매년' },
                 ]}
               />
             </Form.Item>
@@ -310,6 +320,27 @@ function Inner() {
               <Form.Item label="매월 며칠" name="dayOfMonth" rules={[{ required: true, message: '날짜를 입력해주세요.' }]}>
                 <InputNumber min={1} max={31} addonAfter="일" style={{ width: '100%' }} />
               </Form.Item>
+            ) : null}
+
+            {frequency === 'yearly' ? (
+              <Space.Compact block>
+                <Form.Item
+                  label="매년 몇 월"
+                  name="monthOfYear"
+                  rules={[{ required: true, message: '월을 선택해주세요.' }]}
+                  style={{ flex: 1, marginRight: 8 }}
+                >
+                  <InputNumber min={1} max={12} addonAfter="월" style={{ width: '100%' }} />
+                </Form.Item>
+                <Form.Item
+                  label="며칠"
+                  name="dayOfMonth"
+                  rules={[{ required: true, message: '날짜를 입력해주세요.' }]}
+                  style={{ flex: 1 }}
+                >
+                  <InputNumber min={1} max={31} addonAfter="일" style={{ width: '100%' }} />
+                </Form.Item>
+              </Space.Compact>
             ) : null}
 
             {frequency === 'hourly' ? (
