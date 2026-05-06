@@ -34,7 +34,9 @@ import { normalizeSpringPage } from '@/features/salary-service/lib/normalizePage
 import type {
   CorrectionStateCode,
   DailyAttendance,
+  FlexibleTimeSlot,
   LeaveRequest,
+  MemberScheduleSelection,
   WorkSchedule,
 } from '@/features/salary-service/types';
 import { AttendanceStatusTag } from '@/features/salary-service/ui/AttendanceStatusTag';
@@ -232,6 +234,58 @@ export function MyAttendancePage() {
     return activeSchedule.workType === 'FLEXIBLE' ? '시차 출퇴근제' : '고정 출퇴근제';
   }, [activeSchedule]);
 
+  // FLEXIBLE 회사면 본인 이번 달 슬롯 선택 + 슬롯 시간을 합성해서 화면에 표시
+  // FIXED 회사면 회사 WorkSchedule 자체에 startTime/endTime/break가 박힌다
+  const thisYearMonth = today.format('YYYY-MM');
+  const isFlexible = activeSchedule?.workType === 'FLEXIBLE';
+  const mySelectionQ = useQuery({
+    queryKey: ['salary', 'schedule-selection', 'my', 'current', thisYearMonth],
+    queryFn: () => attendanceApi.scheduleSelection.getMyCurrent(thisYearMonth),
+    enabled: !!isFlexible,
+    staleTime: 5 * 60_000,
+  });
+  const mySelection: MemberScheduleSelection | null = mySelectionQ.data ?? null;
+  const mySlotQ = useQuery({
+    queryKey: ['salary', 'flexible-slot', mySelection?.slotId ?? null],
+    queryFn: () => attendanceApi.flexibleSlot.getById(mySelection!.slotId!),
+    enabled: !!isFlexible && !!mySelection?.slotId,
+    staleTime: 5 * 60_000,
+  });
+  const mySlot: FlexibleTimeSlot | undefined = mySlotQ.data ?? undefined;
+
+  // HH:mm:ss 시간 차를 분으로
+  const minutesBetweenHms = (s?: string | null, e?: string | null): number => {
+    if (!s || !e) return 0;
+    const ds = dayjs(`2000-01-01T${s}`);
+    const de = dayjs(`2000-01-01T${e}`);
+    let m = de.diff(ds, 'minute');
+    if (m < 0) m += 24 * 60;
+    return Math.max(0, m);
+  };
+
+  // 화면 표시·통계용 유효 스케줄 - FLEXIBLE이면 (slot + selection) 우선, FIXED면 회사 WorkSchedule
+  const effectiveSchedule = useMemo(() => {
+    if (!activeSchedule) return undefined;
+    if (!isFlexible) {
+      const breakMin = activeSchedule.breakMinutes
+        ?? minutesBetweenHms(activeSchedule.breakStart, activeSchedule.breakEnd);
+      return {
+        startTime: activeSchedule.startTime ?? null,
+        endTime: activeSchedule.endTime ?? null,
+        workMinutes: activeSchedule.workMinutes ?? null,
+        breakMinutes: breakMin,
+      };
+    }
+    // FLEXIBLE - 본인 슬롯 + 본인 선택 점심 우선
+    const startTime = mySlot?.startTime ?? null;
+    const endTime = mySlot?.endTime ?? null;
+    const workMinutes = mySlot?.workMinutes ?? null;
+    const breakStart = mySelection?.breakStart ?? mySlot?.breakStart ?? null;
+    const breakEnd = mySelection?.breakEnd ?? mySlot?.breakEnd ?? null;
+    const breakMin = mySelection?.breakMinutes ?? minutesBetweenHms(breakStart, breakEnd);
+    return { startTime, endTime, workMinutes, breakMinutes: breakMin };
+  }, [activeSchedule, isFlexible, mySlot, mySelection]);
+
   // 월별 일자별 근태 목록 - 정정 결재 진입용
   // staleTime 60s: 같은 월 페이지 이동 / 다른 탭 갔다와도 60초 내는 캐시 HIT
   const monthlyQ = useQuery({
@@ -298,8 +352,8 @@ export function MyAttendancePage() {
   // 이번 달 통계 - 근무일 / 지각 / 결근 / 조퇴
   const monthStats = useMemo(() => {
     const rows = monthlyNormalized.content;
-    const startTime = activeSchedule?.startTime ?? null; // HH:mm:ss
-    const endTime = activeSchedule?.endTime ?? null;
+    const startTime = effectiveSchedule?.startTime ?? null; // HH:mm:ss
+    const endTime = effectiveSchedule?.endTime ?? null;
     const todayStr = todayIso;
     let workDays = 0;
     let tardy = 0;
@@ -326,7 +380,7 @@ export function MyAttendancePage() {
       }
     }
     return { workDays, tardy, absent, earlyLeave };
-  }, [monthlyNormalized, activeSchedule, todayIso]);
+  }, [monthlyNormalized, effectiveSchedule, todayIso]);
 
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ['salary', 'attendance', 'my'] });
@@ -421,10 +475,8 @@ export function MyAttendancePage() {
         key: 'workedMinutes',
         render: (_, row) => {
           // 배치 전이라도 즉시 표기 - 저장값이 있으면 그대로, 없으면 (체류시간 - 점심) 추정값
-          const breakMin = activeSchedule?.breakMinutes ?? 0;
-          const m =
-            row.workedMinutes ??
-            estimateWorkedMinutes(row.firstClockIn, row.lastClockOut, breakMin);
+          const breakMin = effectiveSchedule?.breakMinutes ?? 0;
+          const m = row.workedMinutes ?? estimateWorkedMinutes(row.firstClockIn, row.lastClockOut, breakMin);
           return formatMinutesWithHm(m);
         },
       },
@@ -546,7 +598,7 @@ export function MyAttendancePage() {
         },
       },
     ],
-    [navigate, correctionDocId, overtimeDocId, overtimeByDate, holidayMap, activeSchedule],
+    [navigate, correctionDocId, overtimeDocId, overtimeByDate, holidayMap, effectiveSchedule],
   );
 
   const daily = dailyQ.data;
@@ -871,11 +923,11 @@ export function MyAttendancePage() {
                 <DailyScheduleDonut
                   firstClockIn={daily?.firstClockIn ?? null}
                   lastClockOut={daily?.lastClockOut ?? null}
-                  scheduleStartTime={activeSchedule?.startTime ?? null}
-                  scheduleEndTime={activeSchedule?.endTime ?? null}
-                  scheduledMinutes={activeSchedule?.workMinutes ?? null}
+                  scheduleStartTime={effectiveSchedule?.startTime ?? null}
+                  scheduleEndTime={effectiveSchedule?.endTime ?? null}
+                  scheduledMinutes={effectiveSchedule?.workMinutes ?? null}
                   workedMinutes={daily?.workedMinutes ?? null}
-                  breakMinutes={activeSchedule?.breakMinutes ?? 0}
+                  breakMinutes={effectiveSchedule?.breakMinutes ?? 0}
                 />
               </div>
             </Card>

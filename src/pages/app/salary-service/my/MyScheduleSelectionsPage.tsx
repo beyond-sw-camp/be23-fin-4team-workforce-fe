@@ -94,23 +94,23 @@ function trimSeconds(time?: string | null) {
 function ScheduleWeeklyTable({
   calendarMonth,
   dailyMap,
-  scheduleMap,
-  fallbackTime,
-  fallbackBreakRange,
+  workTimeRange,
+  breakRange,
   holidaySet,
   holidayNameMap,
-  defaultScheduleTimeLabel,
 }: {
   calendarMonth: dayjs.Dayjs;
   dailyMap: Map<string, DailyAttendance>;
-  scheduleMap: Map<string, WorkSchedule>;
-  fallbackTime: string;
-  /** 표시용 점심 시작/종료 시각 — FLEXIBLE 직원이 이번 달 선택한 값 (HH:mm:ss 문자열). null 이면 표시 안함. */
-  fallbackBreakRange: { start: string; end: string } | null;
+  /** 회사 단위 활성 근무 시간대 (HH:mm:ss).
+   *  - FIXED: 회사 WorkSchedule.startTime/endTime
+   *  - FLEXIBLE: 본인 이번 달 선택 슬롯의 startTime/endTime (없으면 회사 기본 슬롯) */
+  workTimeRange: { start: string; end: string } | null;
+  /** 회사 단위 점심 시작/종료 (HH:mm:ss).
+   *  - FIXED: 회사 WorkSchedule.breakStart/End
+   *  - FLEXIBLE: 본인 selection.break(없으면 슬롯.break) */
+  breakRange: { start: string; end: string } | null;
   holidaySet: Set<string>;
   holidayNameMap: Map<string, string>;
-  /** 회사 기본 스케줄 시간 (예: "09:00 ~ 18:00") - 슬롯/스케줄 매핑 없을 때 fallback 으로 표시 */
-  defaultScheduleTimeLabel?: string;
 }) {
   type DayCell = {
     date: dayjs.Dayjs;
@@ -119,8 +119,6 @@ function ScheduleWeeklyTable({
     isWeekend: boolean; // 일/토
     holidayName?: string;
     daily?: DailyAttendance;
-    schedule?: WorkSchedule | null;
-    timeRange: string; // "08:00~17:00" or "-"
   };
 
   // 5~6주 × 7일 행렬 구성
@@ -135,11 +133,6 @@ function ScheduleWeeklyTable({
         const date = cursor.add(d, 'day');
         const iso = date.format('YYYY-MM-DD');
         const daily = dailyMap.get(iso);
-        const schedule = daily?.workScheduleId ? scheduleMap.get(daily.workScheduleId) : null;
-        const timeRange =
-          schedule?.startTime && schedule?.endTime
-            ? `${trimSeconds(schedule.startTime)}~${trimSeconds(schedule.endTime)}`
-            : fallbackTime;
         const isHoliday = date.day() === 0 || date.day() === 6 || holidaySet.has(iso);
         week.push({
           date,
@@ -148,47 +141,41 @@ function ScheduleWeeklyTable({
           isWeekend: isHoliday,
           holidayName: holidayNameMap.get(iso),
           daily,
-          schedule,
-          timeRange,
         });
       }
       result.push(week);
       cursor = cursor.add(7, 'day');
     }
     return result;
-  }, [calendarMonth, dailyMap, scheduleMap, fallbackTime, holidaySet, holidayNameMap]);
+  }, [calendarMonth, dailyMap, holidaySet, holidayNameMap]);
 
-  /** 표준 일 근무 시간(분) - 스케줄 있으면 (end-start-break), 없으면 480 (8h) */
-  const standardWorkMinForCell = (cell: DayCell): number => {
-    const sch = cell.schedule;
-    if (sch?.startTime && sch?.endTime) {
-      const start = parseHmToMin(sch.startTime);
-      const end = parseHmToMin(sch.endTime);
-      let breakMin = 60;
-      if (sch.breakStart && sch.breakEnd) {
-        breakMin = parseHmToMin(sch.breakEnd) - parseHmToMin(sch.breakStart);
-      }
-      return Math.max(0, end - start - breakMin);
+  // 표준 일 근무 분 - 회사 단위 단일값
+  const standardWorkMin = useMemo<number>(() => {
+    if (!workTimeRange) return 480;
+    const start = parseHmToMin(workTimeRange.start);
+    const end = parseHmToMin(workTimeRange.end);
+    let breakMin = 60;
+    if (breakRange) {
+      breakMin = parseHmToMin(breakRange.end) - parseHmToMin(breakRange.start);
     }
-    return 480; // fallback 8h
+    return Math.max(0, end - start - breakMin);
+  }, [workTimeRange, breakRange]);
+
+  /** 표준 일 근무 분 - 휴일/주말은 0, 평일은 standardWorkMin */
+  const standardWorkMinForCell = (cell: DayCell): number => {
+    if (cell.isWeekend || cell.holidayName) return 0;
+    return standardWorkMin;
   };
 
-  /** 근무 행 셀 텍스트 - 휴일/공휴일 또는 "평일 / HH:mm ~ HH:mm"
-   *  실제 출퇴근 시간(daily.firstClockIn) 대신 항상 회사 스케줄 시간을 표시 */
+  /** 근무 행 셀 텍스트 - 휴일/공휴일 또는 "평일 / HH:mm ~ HH:mm" */
   const workCellText = (cell: DayCell): string => {
     if (cell.holidayName) return '공휴일';
     const dow = cell.date.day();
     if (dow === 0 || dow === 6) return '휴일';
-    // 평일 - 슬롯/할당된 스케줄 우선
-    const sch = cell.schedule;
-    if (sch?.startTime && sch?.endTime) {
-      return `평일 / ${trimSeconds(sch.startTime)} ~ ${trimSeconds(sch.endTime)}`;
+    if (workTimeRange) {
+      return `평일 / ${trimSeconds(workTimeRange.start)} ~ ${trimSeconds(workTimeRange.end)}`;
     }
-    // 슬롯/스케줄 매핑 없으면 회사 기본 스케줄 시간 사용 (실제 출퇴근 시간 X)
-    if (defaultScheduleTimeLabel) {
-      return `평일 / ${defaultScheduleTimeLabel}`;
-    }
-    return `평일 / ${fallbackTime}`;
+    return '평일 / -';
   };
 
   /** 근태 행 셀 텍스트 - 휴가/결근/반차/출장/외근, 없으면 빈칸 */
@@ -215,12 +202,11 @@ function ScheduleWeeklyTable({
   const overtimeCell = (cell: DayCell): React.ReactNode => {
     const ot = cell.daily?.overtimeMinutes ?? 0;
     if (ot <= 0) return null;
-    const sch = cell.schedule;
     let otStartHm: string | null = null;
-    if (sch?.endTime) {
-      otStartHm = trimSeconds(sch.endTime);
+    if (workTimeRange?.end) {
+      otStartHm = trimSeconds(workTimeRange.end);
     } else if (cell.daily?.lastClockOut) {
-      // schedule 없으면 lastClockOut 에서 ot 만큼 앞으로 빼기
+      // 회사 단위 끝 시각 없으면 lastClockOut에서 ot만큼 앞으로 빼기
       otStartHm = addMinToHm(isoToHm(cell.daily.lastClockOut), -ot);
     }
     const otEndHm = isoToHm(cell.daily?.lastClockOut);
@@ -257,17 +243,13 @@ function ScheduleWeeklyTable({
   };
 
   /** 점심시간 텍스트 (HH:mm~HH:mm).
-   *  - FIXED: 해당 일자의 WorkSchedule.breakStart/End
-   *  - FLEXIBLE / 미지정: 직원이 이번 달 선택한 fallbackBreakRange
+   *  - FIXED: 회사 WorkSchedule.break
+   *  - FLEXIBLE: 본인 selection.break(없으면 슬롯.break)
    *  - 휴일/주말 또는 미지정이면 빈 칸. */
   const breakText = (cell: DayCell): string => {
-    if (cell.isWeekend) return '';
-    const fromScheduleStart = cell.schedule?.breakStart;
-    const fromScheduleEnd = cell.schedule?.breakEnd;
-    const start = fromScheduleStart ?? fallbackBreakRange?.start ?? null;
-    const end = fromScheduleEnd ?? fallbackBreakRange?.end ?? null;
-    if (!start || !end) return '';
-    return `${trimSeconds(start)}~${trimSeconds(end)}`;
+    if (cell.isWeekend || cell.holidayName) return '';
+    if (!breakRange) return '';
+    return `${trimSeconds(breakRange.start)}~${trimSeconds(breakRange.end)}`;
   };
 
   const cellBase =
@@ -527,11 +509,6 @@ export function MyScheduleSelectionsPage() {
     [historyQ.data],
   );
   const latestAppliedSelection = approvedOrAuto[0] ?? currentQ.data ?? null;
-
-  const scheduleMap = useMemo(
-    () => new Map((schedulesQ.data ?? []).map((s) => [s.workScheduleId ?? '', s])),
-    [schedulesQ.data],
-  );
 
   /* ─────────────────────────────────────────────────────────────
    * 마감일 안내 배너 — 4가지 상태 자동 분기
@@ -833,36 +810,39 @@ export function MyScheduleSelectionsPage() {
                     </Button>
                   </div>
 
-                  {/* 주간 행 테이블 — 5주 × 7일 × (일자/점심/근태/초과근무) + 합계 + 1주 근로시간 */}
+                  {/* 주간 행 테이블 - 회사 workType 단일 분기로 시간/점심 결정.
+                      FIXED -> WorkSchedule, FLEXIBLE -> 본인 selection (없으면 슬롯) */}
                   <ScheduleWeeklyTable
                     calendarMonth={calendarMonth}
                     dailyMap={dailyMap}
-                    scheduleMap={scheduleMap}
-                    defaultScheduleTimeLabel={defaultScheduleTimeLabel}
-                    fallbackTime={latestSlotLabel !== '-' ? latestSlotLabel : defaultSlotTime}
-                    fallbackBreakRange={(() => {
-                      const fromSelection =
-                        latestAppliedSelection?.breakStart && latestAppliedSelection?.breakEnd
-                          ? {
-                              start: latestAppliedSelection.breakStart,
-                              end: latestAppliedSelection.breakEnd,
-                            }
-                          : null;
-                      if (fromSelection) return fromSelection;
-                      const fromSelectedSlot = allSlotsMap.get(
-                        latestAppliedSelection?.slotId ?? '',
-                      );
-                      if (fromSelectedSlot?.breakStart && fromSelectedSlot?.breakEnd) {
-                        return {
-                          start: fromSelectedSlot.breakStart,
-                          end: fromSelectedSlot.breakEnd,
-                        };
+                    workTimeRange={(() => {
+                      if (activeFlexibleSchedule) {
+                        const slot = allSlotsMap.get(latestAppliedSelection?.slotId ?? '')
+                          ?? defaultFlexibleSlot;
+                        if (slot?.startTime && slot?.endTime) {
+                          return { start: slot.startTime, end: slot.endTime };
+                        }
+                        return null;
                       }
-                      if (defaultFlexibleSlot?.breakStart && defaultFlexibleSlot?.breakEnd) {
-                        return {
-                          start: defaultFlexibleSlot.breakStart,
-                          end: defaultFlexibleSlot.breakEnd,
-                        };
+                      if (defaultFixedSchedule?.startTime && defaultFixedSchedule?.endTime) {
+                        return { start: defaultFixedSchedule.startTime, end: defaultFixedSchedule.endTime };
+                      }
+                      return null;
+                    })()}
+                    breakRange={(() => {
+                      if (activeFlexibleSchedule) {
+                        if (latestAppliedSelection?.breakStart && latestAppliedSelection?.breakEnd) {
+                          return { start: latestAppliedSelection.breakStart, end: latestAppliedSelection.breakEnd };
+                        }
+                        const slot = allSlotsMap.get(latestAppliedSelection?.slotId ?? '')
+                          ?? defaultFlexibleSlot;
+                        if (slot?.breakStart && slot?.breakEnd) {
+                          return { start: slot.breakStart, end: slot.breakEnd };
+                        }
+                        return null;
+                      }
+                      if (defaultFixedSchedule?.breakStart && defaultFixedSchedule?.breakEnd) {
+                        return { start: defaultFixedSchedule.breakStart, end: defaultFixedSchedule.breakEnd };
                       }
                       return null;
                     })()}
