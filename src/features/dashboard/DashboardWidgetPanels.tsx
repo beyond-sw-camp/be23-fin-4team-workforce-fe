@@ -3,9 +3,7 @@ import {
   CheckCircleOutlined,
   ClockCircleOutlined,
   DollarOutlined,
-  TeamOutlined,
   UserOutlined,
-  VideoCameraOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Avatar, Button, Card, List, Progress, Spin, Tabs, Tag, Typography } from 'antd';
@@ -20,9 +18,7 @@ import { evaluationRedesignApi } from '@/features/evaluation/api/evaluationRedes
 import type { EvaluationSeasonFlow } from '@/features/evaluation/model/workflowTypes';
 import { goalApi } from '@/features/goals/api/goalApi';
 import type { Goal, KpiCycle } from '@/features/goals/model/types';
-import { meetingApi } from '@/features/meetings/api/meetingApi';
 import { memberApi } from '@/features/member/api/memberApi';
-import { useMemberDisplayNames } from '@/features/members/hooks/useMemberDisplayNames';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import type { Salary } from '@/features/salary-service/types';
@@ -57,24 +53,6 @@ const TXT = {
   waitingEval: '\uD3C9\uAC00 \uB300\uAE30',
   closed: '\uC885\uB8CC',
   skipped: '\uC81C\uC678',
-  evalView: '\uD3C9\uAC00 \uBCF4\uAE30',
-  selfEval: '\uC790\uAE30\uD3C9\uAC00',
-  evaluator: '\uD3C9\uAC00\uC790\uB85C \uCC38\uC5EC',
-  publishedResult: '\uACF5\uAC1C \uACB0\uACFC',
-  evalSeason: '\uD3C9\uAC00 \uC2DC\uC98C',
-  selfEvalRequired: '\uC790\uAE30\uD3C9\uAC00 \uC791\uC131\uC774 \uD544\uC694\uD569\uB2C8\uB2E4.',
-  evaluatorRequired: 'Lead/평가자\uB85C \uAC80\uD1A0\uD560 \uD3C9\uAC00\uC785\uB2C8\uB2E4.',
-  required: '\uC791\uC131 \uD544\uC694',
-  review: '\uAC80\uD1A0',
-  noEvalTasks: '\uC9C0\uAE08 \uBC14\uB85C \uCC98\uB9AC\uD560 \uD3C9\uAC00\uB294 \uC5C6\uC2B5\uB2C8\uB2E4.',
-  waitingReview: '\uAC80\uD1A0 \uB300\uAE30',
-  meetingView: '\uBA74\uB2F4 \uBCF4\uAE30',
-  scheduled: '\uC608\uC815',
-  done: '\uC644\uB8CC',
-  total: '\uC804\uCCB4',
-  noFeedbackMeetings: '\uC608\uC815\uB41C \uD53C\uB4DC\uBC31 \uBA74\uB2F4\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.',
-  feedbackMeeting: '\uD3C9\uAC00 \uD53C\uB4DC\uBC31 \uBA74\uB2F4',
-  detail: '\uC0C1\uC138',
   more: '\uB354\uBCF4\uAE30',
   approvalWait: '\uACB0\uC7AC\uB300\uAE30',
   all: '\uC804\uCCB4',
@@ -248,13 +226,6 @@ function seasonStatusLabel(status?: EvaluationSeasonFlow['status'] | null): stri
   return '시즌 미연결';
 }
 
-function meetingState(meeting: { scheduledAt: string; completedAt?: string }) {
-  if (meeting.completedAt) return { label: '완료', color: 'green' as const };
-  if (dayjs(meeting.scheduledAt).isBefore(dayjs())) return { label: '지연', color: 'orange' as const };
-  if (dayjs(meeting.scheduledAt).isBefore(dayjs().add(7, 'day'))) return { label: '7일 내', color: 'blue' as const };
-  return { label: '예정', color: 'default' as const };
-}
-
 function isApprovalNotification(type: string): boolean {
   return String(type ?? '').toUpperCase().startsWith('APPROVAL_');
 }
@@ -265,10 +236,17 @@ function isGoalBundleNotification(type: string, targetType?: string): boolean {
   return t.startsWith('GOAL_BUNDLE_') || tt.startsWith('GOAL_BUNDLE_');
 }
 
+function isMeetingNotification(type: string, targetType?: string): boolean {
+  const t = String(type ?? '').toUpperCase();
+  const tt = String(targetType ?? '').toUpperCase();
+  return t.startsWith('MEETING_') || tt.startsWith('MEETING_');
+}
+
 function isRoutableNotification(item: NotificationItem): boolean {
   return (
     isApprovalNotification(item.notificationType) ||
     isGoalBundleNotification(item.notificationType, item.targetType) ||
+    isMeetingNotification(item.notificationType, item.targetType) ||
     isContractNotificationRoutable(item)
   );
 }
@@ -368,7 +346,7 @@ export function DashboardPerformanceGoalsBlock() {
 
   return cardShell(
     DASHBOARD_WIDGET_LABELS.performanceGoals,
-    <Link to="/app/performance" search={{ view: 'my-objective' }} className="tw-text-xs tw-font-medium tw-text-blue-600">
+    <Link to="/app/performance" search={{ view: 'my' }} className="tw-text-xs tw-font-medium tw-text-blue-600">
       {TXT.goalView}
     </Link>,
     <Spin spinning={myGoalsQ.isLoading || objectivesQ.isLoading || seasonsQ.isLoading}>
@@ -433,170 +411,6 @@ export function DashboardPerformanceGoalsBlock() {
   );
 }
 
-export function DashboardEvaluationTasksBlock() {
-  const selfQ = useQuery({
-    queryKey: ['dashboard', 'evaluation', 'self'],
-    queryFn: () => evaluationRedesignApi.listMySelf(),
-    staleTime: 60_000,
-  });
-  const evaluatorQ = useQuery({
-    queryKey: ['dashboard', 'evaluation', 'evaluator'],
-    queryFn: () => evaluationRedesignApi.listMyEvaluatorAssignments(),
-    staleTime: 60_000,
-  });
-  const receivedQ = useQuery({
-    queryKey: ['dashboard', 'evaluation', 'received'],
-    queryFn: () => evaluationRedesignApi.listMyReceived(),
-    staleTime: 60_000,
-  });
-
-  const selfPending = (selfQ.data ?? []).filter((item) => item.stage === 'SELF_PENDING');
-  const waiting = (selfQ.data ?? []).filter((item) => item.stage !== 'SELF_PENDING' && item.stage !== 'CONFIRMED' && item.stage !== 'SKIPPED_LEAVER');
-  const evaluatorTasks = evaluatorQ.data ?? [];
-  const received = receivedQ.data ?? [];
-  const primaryTasks = [...selfPending, ...evaluatorTasks].slice(0, 3);
-
-  return cardShell(
-    DASHBOARD_WIDGET_LABELS.evaluationTasks,
-    <Link to="/app/evaluations" className="tw-text-xs tw-font-medium tw-text-blue-600">
-      {TXT.evalView}
-    </Link>,
-    <Spin spinning={selfQ.isLoading || evaluatorQ.isLoading || receivedQ.isLoading}>
-      <div className="tw-space-y-4">
-        <div className="tw-grid tw-grid-cols-3 tw-gap-2">
-          {compactStat(TXT.selfEval, selfPending.length, selfPending.length > 0 ? 'amber' : 'slate')}
-          {compactStat(TXT.evaluator, evaluatorTasks.length, evaluatorTasks.length > 0 ? 'blue' : 'slate')}
-          {compactStat(TXT.publishedResult, received.length, 'green')}
-        </div>
-        {primaryTasks.length > 0 ? (
-          <List
-            size="small"
-            dataSource={primaryTasks}
-            renderItem={(item) => (
-              <List.Item className="!tw-px-0 !tw-py-2">
-                <div className="tw-min-w-0 tw-flex-1">
-                  <div className="tw-truncate tw-text-sm tw-font-medium tw-text-slate-800">{item.seasonName ?? TXT.evalSeason}</div>
-                  <div className="tw-mt-0.5 tw-text-xs tw-text-slate-500">
-                    {item.stage === 'SELF_PENDING' ? TXT.selfEvalRequired : TXT.evaluatorRequired}
-                  </div>
-                </div>
-                <Tag color={item.stage === 'SELF_PENDING' ? 'gold' : 'processing'} className="!tw-m-0">
-                  {item.stage === 'SELF_PENDING' ? TXT.required : TXT.review}
-                </Tag>
-              </List.Item>
-            )}
-          />
-        ) : (
-          <div className="tw-rounded-xl tw-bg-slate-50 tw-p-4 tw-text-center tw-text-xs tw-text-slate-500">
-            {TXT.noEvalTasks}
-            {waiting.length > 0 ? ` ${TXT.waitingReview} ${waiting.length}${TXT.caseCount}\uC774 \uC9C4\uD589 \uC911\uC785\uB2C8\uB2E4.` : ''}
-          </div>
-        )}
-      </div>
-    </Spin>,
-  );
-}
-
-export function DashboardFeedbackMeetingsBlock() {
-  const memberQ = useQuery({
-    queryKey: ['dashboard', 'meetings', 'member'],
-    queryFn: () => meetingApi.listMyMeetingsAsMember(),
-    staleTime: 60_000,
-  });
-  const managerQ = useQuery({
-    queryKey: ['dashboard', 'meetings', 'manager'],
-    queryFn: () => meetingApi.listMyMeetingsAsManager(),
-    staleTime: 60_000,
-  });
-  const seasonsQ = useQuery({
-    queryKey: ['dashboard', 'meetings', 'seasons'],
-    queryFn: () => evaluationRedesignApi.listSeasons(),
-    staleTime: 60_000,
-  });
-
-  const meetings = [...(memberQ.data ?? []), ...(managerQ.data ?? [])];
-  const uniqueMeetings = Array.from(new Map(meetings.map((meeting) => [meeting.meetingRecordId, meeting])).values());
-  const partnerIds = uniqueMeetings.flatMap((meeting) => [meeting.memberId, meeting.managerId]);
-  const { labelFor } = useMemberDisplayNames(partnerIds);
-  const seasonById = new Map((seasonsQ.data ?? []).map((season) => [season.seasonId, season]));
-  const feedbackMeetings = uniqueMeetings
-    .filter((meeting) => !!meeting.relatedSeasonId)
-    .sort((a, b) => dayjs(a.scheduledAt).valueOf() - dayjs(b.scheduledAt).valueOf());
-  const pendingMeetings = feedbackMeetings.filter((meeting) => !meeting.completedAt);
-  const overdueMeetings = pendingMeetings.filter((meeting) => dayjs(meeting.scheduledAt).isBefore(dayjs()));
-  const upcomingMeetings = pendingMeetings.filter((meeting) => !dayjs(meeting.scheduledAt).isBefore(dayjs()));
-  const nextMeetings = [...overdueMeetings, ...upcomingMeetings].slice(0, 3);
-  const primarySeason = nextMeetings[0]?.relatedSeasonId ? seasonById.get(nextMeetings[0].relatedSeasonId) : null;
-
-  return cardShell(
-    DASHBOARD_WIDGET_LABELS.feedbackMeetings,
-    <Link to="/app/meetings" className="tw-text-xs tw-font-medium tw-text-blue-600">{TXT.meetingView}</Link>,
-    <Spin spinning={memberQ.isLoading || managerQ.isLoading || seasonsQ.isLoading}>
-      <div className="tw-space-y-4">
-        <div className="tw-rounded-2xl tw-border tw-border-slate-100 tw-bg-slate-50/80 tw-p-3">
-          <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2">
-            <div>
-              <div className="tw-text-sm tw-font-semibold tw-text-slate-900">
-                {primarySeason?.name ?? '피드백 면담'}
-              </div>
-              <div className="tw-mt-0.5 tw-text-[11px] tw-text-slate-500">
-                {primarySeason
-                  ? `${seasonStatusLabel(primarySeason.status)} · ${dayjs(primarySeason.startDate).format('YYYY.MM.DD')} ~ ${dayjs(primarySeason.endDate).format('YYYY.MM.DD')}`
-                  : '평가 결과 공개 후 자동 생성된 면담을 기준으로 보여줍니다.'}
-              </div>
-            </div>
-            <Tag color={overdueMeetings.length > 0 ? 'orange' : pendingMeetings.length > 0 ? 'blue' : 'green'} className="!tw-m-0 !tw-rounded-full">
-              {overdueMeetings.length > 0 ? `지연 ${overdueMeetings.length}` : pendingMeetings.length > 0 ? '예정 있음' : '대기 없음'}
-            </Tag>
-          </div>
-        </div>
-        <div className="tw-grid tw-grid-cols-2 tw-gap-2">
-          {compactStat('지연', overdueMeetings.length, overdueMeetings.length > 0 ? 'amber' : 'slate')}
-          {compactStat(TXT.scheduled, upcomingMeetings.length, upcomingMeetings.length > 0 ? 'blue' : 'slate')}
-        </div>
-        {nextMeetings.length === 0 ? (
-          <div className="tw-rounded-xl tw-bg-slate-50 tw-p-4 tw-text-center tw-text-xs tw-text-slate-500">{TXT.noFeedbackMeetings}</div>
-        ) : (
-          <List
-            size="small"
-            dataSource={nextMeetings}
-            renderItem={(meeting) => {
-              const state = meetingState(meeting);
-              const season = meeting.relatedSeasonId ? seasonById.get(meeting.relatedSeasonId) : null;
-              const isManagerSide = managerQ.data?.some((item) => item.meetingRecordId === meeting.meetingRecordId);
-              const partnerId = isManagerSide ? meeting.memberId : meeting.managerId;
-              return (
-                <List.Item className="!tw-px-0 !tw-py-2">
-                  <div className="tw-flex tw-min-w-0 tw-flex-1 tw-items-start tw-gap-2">
-                    <VideoCameraOutlined className="tw-mt-0.5 tw-text-blue-600" />
-                    <div className="tw-min-w-0">
-                      <div className="tw-flex tw-min-w-0 tw-flex-wrap tw-items-center tw-gap-1.5">
-                        <span className="tw-truncate tw-text-sm tw-font-medium tw-text-slate-800">
-                          {season?.name ?? TXT.feedbackMeeting}
-                        </span>
-                        <Tag color={state.color} className="!tw-m-0 !tw-rounded-full !tw-text-[10px]">{state.label}</Tag>
-                      </div>
-                      <div className="tw-mt-0.5 tw-text-xs tw-text-slate-500">
-                        {dayjs(meeting.scheduledAt).format('YYYY.MM.DD (ddd) HH:mm')} · {isManagerSide ? '대상자' : '상사'} {labelFor(partnerId)}
-                      </div>
-                      <div className="tw-mt-0.5 tw-text-[11px] tw-text-slate-400">
-                        {season ? seasonStatusLabel(season.status) : '시즌 정보 없음'}
-                      </div>
-                    </div>
-                  </div>
-                  <Link to="/app/meetings/$meetingId" params={{ meetingId: meeting.meetingRecordId }} className="tw-shrink-0 tw-text-xs tw-font-medium tw-text-blue-600">
-                    {TXT.detail}
-                  </Link>
-                </List.Item>
-              );
-            }}
-          />
-        )}
-      </div>
-    </Spin>,
-  );
-}
-
 export function DashboardApprovalInboxBlock() {
   return cardShell(
     DASHBOARD_WIDGET_LABELS.approvalInbox,
@@ -650,6 +464,7 @@ export function DashboardApprovalInboxBlock() {
 export function DashboardCalendarBlock() {
   const today = dayjs();
   const [selectedDate, setSelectedDate] = useState(() => today.format('YYYY-MM-DD'));
+  const todayIso = today.format('YYYY-MM-DD');
   const monthQuery = useQuery({
     queryKey: ['calendar', 'dashboard-month', today.year(), today.month() + 1],
     queryFn: () => calendarApi.listMonth(today.year(), today.month() + 1),
@@ -666,7 +481,7 @@ export function DashboardCalendarBlock() {
     (h) => typeof h.holidayDate === 'string' && h.holidayDate.startsWith(monthPrefix),
   );
   const upcomingEvents = events
-    .filter((event) => !dayjs(event.endAt).isBefore(today.startOf('day')))
+    .filter((event) => !dayjs(event.startAt).isBefore(today, 'day'))
     .sort((a, b) => dayjs(a.startAt).valueOf() - dayjs(b.startAt).valueOf())
     .slice(0, 4);
   const selectedDay = dayjs(selectedDate);
@@ -797,7 +612,9 @@ export function DashboardCalendarBlock() {
           children: (
             <Spin spinning={monthQuery.isLoading}>
               {upcomingEvents.length === 0 ? (
-                <Typography.Text type="secondary" className="tw-text-xs">{TXT.noUpcomingSchedule}</Typography.Text>
+                <Typography.Text type="secondary" className="tw-text-xs">
+                  {monthQuery.isError ? '다가올 일정을 불러오지 못했습니다.' : TXT.noUpcomingSchedule}
+                </Typography.Text>
               ) : (
                 renderEventList(upcomingEvents)
               )}
@@ -1001,6 +818,14 @@ export function DashboardNotificationsBlock() {
       );
       return;
     }
+    if (isMeetingNotification(item.notificationType, item.targetType)) {
+      if (item.targetId) {
+        await navigate({ to: '/app/meetings/$meetingId', params: { meetingId: item.targetId } });
+      } else {
+        await navigate({ to: '/app/meetings' });
+      }
+      return;
+    }
     await navigate(
       buildApprovalNotificationNavigate({
         notificationType: item.notificationType,
@@ -1174,10 +999,6 @@ export function renderDashboardWidget(id: DashboardWidgetId, user: Me | null): R
       return <DashboardProfileBlock key={id} user={user} />;
     case 'performanceGoals':
       return <DashboardPerformanceGoalsBlock key={id} />;
-    case 'evaluationTasks':
-      return <DashboardEvaluationTasksBlock key={id} />;
-    case 'feedbackMeetings':
-      return <DashboardFeedbackMeetingsBlock key={id} />;
     case 'approvalInbox':
       return <DashboardApprovalInboxBlock key={id} />;
     case 'calendar':

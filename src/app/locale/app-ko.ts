@@ -23,7 +23,6 @@ export const APP_MENU_LABEL: Record<string, string> = {
   '/app/performance': '목표',
   '/app/evaluations': '내 평가',
   '/app/meetings': '면담',
-  '/app/settings': '설정',
   '/app/ai-documents': 'HR 정책 문서',
   '/app/work-trips': '출장 신청/이력',
   '/app/attendance/monthly': '개인 월근태근무',
@@ -174,10 +173,6 @@ export const APP_GENERIC_PAGE_COPY: Record<string, { title: string; description:
   '/ai-assistant': {
     title: 'AI 비서',
     description: '업무 질의·문서 요약 등 AI 지원 기능을 준비 중입니다.',
-  },
-  '/settings': {
-    title: '설정',
-    description: '내 계정·알림·환경 설정 화면을 준비 중입니다.',
   },
 };
 

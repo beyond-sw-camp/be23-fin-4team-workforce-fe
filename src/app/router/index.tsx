@@ -146,7 +146,7 @@ const appLayoutRoute = createRoute({
     requireAuth(context);
     // SaaS 운영자는 일반 앱 영역 접근 차단 -> 운영자 콘솔로 redirect
     const token = getAccessToken();
-    const payload = decodeJwtPayload(token);
+    const payload = token ? decodeJwtPayload(token) : null;
     const actorType = (payload?.actor_type ?? payload?.actorType) as string | undefined;
     if (actorType === 'OPERATOR') {
       throw redirect({ to: '/saas/dashboard' });
@@ -990,7 +990,7 @@ const adminBonusPolicyRoute = createRoute({
   },
 });
 
-const genericPaths = ['/mail', '/ai-assistant', '/settings'] as const;
+const genericPaths = ['/mail', '/ai-assistant'] as const;
 
 const genericRoutes = genericPaths.map((path) => {
   const copy = APP_GENERIC_PAGE_COPY[path] ?? { title: '페이지', description: '준비 중입니다.' };
@@ -1006,7 +1006,8 @@ const notFoundRoute = createRoute({ getParentRoute: () => rootRoute, path: '/404
 
 // SaaS 운영자 - 일반 layout 무관 단독 라우트 (로그인은 일반 /login 통합)
 function requireOperator() {
-  const payload = decodeJwtPayload(getAccessToken());
+  const token = getAccessToken();
+  const payload = token ? decodeJwtPayload(token) : null;
   const actorType = (payload?.actor_type ?? payload?.actorType) as string | undefined;
   if (actorType !== 'OPERATOR') {
     throw redirect({ to: '/login' });

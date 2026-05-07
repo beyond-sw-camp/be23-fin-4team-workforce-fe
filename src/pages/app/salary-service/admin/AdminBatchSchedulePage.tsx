@@ -1,11 +1,13 @@
 import { EditOutlined, ReloadOutlined, ScheduleOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Button, Form, Input, InputNumber, Select, Space, Switch, Table, Tag, TimePicker, Typography } from 'antd';
+import { App, Card, Form, Input, InputNumber, Segmented, Select, Space, Switch, Table, Tag, TimePicker, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { useState } from 'react';
 import { companyBatchScheduleApi, type CompanyBatchSchedule } from '@/features/salary-service/api/companyBatchScheduleApi';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
+import { AppButton } from '@/shared/ui/AppButton';
+import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 
 type Frequency = 'hourly' | 'daily' | 'weekly' | 'monthly' | 'yearly';
 const WEEKDAYS = [
@@ -45,7 +47,7 @@ function cronToHuman(expr: string | null): string {
   if (!expr) return '-';
   const parts = expr.trim().split(/\s+/);
   if (parts.length < 6) return expr;
-  const [sec, min, hour, day, month, dow] = parts;
+  const [sec = '', min = '', hour = '', day = '', month = '', dow = ''] = parts;
   const allWild = (v: string) => v === '*' || v === '?';
   const isNum = (v: string) => /^\d+$/.test(v);
   const pad = (v: string) => String(v).padStart(2, '0');
@@ -79,7 +81,7 @@ function parseCronToForm(expr: string | null): {
   if (!expr) return fallback;
   const parts = expr.trim().split(/\s+/);
   if (parts.length < 6) return fallback;
-  const [, min, hour, day, month, dow] = parts;
+  const [, min = '0', hour = '0', day = '', month = '', dow = ''] = parts;
   const time = dayjs().hour(Number(hour) || 0).minute(Number(min) || 0);
   if (hour === '*' && (day === '*' || day === '?') && (dow === '*' || dow === '?')) {
     return { frequency: 'hourly', time: dayjs().hour(0).minute(Number(min) || 0), dayOfMonth: 1, dayOfWeek: 2, monthOfYear: 1 };
@@ -103,6 +105,8 @@ function formToCron(values: { frequency: Frequency; time: dayjs.Dayjs; dayOfMont
 }
 
 const QK = ['salary', 'company-batch-schedule'] as const;
+const PAGE_CARD_CLASS =
+  'tw-rounded-2xl tw-border tw-border-slate-200/80 tw-bg-white tw-shadow-[0_1px_3px_rgba(15,23,42,0.06)]';
 
 export default function AdminBatchSchedulePage() {
   return (
@@ -158,6 +162,9 @@ function Inner() {
       }
       return true;
     });
+  const schedules = listQ.data ?? [];
+  const activeCount = schedules.filter((item) => !item.paused).length;
+  const pausedCount = schedules.length - activeCount;
 
   const openEdit = (row: CompanyBatchSchedule) => {
     setEditing(row);
@@ -172,15 +179,27 @@ function Inner() {
 
   const cols: ColumnsType<CompanyBatchSchedule> = [
     {
-      title: '활성',
+      title: '상태',
       key: 'active',
-      width: 80,
+      width: 116,
       render: (_, row) => (
-        <Switch
-          checked={!row.paused}
-          loading={toggleM.isPending && toggleM.variables?.jobKey === row.jobKey}
-          onChange={(checked) => toggleM.mutate({ jobKey: row.jobKey, active: checked })}
-        />
+        <Space size={8}>
+          <Switch
+            size="small"
+            checked={!row.paused}
+            loading={toggleM.isPending && toggleM.variables?.jobKey === row.jobKey}
+            onChange={(checked) => toggleM.mutate({ jobKey: row.jobKey, active: checked })}
+          />
+          <Tag
+            className={`!tw-m-0 !tw-rounded-full !tw-px-2.5 !tw-text-[11px] !tw-font-semibold ${
+              row.paused
+                ? '!tw-border-slate-200 !tw-bg-slate-50 !tw-text-slate-500'
+                : '!tw-border-emerald-100 !tw-bg-emerald-50 !tw-text-emerald-700'
+            }`}
+          >
+            {row.paused ? '중지' : '활성'}
+          </Tag>
+        </Space>
       ),
     },
     {
@@ -191,9 +210,9 @@ function Inner() {
         const meta = jobLabel(v);
         return (
           <Space direction="vertical" size={2}>
-            <Typography.Text strong>{meta.name}</Typography.Text>
+            <Typography.Text strong className="!tw-text-[14px] !tw-text-slate-900">{meta.name}</Typography.Text>
             {meta.description ? (
-              <Typography.Text type="secondary" className="tw-text-xs">{meta.description}</Typography.Text>
+              <Typography.Text type="secondary" className="tw-text-xs tw-leading-relaxed">{meta.description}</Typography.Text>
             ) : null}
           </Space>
         );
@@ -205,7 +224,13 @@ function Inner() {
       key: 'cronExpression',
       width: 180,
       render: (v: string | null) =>
-        v ? <Tag color="blue">{cronToHuman(v)}</Tag> : <Typography.Text type="secondary">-</Typography.Text>,
+        v ? (
+          <Tag className="!tw-m-0 !tw-rounded-full !tw-border-[#d7e2ef] !tw-bg-[#f6f9fd] !tw-px-3 !tw-py-0.5 !tw-font-semibold !tw-text-[#1e3a5f]">
+            {cronToHuman(v)}
+          </Tag>
+        ) : (
+          <Typography.Text type="secondary">-</Typography.Text>
+        ),
     },
     {
       title: '다음 실행 예정',
@@ -228,58 +253,95 @@ function Inner() {
       key: 'action',
       width: 100,
       render: (_, row) => (
-        <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(row)}>시간 변경</Button>
+        <AppButton size="small" variant="secondary" icon={<EditOutlined />} onClick={() => openEdit(row)}>
+          시간 변경
+        </AppButton>
       ),
     },
   ];
 
   return (
-    <div className="tw-min-h-screen tw-bg-slate-50 tw-p-8">
-      <div className="tw-mx-auto tw-max-w-6xl tw-space-y-6">
-        <div className="tw-flex tw-items-center tw-justify-between">
-          <Space align="center" size={12}>
-            <ScheduleOutlined className="tw-text-2xl tw-text-blue-500" />
-            <Typography.Title level={2} className="!tw-m-0">자동 작업 관리</Typography.Title>
-          </Space>
-          <Button icon={<ReloadOutlined />} onClick={() => void listQ.refetch()} loading={listQ.isFetching}>
-            새로고침
-          </Button>
+    <div className="tw-mx-auto tw-w-full tw-space-y-5">
+        <AppWorkspacePageTitle
+          eyebrow="PAYROLL AUTOMATION"
+          title="자동 작업 관리"
+          subtitle="급여, 근태, 휴가와 연결된 회사 자동 작업의 실행 주기와 활성 상태를 관리합니다."
+          extra={
+            <AppButton
+              variant="secondary"
+              icon={<ReloadOutlined />}
+              onClick={() => void listQ.refetch()}
+              loading={listQ.isFetching}
+            >
+              새로고침
+            </AppButton>
+          }
+        />
+
+        <div className="tw-grid tw-grid-cols-1 tw-gap-3 md:tw-grid-cols-3">
+          {[
+            { label: '전체 작업', value: schedules.length, tone: 'tw-text-[#1e3a5f]' },
+            { label: '활성 작업', value: activeCount, tone: 'tw-text-emerald-700' },
+            { label: '중지 작업', value: pausedCount, tone: 'tw-text-slate-500' },
+          ].map((item) => (
+            <div key={item.label} className={`${PAGE_CARD_CLASS} tw-px-5 tw-py-4`}>
+              <div className="tw-text-xs tw-font-semibold tw-text-slate-500">{item.label}</div>
+              <div className={`tw-mt-1 tw-text-2xl tw-font-bold tw-tabular-nums ${item.tone}`}>
+                {listQ.isLoading ? '-' : item.value}
+              </div>
+            </div>
+          ))}
         </div>
 
-        <Alert
-          type="info"
-          showIcon
-          message="우리 회사의 자동 작업 시각을 직접 조정할 수 있어요. 활성 토글로 끄거나 켜고, 시간 변경으로 실행 주기를 바꿀 수 있어요."
-        />
+        <Card className={PAGE_CARD_CLASS} styles={{ body: { padding: 20 } }}>
+          <div className="tw-flex tw-flex-col tw-gap-3 lg:tw-flex-row lg:tw-items-center lg:tw-justify-between">
+            <div className="tw-flex tw-min-w-0 tw-items-start tw-gap-3">
+              <span className="tw-flex tw-size-10 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-xl tw-bg-[#f1f5f9] tw-text-[#1e3a5f]">
+                <ScheduleOutlined />
+              </span>
+              <div className="tw-min-w-0">
+                <div className="tw-text-sm tw-font-semibold tw-text-slate-900">작업 실행 설정</div>
+                <div className="tw-mt-1 tw-text-xs tw-leading-relaxed tw-text-slate-500">
+                  활성 토글은 즉시 반영되며, 실행 시간은 작업별로 변경할 수 있습니다.
+                </div>
+              </div>
+            </div>
+            <div className="tw-flex tw-flex-col tw-gap-2 sm:tw-flex-row sm:tw-items-center">
+              <Segmented
+                size="middle"
+                value={filter}
+                onChange={(value) => setFilter(value as typeof filter)}
+                options={[
+                  { value: 'all', label: '전체' },
+                  { value: 'active', label: '활성' },
+                  { value: 'paused', label: '중지' },
+                ]}
+                className="tw-shrink-0"
+              />
+              <Input.Search
+                allowClear
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+                placeholder="작업명 또는 설명 검색"
+                className="tw-w-full sm:tw-w-[260px]"
+              />
+            </div>
+          </div>
 
-        <Space wrap size={12}>
-          <Select
-            value={filter}
-            onChange={setFilter}
-            style={{ width: 140 }}
-            options={[
-              { value: 'all', label: '전체' },
-              { value: 'active', label: '활성만' },
-              { value: 'paused', label: '중지만' },
-            ]}
+          <Table<CompanyBatchSchedule>
+            rowKey={(r) => r.jobKey}
+            loading={listQ.isLoading}
+            dataSource={filtered}
+            columns={cols}
+            pagination={false}
+            scroll={{ x: 920 }}
+            locale={{ emptyText: '조건에 맞는 자동 작업이 없습니다.' }}
+            className="tw-mt-4 [&_.ant-table-thead>tr>th]:!tw-bg-slate-50 [&_.ant-table-thead>tr>th]:!tw-text-xs [&_.ant-table-thead>tr>th]:!tw-font-semibold [&_.ant-table-thead>tr>th]:!tw-text-slate-500 [&_.ant-table-tbody>tr>td]:!tw-py-4"
           />
-          <Input.Search
-            allowClear
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            placeholder="작업명/설명 검색"
-            style={{ width: 240 }}
-          />
-          <Typography.Text type="secondary" className="tw-text-xs">총 {filtered.length}건</Typography.Text>
-        </Space>
-
-        <Table<CompanyBatchSchedule>
-          rowKey={(r) => r.jobKey}
-          loading={listQ.isLoading}
-          dataSource={filtered}
-          columns={cols}
-          pagination={false}
-        />
+          <div className="tw-mt-3 tw-text-xs tw-text-slate-500">
+            현재 조건 기준 {filtered.length}건이 표시됩니다.
+          </div>
+        </Card>
 
         <AppDoubleActionModal
           title="실행 시간 변경"
@@ -367,7 +429,6 @@ function Inner() {
             )}
           </Form>
         </AppDoubleActionModal>
-      </div>
     </div>
   );
 }

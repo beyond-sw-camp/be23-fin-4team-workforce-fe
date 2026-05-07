@@ -9,7 +9,7 @@ import {
   TeamOutlined,
   UserOutlined,
 } from '@ant-design/icons';
-import { App, Card, Collapse, List, Popconfirm, Select, Space, Tag, Typography } from 'antd';
+import { App, Card, Collapse, List, Popconfirm, Progress, Select, Space, Tag, Typography } from 'antd';
 import { useAuth } from '@/features/auth/useAuth';
 import { approvalApi } from '@/features/approval/api/approvalApi';
 import type { GoalApprovalBundle } from '@/features/approval/model/types';
@@ -357,20 +357,7 @@ function OrgGoalsView({
   return (
     <div className="tw-space-y-5">
       <CycleFilterBar value={cycleFilter} onChange={setCycleFilter} options={cycleOptions} />
-      <Card title="조직 목표 요약" className={SECTION_CARD}>
-        <div className="tw-grid tw-grid-cols-2 tw-gap-3 md:tw-grid-cols-4">
-          <StatusMetric label="조직 목표" value={orgMetrics.objectives} description="선택한 기간의 담당 조직 목표" />
-          <StatusMetric
-            label="평가 기준 완료"
-            value={orgMetrics.criteriaReady}
-            tone={orgMetrics.criteriaReady === orgMetrics.objectives ? 'green' : 'gold'}
-            description="S/A/B/C 기준이 모두 있는 목표"
-          />
-          <StatusMetric label="승인 완료 구성원" value={orgMetrics.approvedMembers} tone="green" description="평가 대상 목표를 가진 구성원" />
-          <StatusMetric label="승인된 개인 목표" value={orgMetrics.approvedGoals} description="조직 목표에 연결된 개인 목표" />
-        </div>
-      </Card>
-      <GoalSetupStatusPanel status={setupStatus} />
+      <GoalManagementStatusPanel orgMetrics={orgMetrics} setupStatus={setupStatus} />
       <div className="tw-grid tw-grid-cols-1 tw-gap-5 xl:tw-grid-cols-[minmax(0,1fr)_420px]">
         <Card title="조직 목표" className={SECTION_CARD} loading={loading}>
           <CompactGoalRows goals={orgObjectives} empty="담당 조직 목표가 없습니다." mode="objective" />
@@ -564,32 +551,127 @@ type GoalSetupStatus = {
   incompleteMembers: GoalSetupMemberStatus[];
 };
 
-function GoalSetupStatusPanel({ status }: { status: GoalSetupStatus }) {
+type OrgGoalMetrics = {
+  objectives: number;
+  criteriaReady: number;
+  approvedMembers: number;
+  approvedGoals: number;
+};
+
+function percentOf(value: number, total: number): number {
+  if (total <= 0) return 0;
+  return Math.round((value / total) * 100);
+}
+
+function GoalManagementStatusPanel({
+  orgMetrics,
+  setupStatus,
+}: {
+  orgMetrics: OrgGoalMetrics;
+  setupStatus: GoalSetupStatus;
+}) {
+  const criteriaPct = percentOf(orgMetrics.criteriaReady, orgMetrics.objectives);
+  const approvedPct = percentOf(setupStatus.approved, setupStatus.total);
+  const waitingCount = setupStatus.pending + setupStatus.notReady;
+
   return (
-    <Card title="구성원 목표 수립 현황" className={SECTION_CARD}>
-      <div className="tw-grid tw-grid-cols-2 tw-gap-3 md:tw-grid-cols-4">
-        <StatusMetric label="전체 구성원" value={status.total} />
-        <StatusMetric label="승인 완료" value={status.approved} tone="green" />
-        <StatusMetric label="승인 대기" value={status.pending} tone="gold" />
-        <StatusMetric label="미완료" value={status.notReady} tone="red" />
+    <Card className={SECTION_CARD} styles={{ body: { padding: 20 } }}>
+      <div className="tw-flex tw-flex-col tw-gap-1 md:tw-flex-row md:tw-items-start md:tw-justify-between">
+        <div>
+          <Text strong className="!tw-text-base !tw-text-slate-900">
+            조직 목표 관리 현황
+          </Text>
+          <div className="tw-mt-1 tw-text-xs tw-leading-relaxed tw-text-slate-500">
+            조직 목표는 평가 기준 입력 상태를, 구성원 목표는 개인 목표 승인 완료 여부를 보여줍니다.
+          </div>
+        </div>
+        <Tag
+          className={`!tw-m-0 !tw-rounded-full !tw-px-3 !tw-py-1 !tw-text-xs !tw-font-semibold ${
+            waitingCount === 0
+              ? '!tw-border-emerald-100 !tw-bg-emerald-50 !tw-text-emerald-700'
+              : '!tw-border-amber-100 !tw-bg-amber-50 !tw-text-amber-700'
+          }`}
+        >
+          {waitingCount === 0 ? '수립 완료' : `확인 필요 ${waitingCount}명`}
+        </Tag>
       </div>
+
+      <div className="tw-mt-5 tw-grid tw-grid-cols-1 tw-gap-4 lg:tw-grid-cols-2">
+        <div className="tw-rounded-2xl tw-border tw-border-slate-100 tw-bg-slate-50/70 tw-p-4">
+          <div className="tw-flex tw-items-start tw-justify-between tw-gap-3">
+            <div>
+              <div className="tw-text-sm tw-font-semibold tw-text-slate-900">조직 목표 준비도</div>
+              <div className="tw-mt-1 tw-text-xs tw-leading-relaxed tw-text-slate-500">
+                담당 조직 목표 중 S/A/B/C 평가 기준이 모두 입력된 비율입니다.
+              </div>
+            </div>
+            <div className="tw-text-right">
+              <div className="tw-text-2xl tw-font-bold tw-tabular-nums tw-text-[#1e3a5f]">
+                {orgMetrics.criteriaReady}/{orgMetrics.objectives}
+              </div>
+              <div className="tw-text-[11px] tw-text-slate-400">기준 완료</div>
+            </div>
+          </div>
+          <Progress
+            percent={criteriaPct}
+            showInfo={false}
+            strokeColor={criteriaPct === 100 ? '#059669' : '#1e3a5f'}
+            trailColor="#e2e8f0"
+            className="!tw-mt-3"
+          />
+          <div className="tw-mt-3 tw-flex tw-flex-wrap tw-gap-2">
+            <Tag className="!tw-m-0">조직 목표 {orgMetrics.objectives}개</Tag>
+            <Tag className="!tw-m-0">연결 승인 목표 {orgMetrics.approvedGoals}개</Tag>
+          </div>
+        </div>
+
+        <div className="tw-rounded-2xl tw-border tw-border-slate-100 tw-bg-white tw-p-4">
+          <div className="tw-flex tw-items-start tw-justify-between tw-gap-3">
+            <div>
+              <div className="tw-text-sm tw-font-semibold tw-text-slate-900">구성원 목표 수립 진행</div>
+              <div className="tw-mt-1 tw-text-xs tw-leading-relaxed tw-text-slate-500">
+                담당 조직 구성원 중 개인 목표가 승인 완료되어 평가 대상으로 준비된 인원입니다.
+              </div>
+            </div>
+            <div className="tw-text-right">
+              <div className="tw-text-2xl tw-font-bold tw-tabular-nums tw-text-emerald-700">
+                {setupStatus.approved}/{setupStatus.total}
+              </div>
+              <div className="tw-text-[11px] tw-text-slate-400">승인 완료</div>
+            </div>
+          </div>
+          <Progress
+            percent={approvedPct}
+            showInfo={false}
+            strokeColor={approvedPct === 100 ? '#059669' : '#d97706'}
+            trailColor="#e2e8f0"
+            className="!tw-mt-3"
+          />
+          <div className="tw-mt-3 tw-flex tw-flex-wrap tw-gap-2">
+            <Tag color="green" className="!tw-m-0">완료 {setupStatus.approved}명</Tag>
+            <Tag color="gold" className="!tw-m-0">승인 대기 {setupStatus.pending}명</Tag>
+            <Tag color="red" className="!tw-m-0">미완료 {setupStatus.notReady}명</Tag>
+          </div>
+        </div>
+      </div>
+
       <Collapse
         ghost
-        className="tw-mt-4"
+        className="tw-mt-3"
         items={[
           {
             key: 'incomplete-members',
             label: (
               <span className="tw-text-sm tw-font-semibold tw-text-slate-900">
-                아직 완료되지 않은 구성원 {status.incompleteMembers.length}명
+                미완료/승인 대기 구성원 {setupStatus.incompleteMembers.length}명 보기
               </span>
             ),
             children:
-              status.incompleteMembers.length === 0 ? (
+              setupStatus.incompleteMembers.length === 0 ? (
                 <AppEmptyIllustrated description="모든 구성원의 목표가 승인 완료되었습니다." />
               ) : (
                 <List
-                  dataSource={status.incompleteMembers}
+                  dataSource={setupStatus.incompleteMembers}
                   renderItem={(member) => (
                     <List.Item className="!tw-items-start">
                       <List.Item.Meta
