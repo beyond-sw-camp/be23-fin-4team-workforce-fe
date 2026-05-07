@@ -23,6 +23,13 @@ jobs:
 
       - name: npm build
         working-directory: .
+        env:
+          VITE_APP_NAME: Workforce
+          VITE_APP_ENV: production
+          VITE_API_BASE_URL: https://server.workforcehr.shop
+          VITE_ENABLE_MSW: false
+          VITE_LOG_LEVEL: info
+          VITE_SENTRY_DSN: ""
         run: npm run build
 
       - name: setup aws cli
