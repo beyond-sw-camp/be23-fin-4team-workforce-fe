@@ -11,6 +11,7 @@ import {
   Typography,
   message,
 } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import {
   CalendarOutlined,
   CheckCircleOutlined,
@@ -100,6 +101,81 @@ export default function MeetingsPage() {
     return [...ids];
   }, [managerQ.data, memberQ.data]);
   const { labelFor } = useMemberDisplayNames(allPartnerIds);
+  const columns: ColumnsType<MeetingListItem> = [
+    {
+      title: '면담 상대',
+      key: 'partner',
+      render: (_: unknown, record) => (
+        <Space>
+          <UserOutlined />
+          <Typography.Text className="tw-font-medium">
+            {labelFor(partnerIdOf(record))}
+          </Typography.Text>
+          {record.relatedSeasonId && (
+            <Tag color="blue" className="!tw-rounded-full">
+              <LinkOutlined className="tw-mr-1" />
+              피드백 면담
+            </Tag>
+          )}
+        </Space>
+      ),
+    },
+    {
+      title: '유형',
+      key: 'type',
+      width: 140,
+      filters: [
+        { text: '피드백', value: 'feedback' },
+        { text: '일반', value: 'general' },
+      ],
+      onFilter: (value, record) =>
+        value === 'feedback' ? !!record.relatedSeasonId : !record.relatedSeasonId,
+      render: (_: unknown, record) => (
+        <Tag color={record.relatedSeasonId ? 'blue' : 'default'}>
+          {record.relatedSeasonId ? '피드백' : '일반'}
+        </Tag>
+      ),
+    },
+    {
+      title: '일정',
+      dataIndex: 'scheduledAt',
+      key: 'scheduledAt',
+      render: (value: string) => (
+        <Space>
+          <CalendarOutlined className="tw-text-slate-400" />
+          <span>{dayjs(value).format('YYYY-MM-DD (ddd) HH:mm')}</span>
+        </Space>
+      ),
+      sorter: (a, b) => dayjs(a.scheduledAt).unix() - dayjs(b.scheduledAt).unix(),
+      defaultSortOrder: 'ascend',
+    },
+    {
+      title: '상태',
+      key: 'status',
+      width: 120,
+      filters: [
+        { text: '미완료', value: 'pending' },
+        { text: '완료', value: 'completed' },
+      ],
+      onFilter: (value, record) =>
+        value === 'pending' ? !record.completedAt : !!record.completedAt,
+      render: (_: unknown, record) => statusTag(record),
+    },
+    {
+      title: '',
+      key: 'action',
+      width: 120,
+      render: (_: unknown, record) => (
+        <Link
+          to="/app/meetings/$meetingId"
+          params={{ meetingId: record.meetingRecordId }}
+          className="tw-font-medium tw-text-[#1e3a5f]"
+        >
+          상세 보기
+        </Link>
+      ),
+    },
+  ];
 
   return (
     <div className="tw-mx-auto tw-w-full tw-space-y-5">
@@ -146,82 +222,7 @@ export default function MeetingsPage() {
         <Table
           rowKey="meetingRecordId"
           className="app-table-compact tw-mt-4"
-          columns={[
-            {
-              title: '면담 상대',
-              key: 'partner',
-              render: (_: unknown, record: MeetingListItem) => (
-                <Space>
-                  <UserOutlined />
-                  <Typography.Text className="tw-font-medium">
-                    {labelFor(partnerIdOf(record))}
-                  </Typography.Text>
-                  {record.relatedSeasonId && (
-                    <Tag color="blue" className="!tw-rounded-full">
-                      <LinkOutlined className="tw-mr-1" />
-                      피드백 면담
-                    </Tag>
-                  )}
-                </Space>
-              ),
-            },
-            {
-              title: '유형',
-              key: 'type',
-              width: 140,
-              filters: [
-                { text: '피드백', value: 'feedback' },
-                { text: '일반', value: 'general' },
-              ],
-              onFilter: (value, record) =>
-                value === 'feedback' ? !!record.relatedSeasonId : !record.relatedSeasonId,
-              render: (_: unknown, record: MeetingRecord) => (
-                <Tag color={record.relatedSeasonId ? 'blue' : 'default'}>
-                  {record.relatedSeasonId ? '피드백' : '일반'}
-                </Tag>
-              ),
-            },
-            {
-              title: '일정',
-              dataIndex: 'scheduledAt',
-              key: 'scheduledAt',
-              render: (value: string) => (
-                <Space>
-                  <CalendarOutlined className="tw-text-slate-400" />
-                  <span>{dayjs(value).format('YYYY-MM-DD (ddd) HH:mm')}</span>
-                </Space>
-              ),
-              sorter: (a: MeetingRecord, b: MeetingRecord) =>
-                dayjs(a.scheduledAt).unix() - dayjs(b.scheduledAt).unix(),
-              defaultSortOrder: 'ascend' as const,
-            },
-            {
-              title: '상태',
-              key: 'status',
-              width: 120,
-              filters: [
-                { text: '미완료', value: 'pending' },
-                { text: '완료', value: 'completed' },
-              ],
-              onFilter: (value, record) =>
-                value === 'pending' ? !record.completedAt : !!record.completedAt,
-              render: (_: unknown, record: MeetingRecord) => statusTag(record),
-            },
-            {
-              title: '',
-              key: 'action',
-              width: 120,
-              render: (_: unknown, record: MeetingRecord) => (
-                <Link
-                  to="/app/meetings/$meetingId"
-                  params={{ meetingId: record.meetingRecordId }}
-                  className="tw-font-medium tw-text-[#1e3a5f]"
-                >
-                  상세 보기
-                </Link>
-              ),
-            },
-          ]}
+          columns={columns}
           dataSource={meetings}
           loading={loading}
           pagination={{ pageSize: 15, showSizeChanger: false }}
