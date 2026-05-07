@@ -1,6 +1,15 @@
-import { Link } from '@tanstack/react-router';
+import {
+  Link } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Button, Card, Col, Row, Space, Statistic, Table, Typography } from 'antd';
+import { Alert,
+  Button,
+  Card,
+  Col,
+  Row,
+  Space,
+  Statistic,
+  Typography,
+} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { useCallback, useMemo, useState } from 'react';
@@ -10,6 +19,9 @@ import { esgApi } from '@/features/esg/api/esgApi';
 import { esgCardLinkButtonClass, esgLinkTextClass, esgTableLinkClass } from '@/features/esg/esgUiTokens';
 import { EsgActivitySubmitModal } from '@/features/esg/ui/EsgActivitySubmitModal';
 import { AppModal } from '@/shared/ui/AppModal';
+import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
+import { AppDataTable } from '@/shared/ui/AppDataTable';
+
 import {
   formatActivityDateTime,
   formatActivityStatusKo,
@@ -362,7 +374,7 @@ export function EsgHomePage() {
         }
       >
         
-        <Table<EsgSubject>
+        <AppDataTable<EsgSubject>
           className={cardTableCls}
           rowKey={(r) => r.subjectId || JSON.stringify(r)}
           loading={subjectsLoading}
@@ -386,7 +398,7 @@ export function EsgHomePage() {
         }
       >
        
-        <Table<EsgActivity>
+        <AppDataTable<EsgActivity>
           className={cardTableCls}
           rowKey={(r) => pickActivityId(r) || JSON.stringify(r)}
           loading={mineLoading}
@@ -410,7 +422,7 @@ export function EsgHomePage() {
         }
       >
        
-        <Table<EsgShopOrder>
+        <AppDataTable<EsgShopOrder>
           className={cardTableCls}
           rowKey={(row) => row.esgShopOrderId || JSON.stringify(row)}
           loading={myOrdersLoading}
@@ -424,49 +436,53 @@ export function EsgHomePage() {
 
       <EsgActivitySubmitModal open={submitModalOpen} initialSubjectId={submitModalSubjectId} onClose={closeActivitySubmitModal} />
 
-      <AppModal
+      <AppSingleActionModal
         title={modal === 'subjects' ? '활동 양식 전체' : modal === 'activities' ? '내 활동 전체' : '내 구매 내역 전체'}
         open={modal !== null}
-        onCancel={() => setModal(null)}
-        footer={null}
+        onClose={() => setModal(null)}
+        onSubmit={() => undefined}
+        submitText="확인"
+        customFooter={null}
         width={modal === 'activities' ? 1100 : 880}
-        styles={{ body: { maxHeight: '72vh', overflowY: 'auto', paddingTop: 12 } }}
+        styles={{ body: { maxHeight: '72vh', overflowY: 'auto' } }}
         destroyOnHidden
       >
-        {modal === 'subjects' && (
-          <Table<EsgSubject>
-            rowKey={(r) => r.subjectId || JSON.stringify(r)}
-            loading={subjectsLoading}
-            dataSource={subjects}
-            pagination={{ pageSize: 10, showSizeChanger: false }}
-            size="small"
-            scroll={{ x: 720 }}
-            columns={subjectColumns}
-          />
-        )}
-        {modal === 'activities' && (
-          <Table<EsgActivity>
-            rowKey={(r) => pickActivityId(r) || JSON.stringify(r)}
-            loading={mineLoading}
-            dataSource={activitiesSorted}
-            pagination={{ pageSize: 10, showSizeChanger: false }}
-            size="small"
-            scroll={{ x: 1280 }}
-            columns={activityColumnsFull}
-          />
-        )}
-        {modal === 'orders' && (
-          <Table<EsgShopOrder>
-            rowKey={(row) => row.esgShopOrderId || JSON.stringify(row)}
-            loading={myOrdersLoading}
-            dataSource={ordersSorted}
-            pagination={{ pageSize: 10, showSizeChanger: false }}
-            size="small"
-            scroll={{ x: 640 }}
-            columns={orderColumns}
-          />
-        )}
-      </AppModal>
+        <div className="tw-px-5 tw-py-4">
+          {modal === 'subjects' && (
+            <AppDataTable<EsgSubject>
+              rowKey={(r) => r.subjectId || JSON.stringify(r)}
+              loading={subjectsLoading}
+              dataSource={subjects}
+              pagination={{ pageSize: 10, showSizeChanger: false }}
+              size="small"
+              scroll={{ x: 720 }}
+              columns={subjectColumns}
+            />
+          )}
+          {modal === 'activities' && (
+            <AppDataTable<EsgActivity>
+              rowKey={(r) => pickActivityId(r) || JSON.stringify(r)}
+              loading={mineLoading}
+              dataSource={activitiesSorted}
+              pagination={{ pageSize: 10, showSizeChanger: false }}
+              size="small"
+              scroll={{ x: 1280 }}
+              columns={activityColumnsFull}
+            />
+          )}
+          {modal === 'orders' && (
+            <AppDataTable<EsgShopOrder>
+              rowKey={(row) => row.esgShopOrderId || JSON.stringify(row)}
+              loading={myOrdersLoading}
+              dataSource={ordersSorted}
+              pagination={{ pageSize: 10, showSizeChanger: false }}
+              size="small"
+              scroll={{ x: 640 }}
+              columns={orderColumns}
+            />
+          )}
+        </div>
+      </AppSingleActionModal>
     </Space>
   );
 }

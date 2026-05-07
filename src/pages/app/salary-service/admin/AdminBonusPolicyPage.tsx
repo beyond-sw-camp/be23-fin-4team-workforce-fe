@@ -1,8 +1,12 @@
 // /app/salary/bonus-policy 회사별 보너스 정책 관리
 // 정기상여 / 성과급 / 명절상여 3개 영역 회사 표준 룰 관리
 // 실제 지급은 PayrollType (PERFORMANCE_BONUS / SPECIAL_BONUS) 새 Payroll 행에서 처리
-import { useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useMemo,
+  useState } from 'react';
+import { useMutation,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
   App,
@@ -17,18 +21,20 @@ import {
   Select,
   Space,
   Switch,
-  Table,
   Tabs,
   Tag,
+  Tooltip,
   Typography,
 } from 'antd';
-import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs, { type Dayjs } from 'dayjs';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppUnitInputNumber } from '@/shared/ui/AppUnitInputNumber';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
+import { AppDataTable } from '@/shared/ui/AppDataTable';
+
 import type {
   BonusEligibilityScopeCode,
   BonusPolicy,
@@ -253,33 +259,35 @@ export function AdminBonusPolicyPage() {
         width: 160,
         render: (_, r) => (
           <Space>
-            <Button
-              size="small"
-              onClick={() => {
-                setEditing(r);
-                form.setFieldsValue({
-                  useRegularBonusYn: r.useRegularBonusYn === 'Y',
-                  regularBonusAnnualRate: r.regularBonusAnnualRate ?? undefined,
-                  regularBonusPaymentCount: r.regularBonusPaymentCount ?? undefined,
-                  usePerformanceBonusYn: r.usePerformanceBonusYn === 'Y',
-                  performanceBonusMaxRate: r.performanceBonusMaxRate ?? undefined,
-                  performanceBonusBasis: r.performanceBonusBasis ?? undefined,
-                  gradeRows: parseGradeRows(r.gradeBonusRatesJson),
-                  useHolidayBonusYn: r.useHolidayBonusYn === 'Y',
-                  holidayBonusType: (r.holidayBonusType as HolidayBonusTypeCode) ?? undefined,
-                  holidayBonusValue: r.holidayBonusValue ?? undefined,
-                  eligibilityScope: (r.eligibilityScope as BonusEligibilityScopeCode) ?? 'ALL',
-                  effectiveRange: [
-                    r.effectiveFrom ? dayjs(r.effectiveFrom) : dayjs(),
-                    r.effectiveTo ? dayjs(r.effectiveTo) : null,
-                  ],
-                  memo: r.memo ?? undefined,
-                });
-                setOpen(true);
-              }}
-            >
-              수정
-            </Button>
+            <Tooltip title="수정">
+              <Button
+                size="small"
+                icon={<EditOutlined />}
+                aria-label="보너스 정책 수정"
+                onClick={() => {
+                  setEditing(r);
+                  form.setFieldsValue({
+                    useRegularBonusYn: r.useRegularBonusYn === 'Y',
+                    regularBonusAnnualRate: r.regularBonusAnnualRate ?? undefined,
+                    regularBonusPaymentCount: r.regularBonusPaymentCount ?? undefined,
+                    usePerformanceBonusYn: r.usePerformanceBonusYn === 'Y',
+                    performanceBonusMaxRate: r.performanceBonusMaxRate ?? undefined,
+                    performanceBonusBasis: r.performanceBonusBasis ?? undefined,
+                    gradeRows: parseGradeRows(r.gradeBonusRatesJson),
+                    useHolidayBonusYn: r.useHolidayBonusYn === 'Y',
+                    holidayBonusType: (r.holidayBonusType as HolidayBonusTypeCode) ?? undefined,
+                    holidayBonusValue: r.holidayBonusValue ?? undefined,
+                    eligibilityScope: (r.eligibilityScope as BonusEligibilityScopeCode) ?? 'ALL',
+                    effectiveRange: [
+                      r.effectiveFrom ? dayjs(r.effectiveFrom) : dayjs(),
+                      r.effectiveTo ? dayjs(r.effectiveTo) : null,
+                    ],
+                    memo: r.memo ?? undefined,
+                  });
+                  setOpen(true);
+                }}
+              />
+            </Tooltip>
             <Popconfirm
               title="정책을 삭제할까요?"
               description="삭제는 소프트 처리되며, 활성 정책 삭제 후엔 화면 진입 시 기본 비활성 정책이 자동 생성됩니다."
@@ -287,9 +295,9 @@ export function AdminBonusPolicyPage() {
               cancelText="취소"
               onConfirm={() => r.bonusPolicyId && deleteM.mutate(r.bonusPolicyId)}
             >
-              <Button size="small" danger>
-                삭제
-              </Button>
+              <Tooltip title="삭제">
+                <Button size="small" danger icon={<DeleteOutlined />} aria-label="보너스 정책 삭제" />
+              </Tooltip>
             </Popconfirm>
           </Space>
         ),
@@ -352,6 +360,7 @@ export function AdminBonusPolicyPage() {
         <div className="tw-flex tw-justify-end tw-mb-3">
           <Button
             type="primary"
+            icon={<PlusOutlined />}
             onClick={() => {
               setEditing(null);
               form.resetFields();
@@ -371,7 +380,7 @@ export function AdminBonusPolicyPage() {
           </Button>
         </div>
 
-        <Table<BonusPolicy>
+        <AppDataTable<BonusPolicy>
           rowKey={(r) => r.bonusPolicyId ?? Math.random().toString()}
           loading={listQ.isLoading}
           dataSource={listQ.data ?? []}

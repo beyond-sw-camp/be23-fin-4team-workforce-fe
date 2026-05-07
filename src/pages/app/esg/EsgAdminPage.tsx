@@ -9,8 +9,10 @@ import {
   SaveOutlined,
   ShoppingOutlined,
   UnorderedListOutlined,
-} from '@ant-design/icons';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+  } from '@ant-design/icons';
+import { useMutation,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
   App,
@@ -25,7 +27,6 @@ import {
   Row,
   Select,
   Space,
-  Table,
   Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
@@ -34,6 +35,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { ApiError } from '@/shared/api/types';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppModal } from '@/shared/ui/AppModal';
+import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import type { EsgActivity, EsgShopItem, EsgShopOrder, EsgSubject, EsgSubjectCategory } from '@/features/esg/api/esgApi';
 import { esgApi } from '@/features/esg/api/esgApi';
@@ -52,6 +54,8 @@ import {
   resolveVerificationContent,
 } from '@/features/esg/esgActivityDisplay';
 import type { EsgScoreHistoryRow } from '@/features/esg/esgScoreDisplay';
+import { AppDataTable } from '@/shared/ui/AppDataTable';
+
 import {
   pickEsgScoreRowId,
   pickGrade,
@@ -525,7 +529,7 @@ export function EsgAdminPage() {
               주요 옵션 {PREVIEW_ROWS}건 미리보기입니다. 변경은 관리에서 저장합니다.
             </Typography.Paragraph>
             {cfg ? (
-              <Table<{ key: string; label: string; value: string }>
+              <AppDataTable<{ key: string; label: string; value: string }>
                 className={cardTableCls}
                 size="small"
                 rowKey="key"
@@ -583,7 +587,7 @@ export function EsgAdminPage() {
               {!esgModuleOn ? ' (ESG OFF 시 목록 미조회)' : ''}
             </Typography.Paragraph>
             {esgModuleOn ? (
-              <Table<EsgSubject>
+              <AppDataTable<EsgSubject>
                 className={cardTableCls}
                 rowKey={(r) => r.subjectId || JSON.stringify(r)}
                 loading={subLoad}
@@ -625,7 +629,7 @@ export function EsgAdminPage() {
               {PREVIEW_ROWS}건
             </Typography.Paragraph>
             {esgModuleOn ? (
-              <Table<EsgActivity>
+              <AppDataTable<EsgActivity>
                 className={cardTableCls}
                 rowKey={(r) => pickActivityId(r) || JSON.stringify(r)}
                 loading={pendLoad}
@@ -677,7 +681,7 @@ export function EsgAdminPage() {
               등록 {esgModuleOn ? shopItems.length : '—'}건 · 상위 {PREVIEW_ROWS}건 미리보기
             </Typography.Paragraph>
             {esgModuleOn ? (
-              <Table<EsgShopItem>
+              <AppDataTable<EsgShopItem>
                 className={cardTableCls}
                 rowKey={(r) => r.itemId || JSON.stringify(r)}
                 loading={shopLoad}
@@ -718,7 +722,7 @@ export function EsgAdminPage() {
               누적 {esgModuleOn ? allOrders.length : '—'}건 · 최신순 상위 {PREVIEW_ROWS}건
             </Typography.Paragraph>
             {esgModuleOn ? (
-              <Table<EsgShopOrder>
+              <AppDataTable<EsgShopOrder>
                 className={cardTableCls}
                 rowKey={(row) => row.esgShopOrderId || JSON.stringify(row)}
                 loading={ordLoad}
@@ -759,7 +763,7 @@ export function EsgAdminPage() {
               이력 {esgModuleOn ? scoreHist.length : '—'}건 · 최신 연월 기준 상위 {PREVIEW_ROWS}건
             </Typography.Paragraph>
             {esgModuleOn ? (
-              <Table<EsgScoreHistoryRow>
+              <AppDataTable<EsgScoreHistoryRow>
                 className={cardTableCls}
                 rowKey={(row) => pickEsgScoreRowId(row) || JSON.stringify(row)}
                 loading={scoreLoad}
@@ -774,11 +778,13 @@ export function EsgAdminPage() {
         </Col>
       </Row>
 
-      <AppModal
+      <AppSingleActionModal
         title="기능 설정"
         open={dashboardModal === 'config'}
-        onCancel={() => setDashboardModal(null)}
-        footer={null}
+        onClose={() => setDashboardModal(null)}
+        onSubmit={() => undefined}
+        submitText="확인"
+        customFooter={null}
         width={520}
         destroyOnHidden
         styles={{ body: modalBodyPadding }}
@@ -811,13 +817,15 @@ export function EsgAdminPage() {
             </Button>
           </Form>
         </Card>
-      </AppModal>
+      </AppSingleActionModal>
 
-      <AppModal
+      <AppSingleActionModal
         title="활동 양식"
         open={dashboardModal === 'subjects'}
-        onCancel={() => setDashboardModal(null)}
-        footer={null}
+        onClose={() => setDashboardModal(null)}
+        onSubmit={() => undefined}
+        submitText="확인"
+        customFooter={null}
         width={960}
         destroyOnHidden
         styles={{ body: modalBodyPadding }}
@@ -837,7 +845,7 @@ export function EsgAdminPage() {
             </Button>
           }
         >
-          <Table<EsgSubject>
+          <AppDataTable<EsgSubject>
             rowKey="subjectId"
             loading={subLoad}
             dataSource={subjects}
@@ -868,20 +876,22 @@ export function EsgAdminPage() {
             ]}
           />
         </Card>
-      </AppModal>
+      </AppSingleActionModal>
 
-      <AppModal
+      <AppSingleActionModal
         title="활동 승인"
         open={dashboardModal === 'approve'}
-        onCancel={() => setDashboardModal(null)}
-        footer={null}
+        onClose={() => setDashboardModal(null)}
+        onSubmit={() => undefined}
+        submitText="확인"
+        customFooter={null}
         width={1120}
         destroyOnHidden
         styles={{ body: { ...modalBodyPadding, maxHeight: '78vh', overflowY: 'auto' } }}
       >
         <Space direction="vertical" className="tw-w-full" size={16}>
           <Card className="tw-border-slate-200/80 tw-shadow-sm" size="small" title="승인 대기">
-            <Table<EsgActivity>
+            <AppDataTable<EsgActivity>
               rowKey={(r) => pickActivityId(r) || JSON.stringify(r)}
               loading={pendLoad}
               dataSource={pendingActs}
@@ -994,7 +1004,7 @@ export function EsgAdminPage() {
             <Typography.Paragraph type="secondary" className="!tw-mb-3 !tw-text-xs">
               회사 전체 직원 기준 승인 완료된 활동입니다.
             </Typography.Paragraph>
-            <Table<EsgActivity>
+            <AppDataTable<EsgActivity>
               rowKey={(r) => pickActivityId(r) || JSON.stringify(r)}
               loading={approvedLoad}
               dataSource={approvedActs}
@@ -1074,13 +1084,15 @@ export function EsgAdminPage() {
             />
           </Card>
         </Space>
-      </AppModal>
+      </AppSingleActionModal>
 
-      <AppModal
+      <AppSingleActionModal
         title="샵 물품 조회"
         open={dashboardModal === 'shop'}
-        onCancel={() => setDashboardModal(null)}
-        footer={null}
+        onClose={() => setDashboardModal(null)}
+        onSubmit={() => undefined}
+        submitText="확인"
+        customFooter={null}
         width={920}
         destroyOnHidden
         styles={{ body: { ...modalBodyPadding, maxHeight: '78vh', overflowY: 'auto' } }}
@@ -1089,7 +1101,7 @@ export function EsgAdminPage() {
           등록된 포인트샵 물품 목록입니다. 새 물품은 샵 물품 카드의「등록」에서 추가하세요.
         </Typography.Paragraph>
         <Card className="tw-border-slate-200/80 tw-shadow-sm" size="small" title="등록 물품">
-          <Table<EsgShopItem>
+          <AppDataTable<EsgShopItem>
             rowKey={(r) => r.itemId || JSON.stringify(r)}
             loading={shopLoad}
             dataSource={shopItems}
@@ -1108,13 +1120,15 @@ export function EsgAdminPage() {
             ]}
           />
         </Card>
-      </AppModal>
+      </AppSingleActionModal>
 
-      <AppModal
+      <AppSingleActionModal
         title="물품 등록"
         open={dashboardModal === 'shopRegister'}
-        onCancel={() => setDashboardModal(null)}
-        footer={null}
+        onClose={() => setDashboardModal(null)}
+        onSubmit={() => undefined}
+        submitText="확인"
+        customFooter={null}
         width={560}
         destroyOnHidden
         styles={{ body: { ...modalBodyPadding, maxHeight: '78vh', overflowY: 'auto' } }}
@@ -1142,6 +1156,7 @@ export function EsgAdminPage() {
             <Button
               type="primary"
               className={esgPrimaryButtonClass}
+              icon={<PlusOutlined />}
               loading={createShop.isPending}
               onClick={() => void createShop.mutateAsync()}
             >
@@ -1149,13 +1164,15 @@ export function EsgAdminPage() {
             </Button>
           </Form>
         </Card>
-      </AppModal>
+      </AppSingleActionModal>
 
-      <AppModal
+      <AppSingleActionModal
         title="주문(전체)"
         open={dashboardModal === 'orders'}
-        onCancel={() => setDashboardModal(null)}
-        footer={null}
+        onClose={() => setDashboardModal(null)}
+        onSubmit={() => undefined}
+        submitText="확인"
+        customFooter={null}
         width={960}
         destroyOnHidden
         styles={{ body: { ...modalBodyPadding, maxHeight: '78vh', overflowY: 'auto' } }}
@@ -1163,7 +1180,7 @@ export function EsgAdminPage() {
         <Typography.Paragraph type="secondary" className="!tw-mb-3 !tw-text-xs">
           회사 전체 직원 구매 이력입니다. 최신순으로 표시됩니다. (관리자·ESG READ 권한)
         </Typography.Paragraph>
-        <Table<EsgShopOrder>
+        <AppDataTable<EsgShopOrder>
           rowKey={(row) => row.esgShopOrderId || JSON.stringify(row)}
           loading={ordLoad}
           dataSource={allOrders}
@@ -1187,13 +1204,15 @@ export function EsgAdminPage() {
             },
           ]}
         />
-      </AppModal>
+      </AppSingleActionModal>
 
-      <AppModal
+      <AppSingleActionModal
         title="점수"
         open={dashboardModal === 'scores'}
-        onCancel={() => setDashboardModal(null)}
-        footer={null}
+        onClose={() => setDashboardModal(null)}
+        onSubmit={() => undefined}
+        submitText="확인"
+        customFooter={null}
         width={880}
         destroyOnHidden
         styles={{ body: { ...modalBodyPadding, maxHeight: '78vh', overflowY: 'auto' } }}
@@ -1218,7 +1237,7 @@ export function EsgAdminPage() {
             </Space>
           </Card>
           <Card className="tw-border-slate-200/80 tw-shadow-sm" size="small" title="점수 이력">
-            <Table<EsgScoreHistoryRow>
+            <AppDataTable<EsgScoreHistoryRow>
               rowKey={(row) => pickEsgScoreRowId(row) || JSON.stringify(row)}
               loading={scoreLoad}
               dataSource={scoreHist as EsgScoreHistoryRow[]}
@@ -1238,7 +1257,7 @@ export function EsgAdminPage() {
             />
           </Card>
         </Space>
-      </AppModal>
+      </AppSingleActionModal>
 
       <AppDoubleActionModal
         title={editingSubject ? '활동 양식 수정' : '활동 양식 추가'}

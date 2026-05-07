@@ -2,6 +2,7 @@ import {
   AudioOutlined,
   DeleteOutlined,
   EditOutlined,
+  MinusOutlined,
   PauseCircleOutlined,
   PlayCircleOutlined,
   SaveOutlined,
@@ -32,13 +33,16 @@ import {
   type AiRecording,
   type AiRecordingLanguage,
 } from '@/features/ai-recordings/api/aiRecordingsApi';
-import { AppModal } from '@/shared/ui/AppModal';
+import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppSearchBar } from '@/shared/ui';
 import { formatApprovalAttachmentBytes } from '@/features/approvals/api/approvalAttachmentsApi';
 
 type AiRecordingModalProps = {
   open: boolean;
+  restoreSignal?: number;
   onClose: () => void;
+  onRecordingStateChange?: (state: { isRecording: boolean; elapsedSec: number; minimized: boolean }) => void;
 };
 
 function languageLabel(lang: string): string {
@@ -93,7 +97,12 @@ function apiErrorMessage(e: unknown, fallback: string): string {
   return e instanceof Error && e.message ? e.message : fallback;
 }
 
-export function AiRecordingModal({ open, onClose }: AiRecordingModalProps) {
+export function AiRecordingModal({
+  open,
+  restoreSignal = 0,
+  onClose,
+  onRecordingStateChange,
+}: AiRecordingModalProps) {
   const { message } = App.useApp();
   const qc = useQueryClient();
 
@@ -114,6 +123,8 @@ export function AiRecordingModal({ open, onClose }: AiRecordingModalProps) {
   const [liveInterimText, setLiveInterimText] = useState('');
   const [liveCaptionMode, setLiveCaptionMode] = useState<'off' | 'live' | 'unsupported'>('off');
   const [savingStage, setSavingStage] = useState<string | null>(null);
+  const [minimized, setMinimized] = useState(false);
+  const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editTranscript, setEditTranscript] = useState('');
@@ -125,13 +136,36 @@ export function AiRecordingModal({ open, onClose }: AiRecordingModalProps) {
   const stopInFlightRef = useState<{ value: Promise<void> | null }>({ value: null })[0];
   const recognitionRef = useState<{ value: WebSpeechRecognition | null }>({ value: null })[0];
   const wantLiveCaptionRef = useState<{ value: boolean }>({ value: false })[0];
+  const wasOpenRef = useState<{ value: boolean }>({ value: false })[0];
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      wasOpenRef.value = false;
+      return;
+    }
+    if (wasOpenRef.value) return;
+    wasOpenRef.value = true;
+    setMinimized(false);
+    if (isRecording) {
+      setTab('create');
+      setSelectedId(null);
+      setEditing(false);
+      return;
+    }
     setTab('list');
     setSelectedId(null);
     setEditing(false);
-  }, [open]);
+  }, [open, isRecording]);
+
+  useEffect(() => {
+    if (!open || restoreSignal <= 0) return;
+    setMinimized(false);
+    if (isRecording) setTab('create');
+  }, [restoreSignal, open, isRecording]);
+
+  useEffect(() => {
+    onRecordingStateChange?.({ isRecording, elapsedSec, minimized });
+  }, [elapsedSec, isRecording, minimized, onRecordingStateChange]);
 
   useEffect(() => {
     if (!open) return;
@@ -432,8 +466,60 @@ export function AiRecordingModal({ open, onClose }: AiRecordingModalProps) {
     setLiveCaptionMode('off');
   };
 
+  const discardRecording = () => {
+    wantLiveCaptionRef.value = false;
+    const sr = recognitionRef.value;
+    recognitionRef.value = null;
+    if (sr) {
+      try {
+        sr.onresult = null;
+        sr.onerror = null;
+        sr.onend = null;
+        sr.stop();
+      } catch {
+        sr.abort?.();
+      }
+    }
+
+    const recorder = mediaRecorderRef.value;
+    mediaRecorderRef.value = null;
+    if (recorder) {
+      try {
+        recorder.ondataavailable = null;
+        recorder.onstop = null;
+        if (recorder.state !== 'inactive') recorder.stop();
+      } catch {
+        // ignore
+      }
+      try {
+        recorder.stream.getTracks().forEach((t) => t.stop());
+      } catch {
+        // ignore
+      }
+    }
+    if (timerRef.value != null) {
+      window.clearInterval(timerRef.value);
+      timerRef.value = null;
+    }
+    chunksRef.value = [];
+    setIsRecording(false);
+    setElapsedSec(0);
+    setLiveFinalText('');
+    setLiveInterimText('');
+    setLiveCaptionMode('off');
+    setAudioBlob(null);
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+    setAudioUrl('');
+  };
+
   const handleClose = () => {
-    if (!createM.isPending && !updateM.isPending && !deleteM.isPending) onClose();
+    if (createM.isPending || updateM.isPending || deleteM.isPending) return;
+    if (isRecording) {
+      setCloseConfirmOpen(true);
+      return;
+    }
+    setMinimized(false);
+    onClose();
   };
 
   const currentDetail: AiRecording | null = detailQ.data ?? null;
@@ -441,32 +527,108 @@ export function AiRecordingModal({ open, onClose }: AiRecordingModalProps) {
   const livePreviewText = `${liveFinalText}${liveInterimText}`.trimEnd();
   const mm = String(Math.floor(elapsedSec / 60)).padStart(2, '0');
   const ss = String(elapsedSec % 60).padStart(2, '0');
+  const recordingStatusLabel = savingStage ? '처리 중' : isRecording ? '녹음 중' : '대기';
+  const recordingStatusDescription = savingStage
+    ? '녹음 파일을 업로드하고 AI 원문/회의록을 생성하고 있습니다.'
+    : isRecording
+      ? '녹음 중입니다. 필요하면 실시간 받아쓰기 내용을 함께 확인하세요.'
+      : '마이크 권한을 허용한 뒤 녹음을 시작해 주세요.';
 
   const createBody = (
     <div className="wf-ai-recording-create">
-      <Card
-        title="새 녹음"
-        size="small"
-        className="wf-ai-recording-panel wf-ai-recording-create-panel"
-      >
-        <Space direction="vertical" className="tw-w-full" size="middle">
-          <Input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            maxLength={200}
-            placeholder="제목 (비우면 자동 생성)"
-          />
-          <Select
-            value={language}
-            onChange={(v) => setLanguage(v)}
-            options={[
-              { value: 'ko', label: '한국어' },
-              { value: 'en', label: 'English' },
-              { value: 'ja', label: '日本語' },
-              { value: 'zh', label: '中文' },
-            ]}
-          />
-          <Space wrap className="wf-ai-recording-controls">
+      <Card size="small" className="wf-ai-recording-panel wf-ai-recording-create-panel">
+        <div className="wf-ai-recording-create-main">
+          <div className="wf-ai-recording-form-stack">
+            <div className="wf-ai-recording-section-head">
+              <div>
+                <Typography.Text className="wf-ai-recording-section-title">새 녹음</Typography.Text>
+                <Typography.Text className="wf-ai-recording-section-copy">
+                  녹음 종료 후 자동으로 저장하고 AI 회의록을 생성합니다.
+                </Typography.Text>
+              </div>
+              <Tag className="wf-ai-recording-status-tag">{recordingStatusLabel}</Tag>
+            </div>
+
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              maxLength={200}
+              placeholder="제목 (비우면 자동 생성)"
+              className="wf-ai-recording-soft-input"
+            />
+
+            <div className="wf-ai-recording-stage">
+              <div className="wf-ai-recording-stage-visual">
+                {savingStage ? (
+                  <Spin />
+                ) : isRecording ? (
+                  <div className="wf-ai-recording-bars" aria-hidden="true">
+                    <span />
+                    <span />
+                    <span />
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                ) : (
+                  <AudioOutlined />
+                )}
+              </div>
+              <div className="wf-ai-recording-stage-copy">
+                <span className="wf-ai-recording-stage-state">{recordingStatusLabel}</span>
+                <span className="wf-ai-recording-stage-time">
+                  {mm}:{ss}
+                </span>
+                <span className="wf-ai-recording-stage-desc">{recordingStatusDescription}</span>
+              </div>
+            </div>
+
+            {isRecording && liveCaptionMode === 'live' ? (
+              <Alert
+                type="info"
+                showIcon
+                message="실시간 받아쓰기"
+                description="아래 원문은 임시 자막입니다. 녹음 종료 후 AI가 정식 원문/회의록으로 생성합니다."
+                className="wf-ai-recording-inline-alert"
+              />
+            ) : null}
+            {isRecording && liveCaptionMode === 'unsupported' ? (
+              <Alert
+                type="warning"
+                showIcon
+                message="실시간 받아쓰기 미지원 브라우저"
+                description="녹음 종료 후 AI 변환 결과는 정상 생성됩니다. Chrome/Edge 사용을 권장합니다."
+                className="wf-ai-recording-inline-alert"
+              />
+            ) : null}
+            {isRecording ? (
+              <Input.TextArea
+                rows={8}
+                readOnly
+                value={livePreviewText}
+                placeholder="말하면 여기에서 실시간으로 받아쓰기됩니다."
+                className="wf-ai-recording-live-textarea"
+              />
+            ) : null}
+            {audioBlob ? (
+              <Alert
+                type="info"
+                showIcon
+                message={`녹음 준비 완료: ${formatApprovalAttachmentBytes(audioBlob.size)}`}
+                description="녹음 종료 시 자동으로 AI 받아쓰기/회의록 정리를 시작합니다."
+                className="wf-ai-recording-inline-alert"
+              />
+            ) : null}
+            {audioUrl ? <audio src={audioUrl} controls className="tw-w-full" /> : null}
+          </div>
+
+          <div className="wf-ai-recording-create-footer">
+            <Button onClick={() => setTab('list')} disabled={createM.isPending}>
+              목록으로
+            </Button>
+            <Button onClick={resetCreateForm} disabled={isRecording || createM.isPending}>
+              초기화
+            </Button>
             {!isRecording ? (
               <Button
                 type="primary"
@@ -481,59 +643,31 @@ export function AiRecordingModal({ open, onClose }: AiRecordingModalProps) {
                 녹음 종료
               </Button>
             )}
-            <Tag color={isRecording ? 'red' : 'default'} className="wf-ai-recording-timer">
-              {isRecording ? `녹음 중 ${mm}:${ss}` : `대기 ${mm}:${ss}`}
-            </Tag>
-            <Button onClick={resetCreateForm} disabled={isRecording || createM.isPending}>
-              초기화
-            </Button>
-          </Space>
-          {isRecording && liveCaptionMode === 'live' ? (
-            <Alert
-              type="info"
-              showIcon
-              message="실시간 받아쓰기"
-              description="아래 원문은 임시 자막입니다. 녹음 종료 후 AI가 정식 원문/회의록으로 생성합니다."
-            />
-          ) : null}
-          {isRecording && liveCaptionMode === 'unsupported' ? (
-            <Alert
-              type="warning"
-              showIcon
-              message="실시간 받아쓰기 미지원 브라우저"
-              description="녹음 종료 후 AI 변환 결과는 정상 생성됩니다. Chrome/Edge 사용을 권장합니다."
-            />
-          ) : null}
-          {isRecording ? (
-            <Input.TextArea
-              rows={8}
-              readOnly
-              value={livePreviewText}
-              placeholder="말하면 여기에서 실시간으로 받아쓰기됩니다."
-              className="wf-ai-recording-live-textarea"
-            />
-          ) : null}
-          {audioBlob ? (
-            <Alert
-              type="info"
-              showIcon
-              message={`녹음 준비 완료: ${formatApprovalAttachmentBytes(audioBlob.size)}`}
-              description="녹음 종료 시 자동으로 AI 받아쓰기/회의록 정리를 시작합니다."
-            />
-          ) : null}
-          {audioUrl ? <audio src={audioUrl} controls className="tw-w-full" /> : null}
-          {savingStage ? <Spin tip={savingStage} /> : null}
-          <Space className="wf-ai-recording-create-footer">
-            <Button onClick={() => setTab('list')} disabled={createM.isPending}>
-              목록으로
-            </Button>
-            <Button type="primary" icon={<SaveOutlined />} disabled>
+            <Button type="primary" icon={<SaveOutlined />} disabled className="wf-ai-recording-disabled-save">
               녹음 종료 시 자동 저장
             </Button>
-          </Space>
-        </Space>
+          </div>
+        </div>
       </Card>
-      <Card title="안내" size="small" className="wf-ai-recording-panel wf-ai-recording-guide-panel">
+      <Card size="small" className="wf-ai-recording-panel wf-ai-recording-guide-panel">
+        <div className="wf-ai-recording-guide-head">
+          <Typography.Text className="wf-ai-recording-section-title">안내</Typography.Text>
+          <Typography.Text className="wf-ai-recording-section-copy">녹음 전 확인해 주세요.</Typography.Text>
+        </div>
+        <div className="wf-ai-recording-language-block">
+          <Typography.Text className="wf-ai-recording-language-label">인식 언어</Typography.Text>
+          <Select
+            value={language}
+            onChange={(v) => setLanguage(v)}
+            className="wf-ai-recording-language-select"
+            options={[
+              { value: 'ko', label: '한국어' },
+              { value: 'en', label: 'English' },
+              { value: 'ja', label: '日本語' },
+              { value: 'zh', label: '中文' },
+            ]}
+          />
+        </div>
         <div className="wf-ai-recording-guide-list">
           <div>
             <AudioOutlined />
@@ -701,33 +835,67 @@ export function AiRecordingModal({ open, onClose }: AiRecordingModalProps) {
     const label = tab === 'create' ? '새 녹음' : tab === 'detail' ? '상세' : '목록';
     return (
       <div className="wf-ai-recording-title">
-        <span className="wf-ai-recording-title-icon">
-          <AudioOutlined />
-        </span>
         <span>
           <span className="wf-ai-recording-title-main">AI 녹음 {label}</span>
           <span className="wf-ai-recording-title-sub">녹음 원문과 AI 회의록을 관리합니다.</span>
         </span>
+        {isRecording ? (
+          <Button
+            type="text"
+            icon={<MinusOutlined />}
+            title="최소화"
+            aria-label="AI 녹음 최소화"
+            className="wf-ai-recording-minimize-button"
+            onClick={(event) => {
+              event.stopPropagation();
+              setCloseConfirmOpen(false);
+              setMinimized(true);
+            }}
+          />
+        ) : null}
       </div>
     );
-  }, [tab]);
+  }, [isRecording, tab]);
 
   return (
-    <AppModal
-      title={titleNode}
-      open={open}
-      onCancel={handleClose}
-      footer={null}
-      centered
-      width={1100}
-      destroyOnHidden={false}
-      classNames={{
-        content: 'wf-ai-recording-modal',
-        body: 'wf-ai-recording-modal-body',
-      }}
-      styles={{ body: { maxHeight: '76vh', overflowY: 'auto' } }}
-    >
-      {tab === 'list' ? listBody : tab === 'create' ? createBody : detailBody}
-    </AppModal>
+    <>
+      <AppSingleActionModal
+        title={titleNode}
+        open={open && !minimized}
+        onClose={handleClose}
+        onSubmit={() => undefined}
+        submitText="확인"
+        customFooter={null}
+        centered
+        width={1100}
+        destroyOnHidden={false}
+        classNames={{
+          content: 'wf-ai-recording-modal',
+          body: 'wf-ai-recording-modal-body',
+        }}
+        styles={{ body: { maxHeight: '76vh', overflowY: 'auto' } }}
+      >
+        {tab === 'list' ? listBody : tab === 'create' ? createBody : detailBody}
+      </AppSingleActionModal>
+      <AppDoubleActionModal
+        open={closeConfirmOpen}
+        title="녹음을 중단하고 닫을까요?"
+        onClose={() => setCloseConfirmOpen(false)}
+        onConfirm={() => {
+          discardRecording();
+          setCloseConfirmOpen(false);
+          setMinimized(false);
+          onClose();
+        }}
+        cancelText="계속 녹음"
+        confirmText="중단하고 닫기"
+        confirmDanger
+        width={420}
+      >
+        <div className="tw-p-5 tw-text-sm tw-font-medium tw-leading-6 tw-text-slate-600">
+          현재 녹음 중입니다. 중단하고 닫으면 이 녹음은 저장되지 않습니다. 녹음을 유지하려면 최소화 버튼을 사용해 주세요.
+        </div>
+      </AppDoubleActionModal>
+    </>
   );
 }

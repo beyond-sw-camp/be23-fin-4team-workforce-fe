@@ -1,7 +1,21 @@
-import { useMemo } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate, useParams } from '@tanstack/react-router';
-import { Alert, App, Button, Card, Collapse, Space, Table, Tabs, Tag, Typography } from 'antd';
+import {
+  useMemo } from 'react';
+import { useMutation,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
+import { Link,
+  useNavigate,
+  useParams } from '@tanstack/react-router';
+import { Alert,
+  App,
+  Button,
+  Card,
+  Collapse,
+  Space,
+  Tabs,
+  Tag,
+  Typography,
+} from 'antd';
 import { CalendarOutlined, CheckCircleOutlined, SoundOutlined, StopOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { evaluationRedesignApi } from '@/features/evaluation/api/evaluationRedesignApi';
@@ -16,6 +30,9 @@ import { PERM } from '@/features/permissions/backend-permissions';
 import { usePermissions } from '@/features/permissions/usePermissionsHook';
 import { parseApiError } from '@/shared/api/error-parser';
 import { DetailPageHeader } from '@/shared/ui/DetailPageHeader';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
+import { AppTabLabel } from '@/shared/ui/AppTabLabel';
 
 const { Text, Title } = Typography;
 const STAGES: SeasonStatus[] = ['DRAFT', 'SELF_EVAL', 'MANAGER_EVAL', 'GRADE_CONFIRM', 'RESULT_PUBLISHED', 'INTERVIEW', 'CLOSED'];
@@ -218,7 +235,14 @@ export default function EvaluationSeasonDetailPage() {
           items={[
             {
               key: 'targets',
-              label: `대상자/평가자 ${groups.length > 0 ? `· ${opsSummary.total}명` : ''}`,
+              label: (
+                <AppTabLabel
+                  count={groups.length > 0 ? opsSummary.total : undefined}
+                  suffix={groups.length > 0 ? '명' : undefined}
+                >
+                  대상자/평가자
+                </AppTabLabel>
+              ),
               children: (
                 <div className="tw-space-y-4">
                   <Alert
@@ -243,7 +267,15 @@ export default function EvaluationSeasonDetailPage() {
             },
             {
               key: 'results',
-              label: `결과 현황 ${opsSummary.confirmed ? `· ${opsSummary.confirmed}명 확정` : ''}`,
+              label: (
+                <AppTabLabel
+                  count={opsSummary.confirmed || undefined}
+                  suffix={opsSummary.confirmed ? '명 확정' : undefined}
+                  showZero={false}
+                >
+                  결과 현황
+                </AppTabLabel>
+              ),
               children:
                 canRead && season.status !== 'DRAFT' ? (
                   <SeasonResultsDashboard
@@ -262,7 +294,11 @@ export default function EvaluationSeasonDetailPage() {
             },
             {
               key: 'meetings',
-              label: `피드백 면담 ${opsSummary.meetingTotal ? `· ${opsSummary.meetingDone}/${opsSummary.meetingTotal}` : ''}`,
+              label: (
+                <AppTabLabel count={opsSummary.meetingTotal ? `${opsSummary.meetingDone}/${opsSummary.meetingTotal}` : undefined}>
+                  피드백 면담
+                </AppTabLabel>
+              ),
               children: ['RESULT_PUBLISHED', 'INTERVIEW', 'CLOSED'].includes(season.status) ? (
                 <SeasonMeetingsCard meetings={meetings} labelFor={labelMeetingMember} embedded />
               ) : (
@@ -516,7 +552,7 @@ function SeasonResultTable({
   labelFor: (memberId: string) => string;
 }) {
   return (
-    <Table
+    <AppDataTable
       rowKey="responseId"
       pagination={false}
       size="small"
@@ -621,7 +657,7 @@ function SeasonMeetingsCard({
           </Tag>
         </div>
       ) : null}
-      <Table
+      <AppDataTable
         rowKey="meetingRecordId"
         pagination={false}
         scroll={{ x: 760 }}

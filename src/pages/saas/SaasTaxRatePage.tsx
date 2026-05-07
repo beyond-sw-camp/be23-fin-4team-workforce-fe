@@ -1,13 +1,34 @@
-import { ArrowLeftOutlined, PercentageOutlined, PlusOutlined, ReloadOutlined, ThunderboltOutlined } from '@ant-design/icons';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  ArrowLeftOutlined,
+  DeleteOutlined,
+  EditOutlined,
+  PercentageOutlined,
+  PlusOutlined,
+  ReloadOutlined,
+  ThunderboltOutlined,
+  } from '@ant-design/icons';
+import { useMutation,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { Alert, App, Button, Form, Select, Space, Table, Tag, Typography } from 'antd';
+import { Alert,
+  App,
+  Button,
+  Form,
+  Select,
+  Space,
+  Tag,
+  Tooltip,
+  Typography,
+} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useEffect, useState } from 'react';
 import { saasApi, type TaxRate, type TaxRateInput, type TaxType } from '@/features/saas/api/saasApi';
 import { SaasConsoleShell } from '@/pages/saas/SaasConsoleShell';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppUnitInputNumber } from '@/shared/ui/AppUnitInputNumber';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 const TAX_TYPE_OPTIONS: { value: TaxType; label: string; supportsCap: boolean }[] = [
   { value: 'NATIONAL_PENSION', label: '국민연금', supportsCap: true },
@@ -177,12 +198,23 @@ function SaasTaxRatePageInner() {
       width: 160,
       render: (_, row) => (
         <Space>
-          <Button size="small" onClick={() => setEditing(row)}>
-            수정
-          </Button>
-          <Button size="small" danger onClick={() => setDeleting(row)}>
-            삭제
-          </Button>
+          <Tooltip title="수정">
+            <Button
+              size="small"
+              icon={<EditOutlined />}
+              aria-label={`${row.applyYear}년 ${TAX_TYPE_LABEL[row.taxType]} 요율 수정`}
+              onClick={() => setEditing(row)}
+            />
+          </Tooltip>
+          <Tooltip title="삭제">
+            <Button
+              size="small"
+              danger
+              icon={<DeleteOutlined />}
+              aria-label={`${row.applyYear}년 ${TAX_TYPE_LABEL[row.taxType]} 요율 삭제`}
+              onClick={() => setDeleting(row)}
+            />
+          </Tooltip>
         </Space>
       ),
     },
@@ -248,7 +280,7 @@ function SaasTaxRatePageInner() {
           </Typography.Text>
         </Space>
 
-        <Table<TaxRate>
+        <AppDataTable<TaxRate>
           rowKey={(r) => r.taxRateId}
           loading={listQ.isLoading}
           dataSource={listQ.data ?? []}

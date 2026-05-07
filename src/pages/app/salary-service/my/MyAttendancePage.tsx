@@ -3,9 +3,16 @@
  * 내 근태 통합 - 오늘 처리 + 월간 현황(근무일/지각/결근/조퇴) + 월별 일자별 표. 정정 결재 진입점 포함.
  * 주간 근무시간 요약은 [초과근무 관리] 페이지로 이동.
  */
-import { Link, useNavigate, useSearch } from '@tanstack/react-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { LoginOutlined, LogoutOutlined, RedoOutlined } from '@ant-design/icons';
+import {
+  Link,
+  useNavigate,
+  useSearch } from '@tanstack/react-router';
+import { useMutation,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
+import { LoginOutlined,
+  LogoutOutlined,
+  RedoOutlined } from '@ant-design/icons';
 import {
   Alert,
   App,
@@ -16,8 +23,6 @@ import {
   Modal,
   Progress,
   Space,
-  Statistic,
-  Table,
   Tabs,
   Tag,
   Tooltip,
@@ -43,6 +48,8 @@ import { AttendanceStatusTag } from '@/features/salary-service/ui/AttendanceStat
 import { MyLeaveHistoryModal } from '@/features/salary-service/ui/MyLeaveHistoryModal';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import type { ApiError } from '@/shared/api/types';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 function isApiError(e: unknown): e is ApiError {
   return (
@@ -382,13 +389,15 @@ export function MyAttendancePage() {
     return { workDays, tardy, absent, earlyLeave };
   }, [monthlyNormalized, effectiveSchedule, todayIso]);
 
+  const todayDailyQueryKey = ['salary', 'attendance', 'my', 'daily', todayIso] as const;
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ['salary', 'attendance', 'my'] });
   };
 
   const clockInM = useMutation({
     mutationFn: () => attendanceApi.attendance.clockIn({}),
-    onSuccess: () => {
+    onSuccess: (daily) => {
+      qc.setQueryData(todayDailyQueryKey, daily);
       message.success('출근 처리되었습니다.');
       invalidate();
     },
@@ -397,7 +406,8 @@ export function MyAttendancePage() {
 
   const clockOutM = useMutation({
     mutationFn: () => attendanceApi.attendance.clockOut({}),
-    onSuccess: () => {
+    onSuccess: (daily) => {
+      qc.setQueryData(todayDailyQueryKey, daily);
       message.success('퇴근 처리되었습니다.');
       invalidate();
     },
@@ -406,7 +416,8 @@ export function MyAttendancePage() {
 
   const cancelClockOutM = useMutation({
     mutationFn: () => attendanceApi.attendance.cancelClockOut(),
-    onSuccess: () => {
+    onSuccess: (daily) => {
+      qc.setQueryData(todayDailyQueryKey, daily);
       message.success('퇴근이 취소되었습니다.');
       invalidate();
     },
@@ -602,6 +613,20 @@ export function MyAttendancePage() {
   );
 
   const daily = dailyQ.data;
+  const leaveUsagePercent =
+    totalGranted > 0 ? Math.min(100, Math.round((totalUsed / totalGranted) * 100)) : 0;
+  const todayWorkedMinutes =
+    daily?.workedMinutes ??
+    estimateWorkedMinutes(
+      daily?.firstClockIn,
+      daily?.lastClockOut,
+      effectiveSchedule?.breakMinutes ?? 0,
+    );
+  const latestClockLabel = (() => {
+    if (daily?.lastClockOut) return `퇴근 ${dayjs(daily.lastClockOut).format('HH:mm')}`;
+    if (daily?.firstClockIn) return `출근 ${dayjs(daily.firstClockIn).format('HH:mm')}`;
+    return '최근 기록 없음';
+  })();
 
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
@@ -800,184 +825,243 @@ export function MyAttendancePage() {
         </Space>
       ) : (
         <>
-          {/* 이번 달 현황 - 근무 형태 / 근무일 / 지각 / 결근 / 조퇴 */}
-          <div className="tw-grid tw-grid-cols-2 sm:tw-grid-cols-3 lg:tw-grid-cols-5 tw-gap-3">
-            <Card size="small" className="tw-border-slate-200/80">
-              <Statistic
-                title="근무 형태"
-                value={scheduleTypeLabel}
-                valueStyle={{ fontSize: 18, color: '#0f172a', fontWeight: 600 }}
-              />
-            </Card>
-            <Card size="small" className="tw-border-slate-200/80">
-              <Statistic
-                title="이번 달 근무일"
-                value={monthStats.workDays}
-                suffix="일"
-                valueStyle={{ fontSize: 22 }}
-              />
-            </Card>
-            <Card size="small" className="tw-border-slate-200/80">
-              <Statistic
-                title="이번 달 지각"
-                value={monthStats.tardy}
-                suffix="회"
-                valueStyle={{ fontSize: 22, color: monthStats.tardy > 0 ? '#D48806' : undefined }}
-              />
-            </Card>
-            <Card size="small" className="tw-border-slate-200/80">
-              <Statistic
-                title="이번 달 결근"
-                value={monthStats.absent}
-                suffix="회"
-                valueStyle={{ fontSize: 22, color: monthStats.absent > 0 ? '#CF1322' : undefined }}
-              />
-            </Card>
-            <Card size="small" className="tw-border-slate-200/80">
-              <Statistic
-                title="이번 달 조퇴"
-                value={monthStats.earlyLeave}
-                suffix="회"
-                valueStyle={{
-                  fontSize: 22,
-                  color: monthStats.earlyLeave > 0 ? '#D48806' : undefined,
-                }}
-              />
-            </Card>
-          </div>
-
-          {/* 상단 1번 row - 근태 현황 1 : 휴가 현황 2 비율로 분할 */}
-          <div className="tw-grid tw-grid-cols-1 lg:tw-grid-cols-3 tw-gap-3">
+          {/* 상단 현황 - 근태 / 휴가 */}
+          <div className="tw-grid tw-grid-cols-1 xl:tw-grid-cols-12 tw-gap-4">
             <Card
-              className="tw-border-slate-200/80 tw-shadow-sm lg:tw-col-span-1"
-              size="small"
+              className="tw-border-slate-200/80 tw-shadow-sm xl:tw-col-span-5"
               title={
-                <div className="tw-flex tw-items-center tw-justify-between">
-                  <span>근태 현황</span>
-                  <Typography.Text type="secondary" className="!tw-text-xs">
-                    {today.format('YYYY년 MM월 DD일 (dd)')}
-                  </Typography.Text>
+                <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2">
+                  <div>
+                    <div className="tw-font-semibold tw-text-slate-900">근태 현황</div>
+                    <Typography.Text type="secondary" className="!tw-text-xs">
+                      실시간 출퇴근 상태와 월간 근태 지표입니다.
+                    </Typography.Text>
+                  </div>
+                  <Tag className="!tw-m-0 !tw-rounded-full !tw-border-slate-200 !tw-bg-slate-50 !tw-px-3 !tw-py-1 !tw-text-xs !tw-font-medium !tw-text-slate-600">
+                    {today.format('YYYY.MM.DD (dd)')}
+                  </Tag>
                 </div>
               }
             >
-              <div className="tw-flex tw-items-center tw-gap-3">
-                {/* 좌측: 출근/퇴근 버튼을 좌우로 배치 (위아래 X - 오타 방지). 폭은 좁게 (max-w 제한) */}
-                <div className="tw-flex tw-gap-2 tw-flex-1 tw-min-w-0">
-                  <Button
-                    size="large"
-                    type="primary"
-                    loading={busy}
-                    icon={<LoginOutlined />}
-                    onClick={() => clockInM.mutate()}
-                    className="tw-flex-1 !tw-max-w-[180px]"
-                  >
-                    출근하기
-                  </Button>
-                  {/* 퇴근 버튼은 상태에 따라 분기 처리:
-                - 아직 퇴근 전이면 일반 퇴근 처리
-                - 이미 퇴근됐다면 confirm 후 취소 처리 (잘못 누른 경우 복구) */}
-                  {daily?.lastClockOut ? (
+              <div className="tw-flex tw-h-full tw-flex-col tw-gap-5">
+                <div className="tw-flex tw-flex-col tw-gap-4">
+                  <div className="tw-flex tw-items-center tw-gap-4">
+                    <DailyScheduleDonut
+                      firstClockIn={daily?.firstClockIn ?? null}
+                      lastClockOut={daily?.lastClockOut ?? null}
+                      scheduleStartTime={effectiveSchedule?.startTime ?? null}
+                      scheduleEndTime={effectiveSchedule?.endTime ?? null}
+                      scheduledMinutes={effectiveSchedule?.workMinutes ?? null}
+                      workedMinutes={daily?.workedMinutes ?? null}
+                      breakMinutes={effectiveSchedule?.breakMinutes ?? 0}
+                    />
+                    <div className="tw-min-w-0">
+                      <Typography.Text className="!tw-text-xs !tw-font-semibold !tw-text-slate-500">
+                        오늘의 근무
+                      </Typography.Text>
+                      <div className="tw-mt-1 tw-text-lg tw-font-bold tw-text-slate-900">
+                        {daily?.firstClockIn
+                          ? daily?.lastClockOut
+                            ? '퇴근 완료'
+                            : '근무 중'
+                          : '출근 전'}
+                      </div>
+                      <div className="tw-mt-1 tw-text-xs tw-text-slate-500">
+                        {latestClockLabel} · {formatHm(todayWorkedMinutes)}
+                      </div>
+                      <div className="tw-mt-2 tw-text-xs tw-text-slate-500">
+                        {scheduleTypeLabel}
+                        {effectiveSchedule?.startTime && effectiveSchedule?.endTime
+                          ? ` · ${effectiveSchedule.startTime.slice(0, 5)} ~ ${effectiveSchedule.endTime.slice(0, 5)}`
+                          : ''}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="tw-grid tw-grid-cols-2 tw-gap-2">
                     <Button
                       size="large"
+                      type="primary"
                       loading={busy}
-                      danger
-                      icon={<LogoutOutlined />}
-                      className="tw-flex-1 !tw-max-w-[180px]"
-                      onClick={() => {
-                        modal.confirm({
-                          title: '퇴근을 취소하시겠습니까?',
-                          content:
-                            '잘못 누른 경우에 사용하세요. 퇴근 기록과 근무·연장 분이 초기화되며, 다시 퇴근하려면 [퇴근] 버튼을 누르면 됩니다. (이미 마감된 근태는 취소할 수 없습니다.)',
-                          okText: '퇴근 취소',
-                          okButtonProps: { danger: true },
-                          cancelText: '닫기',
-                          onOk: () => cancelClockOutM.mutateAsync(),
-                        });
-                      }}
+                      disabled={!!daily?.firstClockIn}
+                      icon={<LoginOutlined />}
+                      onClick={() => clockInM.mutate()}
+                      className="!tw-h-11 !tw-rounded-xl !tw-font-semibold"
                     >
-                      퇴근 취소
+                      출근하기
                     </Button>
-                  ) : (
-                    <Button
-                      size="large"
-                      loading={busy}
-                      icon={<LogoutOutlined />}
-                      onClick={() => {
-                        modal.confirm({
-                          title: '퇴근하시겠습니까?',
-                          content:
-                            '퇴근 시각이 현재 시간으로 기록되며, 근무·연장 분이 계산됩니다. 잘못 누른 경우 [퇴근 취소] 버튼으로 되돌릴 수 있습니다.',
-                          okText: '퇴근',
-                          cancelText: '닫기',
-                          onOk: () => clockOutM.mutateAsync(),
-                        });
-                      }}
-                      className="tw-flex-1 !tw-max-w-[180px]"
-                    >
-                      퇴근하기
-                    </Button>
-                  )}
+                    {daily?.lastClockOut ? (
+                      <Button
+                        size="large"
+                        loading={busy}
+                        disabled={!daily?.firstClockIn || !daily?.lastClockOut}
+                        danger
+                        icon={<LogoutOutlined />}
+                        className="!tw-h-11 !tw-rounded-xl !tw-font-semibold"
+                        onClick={() => {
+                          modal.confirm({
+                            title: '퇴근을 취소하시겠습니까?',
+                            content:
+                              '잘못 누른 경우에 사용하세요. 퇴근 기록과 근무·연장 분이 초기화되며, 다시 퇴근하려면 [퇴근] 버튼을 누르면 됩니다. (이미 마감된 근태는 취소할 수 없습니다.)',
+                            okText: '퇴근 취소',
+                            okButtonProps: { danger: true },
+                            cancelText: '닫기',
+                            onOk: () => cancelClockOutM.mutateAsync(),
+                          });
+                        }}
+                      >
+                        퇴근 취소
+                      </Button>
+                    ) : (
+                      <Button
+                        size="large"
+                        loading={busy}
+                        disabled={!daily?.firstClockIn || !!daily?.lastClockOut}
+                        icon={<LogoutOutlined />}
+                        onClick={() => {
+                          modal.confirm({
+                            title: '퇴근하시겠습니까?',
+                            content:
+                              '퇴근 시각이 현재 시간으로 기록되며, 근무·연장 분이 계산됩니다. 잘못 누른 경우 [퇴근 취소] 버튼으로 되돌릴 수 있습니다.',
+                            okText: '퇴근',
+                            cancelText: '닫기',
+                            onOk: () => clockOutM.mutateAsync(),
+                          });
+                        }}
+                        className="!tw-h-11 !tw-rounded-xl !tw-font-semibold"
+                      >
+                        퇴근하기
+                      </Button>
+                    )}
+                  </div>
                 </div>
 
-                {/* 우측: 하루 스케줄 도넛 - 출근~현재(또는 퇴근) 진행률 */}
-                <DailyScheduleDonut
-                  firstClockIn={daily?.firstClockIn ?? null}
-                  lastClockOut={daily?.lastClockOut ?? null}
-                  scheduleStartTime={effectiveSchedule?.startTime ?? null}
-                  scheduleEndTime={effectiveSchedule?.endTime ?? null}
-                  scheduledMinutes={effectiveSchedule?.workMinutes ?? null}
-                  workedMinutes={daily?.workedMinutes ?? null}
-                  breakMinutes={effectiveSchedule?.breakMinutes ?? 0}
-                />
+                <div className="tw-grid tw-grid-cols-2 tw-gap-2 sm:tw-grid-cols-4">
+                  {[
+                    { label: '근무일', value: `${monthStats.workDays}일`, tone: 'slate' },
+                    { label: '지각', value: `${monthStats.tardy}회`, tone: monthStats.tardy > 0 ? 'amber' : 'slate' },
+                    { label: '결근', value: `${monthStats.absent}회`, tone: monthStats.absent > 0 ? 'rose' : 'slate' },
+                    {
+                      label: '조퇴',
+                      value: `${monthStats.earlyLeave}회`,
+                      tone: monthStats.earlyLeave > 0 ? 'amber' : 'slate',
+                    },
+                  ].map((item) => (
+                    <div
+                      key={item.label}
+                      className={
+                        'tw-rounded-xl tw-border tw-px-3 tw-py-3 ' +
+                        (item.tone === 'rose'
+                          ? 'tw-border-rose-100 tw-bg-rose-50/70'
+                          : item.tone === 'amber'
+                            ? 'tw-border-amber-100 tw-bg-amber-50/70'
+                            : 'tw-border-slate-100 tw-bg-slate-50')
+                      }
+                    >
+                      <div className="tw-text-[11px] tw-font-semibold tw-text-slate-500">
+                        이번 달 {item.label}
+                      </div>
+                      <div
+                        className={
+                          'tw-mt-1 tw-text-lg tw-font-bold ' +
+                          (item.tone === 'rose'
+                            ? 'tw-text-rose-700'
+                            : item.tone === 'amber'
+                              ? 'tw-text-amber-700'
+                              : 'tw-text-slate-900')
+                        }
+                      >
+                        {item.value}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </Card>
 
-            {/* 우측 - 휴가 현황 카드 */}
-
-            {/* 휴가 현황 - 근태 현황과 같은 row (2/3 폭), 연차/사용/잔여/이력 4 메트릭 inline 표시 */}
             <Card
-              className="tw-border-slate-200/80 tw-shadow-sm lg:tw-col-span-2"
-              size="small"
-              title="휴가 현황"
+              className="tw-border-slate-200/80 tw-shadow-sm xl:tw-col-span-7"
+              title={
+                <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2">
+                  <div>
+                    <div className="tw-font-semibold tw-text-slate-900">휴가 현황</div>
+                    <Typography.Text type="secondary" className="!tw-text-xs">
+                      올해 사용 가능한 휴가와 사용률을 확인합니다.
+                    </Typography.Text>
+                  </div>
+                  <Button
+                    onClick={() => setLeaveHistoryOpen(true)}
+                    className="!tw-rounded-lg !tw-border-slate-200 !tw-text-slate-700 hover:!tw-border-slate-300 hover:!tw-text-slate-900"
+                  >
+                    휴가 이력
+                  </Button>
+                </div>
+              }
               loading={balanceQ.isLoading}
             >
-              <div className="tw-grid tw-grid-cols-4 tw-gap-3">
-                <div className="tw-flex tw-flex-col tw-items-center tw-gap-1">
-                  <Typography.Text type="secondary" className="!tw-text-xs">
-                    연차휴가
-                  </Typography.Text>
-                  <Typography.Title level={3} className="!tw-m-0">
-                    {totalGranted.toLocaleString('ko-KR')}일
-                  </Typography.Title>
+              <div className="tw-flex tw-h-full tw-flex-col tw-gap-5">
+                <div className="tw-grid tw-grid-cols-1 tw-gap-3 sm:tw-grid-cols-3">
+                  {[
+                    { label: '연차휴가', value: totalGranted, desc: '총 부여' },
+                    { label: '사용한 휴가', value: totalUsed, desc: '승인 기준' },
+                    { label: '잔여 휴가', value: totalRemaining, desc: '사용 가능', active: true },
+                  ].map((item) => (
+                    <div
+                      key={item.label}
+                      className={
+                        'tw-rounded-2xl tw-border tw-p-4 ' +
+                        (item.active
+                          ? 'tw-border-blue-100 tw-bg-blue-50/70'
+                          : 'tw-border-slate-100 tw-bg-slate-50')
+                      }
+                    >
+                      <div
+                        className={
+                          'tw-text-xs tw-font-semibold ' +
+                          (item.active ? 'tw-text-blue-700' : 'tw-text-slate-500')
+                        }
+                      >
+                        {item.label}
+                      </div>
+                      <div className="tw-mt-2 tw-flex tw-items-baseline tw-gap-1">
+                        <span
+                          className={
+                            'tw-text-2xl tw-font-bold ' +
+                            (item.active ? 'tw-text-blue-700' : 'tw-text-slate-900')
+                          }
+                        >
+                          {item.value.toLocaleString('ko-KR')}
+                        </span>
+                        <span className={item.active ? 'tw-text-sm tw-text-blue-500' : 'tw-text-sm tw-text-slate-400'}>
+                          일
+                        </span>
+                      </div>
+                      <div className="tw-mt-2 tw-text-[11px] tw-font-medium tw-text-slate-400">
+                        {item.desc}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <div className="tw-flex tw-flex-col tw-items-center tw-gap-1">
-                  <Typography.Text type="secondary" className="!tw-text-xs">
-                    사용한 휴가
-                  </Typography.Text>
-                  <Typography.Title level={3} className="!tw-m-0">
-                    {totalUsed.toLocaleString('ko-KR')}일
-                  </Typography.Title>
-                </div>
-                <div className="tw-flex tw-flex-col tw-items-center tw-gap-1">
-                  <Typography.Text type="secondary" className="!tw-text-xs">
-                    잔여 휴가
-                  </Typography.Text>
-                  <Typography.Title level={3} className="!tw-m-0 !tw-text-[#2563EB]">
-                    {totalRemaining.toLocaleString('ko-KR')}일
-                  </Typography.Title>
-                </div>
-                <div className="tw-flex tw-flex-col tw-items-center tw-gap-1">
-                  <Typography.Text type="secondary" className="!tw-text-xs">
-                    휴가 이력
-                  </Typography.Text>
-                  <Button
-                    type="primary"
-                    ghost
-                    onClick={() => setLeaveHistoryOpen(true)}
-                    className="!tw-mt-1"
-                  >
-                    전체 보기
-                  </Button>
+
+                <div className="tw-rounded-xl tw-bg-slate-50 tw-p-4">
+                  <div className="tw-mb-2 tw-flex tw-items-center tw-justify-between tw-gap-3">
+                    <Typography.Text className="!tw-text-xs !tw-font-semibold !tw-text-slate-600">
+                      휴가 사용 비율
+                    </Typography.Text>
+                    <Typography.Text className="!tw-text-xs !tw-font-bold !tw-text-slate-700">
+                      {leaveUsagePercent}%
+                    </Typography.Text>
+                  </div>
+                  <Progress
+                    percent={leaveUsagePercent}
+                    showInfo={false}
+                    strokeColor="#2563EB"
+                    trailColor="#e2e8f0"
+                  />
+                  <div className="tw-mt-2 tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2 tw-text-xs tw-text-slate-500">
+                    <span>잔여 {totalRemaining.toLocaleString('ko-KR')}일</span>
+                    <span>사용 {totalUsed.toLocaleString('ko-KR')}일 / 총 {totalGranted.toLocaleString('ko-KR')}일</span>
+                  </div>
                 </div>
               </div>
             </Card>
@@ -1014,7 +1098,7 @@ export function MyAttendancePage() {
                 description="잠시 후 다시 시도해 주세요."
               />
             )}
-            <Table<DailyAttendance>
+            <AppDataTable<DailyAttendance>
               rowKey={(r) => r.dailyAttendanceId ?? `${r.attendanceDate}-${r.status}`}
               loading={monthlyQ.isLoading}
               columns={monthlyColumns}

@@ -1,5 +1,10 @@
-import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { DownloadOutlined, SendOutlined } from '@ant-design/icons';
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
+import { DownloadOutlined,
+  SendOutlined } from '@ant-design/icons';
 import {
   Alert,
   Button,
@@ -10,7 +15,6 @@ import {
   Modal,
   Popconfirm,
   Space,
-  Table,
   Tag,
   Typography,
   type ModalProps,
@@ -61,6 +65,8 @@ import {
 import { memberApi } from '@/features/member/api/memberApi';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 const REQUEST_STATUS_LABEL: Record<ApprovalRequestStatus, string> = {
   DRAFT: '임시저장',
@@ -967,7 +973,7 @@ export function ApprovalRequestReadOnlyModal({
           {normalizeApprovalRequestType(selectedRequestDetail.requestType) === 'OFFICIAL' &&
           (selectedRequestDetail.recipients?.length ?? 0) > 0 ? (
             <Card size="small" title="수신 부서">
-              <Table
+              <AppDataTable
                 size="small"
                 pagination={false}
                 rowKey={(r) => r.recipientId ?? `${r.recipientOrganizationId}-${r.recipientOrganizationName}`}
@@ -1082,7 +1088,7 @@ export function ApprovalRequestReadOnlyModal({
             ) : attachments.length === 0 ? (
               <Typography.Text type="secondary">첨부파일이 없습니다.</Typography.Text>
             ) : (
-              <Table
+              <AppDataTable
                 size="small"
                 pagination={false}
                 rowKey="attachmentId"
@@ -1092,7 +1098,7 @@ export function ApprovalRequestReadOnlyModal({
             )}
           </Card>
           <Card size="small" title="결재라인">
-            <Table
+            <AppDataTable
               size="small"
               rowKey="approvalId"
               pagination={false}
@@ -1172,7 +1178,7 @@ export function ApprovalRequestReadOnlyModal({
             />
           </Card>
           <Card size="small" title="참조·공람">
-            <Table
+            <AppDataTable
               size="small"
               rowKey="viewerId"
               pagination={false}

@@ -1,6 +1,11 @@
 /** /app/attendance/company/monthly — 전사 월별 일자별 근태 (관리자) */
-import { useQuery } from '@tanstack/react-query';
-import { Card, DatePicker, Space, Table, Typography } from 'antd';
+import {
+  useQuery } from '@tanstack/react-query';
+import { Card,
+  DatePicker,
+  Space,
+  Typography,
+} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useMemo, useState } from 'react';
@@ -9,6 +14,8 @@ import { normalizeSpringPage } from '@/features/salary-service/lib/normalizePage
 import type { DailyAttendance } from '@/features/salary-service/types';
 import { AttendanceStatusTag } from '@/features/salary-service/ui/AttendanceStatusTag';
 import { AppSearchBar } from '@/shared/ui';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 function shortId(id?: string | null) {
   if (!id) return '—';
@@ -118,7 +125,7 @@ export function AdminAttendanceMonthlyPage() {
         </Space>
       </Card>
       <Card className="tw-border-slate-200/80 tw-shadow-sm" title="일자별">
-        <Table<DailyAttendance>
+        <AppDataTable<DailyAttendance>
           rowKey={(r) => r.dailyAttendanceId ?? `${r.memberId}-${r.attendanceDate}`}
           loading={listQ.isLoading}
           columns={columns}

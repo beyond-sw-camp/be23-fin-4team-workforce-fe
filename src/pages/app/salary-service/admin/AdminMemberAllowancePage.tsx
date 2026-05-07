@@ -11,7 +11,10 @@
  *  GET  /salary/admin/allowances?status=...
  *  GET  /salary/admin/allowances/members/{memberId}/active?date=YYYY-MM-DD
  */
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useMutation,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
 import {
   App,
   Button,
@@ -26,7 +29,6 @@ import {
   Select,
   Space,
   Statistic,
-  Table,
   Tag,
   Tooltip,
   Typography,
@@ -38,6 +40,8 @@ import { memberApi } from '@/features/member/api/memberApi';
 import { useMemberDisplayNames } from '@/features/members/hooks/useMemberDisplayNames';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import { AppSearchBar } from '@/shared/ui';
+import { AppDataTable } from '@/shared/ui/AppDataTable';
+
 import type {
   AllowanceApprovalStatusCode,
   MemberAllowance,
@@ -602,7 +606,7 @@ export function AdminMemberAllowancePage() {
           groupedByMember.length === 0 ? (
             <Empty description="조건에 맞는 수당이 없습니다." />
           ) : (
-            <Table
+            <AppDataTable
               rowKey={(g) => g.memberId}
               dataSource={groupedByMember}
               pagination={false}
@@ -708,7 +712,7 @@ export function AdminMemberAllowancePage() {
                     현재 월 합계 {formatWon(g.activeSum)}
                   </Typography.Text>
                 </div>
-                <Table<MemberAllowance>
+                <AppDataTable<MemberAllowance>
                   rowKey={(r) =>
                     r.memberAllowanceId ??
                     `${r.memberId}-${r.salaryItemTemplateId}-${r.effectiveFrom}`

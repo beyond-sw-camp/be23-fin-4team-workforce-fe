@@ -2,9 +2,13 @@
  * /app/salary/pay-grade-table — 호봉표 관리 (시스템 관리자)
  * 호봉 → 기본급. 직급 무관. 직급별 차등은 직책수당 등 SalaryItemTemplate 으로 처리.
  */
-import { Link } from '@tanstack/react-router';
-import { useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  Link } from '@tanstack/react-router';
+import { useMemo,
+  useState } from 'react';
+import { useMutation,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
 import {
   App,
   Button,
@@ -16,16 +20,19 @@ import {
   Popconfirm,
   Space,
   Switch,
-  Table,
   Tag,
+  Tooltip,
   Typography,
 } from 'antd';
+import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs, { type Dayjs } from 'dayjs';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppModal } from '@/shared/ui/AppModal';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import type { PayGradeTable } from '@/features/salary-service/types';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 function formatWon(n: number | null | undefined) {
   if (n == null || Number.isNaN(n)) return '—';
@@ -161,18 +168,23 @@ export function AdminPayGradeTablePage({ embedded = false }: { embedded?: boolea
         width: 170,
         render: (_, r) => (
           <Space>
-            <Button size="small" onClick={() => openEdit(r)}>
-              기본급 수정
-            </Button>
+            <Tooltip title="기본급 수정">
+              <Button
+                size="small"
+                icon={<EditOutlined />}
+                aria-label={`${r.step}호봉 기본급 수정`}
+                onClick={() => openEdit(r)}
+              />
+            </Tooltip>
             <Popconfirm
               title={`${r.step}호봉을 삭제할까요?`}
               okText="삭제"
               cancelText="취소"
               onConfirm={() => r.payGradeTableId && deleteM.mutate(r.payGradeTableId)}
             >
-              <Button size="small" danger>
-                삭제
-              </Button>
+              <Tooltip title="삭제">
+                <Button size="small" danger icon={<DeleteOutlined />} aria-label={`${r.step}호봉 삭제`} />
+              </Tooltip>
             </Popconfirm>
           </Space>
         ),
@@ -218,6 +230,7 @@ export function AdminPayGradeTablePage({ embedded = false }: { embedded?: boolea
           </Space>
           <Button
             type="primary"
+            icon={<PlusOutlined />}
             onClick={() => {
               bulkForm.resetFields();
               setBulkOpen(true);
@@ -229,7 +242,7 @@ export function AdminPayGradeTablePage({ embedded = false }: { embedded?: boolea
       </div>
 
       <Card className="tw-border-slate-200/80 tw-shadow-sm">
-        <Table<PayGradeTable>
+        <AppDataTable<PayGradeTable>
           rowKey={(r) => r.payGradeTableId ?? `${r.step}-${r.effectiveFrom}`}
           loading={listQ.isLoading}
           columns={columns}
@@ -453,7 +466,7 @@ function BulkCreateModal({ open, onCancel, onSubmit, submitting, form }: BulkCre
 
         <Typography.Text strong>미리보기</Typography.Text>
         <div className="tw-mt-2 tw-max-h-64 tw-overflow-auto tw-rounded tw-border tw-border-slate-200">
-          <Table
+          <AppDataTable
             rowKey={(r) => `${r.step}`}
             size="small"
             pagination={false}

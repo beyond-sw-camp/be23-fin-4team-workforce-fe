@@ -8,9 +8,14 @@
  *
  * 정책 메뉴는 별도 (/app/salary/bonus-policy) - 여기선 발행만.
  */
-import { useEffect, useMemo, useState } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
   App,
@@ -25,7 +30,6 @@ import {
   Select,
   Space,
   Statistic,
-  Table,
   Tag,
   Typography,
 } from 'antd';
@@ -34,6 +38,8 @@ import dayjs from 'dayjs';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import { evaluationRedesignApi } from '@/features/evaluation/api/evaluationRedesignApi';
 import { AppUnitInputNumber } from '@/shared/ui/AppUnitInputNumber';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 type BonusKind = 'REGULAR' | 'PERFORMANCE' | 'HOLIDAY';
 
@@ -498,7 +504,7 @@ export function AdminBonusBatchTab() {
             />
           </div>
 
-          <Table<TargetEntry>
+          <AppDataTable<TargetEntry>
             rowKey="memberId"
             dataSource={preview.targets}
             columns={targetCols}

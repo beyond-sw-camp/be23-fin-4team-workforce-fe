@@ -1,70 +1,14 @@
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 import {
-  ApartmentOutlined,
-  ArrowLeftOutlined,
-  CalendarOutlined,
-  CarOutlined,
-  CheckCircleFilled,
-  ClockCircleOutlined,
-  CloseCircleOutlined,
-  DeleteOutlined,
-  EyeOutlined,
-  FileTextOutlined,
-  FolderOpenOutlined,
-  FormOutlined,
-  InboxOutlined,
-  MinusOutlined,
-  PlusOutlined,
-  PaperClipOutlined,
-  SaveOutlined,
-  SearchOutlined,
-  SendOutlined,
-  SettingOutlined,
-} from '@ant-design/icons';
+  ApartmentOutlined, ArrowLeftOutlined, CalendarOutlined, CarOutlined, CheckCircleFilled, ClockCircleOutlined, CloseCircleOutlined, DeleteOutlined, EyeOutlined, FileTextOutlined, FolderOpenOutlined, FormOutlined, InboxOutlined, MinusOutlined, PlusOutlined, PaperClipOutlined, SaveOutlined, SearchOutlined, SendOutlined, SettingOutlined, } from '@ant-design/icons';
 import {
-  DndContext,
-  type DragEndEvent,
-  KeyboardSensor,
-  PointerSensor,
-  closestCenter,
-  useSensor,
-  useSensors,
-} from '@dnd-kit/core';
+  DndContext, type DragEndEvent, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, } from '@dnd-kit/core';
 import {
-  SortableContext,
-  arrayMove,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
+  SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy, } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Alert,
-  App,
-  Avatar,
-  Button,
-  Card,
-  DatePicker,
-  Descriptions,
-  Divider,
-  Empty,
-  Form,
-  Input,
-  Popconfirm,
-  Progress,
-  Select,
-  Space,
-  Spin,
-  Switch,
-  Steps,
-  Table,
-  Tabs,
-  Tag,
-  Tooltip,
-  Tree,
-  Typography,
-  Upload,
-} from 'antd';
+  Alert, App, Avatar, Button, Card, DatePicker, Descriptions, Divider, Empty, Form, Input, Popconfirm, Progress, Select, Space, Spin, Switch, Steps, Tabs, Tag, Tooltip, Tree, Typography, Upload } from 'antd';
 import type { UploadProps } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import type { DataNode } from 'antd/es/tree';
@@ -3999,15 +3943,29 @@ export function ApprovalsPage() {
           </Button>
         ) : null}
         {showCancel ? (
-          <Button
-            type="link"
-            size="small"
-            className="!tw-h-7 !tw-px-2"
-            danger
-            onClick={() => setCancelTarget(row)}
-          >
-            {st === 'DRAFT' ? '삭제' : '취소'}
-          </Button>
+          st === 'DRAFT' ? (
+            <Tooltip title="삭제">
+              <Button
+                type="link"
+                size="small"
+                className="!tw-inline-flex !tw-h-7 !tw-w-7 !tw-items-center !tw-justify-center !tw-p-0"
+                danger
+                icon={<DeleteOutlined />}
+                aria-label="임시저장 문서 삭제"
+                onClick={() => setCancelTarget(row)}
+              />
+            </Tooltip>
+          ) : (
+            <Button
+              type="link"
+              size="small"
+              className="!tw-h-7 !tw-px-2"
+              danger
+              onClick={() => setCancelTarget(row)}
+            >
+              취소
+            </Button>
+          )
         ) : null}
         {showOfficialPreSendCancel ? (
           <Button
@@ -4078,15 +4036,17 @@ export function ApprovalsPage() {
         >
           이어쓰기
         </Button>
-        <Button
-          type="link"
-          size="small"
-          className="!tw-h-7 !tw-px-2"
-          danger
-          onClick={() => setCancelTarget(row)}
-        >
-          삭제
-        </Button>
+        <Tooltip title="삭제">
+          <Button
+            type="link"
+            size="small"
+            className="!tw-inline-flex !tw-h-7 !tw-w-7 !tw-items-center !tw-justify-center !tw-p-0"
+            danger
+            icon={<DeleteOutlined />}
+            aria-label="임시저장 문서 삭제"
+            onClick={() => setCancelTarget(row)}
+          />
+        </Tooltip>
       </div>
     );
   };
@@ -4502,7 +4462,7 @@ export function ApprovalsPage() {
     const title = viewerType === 'CC' ? '참조자 목록' : '공람자 목록';
     return (
       <Card size="small" title={title} variant="borderless" className={APPROVAL_COMPOSE_CARD_CLASS}>
-        <Table<ViewerDraft>
+        <AppDataTable<ViewerDraft>
           rowKey={(row) => (row.kind === 'org' ? row.id : row.viewerMemberId)}
           size="small"
           bordered={false}
@@ -4989,7 +4949,7 @@ export function ApprovalsPage() {
         onDragEnd={onApprovalLineDragEnd}
       >
         <SortableContext items={approvalLineSortableIds} strategy={verticalListSortingStrategy}>
-          <Table<ApprovalLineDraft>
+          <AppDataTable<ApprovalLineDraft>
             rowKey="id"
             size="small"
             bordered={false}
@@ -5623,14 +5583,15 @@ export function ApprovalsPage() {
     ];
 
     const composeHomePendingTable = (rows: ApprovalRequestDetail[]) => (
-      <Table<ApprovalRequestDetail>
+      <AppDataTable<ApprovalRequestDetail>
+        bare
         size="small"
         rowKey="requestId"
         columns={composeHomePendingColumns}
         dataSource={rows}
         pagination={false}
         locale={{ emptyText: '결재 처리 문서가 없습니다.' }}
-        tableLayout="fixed"
+              tableLayout="auto"
         scroll={{ y: 158 }}
         onRow={(record) => ({
           onClick: () => setSelectedRequestId(record.requestId),
@@ -5853,7 +5814,7 @@ export function ApprovalsPage() {
           </div>
         </div>
 
-        <AppModal
+        <AppSingleActionModal
           title={
             composeHomeMoreModal == null
               ? undefined
@@ -5862,8 +5823,10 @@ export function ApprovalsPage() {
                 : composeHomeEmbedPanelModalTitle(composeHomeMoreModal)
           }
           open={composeHomeMoreModal != null}
-          onCancel={() => setComposeHomeMoreModal(null)}
-          footer={null}
+          onClose={() => setComposeHomeMoreModal(null)}
+          onSubmit={() => undefined}
+          submitText="확인"
+          customFooter={null}
           width={1120}
           destroyOnHidden
           styles={{
@@ -5894,7 +5857,7 @@ export function ApprovalsPage() {
               />
             ) : null}
           </div>
-        </AppModal>
+        </AppSingleActionModal>
 
         <ApprovalFormSelectModal
           open={composeFormSelectModalOpen}
@@ -5909,10 +5872,10 @@ export function ApprovalsPage() {
         />
 
         {/* 근태정정신청 자동 모달 - corrDate 진입 시 기존 결재 작성 모달 흐름과 동일한 모양으로 띄움 */}
-        <AppModal
+        <AppSingleActionModal
           title="전자결재"
           open={correctionEmbedSrc != null}
-          onCancel={() => {
+          onClose={() => {
             setCorrectionEmbedSrc(null);
             // 모달 닫을 때 prefill 파라미터 제거하고 허브로 복귀
             navigate({
@@ -5921,7 +5884,9 @@ export function ApprovalsPage() {
               replace: true,
             });
           }}
-          footer={null}
+          onSubmit={() => undefined}
+          submitText="확인"
+          customFooter={null}
           width={1120}
           destroyOnHidden
           styles={{
@@ -5938,7 +5903,7 @@ export function ApprovalsPage() {
               className="tw-h-full tw-min-h-0 tw-w-full tw-border-0"
             />
           ) : null}
-        </AppModal>
+        </AppSingleActionModal>
         <AppDoubleActionModal
           title="퀵 메뉴 설정"
           open={quickHomeFormsSettingOpen}
@@ -6035,7 +6000,7 @@ export function ApprovalsPage() {
       {/* 허브 대시보드 밖(예: sideNav=workbench)에서도 동일 모달이 필요 - 챗봇 prefill 등 */}
       {/* 허브 안(onComposeHub=true)에선 위쪽 그리드의 동일 모달이 뜨므로 중복 렌더 방지 위해 가드 */}
       {!isEmbedComposeModal && !onComposeHub ? (
-        <AppModal
+        <AppSingleActionModal
           title={
             composeHomeMoreModal == null
               ? undefined
@@ -6044,8 +6009,10 @@ export function ApprovalsPage() {
                 : composeHomeEmbedPanelModalTitle(composeHomeMoreModal)
           }
           open={composeHomeMoreModal != null}
-          onCancel={() => setComposeHomeMoreModal(null)}
-          footer={null}
+          onClose={() => setComposeHomeMoreModal(null)}
+          onSubmit={() => undefined}
+          submitText="확인"
+          customFooter={null}
           width={1120}
           destroyOnHidden
           styles={{
@@ -6077,7 +6044,7 @@ export function ApprovalsPage() {
               />
             ) : null}
           </div>
-        </AppModal>
+        </AppSingleActionModal>
       ) : null}
 
       {!isEmbedComposeModal ? (
@@ -6113,6 +6080,7 @@ export function ApprovalsPage() {
           {tab === 'compose' && onComposeHub ? (
             <Button
               type="primary"
+              icon={<PlusOutlined />}
               className="tw-h-11 tw-rounded-2xl tw-font-bold tw-border-0 !tw-bg-[#1e3a5f] hover:!tw-bg-[#152a45] disabled:!tw-cursor-not-allowed disabled:!tw-border disabled:!tw-border-slate-200 disabled:!tw-bg-white disabled:!tw-text-slate-400 disabled:!tw-opacity-100 disabled:!tw-shadow-none disabled:hover:!tw-bg-white disabled:hover:!tw-text-slate-400"
               onClick={() => {
                 setComposeFormSelectInitialId(undefined);
@@ -7271,7 +7239,7 @@ export function ApprovalsPage() {
                             key: 'cc',
                             label: '참조',
                             children: (
-                              <Table<ApprovalRequestDetail>
+                              <AppDataTable<ApprovalRequestDetail>
                                 size="small"
                                 rowKey="requestId"
                                 loading={myTableLoading}
@@ -7290,7 +7258,7 @@ export function ApprovalsPage() {
                             key: 'circ',
                             label: '공람',
                             children: (
-                              <Table<ApprovalRequestDetail>
+                              <AppDataTable<ApprovalRequestDetail>
                                 size="small"
                                 rowKey="requestId"
                                 loading={myTableLoading}
@@ -7308,7 +7276,7 @@ export function ApprovalsPage() {
                         ]}
                       />
                     ) : (
-                      <Table<ApprovalRequestDetail>
+                      <AppDataTable<ApprovalRequestDetail>
                         size="small"
                         rowKey="requestId"
                         loading={myTableLoading}
@@ -7386,7 +7354,7 @@ export function ApprovalsPage() {
                           key: 'cc',
                           label: '참조',
                           children: (
-                            <Table<ApprovalRequestDetail>
+                            <AppDataTable<ApprovalRequestDetail>
                               rowKey="requestId"
                               loading={myTableLoading}
                               columns={viewerCcOnlyColumns}
@@ -7403,7 +7371,7 @@ export function ApprovalsPage() {
                           key: 'circ',
                           label: '공람',
                           children: (
-                            <Table<ApprovalRequestDetail>
+                            <AppDataTable<ApprovalRequestDetail>
                               rowKey="requestId"
                               loading={myTableLoading}
                               columns={viewerCcOnlyColumns}
@@ -7419,7 +7387,7 @@ export function ApprovalsPage() {
                       ]}
                     />
                   ) : (
-                    <Table<ApprovalRequestDetail>
+                    <AppDataTable<ApprovalRequestDetail>
                       rowKey="requestId"
                       loading={myTableLoading}
                       columns={
@@ -7467,7 +7435,7 @@ export function ApprovalsPage() {
             >
               {(() => {
                 const pendingTable = (
-                  <Table<ApprovalRequestDetail>
+                  <AppDataTable<ApprovalRequestDetail>
                     size={isEmbedComposeModal ? 'small' : undefined}
                     rowKey="requestId"
                     loading={pendingTableLoading}
@@ -7513,7 +7481,7 @@ export function ApprovalsPage() {
             >
               {(() => {
                 const actedTable = (
-                  <Table<ApprovalRequestDetail>
+                  <AppDataTable<ApprovalRequestDetail>
                     size={isEmbedComposeModal ? 'small' : undefined}
                     rowKey="requestId"
                     loading={actedLoading}

@@ -5,10 +5,11 @@
  */
 import { CloseOutlined, PlusOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { Button, Empty, List, Modal, Tag, Typography } from 'antd';
+import { Button, Empty, List, Tag, Typography } from 'antd';
 import { useMemo, useState } from 'react';
 import { memberApi } from '@/features/member/api/memberApi';
 import { AppSearchBar } from '@/shared/ui';
+import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
 
 export type ApprovalLinePickerRow = {
   /** 클라이언트 식별자, drag 등에 활용 */
@@ -154,58 +155,62 @@ export function ApprovalLinePicker({ value, onChange, excludeMemberId }: Props) 
       </Button>
 
       {/* 결재자 검색/선택 모달 */}
-      <Modal
+      <AppSingleActionModal
         open={pickerOpen}
         title="결재자 선택"
-        onCancel={() => setPickerOpen(false)}
-        footer={null}
+        onClose={() => setPickerOpen(false)}
+        onSubmit={() => undefined}
+        submitText="확인"
+        customFooter={null}
         destroyOnHidden
         width={520}
       >
-        <AppSearchBar
-          placeholder="이름 / 부서 / 직급 검색"
-          value={keyword}
-          onValueChange={setKeyword}
-          onSearch={setKeyword}
-          ariaLabel="결재자 검색"
-          className="tw-mb-3 tw-w-full"
-        />
-        <List
-          size="small"
-          bordered
-          loading={memberQ.isLoading}
-          dataSource={memberQ.data ?? []}
-          locale={{ emptyText: '검색 결과가 없습니다.' }}
-          style={{ maxHeight: 360, overflowY: 'auto' }}
-          renderItem={(m) => {
-            const already = addedIds.has(m.memberId);
-            const isMe = excludeMemberId && m.memberId === excludeMemberId;
-            const disabled = already || Boolean(isMe);
-            return (
-              <List.Item
-                actions={[
-                  <Button
-                    key="add"
-                    size="small"
-                    type="primary"
-                    disabled={disabled}
-                    onClick={() => handleAddMember(m)}
-                  >
-                    {already ? '추가됨' : isMe ? '본인' : '추가'}
-                  </Button>,
-                ]}
-              >
-                <div>
-                  <div className="tw-font-medium">{m.name}</div>
-                  <Typography.Text type="secondary" className="tw-text-xs">
-                    {m.jobTitleName} · {m.organizationName}
-                  </Typography.Text>
-                </div>
-              </List.Item>
-            );
-          }}
-        />
-      </Modal>
+        <div className="tw-px-5 tw-py-4">
+          <AppSearchBar
+            placeholder="이름 / 부서 / 직급 검색"
+            value={keyword}
+            onValueChange={setKeyword}
+            onSearch={setKeyword}
+            ariaLabel="결재자 검색"
+            className="tw-mb-3 tw-w-full"
+          />
+          <List
+            size="small"
+            bordered
+            loading={memberQ.isLoading}
+            dataSource={memberQ.data ?? []}
+            locale={{ emptyText: '검색 결과가 없습니다.' }}
+            style={{ maxHeight: 360, overflowY: 'auto' }}
+            renderItem={(m) => {
+              const already = addedIds.has(m.memberId);
+              const isMe = excludeMemberId && m.memberId === excludeMemberId;
+              const disabled = already || Boolean(isMe);
+              return (
+                <List.Item
+                  actions={[
+                    <Button
+                      key="add"
+                      size="small"
+                      type="primary"
+                      disabled={disabled}
+                      onClick={() => handleAddMember(m)}
+                    >
+                      {already ? '추가됨' : isMe ? '본인' : '추가'}
+                    </Button>,
+                  ]}
+                >
+                  <div>
+                    <div className="tw-font-medium">{m.name}</div>
+                    <Typography.Text type="secondary" className="tw-text-xs">
+                      {m.jobTitleName} · {m.organizationName}
+                    </Typography.Text>
+                  </div>
+                </List.Item>
+              );
+            }}
+          />
+        </div>
+      </AppSingleActionModal>
     </div>
   );
 }

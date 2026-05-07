@@ -1,3 +1,4 @@
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 /**
  * /app/salary/retirement-settlement — 관리자 퇴직 정산 (시스템 관리자)
  *
@@ -9,18 +10,7 @@ import { useMemo, useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Alert,
-  App,
-  Button,
-  Card,
-  Descriptions,
-  Empty,
-  Modal,
-  Space,
-  Table,
-  Tag,
-  Typography,
-} from 'antd';
+  Alert, App, Button, Card, Descriptions, Empty, Modal, Space, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
@@ -261,7 +251,7 @@ export function AdminRetirementSettlementPage({ embedded = false }: { embedded?:
             </Button>
           </Space>
         </div>
-        <Table<PayrollAdminListItem>
+        <AppDataTable<PayrollAdminListItem>
           rowKey="payrollId"
           loading={listQ.isLoading}
           columns={columns}

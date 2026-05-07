@@ -1,19 +1,10 @@
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 // /app/payroll/tax-summary 4대보험 + 원천세 월별 집계 화면
 // 직원 부담은 실제 공제값, 회사 부담·산재는 요율 기반 추정값 (참고용)
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
-  Alert,
-  App,
-  Button,
-  Card,
-  DatePicker,
-  Empty,
-  Space,
-  Statistic,
-  Table,
-  Typography,
-} from 'antd';
+  Alert, App, Button, Card, DatePicker, Empty, Space, Statistic, Typography } from 'antd';
 import { DownloadOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs, { type Dayjs } from 'dayjs';
@@ -250,7 +241,7 @@ export function AdminPayrollTaxSummaryPage() {
             size="small"
             className="tw-border-slate-200/80 tw-shadow-sm"
           >
-            <Table<InsuranceRow>
+            <AppDataTable<InsuranceRow>
               rowKey="key"
               loading={summaryQ.isLoading}
               dataSource={insuranceRows}
@@ -261,22 +252,22 @@ export function AdminPayrollTaxSummaryPage() {
                 const empSum = rows.reduce((a, r) => a + r.employee, 0);
                 const erSum = rows.reduce((a, r) => a + r.employer, 0);
                 return (
-                  <Table.Summary.Row className="tw-bg-slate-50">
-                    <Table.Summary.Cell index={0}>
+                  <AppDataTable.Summary.Row className="tw-bg-slate-50">
+                    <AppDataTable.Summary.Cell index={0}>
                       <Typography.Text strong>합계</Typography.Text>
-                    </Table.Summary.Cell>
-                    <Table.Summary.Cell index={1} align="right">
+                    </AppDataTable.Summary.Cell>
+                    <AppDataTable.Summary.Cell index={1} align="right">
                       <Typography.Text strong>{formatKrw(empSum)} 원</Typography.Text>
-                    </Table.Summary.Cell>
-                    <Table.Summary.Cell index={2} align="right">
+                    </AppDataTable.Summary.Cell>
+                    <AppDataTable.Summary.Cell index={2} align="right">
                       <Typography.Text strong type="secondary">
                         {formatKrw(erSum)} 원
                       </Typography.Text>
-                    </Table.Summary.Cell>
-                    <Table.Summary.Cell index={3} align="right">
+                    </AppDataTable.Summary.Cell>
+                    <AppDataTable.Summary.Cell index={3} align="right">
                       <Typography.Text strong>{formatKrw(empSum + erSum)} 원</Typography.Text>
-                    </Table.Summary.Cell>
-                  </Table.Summary.Row>
+                    </AppDataTable.Summary.Cell>
+                  </AppDataTable.Summary.Row>
                 );
               }}
             />
@@ -287,7 +278,7 @@ export function AdminPayrollTaxSummaryPage() {
             size="small"
             className="tw-border-slate-200/80 tw-shadow-sm"
           >
-            <Table<WithholdingRow>
+            <AppDataTable<WithholdingRow>
               rowKey="key"
               loading={summaryQ.isLoading}
               dataSource={withholdingRows}
@@ -297,14 +288,14 @@ export function AdminPayrollTaxSummaryPage() {
               summary={(rows) => {
                 const sum = rows.reduce((a, r) => a + r.amount, 0);
                 return (
-                  <Table.Summary.Row className="tw-bg-slate-50">
-                    <Table.Summary.Cell index={0}>
+                  <AppDataTable.Summary.Row className="tw-bg-slate-50">
+                    <AppDataTable.Summary.Cell index={0}>
                       <Typography.Text strong>합계</Typography.Text>
-                    </Table.Summary.Cell>
-                    <Table.Summary.Cell index={1} align="right">
+                    </AppDataTable.Summary.Cell>
+                    <AppDataTable.Summary.Cell index={1} align="right">
                       <Typography.Text strong>{formatKrw(sum)} 원</Typography.Text>
-                    </Table.Summary.Cell>
-                  </Table.Summary.Row>
+                    </AppDataTable.Summary.Cell>
+                  </AppDataTable.Summary.Row>
                 );
               }}
             />

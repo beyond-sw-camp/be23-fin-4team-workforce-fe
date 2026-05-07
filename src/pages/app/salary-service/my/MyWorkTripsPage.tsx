@@ -1,6 +1,13 @@
 /** /app/work-trips — 내 출장·외근 work-trip API */
-import { useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useMemo,
+  useState } from 'react';
+import { useMutation,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
+import { DeleteOutlined,
+  EditOutlined,
+  PlusOutlined } from '@ant-design/icons';
 import {
   App,
   Button,
@@ -12,8 +19,8 @@ import {
   Popconfirm,
   Select,
   Space,
-  Table,
   Tag,
+  Tooltip,
   Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
@@ -21,6 +28,8 @@ import dayjs from 'dayjs';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import type { WorkTrip, WorkTripTypeCode, ExpenseTypeCode } from '@/features/salary-service/types';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 type FormValues = {
   date: dayjs.Dayjs;
@@ -191,35 +200,37 @@ export function MyWorkTripsPage() {
         width: 160,
         render: (_, r) => (
           <Space>
-            <Button
-              size="small"
-              onClick={() => {
-                setEditing(r);
-                setOpen(true);
-                form.setFieldsValue({
-                  date: r.attendanceDate ? dayjs(r.attendanceDate) : dayjs(),
-                  workTripType: (r.workTripType as WorkTripTypeCode) ?? 'BUSINESS_TRIP',
-                  destination: r.destination ?? '',
-                  destinationLat: r.destinationLat ?? null,
-                  destinationLng: r.destinationLng ?? null,
-                  destinationRadiusMeters: r.destinationRadiusMeters ?? null,
-                  purpose: r.purpose ?? '',
-                  expenseAmount: r.expenseAmount ?? undefined,
-                  expenseType: (r.expenseType as ExpenseTypeCode) ?? undefined,
-                });
-              }}
-            >
-              수정
-            </Button>
+            <Tooltip title="수정">
+              <Button
+                size="small"
+                icon={<EditOutlined />}
+                aria-label="출장 외근 수정"
+                onClick={() => {
+                  setEditing(r);
+                  setOpen(true);
+                  form.setFieldsValue({
+                    date: r.attendanceDate ? dayjs(r.attendanceDate) : dayjs(),
+                    workTripType: (r.workTripType as WorkTripTypeCode) ?? 'BUSINESS_TRIP',
+                    destination: r.destination ?? '',
+                    destinationLat: r.destinationLat ?? null,
+                    destinationLng: r.destinationLng ?? null,
+                    destinationRadiusMeters: r.destinationRadiusMeters ?? null,
+                    purpose: r.purpose ?? '',
+                    expenseAmount: r.expenseAmount ?? undefined,
+                    expenseType: (r.expenseType as ExpenseTypeCode) ?? undefined,
+                  });
+                }}
+              />
+            </Tooltip>
             <Popconfirm
               title="삭제하시겠어요?"
               okText="삭제"
               cancelText="취소"
               onConfirm={() => r.workTripDetailId && deleteM.mutate(r.workTripDetailId)}
             >
-              <Button size="small" danger>
-                삭제
-              </Button>
+              <Tooltip title="삭제">
+                <Button size="small" danger icon={<DeleteOutlined />} aria-label="출장 외근 삭제" />
+              </Tooltip>
             </Popconfirm>
           </Space>
         ),
@@ -241,6 +252,7 @@ export function MyWorkTripsPage() {
         </div>
         <Button
           type="primary"
+          icon={<PlusOutlined />}
           onClick={() => {
             setEditing(null);
             form.resetFields();
@@ -253,7 +265,7 @@ export function MyWorkTripsPage() {
       </div>
 
       <Card>
-        <Table<WorkTrip>
+        <AppDataTable<WorkTrip>
           rowKey={(r) => r.workTripDetailId ?? `${r.attendanceDate}-${r.destination}`}
           loading={listQ.isLoading}
           dataSource={listQ.data ?? []}

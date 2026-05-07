@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { App, Alert, Button, Card, Input, Popconfirm, Progress, Space, Tag, Typography } from 'antd';
+import { App, Alert, Button, Card, Input, Popconfirm, Progress, Space, Tag, Tooltip, Typography } from 'antd';
+import { EditOutlined } from '@ant-design/icons';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { approvalApi } from '@/features/approval/api/approvalApi';
 import type { GoalApprovalBundle } from '@/features/approval/model/types';
@@ -322,9 +323,15 @@ function GoalRow({
       </div>
       <div className="tw-flex tw-items-center tw-justify-end tw-gap-1">
         {editable ? (
-          <AppButton variant="text" size="small" onClick={() => onEdit?.(goal)}>
-            수정
-          </AppButton>
+          <Tooltip title="수정">
+            <AppButton
+              variant="text"
+              size="small"
+              icon={<EditOutlined />}
+              aria-label={`${goal.title} 목표 수정`}
+              onClick={() => onEdit?.(goal)}
+            />
+          </Tooltip>
         ) : null}
         {editable && onDelete ? (
           <Popconfirm

@@ -8,14 +8,27 @@
  *
  * 데이터 소스: salaryApi.salary.precheck() 의 missingSalary 배열.
  */
-import { useEffect, useRef, useState } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Button, Card, Empty, Space, Table, Tag, Typography } from 'antd';
+import { PlusOutlined } from '@ant-design/icons';
+import { Alert,
+  Button,
+  Card,
+  Empty,
+  Space,
+  Tag,
+  Typography,
+} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import { SalaryTab } from '@/pages/app/salary-service/admin/AdminSalarySettingsPage';
 import type { PayrollPrecheckMemberRef } from '@/features/salary-service/types';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 type SalaryRegisterTabProps = {
   /** deep-link 진입 시 (직원 생성 직후 / 직원 상세 [급여 등록] 빠른 액션 등) 해당 직원으로 모달 자동 오픈 */
@@ -84,6 +97,7 @@ export function SalaryRegisterTab({ createForMemberId }: SalaryRegisterTabProps 
         <Button
           type="primary"
           size="small"
+          icon={<PlusOutlined />}
           onClick={() => r.memberId && setRegisterMember(r)}
         >
           급여 등록
@@ -122,7 +136,7 @@ export function SalaryRegisterTab({ createForMemberId }: SalaryRegisterTabProps 
           />
         </Card>
       ) : (
-        <Table<PayrollPrecheckMemberRef>
+        <AppDataTable<PayrollPrecheckMemberRef>
           rowKey={(r) => r.memberId ?? Math.random().toString()}
           loading={precheckQ.isLoading}
           dataSource={rows}

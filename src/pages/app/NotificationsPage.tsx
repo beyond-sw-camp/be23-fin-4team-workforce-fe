@@ -18,6 +18,7 @@ import {
   resolveContractNotificationTargetId,
 } from '@/features/notification/lib/contractNotificationRoute';
 import { AppButton } from '@/shared/ui/AppButton';
+import { AppTabLabel } from '@/shared/ui/AppTabLabel';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 
 type NotificationFilter = 'all' | 'unread' | 'read';
@@ -316,9 +317,9 @@ export function NotificationsPage() {
             value={filter}
             onChange={(value) => setFilter(value as NotificationFilter)}
             options={[
-              { label: `전체 ${notifications.length}`, value: 'all' },
-              { label: `읽지 않음 ${unreadCount}`, value: 'unread' },
-              { label: `읽음 ${readCount}`, value: 'read' },
+              { label: <AppTabLabel count={notifications.length}>전체</AppTabLabel>, value: 'all' },
+              { label: <AppTabLabel count={unreadCount}>읽지 않음</AppTabLabel>, value: 'unread' },
+              { label: <AppTabLabel count={readCount}>읽음</AppTabLabel>, value: 'read' },
             ]}
           />
           <Typography.Text type="secondary" className="tw-text-xs">

@@ -1,7 +1,13 @@
 /** /app/attendance/schedules — 근무 스케줄 CRUD (시스템 관리자) */
-import { useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useMemo,
+  useState } from 'react';
+import { useMutation,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
+import { DeleteOutlined,
+  EditOutlined } from '@ant-design/icons';
 import {
   Alert,
   App,
@@ -14,7 +20,6 @@ import {
   Popconfirm,
   Select,
   Space,
-  Table,
   Tag,
   TimePicker,
   Tooltip,
@@ -29,6 +34,8 @@ import { AppButton } from '@/shared/ui/AppButton';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import type { WorkSchedule, WorkTypeCode } from '@/features/salary-service/types';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 type FormValues = {
   scheduleName: string;
@@ -293,50 +300,52 @@ export function AdminWorkSchedulesPage({ embedded = false }: { embedded?: boolea
         width: 160,
         render: (_, r) => (
           <Space>
-            <Button
-              size="small"
-              onClick={() => {
-                setEditing(r);
-                setOpen(true);
-                const isFlexible = r.workType === 'FLEXIBLE';
-                /** FLEXIBLE 은 시간 필드를 사용하지 않으므로 폼에도 비워둔다. */
-                const timeRange =
-                  isFlexible || !r.startTime || !r.endTime
+            <Tooltip title="수정">
+              <Button
+                size="small"
+                icon={<EditOutlined />}
+                aria-label="근무 스케줄 수정"
+                onClick={() => {
+                  setEditing(r);
+                  setOpen(true);
+                  const isFlexible = r.workType === 'FLEXIBLE';
+                  /** FLEXIBLE 은 시간 필드를 사용하지 않으므로 폼에도 비워둔다. */
+                  const timeRange =
+                    isFlexible || !r.startTime || !r.endTime
+                      ? undefined
+                      : ([dayjs(`1970-01-01T${r.startTime}`), dayjs(`1970-01-01T${r.endTime}`)] as [
+                          dayjs.Dayjs,
+                          dayjs.Dayjs,
+                        ]);
+                  const breakRange: [dayjs.Dayjs, dayjs.Dayjs] | undefined = isFlexible
                     ? undefined
-                    : ([dayjs(`1970-01-01T${r.startTime}`), dayjs(`1970-01-01T${r.endTime}`)] as [
-                        dayjs.Dayjs,
-                        dayjs.Dayjs,
-                      ]);
-                const breakRange: [dayjs.Dayjs, dayjs.Dayjs] | undefined = isFlexible
-                  ? undefined
-                  : ([
-                      dayjs(`1970-01-01T${r.breakStart ?? DEFAULT_BREAK_START}`),
-                      dayjs(`1970-01-01T${r.breakEnd ?? DEFAULT_BREAK_END}`),
-                    ] as [dayjs.Dayjs, dayjs.Dayjs]);
-                form.setFieldsValue({
-                  scheduleName: r.scheduleName ?? '',
-                  workType: (r.workType as WorkTypeCode) ?? 'FIXED',
-                  timeRange,
-                  breakRange,
-                  workMinutes: timeRange ? calcNetWorkMinutes(timeRange, breakRange) : undefined,
-                  effectiveRange: [
-                    r.effectiveFrom ? dayjs(r.effectiveFrom) : dayjs(),
-                    r.effectiveTo ? dayjs(r.effectiveTo) : null,
-                  ],
-                });
-              }}
-            >
-              수정
-            </Button>
+                    : ([
+                        dayjs(`1970-01-01T${r.breakStart ?? DEFAULT_BREAK_START}`),
+                        dayjs(`1970-01-01T${r.breakEnd ?? DEFAULT_BREAK_END}`),
+                      ] as [dayjs.Dayjs, dayjs.Dayjs]);
+                  form.setFieldsValue({
+                    scheduleName: r.scheduleName ?? '',
+                    workType: (r.workType as WorkTypeCode) ?? 'FIXED',
+                    timeRange,
+                    breakRange,
+                    workMinutes: timeRange ? calcNetWorkMinutes(timeRange, breakRange) : undefined,
+                    effectiveRange: [
+                      r.effectiveFrom ? dayjs(r.effectiveFrom) : dayjs(),
+                      r.effectiveTo ? dayjs(r.effectiveTo) : null,
+                    ],
+                  });
+                }}
+              />
+            </Tooltip>
             <Popconfirm
               title="삭제하시겠어요?"
               okText="삭제"
               cancelText="취소"
               onConfirm={() => r.workScheduleId && deleteM.mutate(r.workScheduleId)}
             >
-              <Button size="small" danger>
-                삭제
-              </Button>
+              <Tooltip title="삭제">
+                <Button size="small" danger icon={<DeleteOutlined />} aria-label="근무 스케줄 삭제" />
+              </Tooltip>
             </Popconfirm>
           </Space>
         ),
@@ -408,7 +417,7 @@ export function AdminWorkSchedulesPage({ embedded = false }: { embedded?: boolea
 
       <Card className="tw-border-slate-200/80 tw-shadow-sm [&_.ant-card-body]:!tw-p-6">
         {/* TODO: 서버 페이지네이션 전환 필요(현재는 전체 조회 후 프론트 페이징) */}
-        <Table<WorkSchedule>
+        <AppDataTable<WorkSchedule>
           rowKey={(r) => r.workScheduleId ?? `${r.scheduleName}-${r.effectiveFrom}`}
           loading={listQ.isLoading || membersQ.isLoading}
           dataSource={listQ.data ?? []}

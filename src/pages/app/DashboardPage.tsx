@@ -72,13 +72,13 @@ function SortablePoolCard({ id }: { id: DashboardWidgetId }) {
       return (
         <div className="tw-animate-pulse tw-space-y-2">
           <div className="tw-flex tw-items-center tw-gap-2">
-            <div className="tw-h-7 tw-w-7 tw-rounded-full tw-bg-violet-200" />
+            <div className="tw-h-7 tw-w-7 tw-rounded-full tw-bg-blue-200" />
             <div className="tw-space-y-1">
-              <div className="tw-h-2 tw-w-14 tw-rounded tw-bg-violet-200" />
-              <div className="tw-h-2 tw-w-10 tw-rounded tw-bg-violet-100" />
+              <div className="tw-h-2 tw-w-14 tw-rounded tw-bg-blue-200" />
+              <div className="tw-h-2 tw-w-10 tw-rounded tw-bg-blue-100" />
             </div>
           </div>
-          <div className="tw-h-10 tw-rounded-md tw-bg-violet-100" />
+          <div className="tw-h-10 tw-rounded-md tw-bg-blue-100" />
         </div>
       );
     }
@@ -97,10 +97,10 @@ function SortablePoolCard({ id }: { id: DashboardWidgetId }) {
     if (id === 'approvalInbox' || id === 'notifications') {
       return (
         <div className="tw-animate-pulse tw-space-y-2">
-          <div className="tw-h-2 tw-w-20 tw-rounded tw-bg-violet-200" />
-          <div className="tw-h-2 tw-w-full tw-rounded tw-bg-violet-100" />
-          <div className="tw-h-2 tw-w-5/6 tw-rounded tw-bg-violet-100" />
-          <div className="tw-h-2 tw-w-4/6 tw-rounded tw-bg-violet-100" />
+          <div className="tw-h-2 tw-w-20 tw-rounded tw-bg-blue-200" />
+          <div className="tw-h-2 tw-w-full tw-rounded tw-bg-blue-100" />
+          <div className="tw-h-2 tw-w-5/6 tw-rounded tw-bg-blue-100" />
+          <div className="tw-h-2 tw-w-4/6 tw-rounded tw-bg-blue-100" />
         </div>
       );
     }
@@ -117,12 +117,12 @@ function SortablePoolCard({ id }: { id: DashboardWidgetId }) {
     return (
       <div className="tw-animate-pulse tw-space-y-2">
         <div className="tw-grid tw-grid-cols-3 tw-gap-1.5">
-          <div className="tw-h-8 tw-rounded-md tw-bg-violet-100" />
-          <div className="tw-h-8 tw-rounded-md tw-bg-violet-100" />
-          <div className="tw-h-8 tw-rounded-md tw-bg-violet-100" />
+          <div className="tw-h-8 tw-rounded-md tw-bg-blue-100" />
+          <div className="tw-h-8 tw-rounded-md tw-bg-blue-100" />
+          <div className="tw-h-8 tw-rounded-md tw-bg-blue-100" />
         </div>
-        <div className="tw-h-2 tw-w-full tw-rounded tw-bg-violet-100" />
-        <div className="tw-h-2 tw-w-3/4 tw-rounded tw-bg-violet-100" />
+        <div className="tw-h-2 tw-w-full tw-rounded tw-bg-blue-100" />
+        <div className="tw-h-2 tw-w-3/4 tw-rounded tw-bg-blue-100" />
       </div>
     );
   })();
@@ -357,9 +357,9 @@ export function DashboardPage() {
             </Button>
           </div>
         ) : (
-          <div className={`tw-grid tw-grid-cols-1 tw-items-start tw-gap-4 ${gridClassOf(layout.preset)}`}>
+          <div className={`wf-dashboard-layout-grid tw-grid tw-grid-cols-1 tw-items-start ${gridClassOf(layout.preset)}`}>
             {COLUMN_KEYS.map((col) => (
-              <div key={col} className="tw-flex tw-min-h-10 tw-flex-col tw-gap-4">
+              <div key={col} className="tw-flex tw-min-h-10 tw-flex-col tw-gap-5">
                 {layout.items.filter((x) => x.column === col).map((item) => (
                   <ViewWidgetCard key={item.instanceId} item={item} user={user} />
                 ))}

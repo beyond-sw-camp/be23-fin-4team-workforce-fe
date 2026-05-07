@@ -1,8 +1,13 @@
 // /app/leave/my-promotion 직원 본인이 받은 연차 사용 촉진 통보 목록
 // 회신은 사용계획 날짜 입력 회사 면책 기록만 잔여 차감 없음
-import { useMemo, useState } from 'react';
-import { Link, useNavigate } from '@tanstack/react-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useMemo,
+  useState } from 'react';
+import { Link,
+  useNavigate } from '@tanstack/react-router';
+import { useMutation,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
   App,
@@ -10,7 +15,6 @@ import {
   Card,
   Empty,
   Space,
-  Table,
   Tag,
   Typography,
 } from 'antd';
@@ -25,6 +29,8 @@ import type {
   PromotionStageCode,
 } from '@/features/salary-service/types';
 import { PromotionResponseModal } from './components/PromotionResponseModal';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 const QK = ['salary', 'leave-promotion', 'my'] as const;
 
@@ -362,7 +368,7 @@ export function MyLeavePromotionPage() {
       />
 
       <Card className="tw-border-slate-200/80 tw-shadow-sm" title="받은 통보">
-        <Table<LeavePromotionMy>
+        <AppDataTable<LeavePromotionMy>
           rowKey={(r) => r.promotionLogId}
           loading={listQ.isLoading}
           columns={columns}
@@ -385,7 +391,7 @@ export function MyLeavePromotionPage() {
           </Space>
         }
       >
-        <Table<HistoryRow>
+        <AppDataTable<HistoryRow>
           rowKey={(r) => r.rowKey}
           loading={listQ.isLoading}
           columns={historyColumns}

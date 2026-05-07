@@ -6,7 +6,7 @@ type AppTablePanelProps = {
 };
 
 export const APP_TABLE_PANEL_CLASS =
-  'tw-w-full';
+  'wf-app-table-panel tw-w-full';
 
 export function AppTablePanel({ children, className }: AppTablePanelProps) {
   return (

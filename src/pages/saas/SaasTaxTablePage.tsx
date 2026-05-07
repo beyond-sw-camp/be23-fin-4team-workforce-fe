@@ -1,7 +1,21 @@
-import { ArrowLeftOutlined, FileExcelOutlined, InboxOutlined, ReloadOutlined } from '@ant-design/icons';
-import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  ArrowLeftOutlined,
+  FileExcelOutlined,
+  InboxOutlined,
+  ReloadOutlined } from '@ant-design/icons';
+import { useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { Alert, App, Button, Space, Table, Tag, Typography, Upload } from 'antd';
+import { Alert,
+  App,
+  Button,
+  Space,
+  Tag,
+  Typography,
+  Upload,
+} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import type { UploadFile } from 'antd/es/upload/interface';
 import { useState } from 'react';
@@ -9,6 +23,8 @@ import { saasApi } from '@/features/saas/api/saasApi';
 import { SaasConsoleShell } from '@/pages/saas/SaasConsoleShell';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppUnitInputNumber } from '@/shared/ui/AppUnitInputNumber';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 const QK_YEARS = ['saas', 'tax-table', 'years'] as const;
 
@@ -181,7 +197,7 @@ function SaasTaxTablePageInner() {
           <Typography.Title level={4} className="!tw-mt-0">
             등록된 연도
           </Typography.Title>
-          <Table<Row>
+          <AppDataTable<Row>
             rowKey={(r) => String(r.year)}
             loading={yearsQ.isLoading}
             dataSource={rows}

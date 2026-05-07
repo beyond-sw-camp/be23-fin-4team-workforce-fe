@@ -15,11 +15,22 @@ type AppSingleActionModalProps = {
   submitDisabled?: boolean;
   submitButtonClassName?: string;
   destroyOnHidden?: boolean;
+  forceRender?: boolean;
   getContainer?: ModalProps['getContainer'];
   centered?: ModalProps['centered'];
   zIndex?: number;
+  closable?: ModalProps['closable'];
+  closeIcon?: ModalProps['closeIcon'];
+  maskClosable?: ModalProps['maskClosable'];
+  wrapClassName?: ModalProps['wrapClassName'];
+  rootClassName?: ModalProps['rootClassName'];
+  className?: ModalProps['className'];
+  style?: ModalProps['style'];
+  afterOpenChange?: ModalProps['afterOpenChange'];
   /** 있으면 기본 단일 제출 버튼 대신 사용(닫기·승인 등은 이 안에서 구성) */
   customFooter?: ReactNode;
+  classNames?: ModalProps['classNames'];
+  styles?: ModalProps['styles'];
 };
 
 /**
@@ -39,10 +50,21 @@ export function AppSingleActionModal({
   submitDisabled = false,
   submitButtonClassName,
   destroyOnHidden = true,
+  forceRender,
   getContainer,
   centered,
   zIndex,
+  closable,
+  closeIcon,
+  maskClosable = false,
+  wrapClassName,
+  rootClassName,
+  className,
+  style,
+  afterOpenChange,
   customFooter,
+  classNames,
+  styles,
 }: AppSingleActionModalProps) {
   const defaultFooter = (
     <div className="tw-flex tw-items-center">
@@ -69,29 +91,40 @@ export function AppSingleActionModal({
       centered={centered}
       getContainer={getContainer}
       zIndex={zIndex}
+      closable={closable}
+      closeIcon={closeIcon}
+      maskClosable={maskClosable}
+      wrapClassName={wrapClassName}
+      rootClassName={rootClassName}
+      className={className}
+      style={style}
+      afterOpenChange={afterOpenChange}
       footer={customFooter !== undefined ? customFooter : defaultFooter}
       width={width}
       destroyOnHidden={destroyOnHidden}
-      maskClosable={false}
+      forceRender={forceRender}
       classNames={{
-        content: '!tw-p-0',
+        ...classNames,
+        content: clsx('!tw-p-0', classNames?.content),
         header:
-          'tw-sticky tw-top-0 tw-z-10 tw-m-0 tw-border-b tw-border-slate-200 tw-bg-white tw-px-5 tw-py-4',
-        body: 'wf-scrollbar-modal !tw-p-0 !tw-pr-0',
+          clsx('tw-sticky tw-top-0 tw-z-10 tw-m-0 tw-border-b tw-border-slate-200 tw-bg-white tw-px-5 tw-py-4', classNames?.header),
+        body: clsx('wf-scrollbar-modal !tw-p-0 !tw-pr-0', classNames?.body),
         footer:
-          'tw-sticky tw-bottom-0 tw-z-10 tw-m-0 tw-border-t tw-border-slate-200 tw-bg-white tw-px-5 tw-py-4',
+          clsx('tw-sticky tw-bottom-0 tw-z-10 tw-m-0 tw-border-t tw-border-slate-200 tw-bg-white tw-px-5 tw-py-4', classNames?.footer),
       }}
       styles={{
-        content: { padding: 0 },
-        header: { marginBottom: 0, padding: '16px 20px' },
+        ...styles,
+        content: { padding: 0, ...styles?.content },
+        header: { marginBottom: 0, padding: '16px 20px', ...styles?.header },
         body: {
           padding: 0,
           paddingRight: 0,
           marginRight: 0,
           overflowY: 'auto',
           overflowX: 'hidden',
+          ...styles?.body,
         },
-        footer: { marginTop: 0, padding: '16px 20px' },
+        footer: { marginTop: 0, padding: '16px 20px', ...styles?.footer },
       }}
     >
       {children}
