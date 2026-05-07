@@ -1,7 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Button, Card, Spin, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import clsx from 'clsx';
 import dayjs from 'dayjs';
 import { useMemo, useState } from 'react';
 import {
@@ -11,9 +10,15 @@ import {
   type ApprovalRequestDetail,
 } from '@/features/approvals/api/approvalRequestApi';
 import { getApprovalRequestSubjectLine } from '@/features/approvals/lib/approvalFormSchema';
+import { ApprovalLineMiniStrip } from '@/features/approvals/ui/ApprovalLineMiniStrip';
 
 /** 전체(inbox) · 결재 대기(pending) · 결재 예정(waiting) · 결재 완료(acted) */
 export type PendingApprovalInboxTab = 'all' | 'pending' | 'waiting' | 'acted';
+type PendingApprovalInboxKind = Exclude<PendingApprovalInboxTab, 'all'>;
+type PendingApprovalInboxRow = ApprovalRequestDetail & {
+  inboxKind: PendingApprovalInboxKind;
+};
+type PendingApprovalStatusFilter = 'pending' | 'waiting' | 'approved' | 'rejected' | 'acted';
 
 function formatDateTime(value?: string | null) {
   if (!value?.trim()) return '—';
@@ -22,11 +27,11 @@ function formatDateTime(value?: string | null) {
 }
 
 function myTurnBadge(
-  tab: PendingApprovalInboxTab,
-  row: ApprovalRequestDetail,
+  kind: PendingApprovalInboxKind,
+  row: PendingApprovalInboxRow,
   opts: { myMemberId?: string; myMemberPositionId?: string },
 ) {
-  if (tab === 'acted') {
+  if (kind === 'acted') {
     const line = findMyInboxApprovalLine(row, opts);
     const st = String(line?.approvalStatus ?? '').toUpperCase();
     if (st === 'APPROVED') {
@@ -49,14 +54,14 @@ function myTurnBadge(
       </Tag>
     );
   }
-  if (tab === 'waiting') {
+  if (kind === 'waiting') {
     return (
       <Tag color="processing" className="!tw-m-0">
         대기 중
       </Tag>
     );
   }
-  if (tab === 'pending') {
+  if (kind === 'pending') {
     return (
       <Tag color="gold" className="!tw-m-0">
         결재 대기
@@ -82,12 +87,25 @@ function myTurnBadge(
   return <Tag className="!tw-m-0">—</Tag>;
 }
 
+function getRowStatusFilter(
+  row: PendingApprovalInboxRow,
+  opts: { myMemberId?: string; myMemberPositionId?: string },
+): PendingApprovalStatusFilter {
+  if (row.inboxKind === 'pending') return 'pending';
+  if (row.inboxKind === 'waiting') return 'waiting';
+  const line = findMyInboxApprovalLine(row, opts);
+  const st = String(line?.approvalStatus ?? '').toUpperCase();
+  if (st === 'APPROVED') return 'approved';
+  if (st === 'REJECTED') return 'rejected';
+  return 'acted';
+}
+
 function canApproveRow(
-  tab: PendingApprovalInboxTab,
-  row: ApprovalRequestDetail,
+  kind: PendingApprovalInboxKind,
+  row: PendingApprovalInboxRow,
   opts: { myMemberId?: string; myMemberPositionId?: string },
 ): boolean {
-  if (tab === 'waiting' || tab === 'acted') return false;
+  if (kind === 'waiting' || kind === 'acted') return false;
   const line = findMyInboxApprovalLine(row, opts);
   if (!line || String(line.approvalStatus).toUpperCase() !== 'PENDING') return false;
   if (isInlineSyntheticApprovalId(line.approvalId)) return false;
@@ -109,109 +127,151 @@ export function PendingApprovalInboxModalContent({
   onStartApprove,
   onStartReject,
 }: PendingApprovalInboxModalContentProps) {
-  const [tab, setTab] = useState<PendingApprovalInboxTab>('all');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
 
-  const inboxQ = useQuery({
-    queryKey: ['approval-user', 'approval-inbox'],
-    queryFn: () => approvalRequestApi.listApprovalInbox(),
-    enabled: tab === 'all',
-    staleTime: 30_000,
-  });
   const pendingQ = useQuery({
     queryKey: ['approval-user', 'pending-approvals'],
     queryFn: () => approvalRequestApi.listPendingApprovals(),
-    enabled: tab === 'pending',
     staleTime: 30_000,
   });
   const waitingQ = useQuery({
     queryKey: ['approval-user', 'approval-waiting'],
     queryFn: () => approvalRequestApi.listWaitingApprovals(),
-    enabled: tab === 'waiting',
     staleTime: 30_000,
   });
   const actedQ = useQuery({
     queryKey: ['approval-user', 'acted-approvals'],
     queryFn: () => approvalRequestApi.listActedApprovals(),
-    enabled: tab === 'acted',
     staleTime: 30_000,
   });
 
-  const activeQuery =
-    tab === 'all' ? inboxQ : tab === 'pending' ? pendingQ : tab === 'waiting' ? waitingQ : actedQ;
-  const loading = activeQuery.isFetching;
-  const err = activeQuery.error as Error | undefined;
+  const loading = pendingQ.isFetching || waitingQ.isFetching || actedQ.isFetching;
+  const err = (pendingQ.error ?? waitingQ.error ?? actedQ.error) as Error | undefined;
+
+  const allRows = useMemo<PendingApprovalInboxRow[]>(() => {
+    const seen = new Set<string>();
+    const merge = (kind: PendingApprovalInboxKind, rows: ApprovalRequestDetail[] | undefined) =>
+      (rows ?? [])
+        .filter((row) => {
+          if (seen.has(row.requestId)) return false;
+          seen.add(row.requestId);
+          return true;
+        })
+        .map((row) => ({ ...row, inboxKind: kind }));
+
+    return [
+      ...merge('pending', pendingQ.data),
+      ...merge('waiting', waitingQ.data),
+      ...merge('acted', actedQ.data),
+    ].sort((a, b) => {
+      const aTime = dayjs(a.createdAt).valueOf() || 0;
+      const bTime = dayjs(b.createdAt).valueOf() || 0;
+      return bTime - aTime;
+    });
+  }, [actedQ.data, pendingQ.data, waitingQ.data]);
 
   const pagedRows = useMemo(() => {
-    const list = activeQuery.data ?? [];
     const start = (page - 1) * pageSize;
-    return list.slice(start, start + pageSize);
-  }, [activeQuery.data, page, pageSize]);
+    return allRows.slice(start, start + pageSize);
+  }, [allRows, page, pageSize]);
 
-  const totalRows = activeQuery.data?.length ?? 0;
+  const totalRows = allRows.length;
 
   const lineOpts = useMemo(() => ({ myMemberId, myMemberPositionId }), [myMemberId, myMemberPositionId]);
 
-  const columns: ColumnsType<ApprovalRequestDetail> = useMemo(
+  const columns: ColumnsType<PendingApprovalInboxRow> = useMemo(
     () => [
+      {
+        title: '구분',
+        key: 'inboxKind',
+        width: 96,
+        align: 'center',
+        filters: [
+          { text: '결재 대기', value: 'pending' },
+          { text: '결재 예정', value: 'waiting' },
+          { text: '결재 완료', value: 'acted' },
+        ],
+        onFilter: (value, row) => row.inboxKind === value,
+        render: (_: unknown, row) =>
+          row.inboxKind === 'pending' ? (
+            <Tag color="gold" className="!tw-m-0">
+              결재 대기
+            </Tag>
+          ) : row.inboxKind === 'waiting' ? (
+            <Tag color="processing" className="!tw-m-0">
+              결재 예정
+            </Tag>
+          ) : (
+            <Tag color="success" className="!tw-m-0">
+              결재 완료
+            </Tag>
+          ),
+      },
+      {
+        title: '상태',
+        key: 'status',
+        width: 96,
+        align: 'center',
+        filters: [
+          { text: '결재 대기', value: 'pending' },
+          { text: '대기 중', value: 'waiting' },
+          { text: '승인', value: 'approved' },
+          { text: '반려', value: 'rejected' },
+          { text: '처리함', value: 'acted' },
+        ],
+        onFilter: (value, row) => getRowStatusFilter(row, lineOpts) === value,
+        render: (_: unknown, row) => (
+          <div className="tw-flex tw-justify-center">{myTurnBadge(row.inboxKind, row, lineOpts)}</div>
+        ),
+      },
       {
         title: '제목',
         key: 'subject',
         ellipsis: true,
         render: (_: unknown, row) => (
-          <Typography.Text strong className="tw-text-xs">
-            {getApprovalRequestSubjectLine(row) || '—'}
+          <Typography.Text strong className="!tw-block tw-min-w-0 tw-truncate tw-text-xs">
+            {getApprovalRequestSubjectLine(row) || row.documentName?.trim() || '—'}
           </Typography.Text>
         ),
       },
       {
-        title: '양식',
-        key: 'documentName',
+        title: '요청자',
+        key: 'requester',
+        width: 92,
         ellipsis: true,
         render: (_: unknown, row) => (
-          <Typography.Text className="tw-text-xs tw-text-slate-700">
-            {row.documentName?.trim() || '—'}
+          <Typography.Text type="secondary" className="!tw-block tw-truncate tw-text-xs">
+            {row.requesterName?.trim() || '요청자 미상'}
           </Typography.Text>
         ),
       },
       {
         title: '결재선',
         key: 'approvalLine',
-        width: 180,
-        ellipsis: true,
-        render: (_: unknown, row) => (
-          <Typography.Text className="tw-text-xs">
-            {row.requesterName?.trim() || '—'} ({row.requesterOrganizationName?.trim() || '—'})
-          </Typography.Text>
-        ),
-      },
-      {
-        title: '상태',
-        key: 'status',
-        width: 120,
-        align: 'center',
-        render: (_: unknown, row) => (
-          <div className="tw-flex tw-justify-center">{myTurnBadge(tab, row, lineOpts)}</div>
-        ),
+        width: 240,
+        render: (_: unknown, row) => <ApprovalLineMiniStrip lines={row.approvalLines} visibleSlots={0} />,
       },
       {
         title: '기안일',
         dataIndex: 'createdAt',
         key: 'createdAt',
-        width: 150,
+        width: 132,
         render: (_: unknown, row) => (
-          <Typography.Text className="tw-text-xs tw-text-slate-600">{formatDateTime(row.createdAt)}</Typography.Text>
+          <Typography.Text className="tw-whitespace-nowrap tw-text-xs tw-text-slate-600">
+            {formatDateTime(row.createdAt)}
+          </Typography.Text>
         ),
       },
       {
-        title: '관리',
+        title: '결재 처리',
         key: 'manage',
+        width: 116,
         align: 'center',
         render: (_: unknown, row) => {
           const line = findMyInboxApprovalLine(row, lineOpts);
-          const ok = canApproveRow(tab, row, lineOpts);
-          if (tab === 'acted') {
+          const ok = canApproveRow(row.inboxKind, row, lineOpts);
+          if (row.inboxKind === 'acted') {
             return <Typography.Text type="secondary">—</Typography.Text>;
           }
           return (
@@ -240,14 +300,14 @@ export function PendingApprovalInboxModalContent({
         },
       },
     ],
-    [lineOpts, onOpenDetail, onStartApprove, onStartReject, tab],
+    [lineOpts, onStartApprove, onStartReject],
   );
 
   return (
-    <div className="tw-box-border tw-flex tw-h-full tw-min-h-0 tw-w-full tw-flex-col tw-gap-4 tw-overflow-hidden tw-bg-slate-50 tw-px-4 tw-pb-4 tw-pt-2">
+    <div className="wf-approval-embed-root">
       <Card
         size="small"
-        className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-hidden tw-rounded-lg tw-border-slate-200/80 tw-bg-white tw-shadow-sm"
+        className="wf-approval-embed-card"
         styles={{
           body: {
             flex: 1,
@@ -259,48 +319,13 @@ export function PendingApprovalInboxModalContent({
         }}
       >
         <div className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-gap-4">
-          <div
-            role="tablist"
-            aria-label="결재함 구분"
-            className="tw-flex tw-shrink-0 tw-flex-wrap tw-gap-6 tw-gap-y-2 sm:tw-gap-8"
-          >
-            {(
-              [
-                { key: 'all' as const, label: '전체' },
-                { key: 'pending' as const, label: '결재 대기' },
-                { key: 'waiting' as const, label: '결재 예정' },
-                { key: 'acted' as const, label: '결재 완료' },
-              ] as const
-            ).map(({ key, label }) => (
-              <button
-                key={key}
-                type="button"
-                role="tab"
-                aria-selected={tab === key}
-                className={clsx(
-                  '-tw-mb-px tw-border-0 tw-bg-transparent tw-px-0 tw-pb-2 tw-text-sm tw-font-medium tw-outline-none tw-transition-colors',
-                  'focus-visible:tw-ring-2 focus-visible:tw-ring-blue-500 focus-visible:tw-ring-offset-2',
-                  tab === key
-                    ? 'tw-border-b-2 tw-border-solid tw-border-blue-600 tw-text-blue-600'
-                    : 'tw-border-b-2 tw-border-transparent tw-text-slate-600 hover:tw-text-slate-900',
-                )}
-                onClick={() => {
-                  setTab(key);
-                  setPage(1);
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
           {err ? (
             <Alert type="error" showIcon className="tw-shrink-0" message={err.message || '목록을 불러오지 못했습니다.'} />
           ) : null}
 
-          <div className="tw-min-h-0 tw-flex-1 tw-overflow-auto">
+          <div className="wf-approval-modal-table-fill">
             <Spin spinning={loading} className="tw-min-h-0 tw-w-full [&_.ant-spin-container]:tw-min-h-0">
-              <Table<ApprovalRequestDetail>
+              <Table<PendingApprovalInboxRow>
                 size="small"
                 rowKey="requestId"
                 columns={columns}
@@ -322,8 +347,8 @@ export function PendingApprovalInboxModalContent({
                   },
                 }}
                 locale={{ emptyText: loading ? ' ' : '문서가 없습니다.' }}
-                scroll={{ x: 'max-content' }}
-                className="[&_.ant-table-thead>tr>th]:tw-bg-slate-50/90"
+                tableLayout="fixed"
+                className="wf-approval-modal-table"
               />
             </Spin>
           </div>

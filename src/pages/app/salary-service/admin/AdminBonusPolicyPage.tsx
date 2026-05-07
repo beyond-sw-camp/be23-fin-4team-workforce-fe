@@ -27,6 +27,7 @@ import type { ColumnsType } from 'antd/es/table';
 import dayjs, { type Dayjs } from 'dayjs';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
+import { AppUnitInputNumber } from '@/shared/ui/AppUnitInputNumber';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import type {
   BonusEligibilityScopeCode,
@@ -155,7 +156,9 @@ export function AdminBonusPolicyPage() {
 
   const updateM = useMutation({
     mutationFn: ({ id, v }: { id: string; v: FormValues }) => {
-      const { effectiveFrom: _ignored, ...rest } = toPayload(v);
+      const rest = Object.fromEntries(
+        Object.entries(toPayload(v)).filter(([key]) => key !== 'effectiveFrom'),
+      ) as Omit<BonusPolicyCreatePayload, 'effectiveFrom'>;
       return salaryApi.bonusPolicy.update(id, rest);
     },
     onSuccess: () => {
@@ -572,15 +575,15 @@ export function AdminBonusPolicyPage() {
                                 name={[field.name, 'rate']}
                                 className="!tw-mb-0"
                               >
-                                <InputNumber
+                                <AppUnitInputNumber
                                   disabled={!usePerf}
                                   min={0}
                                   max={1000}
                                   step={5}
                                   size="small"
                                   placeholder="비율"
-                                  addonAfter="%"
                                   style={{ width: 140 }}
+                                  unit="%"
                                 />
                               </Form.Item>
                               <Button

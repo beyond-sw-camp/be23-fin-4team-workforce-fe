@@ -33,14 +33,9 @@ import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import { evaluationRedesignApi } from '@/features/evaluation/api/evaluationRedesignApi';
+import { AppUnitInputNumber } from '@/shared/ui/AppUnitInputNumber';
 
 type BonusKind = 'REGULAR' | 'PERFORMANCE' | 'HOLIDAY';
-
-const KIND_LABEL: Record<BonusKind, string> = {
-  REGULAR: '정기상여',
-  PERFORMANCE: '성과급',
-  HOLIDAY: '명절상여',
-};
 
 type FormValues = {
   bonusKind: BonusKind;
@@ -419,13 +414,12 @@ export function AdminBonusBatchTab() {
                   : [{ required: true, message: '지급 비율을 입력하세요.' }]
               }
             >
-              <InputNumber
+              <AppUnitInputNumber
                 min={0}
                 max={1000}
                 step={5}
-                style={{ width: '100%' }}
                 disabled={isHolidayAmount}
-                addonAfter="%"
+                unit="%"
               />
             </Form.Item>
             <Form.Item label="메모 (선택)" name="memo">
@@ -529,7 +523,7 @@ export function AdminBonusBatchTab() {
         okText="등급 적용"
         cancelText="취소"
         confirmLoading={gradesM.isPending}
-        destroyOnClose
+        destroyOnHidden
       >
         <Space direction="vertical" className="tw-w-full" size={12}>
           <Typography.Text type="secondary">

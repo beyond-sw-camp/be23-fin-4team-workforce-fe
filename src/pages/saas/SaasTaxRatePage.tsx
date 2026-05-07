@@ -1,10 +1,13 @@
 import { ArrowLeftOutlined, PercentageOutlined, PlusOutlined, ReloadOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { Alert, App, Button, Form, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, Typography } from 'antd';
+import { Alert, App, Button, Form, Select, Space, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useEffect, useState } from 'react';
 import { saasApi, type TaxRate, type TaxRateInput, type TaxType } from '@/features/saas/api/saasApi';
+import { SaasConsoleShell } from '@/pages/saas/SaasConsoleShell';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
+import { AppUnitInputNumber } from '@/shared/ui/AppUnitInputNumber';
 
 const TAX_TYPE_OPTIONS: { value: TaxType; label: string; supportsCap: boolean }[] = [
   { value: 'NATIONAL_PENSION', label: '국민연금', supportsCap: true },
@@ -46,6 +49,7 @@ function SaasTaxRatePageInner() {
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState<number>(currentYear);
   const [editing, setEditing] = useState<TaxRate | null>(null);
+  const [deleting, setDeleting] = useState<TaxRate | null>(null);
   const [creating, setCreating] = useState(false);
   const [form] = Form.useForm<{
     taxType: TaxType;
@@ -93,6 +97,7 @@ function SaasTaxRatePageInner() {
     mutationFn: (id: string) => saasApi.taxRate.remove(id),
     onSuccess: () => {
       message.success('삭제되었습니다.');
+      setDeleting(null);
       void invalidate();
     },
     onError: (e: unknown) => {
@@ -175,25 +180,16 @@ function SaasTaxRatePageInner() {
           <Button size="small" onClick={() => setEditing(row)}>
             수정
           </Button>
-          <Popconfirm
-            title="삭제할까요?"
-            okText="삭제"
-            cancelText="취소"
-            okButtonProps={{ danger: true }}
-            onConfirm={() => deleteM.mutate(row.taxRateId)}
-          >
-            <Button size="small" danger>
-              삭제
-            </Button>
-          </Popconfirm>
+          <Button size="small" danger onClick={() => setDeleting(row)}>
+            삭제
+          </Button>
         </Space>
       ),
     },
   ];
 
   return (
-    <div className="tw-min-h-screen tw-bg-slate-50 tw-p-8">
-      <div className="tw-mx-auto tw-max-w-6xl tw-space-y-6">
+    <SaasConsoleShell contentClassName="tw-space-y-5">
         <div className="tw-flex tw-items-center tw-justify-between">
           <Space align="center" size={12}>
             <Button
@@ -224,12 +220,12 @@ function SaasTaxRatePageInner() {
         <Space wrap size={12}>
           <Space size={4} align="center">
             <Typography.Text type="secondary">적용 연도</Typography.Text>
-            <InputNumber
+            <AppUnitInputNumber
               min={2000}
               max={2100}
               value={year}
               onChange={(v) => setYear(Number(v) || currentYear)}
-              addonAfter="년"
+              unit="년"
               style={{ width: 140 }}
             />
           </Space>
@@ -260,66 +256,90 @@ function SaasTaxRatePageInner() {
           pagination={false}
         />
 
-        <Modal
+        <AppDoubleActionModal
           title={editing ? '세율 수정' : '세율 추가'}
           open={creating || !!editing}
-          onCancel={() => {
+          onClose={() => {
             setCreating(false);
             setEditing(null);
           }}
-          onOk={onSubmit}
+          onConfirm={onSubmit}
           confirmLoading={saveM.isPending}
-          okText={editing ? '수정' : '등록'}
+          confirmText={editing ? '수정' : '등록'}
           cancelText="취소"
-          destroyOnClose
+          width={560}
         >
-          <Form form={form} layout="vertical">
-            <Form.Item
-              label="세금 유형"
-              name="taxType"
-              rules={[{ required: true, message: '세금 유형을 선택해주세요.' }]}
-            >
-              <Select
-                options={TAX_TYPE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
-                disabled={!!editing}
-              />
-            </Form.Item>
-            <Form.Item
-              label="근로자 부담률 (%)"
-              name="rate"
-              rules={[{ required: true, message: '근로자 부담률을 입력해주세요.' }]}
-              tooltip="예: 4.5 입력 시 4.5%"
-            >
-              <InputNumber min={0} max={100} step={0.001} style={{ width: '100%' }} addonAfter="%" />
-            </Form.Item>
-            <Form.Item
-              label="회사 부담률 (%)"
-              name="employerRate"
-              tooltip="회사 부담이 없는 세금(소득세 등)은 비워두세요"
-            >
-              <InputNumber min={0} max={100} step={0.001} style={{ width: '100%' }} addonAfter="%" />
-            </Form.Item>
-            {supportsCap ? (
-              <>
-                <Form.Item
-                  label="기준소득 하한 (원/월)"
-                  name="incomeFloor"
-                  tooltip="국민연금/건강보험만 적용. 비워두면 하한 없음"
-                >
-                  <InputNumber min={0} step={10000} style={{ width: '100%' }} addonAfter="원" />
-                </Form.Item>
-                <Form.Item
-                  label="기준소득 상한 (원/월)"
-                  name="incomeCeiling"
-                  tooltip="국민연금/건강보험만 적용. 비워두면 상한 없음"
-                >
-                  <InputNumber min={0} step={10000} style={{ width: '100%' }} addonAfter="원" />
-                </Form.Item>
-              </>
-            ) : null}
-          </Form>
-        </Modal>
-      </div>
-    </div>
+          <div className="tw-px-5 tw-py-4">
+            <Form form={form} layout="vertical">
+              <Form.Item
+                label="세금 유형"
+                name="taxType"
+                rules={[{ required: true, message: '세금 유형을 선택해주세요.' }]}
+              >
+                <Select
+                  options={TAX_TYPE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                  disabled={!!editing}
+                />
+              </Form.Item>
+              <Form.Item
+                label="근로자 부담률 (%)"
+                name="rate"
+                rules={[{ required: true, message: '근로자 부담률을 입력해주세요.' }]}
+                tooltip="예: 4.5 입력 시 4.5%"
+              >
+                <AppUnitInputNumber min={0} max={100} step={0.001} unit="%" />
+              </Form.Item>
+              <Form.Item
+                label="회사 부담률 (%)"
+                name="employerRate"
+                tooltip="회사 부담이 없는 세금(소득세 등)은 비워두세요"
+              >
+                <AppUnitInputNumber min={0} max={100} step={0.001} unit="%" />
+              </Form.Item>
+              {supportsCap ? (
+                <>
+                  <Form.Item
+                    label="기준소득 하한 (원/월)"
+                    name="incomeFloor"
+                    tooltip="국민연금/건강보험만 적용. 비워두면 하한 없음"
+                  >
+                    <AppUnitInputNumber min={0} step={10000} unit="원" />
+                  </Form.Item>
+                  <Form.Item
+                    label="기준소득 상한 (원/월)"
+                    name="incomeCeiling"
+                    tooltip="국민연금/건강보험만 적용. 비워두면 상한 없음"
+                  >
+                    <AppUnitInputNumber min={0} step={10000} unit="원" />
+                  </Form.Item>
+                </>
+              ) : null}
+            </Form>
+          </div>
+        </AppDoubleActionModal>
+
+        <AppDoubleActionModal
+          title="세율 삭제"
+          open={!!deleting}
+          onClose={() => setDeleting(null)}
+          onConfirm={() => {
+            if (deleting) deleteM.mutate(deleting.taxRateId);
+          }}
+          confirmText="삭제"
+          cancelText="취소"
+          confirmDanger
+          confirmLoading={deleteM.isPending}
+          width={440}
+        >
+          <div className="tw-space-y-2 tw-px-5 tw-py-4">
+            <Typography.Text className="tw-text-sm tw-font-semibold tw-text-slate-900">
+              {deleting ? `${TAX_TYPE_LABEL[deleting.taxType] ?? deleting.taxType} 요율을 삭제할까요?` : '선택한 세율을 삭제할까요?'}
+            </Typography.Text>
+            <Typography.Paragraph className="!tw-m-0 tw-text-sm tw-leading-6 !tw-text-slate-500">
+              삭제한 세율은 해당 연도의 급여 계산 기준에서 제외됩니다.
+            </Typography.Paragraph>
+          </div>
+        </AppDoubleActionModal>
+    </SaasConsoleShell>
   );
 }
