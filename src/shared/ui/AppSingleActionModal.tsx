@@ -13,6 +13,7 @@ type AppSingleActionModalProps = {
   width?: number | string;
   submitLoading?: boolean;
   submitDisabled?: boolean;
+  submitIcon?: ReactNode;
   submitButtonClassName?: string;
   destroyOnHidden?: boolean;
   forceRender?: boolean;
@@ -48,6 +49,7 @@ export function AppSingleActionModal({
   width = 720,
   submitLoading = false,
   submitDisabled = false,
+  submitIcon,
   submitButtonClassName,
   destroyOnHidden = true,
   forceRender,
@@ -73,6 +75,7 @@ export function AppSingleActionModal({
         onClick={onSubmit}
         loading={submitLoading}
         disabled={submitDisabled}
+        icon={submitIcon}
         className={clsx(
           '!tw-h-12 !tw-w-full !tw-rounded-xl !tw-border-0 !tw-bg-[#1e3a5f] !tw-px-5 !tw-font-semibold hover:!tw-bg-[#152a45] disabled:!tw-bg-slate-300',
           submitButtonClassName,
