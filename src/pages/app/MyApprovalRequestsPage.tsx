@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { App, Card, Input, Typography } from 'antd';
+import clsx from 'clsx';
 import { useCallback, useMemo, useState } from 'react';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
 import { approvalRequestApi } from '@/features/approvals/api/approvalRequestApi';
@@ -164,9 +165,17 @@ export function MyApprovalRequestsPage() {
   const isDraftCancel = cancelTarget != null && cancelTarget.status === 'DRAFT';
 
   const hidePageChrome = filters.embed === APPROVAL_EMBED_COMPOSE_MODAL;
+  const embeddedModalGetContainer = useCallback(() => {
+    try {
+      return window.parent?.document?.body ?? document.body;
+    } catch {
+      return document.body;
+    }
+  }, []);
+  const nestedModalGetContainer = hidePageChrome ? embeddedModalGetContainer : undefined;
 
   return (
-    <div className="tw-mx-auto tw-max-w-[1400px] tw-w-full tw-space-y-4">
+    <div className={clsx(hidePageChrome ? 'wf-approval-embed-root' : 'tw-mx-auto tw-max-w-[1400px] tw-w-full tw-space-y-4')}>
       {hidePageChrome ? null : (
         <div>
           <Typography.Title level={4} className="!tw-mb-1">
@@ -175,7 +184,14 @@ export function MyApprovalRequestsPage() {
           <Typography.Text type="secondary">내가 기안한 전자결재 문서를 조건별로 검색합니다.</Typography.Text>
         </div>
       )}
-      <Card className="tw-rounded-xl">
+      <Card
+        className={clsx(hidePageChrome ? 'wf-approval-embed-card' : 'tw-rounded-xl')}
+        styles={
+          hidePageChrome
+            ? { body: { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 16 } }
+            : undefined
+        }
+      >
         <ApprovalSearchPanel
           filters={filters}
           onFiltersChange={updateFilters}
@@ -188,6 +204,8 @@ export function MyApprovalRequestsPage() {
         requestId={detailRequestId}
         onClose={() => setDetailRequestId(null)}
         title="내 기안 문서함 — 결재 상세"
+        getContainer={nestedModalGetContainer}
+        zIndex={2700}
       />
 
       <AppDoubleActionModal
@@ -213,6 +231,8 @@ export function MyApprovalRequestsPage() {
         cancelText="닫기"
         confirmLoading={cancelM.isPending}
         confirmDanger
+        getContainer={nestedModalGetContainer}
+        zIndex={2800}
       >
         <div className="tw-px-5 tw-py-4">
           <Input.TextArea

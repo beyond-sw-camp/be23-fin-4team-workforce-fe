@@ -4,6 +4,52 @@ import {
   approvalRequestStillInMyPendingInbox,
 } from '@/features/approvals/api/approvalRequestApi';
 
+export const APPROVAL_REQUEST_CHANGED_EVENT = 'workforce:approval-request-changed';
+export const APPROVAL_REQUEST_CHANGED_MESSAGE = 'workforce:approval-request-changed';
+
+type ApprovalRequestChangedPayload = {
+  type: typeof APPROVAL_REQUEST_CHANGED_MESSAGE;
+  requestId: string;
+  requestStatus?: string;
+};
+
+function queryKeyPartHasApproval(value: unknown): boolean {
+  if (typeof value === 'string') return value.toLowerCase().includes('approval');
+  if (Array.isArray(value)) return value.some(queryKeyPartHasApproval);
+  return false;
+}
+
+function isApprovalQueryKey(queryKey: readonly unknown[]): boolean {
+  return queryKey.some(queryKeyPartHasApproval);
+}
+
+export async function invalidateApprovalRequestQueries(qc: QueryClient): Promise<void> {
+  await Promise.all([
+    qc.invalidateQueries({ predicate: (query) => isApprovalQueryKey(query.queryKey) }),
+    qc.invalidateQueries({ queryKey: ['calendar'] }),
+  ]);
+}
+
+export function notifyApprovalRequestChanged(detail: ApprovalRequestDetail): void {
+  if (typeof window === 'undefined') return;
+
+  const payload: ApprovalRequestChangedPayload = {
+    type: APPROVAL_REQUEST_CHANGED_MESSAGE,
+    requestId: detail.requestId,
+    requestStatus: String(detail.requestStatus ?? ''),
+  };
+
+  window.dispatchEvent(new CustomEvent<ApprovalRequestChangedPayload>(APPROVAL_REQUEST_CHANGED_EVENT, { detail: payload }));
+
+  try {
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage(payload, window.location.origin);
+    }
+  } catch {
+    // Cross-window sync is best effort. The current window cache was already updated.
+  }
+}
+
 /**
  * 승인/반려 PATCH 응답(최신 ApprovalRequestResDto)으로 목록·상세 캐시를 맞춤.
  * `isProxyYn`·`actualApprover*` 등이 즉시 반영되도록 함.

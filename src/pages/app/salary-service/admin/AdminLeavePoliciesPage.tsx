@@ -9,7 +9,6 @@ import {
   Card,
   Divider,
   Form,
-  InputNumber,
   Popconfirm,
   Select,
   Space,
@@ -29,6 +28,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
+import { AppUnitInputNumber } from '@/shared/ui/AppUnitInputNumber';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import type { AccrualBaseCode, LeavePolicy } from '@/features/salary-service/types';
 
@@ -457,7 +457,7 @@ function PolicyForm({ form }: PolicyFormProps) {
               style={{ width: 200 }}
               extra="법정 최소 15일 (1년 이상 근속자)"
             >
-              <InputNumber min={0} step={0.5} addonAfter="일" style={{ width: '100%' }} />
+              <AppUnitInputNumber min={0} step={0.5} unit="일" />
             </Form.Item>
           </Space>
 
@@ -473,12 +473,11 @@ function PolicyForm({ form }: PolicyFormProps) {
               style={{ width: 180 }}
               extra="근로기준법 = 2년"
             >
-              <InputNumber
+              <AppUnitInputNumber
                 min={1}
                 step={1}
-                addonBefore="매"
-                addonAfter="년마다"
-                style={{ width: '100%' }}
+                prefixUnit="매"
+                unit="년마다"
               />
             </Form.Item>
             <Form.Item
@@ -491,12 +490,11 @@ function PolicyForm({ form }: PolicyFormProps) {
               style={{ width: 180 }}
               extra="근로기준법 = 1일씩"
             >
-              <InputNumber
+              <AppUnitInputNumber
                 min={0}
                 step={0.5}
-                addonBefore="+"
-                addonAfter="일"
-                style={{ width: '100%' }}
+                prefixUnit="+"
+                unit="일"
               />
             </Form.Item>
             <Form.Item
@@ -509,7 +507,7 @@ function PolicyForm({ form }: PolicyFormProps) {
               style={{ width: 180 }}
               extra="근로기준법 = 25일"
             >
-              <InputNumber min={0} step={0.5} addonAfter="일" style={{ width: '100%' }} />
+              <AppUnitInputNumber min={0} step={0.5} unit="일" />
             </Form.Item>
           </Space>
 
@@ -581,10 +579,9 @@ function PolicyForm({ form }: PolicyFormProps) {
                     style={{ width: 220 }}
                     extra="예: 만료 180일 전 (6개월 전)"
                   >
-                    <InputNumber
+                    <AppUnitInputNumber
                       min={1}
-                      addonAfter="일 전"
-                      style={{ width: '100%' }}
+                      unit="일 전"
                       onChange={() =>
                         /** 1차 변경 시 2차의 검증도 다시 돌려야 함 */
                         form.validateFields(['promotion2ndBeforeDays']).catch(() => {})
@@ -627,10 +624,9 @@ function PolicyForm({ form }: PolicyFormProps) {
                     style={{ width: 220 }}
                     extra="예: 만료 60일 전 (2개월 전)"
                   >
-                    <InputNumber
+                    <AppUnitInputNumber
                       min={1}
-                      addonAfter="일 전"
-                      style={{ width: '100%' }}
+                      unit="일 전"
                       onChange={() =>
                         form.validateFields(['promotion1stBeforeDays']).catch(() => {})
                       }
@@ -690,7 +686,7 @@ function PolicyForm({ form }: PolicyFormProps) {
                     style={{ width: 220 }}
                     extra="이 일수까지만 다음 해로 넘김"
                   >
-                    <InputNumber min={1} addonAfter="일" style={{ width: '100%' }} />
+                    <AppUnitInputNumber min={1} unit="일" />
                   </Form.Item>
                   <Form.Item
                     label="이월 동의서 사용"

@@ -437,7 +437,7 @@ function ProfileEditModal({
       }
       width={760}
       centered
-      destroyOnClose={false}
+      destroyOnHidden={false}
       maskClosable={!isDirty}
       onCancel={onCancel}
       footer={

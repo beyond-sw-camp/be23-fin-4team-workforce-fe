@@ -160,7 +160,13 @@ import {
   stripNonPersistedApprovalContentFields,
 } from '@/features/approvals/lib/approvalFormSchema';
 import { composeContentPatchWithDefaultTitle } from '@/features/approvals/lib/approvalComposeDefaultTitle';
-import { syncApprovalQueryCachesAfterAct } from '@/features/approvals/lib/syncApprovalQueryCaches';
+import {
+  APPROVAL_REQUEST_CHANGED_EVENT,
+  APPROVAL_REQUEST_CHANGED_MESSAGE,
+  invalidateApprovalRequestQueries,
+  notifyApprovalRequestChanged,
+  syncApprovalQueryCachesAfterAct,
+} from '@/features/approvals/lib/syncApprovalQueryCaches';
 import {
   APPROVAL_GUIDE_BOX_LABEL,
   mergeRequestsByRequestId,
@@ -168,6 +174,7 @@ import {
   type ApprovalGuideBox,
 } from '@/features/approvals/lib/approvalGuideNav';
 import { ApprovalFormSelectModal } from '@/features/approvals/ui/ApprovalFormSelectModal';
+import { ApprovalLineMiniStrip } from '@/features/approvals/ui/ApprovalLineMiniStrip';
 import { ApprovalRequestReadOnlyModal } from '@/features/approvals/ui/ApprovalRequestReadOnlyModal';
 import { PendingApprovalInboxModalContent } from '@/features/approvals/ui/PendingApprovalInboxModal';
 import { getRefreshIdentityHeaders } from '@/shared/stores/authRefreshIdentityStore';
@@ -625,9 +632,18 @@ const APPROVAL_FOLLOWUP_MODAL_BODY_STYLE: CSSProperties = {
   padding: 0,
   overflow: 'hidden',
 };
+const APPROVAL_DASHBOARD_MODAL_FRAME_CLASS =
+  'tw-flex tw-h-full tw-min-h-0 tw-w-full tw-overflow-hidden tw-bg-slate-50';
+const APPROVAL_DASHBOARD_MODAL_IFRAME_CLASS =
+  'tw-h-full tw-min-h-0 tw-w-full tw-border-0 tw-bg-slate-50';
+const APPROVAL_NAV_FILTER_TABS_CLASS =
+  'wf-approval-modal-tabs [&_.ant-tabs-content]:tw-hidden';
+const APPROVAL_CONTENT_TABS_CLASS =
+  'wf-approval-modal-tabs';
 
 const APPROVAL_EMBED_QUERY = 'compose-modal';
 const APPROVAL_HUB_REFRESH_ON_RETURN_KEY = 'wf:approval-hub-refresh-on-return';
+const APPROVAL_EMBED_CLOSE_MESSAGE = 'wf:approval-embed-close';
 
 /**
  * 결재 작성 본 화면(워크벤치). `sideNav`가 비어 있으면 허브 대시보드만 보이므로,
@@ -668,7 +684,7 @@ type ApprovalNotificationModal = 'pending' | 'my-all' | 'viewers' | 'official' |
 
 /** 허브 문서함 모달 헤더 — 결재 대기 전체 모달과 동일한 겉 형식용 제목 */
 const COMPOSE_HOME_EMBED_PANEL_TITLE: Record<ComposeHomeEmbedPanel, string> = {
-  'my-all': '내 기안 문서함 전체',
+  'my-all': '결재 상신함 전체',
   viewers: '참조/공람 문서 전체',
   department: '부서 문서함 전체',
   official: '공문 수신함 전체',
@@ -779,52 +795,60 @@ function PendingHomeApprovalLineStrip({
       </Typography.Text>
     );
   }
-  const viewportWidthClass = visibleSlots > 0 ? 'tw-w-[21rem]' : '';
+  const viewportWidthClass = visibleSlots > 0 ? 'tw-w-full tw-max-w-full' : '';
   return (
     <div
-      className={clsx('tw-min-w-0 tw-overflow-x-auto wf-scrollbar tw-pr-0.5', viewportWidthClass)}
+      className={clsx(
+        'tw-box-border tw-min-w-0 tw-overflow-x-auto tw-overflow-y-hidden wf-scrollbar tw-pr-0.5 [scrollbar-gutter:stable]',
+        viewportWidthClass,
+      )}
       aria-label="결재선"
     >
-      <div className="tw-inline-flex tw-min-w-max tw-items-stretch tw-gap-1">
+      <div className="tw-inline-flex tw-min-w-max tw-items-center tw-gap-0">
         {sorted.map((line, i) => {
           const name =
             line.approverName?.trim() ||
             line.approverJobTitleName?.trim() ||
             `결재 ${line.stepOrder}차`;
           const st = String(line.approvalStatus);
-          const title = `${name} (${st})`;
+          const title = `${line.stepOrder}단계 · ${name} · ${pendingHomeLineStatusLabel(st)}`;
+          const statusUpper = String(st).toUpperCase();
           return (
             <Fragment key={line.approvalId}>
               {i > 0 ? (
                 <span
-                  className="tw-flex tw-shrink-0 tw-items-center tw-px-0.5 tw-text-sm tw-font-light tw-text-slate-300"
+                  className="tw-h-px tw-w-4 tw-shrink-0 tw-bg-slate-200"
                   aria-hidden
-                >
-                  -
-                </span>
+                />
               ) : null}
               <div
                 title={title}
                 className={clsx(
-                  'tw-flex tw-h-full tw-min-w-[5.25rem] tw-max-w-[6.5rem] tw-shrink-0 tw-items-center tw-gap-1.5 tw-rounded-lg tw-border tw-px-2 tw-py-1',
-                  pendingHomeLineCardShellClass(st),
+                  'tw-flex tw-h-10 tw-w-[6rem] tw-shrink-0 tw-items-center tw-gap-2 tw-rounded-md tw-border tw-border-slate-200 tw-bg-white tw-px-2 tw-shadow-[0_1px_2px_rgba(15,23,42,0.04)]',
+                  statusUpper === 'PENDING' && 'tw-border-amber-200 tw-bg-amber-50/30',
+                  statusUpper === 'APPROVED' && 'tw-border-blue-200 tw-bg-blue-50/30',
+                  statusUpper === 'REJECTED' && 'tw-border-rose-200 tw-bg-rose-50/30',
                 )}
               >
-                <span className="tw-flex tw-flex-shrink-0 tw-items-center tw-leading-none">
-                  <PendingHomeApprovalLineStepIcon status={st} />
+                <span
+                  className={clsx(
+                    'tw-flex tw-size-5 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-full tw-text-[10px] tw-font-bold',
+                    statusUpper === 'APPROVED' && 'tw-bg-blue-100 tw-text-blue-700',
+                    statusUpper === 'REJECTED' && 'tw-bg-rose-100 tw-text-rose-700',
+                    statusUpper === 'PENDING' && 'tw-bg-amber-100 tw-text-amber-800',
+                    !['APPROVED', 'REJECTED', 'PENDING'].includes(statusUpper) &&
+                      'tw-bg-slate-100 tw-text-slate-500',
+                  )}
+                >
+                  {line.stepOrder}
                 </span>
-                <div className="tw-min-w-0 tw-flex-1">
-                  <div
-                    className={clsx(
-                      'tw-truncate tw-text-[11px] tw-font-semibold tw-leading-tight',
-                      pendingHomeLineTextClass(st),
-                    )}
-                  >
+                <div className="tw-min-w-0 tw-flex-1 tw-leading-tight">
+                  <div className="tw-truncate tw-text-[11px] tw-font-semibold tw-text-slate-800">
                     {name}
                   </div>
                   <div
                     className={clsx(
-                      'tw-truncate tw-text-[10px] tw-font-medium tw-leading-tight tw-opacity-95',
+                      'tw-truncate tw-text-[10px] tw-font-medium',
                       pendingHomeLineTextClass(st),
                     )}
                   >
@@ -837,6 +861,116 @@ function PendingHomeApprovalLineStrip({
         })}
       </div>
     </div>
+  );
+}
+
+function PendingHomeApprovalLineSummary({ lines }: { lines: ApprovalLine[] }) {
+  const sorted = [...lines].sort((a, b) => a.stepOrder - b.stepOrder);
+  if (sorted.length === 0) {
+    return (
+      <Typography.Text type="secondary" className="!tw-text-xs">
+        —
+      </Typography.Text>
+    );
+  }
+
+  const firstLine = sorted[0]!;
+  const focusLine =
+    sorted.find((line) => String(line.approvalStatus).toUpperCase() === 'PENDING') ??
+    [...sorted]
+      .reverse()
+      .find((line) => ['APPROVED', 'REJECTED'].includes(String(line.approvalStatus).toUpperCase())) ??
+    firstLine;
+  const focusStatus = String(focusLine.approvalStatus);
+  const focusName =
+    focusLine.approverName?.trim() ||
+    focusLine.approverJobTitleName?.trim() ||
+    `${focusLine.stepOrder}단계`;
+
+  const tooltipTitle = (
+    <div className="tw-min-w-[190px] tw-space-y-1.5">
+      {sorted.map((line) => {
+        const status = String(line.approvalStatus);
+        const statusUpper = status.toUpperCase();
+        const name =
+          line.approverName?.trim() ||
+          line.approverJobTitleName?.trim() ||
+          `${line.stepOrder}단계`;
+        return (
+          <div
+            key={line.approvalId}
+            className="tw-flex tw-items-center tw-justify-between tw-gap-3 tw-rounded-md tw-px-1 tw-py-0.5"
+          >
+            <span className="tw-flex tw-min-w-0 tw-items-center tw-gap-1.5">
+              <span
+                className={clsx(
+                  'tw-size-1.5 tw-shrink-0 tw-rounded-full',
+                  statusUpper === 'APPROVED' && 'tw-bg-blue-500',
+                  statusUpper === 'REJECTED' && 'tw-bg-rose-500',
+                  statusUpper === 'PENDING' && 'tw-bg-amber-500',
+                  !['APPROVED', 'REJECTED', 'PENDING'].includes(statusUpper) && 'tw-bg-slate-400',
+                )}
+              />
+              <span className="tw-min-w-0 tw-truncate tw-text-[12px] tw-font-medium tw-text-slate-700">
+                {line.stepOrder}. {name}
+              </span>
+            </span>
+            <span
+              className={clsx(
+                'tw-shrink-0 tw-text-[11px] tw-font-semibold',
+                pendingHomeLineTextClass(status),
+              )}
+            >
+              {pendingHomeLineStatusLabel(status)}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  return (
+    <Tooltip
+      title={tooltipTitle}
+      placement="topLeft"
+      color="#ffffff"
+      styles={{
+        body: {
+          border: '1px solid #e2e8f0',
+          borderRadius: 10,
+          boxShadow: '0 14px 34px rgba(15, 23, 42, 0.14)',
+          color: '#0f172a',
+          padding: '8px',
+        },
+      }}
+    >
+      <div className="tw-inline-flex tw-max-w-full tw-items-center tw-gap-1 tw-rounded-md tw-bg-slate-50 tw-px-1.5 tw-py-0.5">
+        <span
+          className={clsx(
+            'tw-size-1 tw-shrink-0 tw-rounded-full',
+            String(focusStatus).toUpperCase() === 'APPROVED' && 'tw-bg-blue-500',
+            String(focusStatus).toUpperCase() === 'REJECTED' && 'tw-bg-rose-500',
+            String(focusStatus).toUpperCase() === 'PENDING' && 'tw-bg-amber-500',
+            !['APPROVED', 'REJECTED', 'PENDING'].includes(String(focusStatus).toUpperCase()) &&
+              'tw-bg-slate-400',
+          )}
+        />
+        <div className="tw-min-w-0">
+          <div
+            className={clsx(
+              'tw-whitespace-nowrap tw-text-xs tw-font-medium tw-leading-tight',
+              pendingHomeLineTextClass(focusStatus),
+            )}
+          >
+            {focusName}
+          </div>
+        </div>
+        <span className="tw-shrink-0 tw-text-[11px] tw-font-medium tw-text-slate-500">
+          {pendingHomeLineStatusLabel(focusStatus)}
+          {sorted.length > 1 ? ` · ${sorted.length}` : ''}
+        </span>
+      </div>
+    </Tooltip>
   );
 }
 
@@ -1354,7 +1488,7 @@ const REQUEST_STATUS_LABEL: Record<ApprovalRequestStatus, string> = {
   CANCELED: '취소',
 };
 
-/** 내 기안 문서함 — 상태 필터 탭(URL `myStatus`와 동기화) */
+/** 결재 상신함 — 상태 필터 탭(URL `myStatus`와 동기화) */
 const MY_INBOX_FILTER_TABS: { key: 'ALL' | ApprovalRequestStatus; label: string }[] = [
   { key: 'ALL', label: '전체 상태' },
   ...APPROVAL_REQUEST_STATUS.map((v) => ({ key: v, label: REQUEST_STATUS_LABEL[v] })),
@@ -1613,6 +1747,30 @@ export function ApprovalsPage() {
         schReason?: string;
       },
   });
+
+  useEffect(() => {
+    const refreshApprovalQueries = () => {
+      void invalidateApprovalRequestQueries(qc);
+    };
+
+    const onApprovalChanged = () => refreshApprovalQueries();
+    const onMessage = (event: MessageEvent<unknown>) => {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data;
+      if (!data || typeof data !== 'object') return;
+      if ((data as { type?: unknown }).type !== APPROVAL_REQUEST_CHANGED_MESSAGE) return;
+      refreshApprovalQueries();
+    };
+
+    window.addEventListener(APPROVAL_REQUEST_CHANGED_EVENT, onApprovalChanged);
+    window.addEventListener('message', onMessage);
+
+    return () => {
+      window.removeEventListener(APPROVAL_REQUEST_CHANGED_EVENT, onApprovalChanged);
+      window.removeEventListener('message', onMessage);
+    };
+  }, [qc]);
+
   const isEmbedComposeModal = routeSearch.embed === APPROVAL_EMBED_QUERY;
   const embedSearchSuffix = useMemo(
     () => (isEmbedComposeModal ? ({ embed: APPROVAL_EMBED_QUERY } as const) : {}),
@@ -1751,7 +1909,7 @@ export function ApprovalsPage() {
     if (!onComposeHub || !approvalNotificationModal) return;
     if (String(routeSearch.approvalRequestId ?? '').trim()) return;
     if (approvalNotificationModal === 'pending') {
-      setComposeHomeMoreModal({ kind: 'pending-inbox', title: '결재 대기·예정 문서 전체' });
+      setComposeHomeMoreModal({ kind: 'pending-inbox', title: '결재 처리함 전체' });
       return;
     }
     setComposeHomeMoreModal({ kind: 'iframe', panel: approvalNotificationModal });
@@ -2090,7 +2248,7 @@ export function ApprovalsPage() {
   const onActedTab = tab === 'acted';
 
   const pendingQueryEnabled = onPendingTab || onComposeHub;
-  const actedQueryEnabled = onActedTab;
+  const actedQueryEnabled = onActedTab || onComposeHub;
   const viewerCcEnabled = (onMyTab && guideBox === 'per-viewers') || onComposeHub;
   const needsMyRequestList = (onMyTab && guideBox !== 'per-viewers') || onComposeHub;
 
@@ -2120,6 +2278,12 @@ export function ApprovalsPage() {
     enabled: pendingQueryEnabled,
   });
 
+  const { data: actedRequests = [], isFetching: actedLoading } = useQuery({
+    queryKey: ['approval-user', 'acted-approvals'],
+    queryFn: () => approvalRequestApi.listActedApprovals(),
+    enabled: actedQueryEnabled,
+  });
+
   const composeHubInboxPreviewRows = useMemo(() => {
     const map = new Map<string, ApprovalRequestDetail>();
     for (const r of pendingRequests) {
@@ -2128,13 +2292,16 @@ export function ApprovalsPage() {
     for (const r of waitingApprovals) {
       if (!map.has(r.requestId)) map.set(r.requestId, r);
     }
+    for (const r of actedRequests) {
+      if (!map.has(r.requestId)) map.set(r.requestId, r);
+    }
     return [...map.values()].sort((a, b) => {
       const tb = dayjs(b.createdAt).valueOf();
       const ta = dayjs(a.createdAt).valueOf();
       if (tb !== ta) return tb - ta;
       return a.requestId.localeCompare(b.requestId);
     });
-  }, [pendingRequests, waitingApprovals]);
+  }, [actedRequests, pendingRequests, waitingApprovals]);
 
   const { data: viewerCcRequests = [], isFetching: viewerCcLoading } = useQuery({
     queryKey: ['approval-user', 'viewer-cc'],
@@ -2209,11 +2376,6 @@ export function ApprovalsPage() {
     return myRequestsAllForSummary.filter((r) => idSet.has(r.requestId)).slice(0, 10);
   }, [bookmarkedRequestIds, myRequestsAllForSummary]);
 
-  const { data: actedRequests = [], isFetching: actedLoading } = useQuery({
-    queryKey: ['approval-user', 'acted-approvals'],
-    queryFn: () => approvalRequestApi.listActedApprovals(),
-    enabled: actedQueryEnabled,
-  });
   const { data: myAbsenceProxies = [] } = useQuery({
     queryKey: ['approval', 'absence-proxy', 'my'],
     queryFn: () => absenceProxyApi.listMine(),
@@ -2337,6 +2499,34 @@ export function ApprovalsPage() {
     await qc.invalidateQueries({ queryKey: ['approval', 'documents', 'active'] });
   };
 
+  const closeEmbeddedApprovalModal = () => {
+    try {
+      sessionStorage.setItem(APPROVAL_HUB_REFRESH_ON_RETURN_KEY, '1');
+    } catch {
+      // ignore
+    }
+    try {
+      window.parent?.postMessage({ type: APPROVAL_EMBED_CLOSE_MESSAGE }, window.location.origin);
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    if (isEmbedComposeModal) return;
+    const handleEmbedClose = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data as { type?: unknown } | null;
+      if (!data || typeof data !== 'object' || data.type !== APPROVAL_EMBED_CLOSE_MESSAGE) return;
+      setComposeHomeMoreModal(null);
+      setCorrectionEmbedSrc(null);
+      void qc.invalidateQueries({ queryKey: ['approval-user'] });
+      void qc.invalidateQueries({ queryKey: ['approval', 'documents', 'active'] });
+    };
+    window.addEventListener('message', handleEmbedClose);
+    return () => window.removeEventListener('message', handleEmbedClose);
+  }, [isEmbedComposeModal, qc]);
+
   const hardReloadToMyInbox = () => {
     const params = new URLSearchParams({ tab: 'my', box: 'per-all' });
     if (isEmbedComposeModal) params.set('embed', APPROVAL_EMBED_QUERY);
@@ -2370,16 +2560,7 @@ export function ApprovalsPage() {
         });
         await refreshUserQueries();
         if (isEmbedComposeModal) {
-          try {
-            sessionStorage.setItem(APPROVAL_HUB_REFRESH_ON_RETURN_KEY, '1');
-          } catch {
-            // ignore
-          }
-          navigate({
-            to: '/app/approvals',
-            search: { tab: 'my', box: 'per-all', ...embedSearchSuffix },
-            replace: true,
-          });
+          closeEmbeddedApprovalModal();
           return;
         }
         hardReloadToMyInbox();
@@ -2403,16 +2584,7 @@ export function ApprovalsPage() {
       });
       await refreshUserQueries();
       if (isEmbedComposeModal) {
-        try {
-          sessionStorage.setItem(APPROVAL_HUB_REFRESH_ON_RETURN_KEY, '1');
-        } catch {
-          // ignore
-        }
-        navigate({
-          to: '/app/approvals',
-          search: { tab: 'my', box: 'per-all', ...embedSearchSuffix },
-          replace: true,
-        });
+        closeEmbeddedApprovalModal();
         return;
       }
       hardReloadToMyInbox();
@@ -2448,16 +2620,7 @@ export function ApprovalsPage() {
         });
         await refreshUserQueries();
         if (isEmbedComposeModal) {
-          try {
-            sessionStorage.setItem(APPROVAL_HUB_REFRESH_ON_RETURN_KEY, '1');
-          } catch {
-            // ignore
-          }
-          navigate({
-            to: '/app/approvals',
-            search: { tab: 'my', box: 'per-all', ...embedSearchSuffix },
-            replace: true,
-          });
+          closeEmbeddedApprovalModal();
           return;
         }
         hardReloadToMyInbox();
@@ -2481,16 +2644,7 @@ export function ApprovalsPage() {
       });
       await refreshUserQueries();
       if (isEmbedComposeModal) {
-        try {
-          sessionStorage.setItem(APPROVAL_HUB_REFRESH_ON_RETURN_KEY, '1');
-        } catch {
-          // ignore
-        }
-        navigate({
-          to: '/app/approvals',
-          search: { tab: 'my', box: 'per-all', ...embedSearchSuffix },
-          replace: true,
-        });
+        closeEmbeddedApprovalModal();
         return;
       }
       hardReloadToMyInbox();
@@ -2653,6 +2807,7 @@ export function ApprovalsPage() {
         myMemberId: authMemberId,
         myMemberPositionId: pid,
       });
+      notifyApprovalRequestChanged(detail);
       const proxy = requestIncludesMyProxyAct(detail, {
         myMemberId: authMemberId,
         myMemberPositionId: pid,
@@ -2660,7 +2815,10 @@ export function ApprovalsPage() {
       message.success(proxy ? '대결로 승인 처리했습니다.' : '승인 처리했습니다.');
       setApprovalAction(null);
       setApprovalComment('');
-      await qc.invalidateQueries({ queryKey: ['approval', 'documents', 'active'] });
+      await Promise.all([
+        invalidateApprovalRequestQueries(qc),
+        qc.invalidateQueries({ queryKey: ['approval', 'documents', 'active'] }),
+      ]);
     },
     onError: (e: Error) => message.error(e.message || '승인 처리에 실패했습니다.'),
   });
@@ -2676,6 +2834,7 @@ export function ApprovalsPage() {
         myMemberId: authMemberId,
         myMemberPositionId: pid,
       });
+      notifyApprovalRequestChanged(detail);
       const proxy = requestIncludesMyProxyAct(detail, {
         myMemberId: authMemberId,
         myMemberPositionId: pid,
@@ -2683,7 +2842,10 @@ export function ApprovalsPage() {
       message.success(proxy ? '대결로 반려 처리했습니다.' : '반려 처리했습니다.');
       setApprovalAction(null);
       setApprovalComment('');
-      await qc.invalidateQueries({ queryKey: ['approval', 'documents', 'active'] });
+      await Promise.all([
+        invalidateApprovalRequestQueries(qc),
+        qc.invalidateQueries({ queryKey: ['approval', 'documents', 'active'] }),
+      ]);
     },
     onError: (e: Error) => message.error(e.message || '반려 처리에 실패했습니다.'),
   });
@@ -3950,11 +4112,11 @@ export function ApprovalsPage() {
     {
       title: '결재선',
       key: 'approvalLineStrip',
-      width: 220,
-      onCell: () => ({ className: '!tw-align-middle' }),
+      width: 180,
+      onCell: () => ({ className: '!tw-align-middle !tw-min-w-0 !tw-max-w-0' }),
       onHeaderCell: () => ({ className: '!tw-text-center' }),
       render: (_: unknown, row: ApprovalRequestDetail) => (
-        <PendingHomeApprovalLineStrip lines={row.approvalLines} visibleSlots={3} />
+        <ApprovalLineMiniStrip lines={row.approvalLines} visibleSlots={3} />
       ),
     },
     {
@@ -4454,6 +4616,10 @@ export function ApprovalsPage() {
 
   const composeToolbarGhostBtn =
     '!tw-inline-flex !tw-h-8 !tw-items-center !tw-gap-1 !tw-rounded-sm !tw-border-0 !tw-bg-transparent !tw-px-2 !tw-text-sm !tw-font-normal !tw-text-[#111827] !tw-shadow-none hover:!tw-bg-black/[0.04] disabled:!tw-opacity-50';
+  const composeActionSecondaryBtn =
+    '!tw-inline-flex !tw-h-9 !tw-items-center !tw-gap-1.5 !tw-rounded-lg !tw-border !tw-border-slate-200 !tw-bg-white !tw-px-3.5 !tw-text-sm !tw-font-semibold !tw-text-slate-700 !tw-shadow-none hover:!tw-border-slate-300 hover:!tw-bg-slate-50 hover:!tw-text-slate-900 disabled:!tw-border-slate-200 disabled:!tw-bg-slate-50 disabled:!tw-text-slate-400 disabled:!tw-opacity-100';
+  const composeActionPrimaryBtn =
+    '!tw-inline-flex !tw-h-9 !tw-items-center !tw-gap-1.5 !tw-rounded-lg !tw-border-[#1e3a5f] !tw-bg-[#1e3a5f] !tw-px-4 !tw-text-sm !tw-font-semibold !tw-text-white !tw-shadow-sm !tw-shadow-slate-900/10 hover:!tw-border-[#172f4d] hover:!tw-bg-[#172f4d] hover:!tw-text-white disabled:!tw-border-[#1e3a5f]/60 disabled:!tw-bg-[#1e3a5f]/60 disabled:!tw-text-white/75 disabled:!tw-opacity-100';
 
   const renderComposeToolbar = (opts?: { showDocumentTitle?: boolean }) => {
     const showTitle = opts?.showDocumentTitle ?? false;
@@ -4495,21 +4661,19 @@ export function ApprovalsPage() {
   const renderComposeDraftSubmitActions = () => (
     <div className="tw-flex tw-shrink-0 tw-flex-wrap tw-items-center tw-justify-end tw-gap-x-3 tw-gap-y-2 tw-border-t tw-border-slate-200 tw-bg-white tw-px-3 tw-py-2.5">
       <Button
-        type="text"
-        size="small"
+        type="default"
         disabled={composeSaving}
-        icon={<SaveOutlined className="tw-text-[13px] tw-text-[#333]" />}
-        className={composeToolbarGhostBtn}
+        icon={<SaveOutlined className="tw-text-[13px]" />}
+        className={composeActionSecondaryBtn}
         onClick={() => void submitCompose('DRAFT')}
       >
         임시저장
       </Button>
       <Button
-        type="text"
-        size="small"
+        type="primary"
         disabled={composeSaving}
-        icon={<FormOutlined className="tw-text-[13px] tw-text-[#333]" />}
-        className={composeToolbarGhostBtn}
+        icon={<FormOutlined className="tw-text-[13px]" />}
+        className={composeActionPrimaryBtn}
         onClick={() => void submitCompose('WAIT')}
       >
         결재요청
@@ -4524,25 +4688,25 @@ export function ApprovalsPage() {
         className={clsx(
           composeApprovalInfoAsideClass,
           variant === 'flush'
-            ? 'tw-flex tw-h-full tw-min-h-0 tw-flex-col tw-overflow-hidden tw-rounded-lg tw-border tw-border-[#e0e0e0] tw-bg-white tw-shadow-[0_1px_6px_rgba(0,0,0,0.06)]'
+            ? 'tw-flex tw-h-full tw-min-h-0 tw-flex-col tw-overflow-hidden tw-bg-white'
             : 'tw-overflow-hidden tw-rounded-xl tw-border tw-border-slate-200 tw-bg-white tw-shadow-[0_1px_4px_rgba(15,23,42,0.06)]',
         )}
       >
-        <div className="tw-flex tw-items-center tw-border-b tw-border-[#e5e7eb] tw-bg-white tw-px-3 tw-py-3">
-          <Typography.Text strong className="!tw-text-sm !tw-text-[#111827]">
-            결재정보
-          </Typography.Text>
-        </div>
         <div
           className={clsx(
-            'tw-p-2 sm:tw-p-3',
+            'tw-px-3 tw-py-3',
             variant === 'flush'
-              ? 'tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-bg-[#f5f6f8]'
-              : 'tw-bg-[#f5f6f8]',
+              ? 'tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-hidden tw-bg-slate-50/80'
+              : 'tw-bg-slate-50',
           )}
         >
           <Tabs
             size="small"
+            className={clsx(
+              'wf-approval-modal-tabs',
+              variant === 'flush' && 'wf-compose-approval-sidebar-tabs',
+              variant === 'flush' && 'tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-hidden',
+            )}
             activeKey={composeSidebarTab}
             onChange={(k) => setComposeSidebarTab(k as 'line' | 'doc')}
             items={[
@@ -4550,16 +4714,16 @@ export function ApprovalsPage() {
                 key: 'line',
                 label: '결재선',
                 children: (
-                  <div className="tw-space-y-2">
+                  <div className="wf-compose-approval-line-panel">
                     <>
                       <button
                         type="button"
                         onClick={() => openComposeApprovalModal('approval')}
-                        className="tw-w-full tw-overflow-hidden tw-rounded-lg tw-border tw-border-slate-200 tw-bg-white tw-p-0 tw-text-left tw-shadow-sm tw-transition-colors hover:tw-bg-slate-50 focus:tw-outline-none focus-visible:tw-ring-2 focus-visible:tw-ring-blue-400"
+                        className="wf-compose-approval-line-card wf-compose-approval-line-card-drafter"
                       >
-                        <div className="tw-flex tw-gap-3 tw-p-3">
+                        <div className="tw-flex tw-gap-3 tw-px-3 tw-py-3">
                           <Avatar
-                            className="tw-h-12 tw-w-12 tw-shrink-0 tw-bg-slate-400 tw-text-base"
+                            className="wf-compose-approval-line-avatar wf-compose-approval-line-avatar-primary"
                             src={drafterProfile?.profileUrl ?? undefined}
                           >
                             {viewerInitial(sidebarDrafterName)}
@@ -4567,56 +4731,60 @@ export function ApprovalsPage() {
                           <div className="tw-min-w-0 tw-flex-1">
                             <Typography.Text
                               strong
-                              className="!tw-block !tw-text-sm !tw-text-[#111827]"
+                              className="!tw-block !tw-text-sm !tw-text-[#102a43]"
                             >
                               {sidebarDrafterName}
                               {sidebarDrafterTitle ? ` ${sidebarDrafterTitle}` : ''}
                             </Typography.Text>
                             <Typography.Text
                               type="secondary"
-                              className="!tw-mt-0.5 !tw-block !tw-text-xs !tw-text-[#666]"
+                              className="!tw-mt-0.5 !tw-block !tw-text-xs !tw-text-slate-500"
                             >
                               {sidebarDrafterOrg}
                             </Typography.Text>
                           </div>
                         </div>
-                        <div className="tw-border-t tw-border-slate-100 tw-bg-[#f2f2f2] tw-px-3 tw-py-2 tw-text-center tw-text-xs tw-text-[#888]">
+                        <div className="wf-compose-approval-line-role">
                           기안
                         </div>
                       </button>
                       {orderedApprovalLineDrafts.length === 0 ? (
-                        <div className="tw-rounded-lg tw-border tw-border-dashed tw-border-slate-300 tw-bg-white tw-px-3 tw-py-4 tw-text-center tw-text-sm tw-text-slate-500">
+                        <button
+                          type="button"
+                          onClick={() => openComposeApprovalModal('approval')}
+                          className="wf-compose-approval-line-empty"
+                        >
                           결재자를 지정하지 않았습니다. 클릭하여 조직도에서 추가하세요.
-                        </div>
+                        </button>
                       ) : (
                         orderedApprovalLineDrafts.map((row) => (
                           <button
                             key={row.id}
                             type="button"
                             onClick={() => openComposeApprovalModal('approval')}
-                            className="tw-w-full tw-rounded-lg tw-border tw-border-slate-200 tw-bg-white tw-p-3 tw-text-left tw-shadow-sm tw-transition-colors hover:tw-bg-slate-50 focus:tw-outline-none focus-visible:tw-ring-2 focus-visible:tw-ring-blue-400"
+                            className="wf-compose-approval-line-card"
                           >
-                            <div className="tw-flex tw-gap-3">
-                              <Avatar className="tw-h-11 tw-w-11 tw-shrink-0 tw-bg-slate-400 tw-text-base">
+                            <div className="tw-flex tw-gap-3 tw-px-3 tw-py-3">
+                              <Avatar className="wf-compose-approval-line-avatar">
                                 {row.kind === 'org'
                                   ? viewerInitial(row.organizationName)
                                   : viewerInitial(row.memberName)}
                               </Avatar>
                               <div className="tw-min-w-0 tw-flex-1">
-                                <Typography.Text strong className="!tw-block !tw-text-sm">
+                                <Typography.Text strong className="!tw-block !tw-text-sm !tw-text-[#102a43]">
                                   {row.kind === 'org'
                                     ? `${row.organizationName} (${row.members.length}명)`
                                     : `${row.memberName}${row.jobTitleName ? ` ${row.jobTitleName}` : ''}`}
                                 </Typography.Text>
                                 <Typography.Text
                                   type="secondary"
-                                  className="!tw-mt-0.5 !tw-block !tw-text-xs"
+                                  className="!tw-mt-0.5 !tw-block !tw-text-xs !tw-text-slate-500"
                                 >
                                   {row.kind === 'org' ? '조직' : row.organizationName || '—'}
                                 </Typography.Text>
                                 <Typography.Text
                                   type="secondary"
-                                  className="!tw-mt-1 !tw-block !tw-text-[11px] tw-text-slate-400"
+                                  className="!tw-mt-1 !tw-block !tw-text-[11px] !tw-font-medium !tw-text-slate-400"
                                 >
                                   결재 예정 · {row.stepOrder}단계
                                 </Typography.Text>
@@ -4625,11 +4793,11 @@ export function ApprovalsPage() {
                           </button>
                         ))
                       )}
-                      <div className="tw-border-t tw-border-slate-200/90 tw-pt-2">
+                      <div className="wf-compose-approval-line-viewers">
                         <Button
                           type="link"
                           size="small"
-                          className="!tw-h-auto !tw-p-0 !tw-text-left !tw-text-xs"
+                          className="!tw-h-auto !tw-p-0 !tw-text-left !tw-text-xs !tw-font-bold !tw-text-[#2563eb]"
                           onClick={() => openComposeApprovalModal('cc')}
                         >
                           참조자 {countViewerDraftMembers(ccViewers)}명
@@ -4643,7 +4811,7 @@ export function ApprovalsPage() {
                 key: 'doc',
                 label: '문서정보',
                 children: selectedDocument ? (
-                  <div className="tw-space-y-3">
+                  <div className="tw-flex tw-min-h-0 tw-flex-col tw-gap-3">
                     <Descriptions size="small" column={1} bordered className="!tw-bg-white">
                       <Descriptions.Item label="양식명">
                         {formatApprovalDocumentName(selectedDocument.documentName)}
@@ -4980,7 +5148,7 @@ export function ApprovalsPage() {
   const pageTitle =
     tab === 'compose'
       ? isComposeHubEntry
-        ? '전자결재'
+        ? '전자결재·계약'
         : '결재 요청 작성'
       : tab === 'admin' && canAdmin
         ? '결재 관리자'
@@ -4990,7 +5158,7 @@ export function ApprovalsPage() {
   const pageDescription =
     tab === 'compose'
       ? isComposeHubEntry
-        ? '결재 대기, 진행 문서, 공문 알림을 한눈에 확인하고 바로 작성하세요.'
+        ? '결재와 계약 문서를 한곳에서 확인하고 바로 작성하세요.'
         : '양식을 선택하고 결재선을 구성한 뒤 기안을 제출합니다.'
       : tab === 'admin' && canAdmin
         ? '양식 옵션(활성·부서 문서함 노출)과 결재 순서(직책/단계)를 설정합니다.'
@@ -5040,60 +5208,85 @@ export function ApprovalsPage() {
           </Button>
         </div>
         {rows.length === 0 ? (
-          <Typography.Text type="secondary">{emptyText}</Typography.Text>
+          <div className="tw-flex tw-min-h-[3.5rem] tw-items-center tw-rounded-xl tw-bg-slate-50/80 tw-px-3">
+            <Typography.Text type="secondary" className="!tw-text-sm">
+              {emptyText}
+            </Typography.Text>
+          </div>
         ) : (
           <div className={APPROVAL_HOME_DOC_LIST_SCROLL}>
             <Space direction="vertical" size={8} className="tw-w-full">
-              {rows.slice(0, 20).map((row) => (
-                <div
-                  key={row.requestId}
-                  className={`tw-flex tw-items-center tw-justify-between tw-gap-2 tw-rounded-lg tw-border tw-px-3 tw-py-2 ${accentClass} ${
-                    options?.onAction
-                      ? ''
-                      : 'tw-cursor-pointer tw-transition-colors hover:tw-bg-white/60'
-                  }`}
-                  onClick={
-                    options?.onAction
-                      ? undefined
-                      : () => {
-                          setSelectedRequestId(row.requestId);
-                        }
-                  }
-                  role={options?.onAction ? undefined : 'button'}
-                  tabIndex={options?.onAction ? undefined : 0}
-                  onKeyDown={
-                    options?.onAction
-                      ? undefined
-                      : (e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
+              {rows.slice(0, 20).map((row) => {
+                const requestStatus = String(row.requestStatus ?? '').trim();
+                const requestStatusNode = requestStatus ? statusTag(requestStatus) : null;
+                return (
+                  <div
+                    key={row.requestId}
+                    className={`tw-group tw-flex tw-items-start tw-justify-between tw-gap-3 tw-rounded-xl tw-border tw-px-3 tw-py-2.5 ${accentClass} ${
+                      options?.onAction
+                        ? ''
+                        : 'tw-cursor-pointer tw-transition-colors hover:tw-border-blue-200 hover:tw-bg-blue-50/70 focus-visible:tw-ring-2 focus-visible:tw-ring-blue-400 focus-visible:tw-ring-offset-1'
+                    }`}
+                    onClick={
+                      options?.onAction
+                        ? undefined
+                        : () => {
                             setSelectedRequestId(row.requestId);
                           }
-                        }
-                  }
-                >
-                  <div className="tw-min-w-0">
-                    <Typography.Text strong className="!tw-block tw-truncate">
-                      {row.documentName || '—'}
-                    </Typography.Text>
-                    <Typography.Text type="secondary" className="!tw-block tw-text-xs">
-                      {row.requesterName || '요청자 미상'} ·{' '}
-                      {formatDateTime(row.updatedAt || row.createdAt)}
-                    </Typography.Text>
+                    }
+                    role={options?.onAction ? undefined : 'button'}
+                    tabIndex={options?.onAction ? undefined : 0}
+                    onKeyDown={
+                      options?.onAction
+                        ? undefined
+                        : (e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              setSelectedRequestId(row.requestId);
+                            }
+                          }
+                    }
+                  >
+                    <span className="tw-mt-0.5 tw-inline-flex tw-size-8 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-lg tw-bg-white tw-text-[#1b365d] tw-shadow-sm tw-shadow-slate-900/5">
+                      <FileTextOutlined aria-hidden />
+                    </span>
+                    <div className="tw-min-w-0 tw-flex-1">
+                      <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
+                        <Typography.Text
+                          strong
+                          className="!tw-block tw-min-w-0 tw-flex-1 tw-truncate !tw-text-[13px] !tw-leading-5 !tw-text-slate-900"
+                        >
+                          {getApprovalRequestSubjectLine(row) || row.documentName || '—'}
+                        </Typography.Text>
+                        {requestStatusNode ? (
+                          <span className="tw-shrink-0 [&_.ant-tag]:!tw-m-0 [&_.ant-tag]:!tw-text-[11px]">
+                            {requestStatusNode}
+                          </span>
+                        ) : null}
+                      </div>
+                      <Typography.Text
+                        type="secondary"
+                        className="!tw-mt-0.5 !tw-block !tw-text-[11px] !tw-leading-4"
+                      >
+                        {row.requesterName || '요청자 미상'} ·{' '}
+                        {formatDateTime(row.updatedAt || row.createdAt)}
+                      </Typography.Text>
+                    </div>
+                    {options?.onAction ? (
+                      <Button
+                        size="small"
+                        className="tw-shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          options.onAction?.(row);
+                        }}
+                      >
+                        {options.actionLabel || '보기'}
+                      </Button>
+                    ) : null}
                   </div>
-                  {options?.onAction ? (
-                    <Button
-                      size="small"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        options.onAction?.(row);
-                      }}
-                    >
-                      {options.actionLabel || '보기'}
-                    </Button>
-                  ) : null}
-                </div>
-              ))}
+                );
+              })}
             </Space>
           </div>
         )}
@@ -5104,9 +5297,18 @@ export function ApprovalsPage() {
   const renderHomeApprovalFormsCard = () => {
     return (
       <Card
-        className={clsx(APPROVAL_HOME_COMPOSE_FORMS_CARD_CLASS, 'tw-flex tw-w-full tw-flex-col')}
+        className={clsx(
+          APPROVAL_HOME_COMPOSE_FORMS_CARD_CLASS,
+          'tw-flex tw-h-full tw-w-full tw-flex-col',
+        )}
         styles={{
-          body: { display: 'flex', flexDirection: 'column', padding: 16 },
+          body: {
+            display: 'flex',
+            flexDirection: 'column',
+            height: '100%',
+            minHeight: 0,
+            padding: 16,
+          },
         }}
       >
         <div className="tw-mb-3 tw-flex tw-shrink-0 tw-items-start tw-justify-between tw-gap-3">
@@ -5150,14 +5352,14 @@ export function ApprovalsPage() {
             </Typography.Text>
           </div>
         ) : (
-          <div className="tw-max-h-[min(16rem,38vh)] tw-overflow-y-auto wf-scrollbar tw-pr-0.5">
-            <Space direction="vertical" size={8} className="tw-w-full">
+          <div className="tw-min-h-0 tw-flex-1 tw-overflow-y-auto wf-scrollbar">
+            <div className="tw-grid tw-min-h-full tw-grid-cols-1 tw-auto-rows-fr tw-gap-2">
               {quickHomeFormDocs.map((doc) => {
                 return (
                   <button
                     key={doc.documentId}
                     type="button"
-                    className="tw-group tw-flex tw-w-full tw-appearance-none tw-items-center tw-justify-between tw-gap-3 tw-rounded-xl tw-border tw-border-blue-100/80 tw-bg-white tw-px-3 tw-py-2.5 tw-text-left tw-shadow-sm tw-shadow-blue-950/[0.03] tw-transition-colors hover:tw-border-blue-200 hover:tw-bg-blue-50/40 focus-visible:tw-outline-none focus-visible:tw-ring-2 focus-visible:tw-ring-blue-400 focus-visible:tw-ring-offset-1"
+                    className="tw-group tw-flex tw-h-full tw-min-h-0 tw-w-full tw-appearance-none tw-items-center tw-justify-between tw-gap-3 tw-rounded-xl tw-border-0 tw-bg-slate-50/80 tw-px-3 tw-py-2 tw-text-left tw-shadow-none tw-outline-none tw-transition-colors hover:tw-bg-blue-50/60 focus-visible:tw-ring-2 focus-visible:tw-ring-blue-400 focus-visible:tw-ring-offset-1"
                     onClick={() => {
                       setComposeFormSelectInitialId(doc.documentId);
                       setComposeFormSelectModalOpen(true);
@@ -5183,7 +5385,7 @@ export function ApprovalsPage() {
                   </button>
                 );
               })}
-            </Space>
+            </div>
           </div>
         )}
       </Card>
@@ -5200,208 +5402,290 @@ export function ApprovalsPage() {
       myMemberPositionId: drafterProfile?.memberPositionId?.trim(),
     };
 
-    const composeHomePendingTable = (rows: ApprovalRequestDetail[]) => (
-      <table className="tw-w-full tw-table-fixed tw-border-collapse tw-text-center">
-        <colgroup>
-          <col className="tw-w-[100px]" />
-          <col />
-          <col className="tw-w-24" />
-          <col className="tw-w-[min(15rem,28vw)]" />
-          <col className="tw-w-[120px]" />
-          <col className="tw-w-[140px]" />
-        </colgroup>
-        <thead>
-          <tr className="tw-border-b tw-border-slate-200">
-            <th
-              scope="col"
-              className="tw-pb-2 tw-px-2 tw-text-xs tw-font-semibold tw-text-slate-500"
-            >
-              문서 상태
-            </th>
-            <th
-              scope="col"
-              className="tw-pb-2 tw-px-2 tw-text-xs tw-font-semibold tw-text-slate-500"
-            >
-              제목
-            </th>
-            <th
-              scope="col"
-              className="tw-pb-2 tw-px-2 tw-text-xs tw-font-semibold tw-text-slate-500"
-            >
-              요청자
-            </th>
-            <th
-              scope="col"
-              className="tw-pb-2 tw-px-2 tw-text-center tw-text-xs tw-font-semibold tw-text-slate-500"
-            >
-              결재선
-            </th>
-            <th
-              scope="col"
-              className="tw-pb-2 tw-px-2 tw-text-xs tw-font-semibold tw-text-slate-500"
-            >
-              기안일
-            </th>
-            <th
-              scope="col"
-              className="tw-pb-2 tw-px-2 tw-text-xs tw-font-semibold tw-text-slate-500"
-            >
-              결재 처리
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length === 0 ? (
-            <tr>
-              <td
-                colSpan={6}
-                className="tw-border tw-border-dashed tw-border-slate-200 tw-bg-slate-50/50 tw-p-6 tw-text-center"
-              >
-                <Typography.Text type="secondary">결재 대기·예정 문서가 없습니다.</Typography.Text>
-              </td>
-            </tr>
-          ) : (
-            rows.map((row) => {
-              const myLine = findMyInboxApprovalLine(row, composeInboxLineOpts);
-              const inboxSt = String(myLine?.approvalStatus ?? '').toUpperCase();
-              const isMyTurnPending =
-                inboxSt === 'PENDING' &&
-                myLine != null &&
-                !isInlineSyntheticApprovalId(myLine.approvalId);
-              const showUpcomingTag =
-                inboxSt === 'WAITING' || rowIsUpcomingForApprover(row, authMemberId);
-              const openPendingRowDetail = () => setSelectedRequestId(row.requestId);
+    const getComposeHomeRowKind = (row: ApprovalRequestDetail): 'pending' | 'waiting' | 'acted' => {
+      const myLine = findMyInboxApprovalLine(row, composeInboxLineOpts);
+      const inboxSt = String(myLine?.approvalStatus ?? '').toUpperCase();
+      if (inboxSt === 'APPROVED' || inboxSt === 'REJECTED') return 'acted';
+      return inboxSt === 'WAITING' || rowIsUpcomingForApprover(row, authMemberId)
+        ? 'waiting'
+        : 'pending';
+    };
+
+    const getComposeHomeStatus = (
+      row: ApprovalRequestDetail,
+    ): 'pending' | 'waiting' | 'approved' | 'rejected' | 'acted' => {
+      const myLine = findMyInboxApprovalLine(row, composeInboxLineOpts);
+      const inboxSt = String(myLine?.approvalStatus ?? '').toUpperCase();
+      if (inboxSt === 'APPROVED') return 'approved';
+      if (inboxSt === 'REJECTED') return 'rejected';
+      if (getComposeHomeRowKind(row) === 'waiting') return 'waiting';
+      if (getComposeHomeRowKind(row) === 'acted') return 'acted';
+      return 'pending';
+    };
+
+    const renderComposeHomeKindTag = (row: ApprovalRequestDetail) => {
+      const kind = getComposeHomeRowKind(row);
+      const tagClass =
+        '!tw-m-0 !tw-rounded !tw-px-1.5 !tw-py-0 !tw-text-xs !tw-font-medium !tw-leading-5';
+      if (kind === 'acted') {
+        return (
+          <Tag color="success" className={tagClass}>
+            결재 완료
+          </Tag>
+        );
+      }
+      if (kind === 'waiting') {
+        return (
+          <Tag color="processing" className={tagClass}>
+            결재 예정
+          </Tag>
+        );
+      }
+      return (
+        <Tag color="gold" className={tagClass}>
+          결재 대기
+        </Tag>
+      );
+    };
+
+    const renderComposeHomeStatusTag = (row: ApprovalRequestDetail) => {
+      const status = getComposeHomeStatus(row);
+      const tagClass =
+        '!tw-m-0 !tw-rounded !tw-px-1.5 !tw-py-0 !tw-text-xs !tw-font-medium !tw-leading-5';
+      if (status === 'approved') {
+        return (
+          <Tag color="success" className={tagClass}>
+            승인
+          </Tag>
+        );
+      }
+      if (status === 'rejected') {
+        return (
+          <Tag color="error" className={tagClass}>
+            반려
+          </Tag>
+        );
+      }
+      if (status === 'acted') {
+        return (
+          <Tag color="processing" className={tagClass}>
+            처리함
+          </Tag>
+        );
+      }
+      if (status === 'waiting') {
+        return (
+          <Tag color="processing" className={tagClass}>
+            대기 중
+          </Tag>
+        );
+      }
+      return (
+        <Tag color="gold" className={tagClass}>
+          결재 대기
+        </Tag>
+      );
+    };
+
+    const composeHomePendingColumns: ColumnsType<ApprovalRequestDetail> = [
+      {
+        title: '구분',
+        key: 'inboxKind',
+        width: 72,
+        align: 'center',
+        filters: [
+          { text: '결재 대기', value: 'pending' },
+          { text: '결재 예정', value: 'waiting' },
+          { text: '결재 완료', value: 'acted' },
+        ],
+        onFilter: (value, row) => getComposeHomeRowKind(row) === value,
+        render: (_: unknown, row) => renderComposeHomeKindTag(row),
+      },
+      {
+        title: '상태',
+        key: 'status',
+        width: 66,
+        align: 'center',
+        filters: [
+          { text: '결재 대기', value: 'pending' },
+          { text: '대기 중', value: 'waiting' },
+          { text: '승인', value: 'approved' },
+          { text: '반려', value: 'rejected' },
+          { text: '처리함', value: 'acted' },
+        ],
+        onFilter: (value, row) => getComposeHomeStatus(row) === value,
+        render: (_: unknown, row) => renderComposeHomeStatusTag(row),
+      },
+      {
+        title: '제목',
+        key: 'subject',
+        ellipsis: true,
+        render: (_: unknown, row) => (
+          <Typography.Text className="!tw-block tw-min-w-0 tw-truncate !tw-text-xs !tw-font-medium !tw-text-slate-800">
+            {getApprovalRequestSubjectLine(row) || row.documentName?.trim() || '—'}
+          </Typography.Text>
+        ),
+      },
+      {
+        title: '요청자',
+        key: 'requester',
+        width: 66,
+        ellipsis: true,
+        render: (_: unknown, row) => (
+          <Typography.Text
+            type="secondary"
+            className="!tw-block tw-truncate !tw-text-xs !tw-font-normal"
+          >
+            {row.requesterName || '요청자 미상'}
+          </Typography.Text>
+        ),
+      },
+      {
+        title: '결재선',
+        key: 'approvalLine',
+        width: 136,
+        render: (_: unknown, row) => (
+          <ApprovalLineMiniStrip lines={row.approvalLines} visibleSlots={0} variant="dashboard" />
+        ),
+      },
+      {
+        title: '기안일',
+        key: 'createdAt',
+        width: 96,
+        render: (_: unknown, row) => {
+          const compactDate = row.createdAt ? dayjs(row.createdAt).format('MM.DD HH:mm') : '—';
+          return (
+            <Tooltip title={formatDateTime(row.createdAt)}>
+              <span className="tw-block tw-whitespace-nowrap tw-text-xs tw-font-normal tw-leading-none tw-text-slate-500 [font-variant-numeric:tabular-nums]">
+                {compactDate}
+              </span>
+            </Tooltip>
+          );
+        },
+      },
+      {
+        title: '결재 처리',
+        key: 'action',
+        width: 86,
+        align: 'center',
+        render: (_: unknown, row) => {
+            const myLine = findMyInboxApprovalLine(row, composeInboxLineOpts);
+            const inboxSt = String(myLine?.approvalStatus ?? '').toUpperCase();
+            const isMyTurnPending =
+              inboxSt === 'PENDING' &&
+              myLine != null &&
+              !isInlineSyntheticApprovalId(myLine.approvalId);
+            if (!isMyTurnPending || !myLine) {
+              const rowKind = getComposeHomeRowKind(row);
+              const status = getComposeHomeStatus(row);
+              const label =
+                rowKind === 'acted'
+                  ? '처리 완료'
+                  : status === 'waiting'
+                    ? '대기 중'
+                    : '액션 없음';
               return (
-                <tr
-                  key={row.requestId}
-                  className="tw-cursor-pointer tw-border-b tw-border-slate-200 tw-bg-white tw-transition-colors hover:tw-bg-slate-50/90"
-                  role="button"
-                  tabIndex={0}
-                  onClick={openPendingRowDetail}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      openPendingRowDetail();
-                    }
+                <Typography.Text type="secondary" className="!tw-text-xs !tw-font-normal">
+                  {label}
+                </Typography.Text>
+              );
+            }
+            return (
+              <div
+                className="tw-flex tw-items-center tw-justify-center tw-gap-0.5"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Button
+                  type="primary"
+                  size="small"
+                  className="!tw-h-6 !tw-rounded-md !tw-px-1.5 !tw-text-xs"
+                  onClick={() => {
+                    setApprovalAction({ approvalId: myLine.approvalId, mode: 'approve' });
                   }}
                 >
-                  <td className="tw-px-2 tw-py-2.5 tw-align-middle">
-                    <div className="tw-flex tw-justify-center">
-                      {isMyTurnPending ? (
-                        <Tag color="gold" className="!tw-m-0">
-                          결재대기
-                        </Tag>
-                      ) : showUpcomingTag ? (
-                        <Tag color="processing" className="!tw-m-0">
-                          결재 예정
-                        </Tag>
-                      ) : (
-                        <Tag className="!tw-m-0">—</Tag>
-                      )}
-                    </div>
-                  </td>
-                  <td className="tw-min-w-0 tw-px-2 tw-py-2.5 tw-align-middle">
-                    <Typography.Text
-                      strong
-                      className="!tw-block tw-min-w-0 tw-truncate tw-text-center"
-                    >
-                      {getApprovalRequestSubjectLine(row) || row.documentName?.trim() || '—'}
-                    </Typography.Text>
-                  </td>
-                  <td className="tw-px-2 tw-py-2.5 tw-align-middle">
-                    <Typography.Text
-                      type="secondary"
-                      className="!tw-block tw-truncate tw-text-center tw-text-xs"
-                    >
-                      {row.requesterName || '요청자 미상'}
-                    </Typography.Text>
-                  </td>
-                  <td className="tw-min-w-0 tw-overflow-hidden tw-px-2 tw-py-2 tw-text-left tw-align-middle">
-                    <PendingHomeApprovalLineStrip lines={row.approvalLines} visibleSlots={2} />
-                  </td>
-                  <td className="tw-px-2 tw-py-2.5 tw-align-middle">
-                    <Typography.Text className="tw-text-center tw-text-xs tw-text-slate-500">
-                      {formatDateTime(row.createdAt)}
-                    </Typography.Text>
-                  </td>
-                  <td className="tw-px-2 tw-py-2.5 tw-align-middle">
-                    <div
-                      className="tw-flex tw-flex-wrap tw-items-center tw-justify-center tw-gap-2"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <Button
-                        type="primary"
-                        size="small"
-                        disabled={!isMyTurnPending || !myLine}
-                        onClick={() => {
-                          if (!isMyTurnPending || !myLine) return;
-                          setApprovalAction({ approvalId: myLine.approvalId, mode: 'approve' });
-                        }}
-                      >
-                        승인
-                      </Button>
-                      <Button
-                        danger
-                        size="small"
-                        disabled={!isMyTurnPending || !myLine}
-                        onClick={() => {
-                          if (!isMyTurnPending || !myLine) return;
-                          setApprovalAction({ approvalId: myLine.approvalId, mode: 'reject' });
-                        }}
-                      >
-                        반려
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })
-          )}
-        </tbody>
-      </table>
+                  승인
+                </Button>
+                <Button
+                  danger
+                  size="small"
+                  type="text"
+                  className="!tw-h-6 !tw-rounded-md !tw-px-1.5 !tw-text-xs"
+                  onClick={() => {
+                    setApprovalAction({ approvalId: myLine.approvalId, mode: 'reject' });
+                  }}
+                >
+                  반려
+                </Button>
+              </div>
+            );
+        },
+      },
+    ];
+
+    const composeHomePendingTable = (rows: ApprovalRequestDetail[]) => (
+      <Table<ApprovalRequestDetail>
+        size="small"
+        rowKey="requestId"
+        columns={composeHomePendingColumns}
+        dataSource={rows}
+        pagination={false}
+        locale={{ emptyText: '결재 처리 문서가 없습니다.' }}
+        tableLayout="fixed"
+        scroll={{ y: 158 }}
+        onRow={(record) => ({
+          onClick: () => setSelectedRequestId(record.requestId),
+          style: { cursor: 'pointer' },
+        })}
+        className="wf-approval-home-pending-table [&_.ant-table-thead>tr>th]:!tw-bg-slate-50/90 [&_.ant-table-thead>tr>th]:!tw-px-1.5 [&_.ant-table-thead>tr>th]:!tw-py-1.5 [&_.ant-table-thead>tr>th]:!tw-text-xs [&_.ant-table-tbody>tr>td]:!tw-align-middle [&_.ant-table-tbody>tr>td]:!tw-px-1.5 [&_.ant-table-tbody>tr>td]:!tw-py-1.5 [&_.ant-table-tbody>tr>td]:!tw-text-xs [&_.ant-table-tbody>tr>td]:!tw-font-normal"
+      />
     );
 
     return (
       <>
         <div className="tw-flex tw-min-w-0 tw-flex-col tw-gap-4">
-          <div className="tw-grid tw-grid-cols-1 tw-gap-4 xl:tw-grid-cols-3 xl:tw-items-stretch">
-            <div className="tw-w-full tw-min-w-0 xl:tw-col-span-2">
+          <div className="tw-grid tw-grid-cols-1 tw-gap-4 xl:tw-h-[17rem] xl:tw-grid-cols-3 xl:tw-items-stretch">
+            <div className="tw-h-full tw-w-full tw-min-w-0 xl:tw-col-span-2">
               <Card
-                className="tw-w-full tw-rounded-2xl tw-border tw-border-slate-200/90 tw-shadow-sm tw-shadow-slate-900/5"
+                className="tw-h-full tw-w-full tw-rounded-2xl tw-border tw-border-slate-200/90 tw-shadow-sm tw-shadow-slate-900/5"
                 styles={{
-                  body: { display: 'flex', flexDirection: 'column' },
+                  body: {
+                    display: 'flex',
+                    flexDirection: 'column',
+                    height: '100%',
+                    minHeight: 0,
+                  },
                 }}
               >
                 <div className="tw-mb-2 tw-flex tw-items-center tw-justify-between">
-                  <Typography.Text strong>결재 대기·예정 문서</Typography.Text>
+                  <Typography.Text strong>결재 처리함</Typography.Text>
                   <Button
                     type="link"
                     size="small"
                     onClick={() =>
                       setComposeHomeMoreModal({
                         kind: 'pending-inbox',
-                        title: '결재 대기·예정 문서 전체',
+                        title: '결재 처리함 전체',
                       })
                     }
                   >
                     전체
                   </Button>
                 </div>
-                <div className="tw-max-h-[min(18rem,42vh)] tw-overflow-y-auto wf-scrollbar tw-pr-1 [scrollbar-gutter:stable]">
-                  <Spin spinning={pendingLoading || waitingLoading}>
+                <div className="tw-min-h-0 tw-flex-1 tw-overflow-y-auto wf-scrollbar tw-pr-0">
+                  <Spin spinning={pendingLoading || waitingLoading || actedLoading}>
                     {composeHomePendingTable(composeHubInboxPreviewRows.slice(0, 20))}
                   </Spin>
                 </div>
               </Card>
             </div>
-            <div className="tw-flex tw-min-h-0 tw-w-full tw-min-w-0 xl:tw-col-span-1">
+            <div className="tw-flex tw-h-full tw-min-h-0 tw-w-full tw-min-w-0 xl:tw-col-span-1">
               {renderHomeApprovalFormsCard()}
             </div>
           </div>
 
           <div className="tw-grid tw-grid-cols-1 tw-gap-4 md:tw-grid-cols-2 xl:tw-grid-cols-3">
             {renderHomeDocListCard(
-              '내 기안 문서함',
+              '결재 상신함',
               myRequestsAllForSummary,
               '기안 문서가 없습니다.',
               {
@@ -5588,24 +5872,28 @@ export function ApprovalsPage() {
             body: APPROVAL_FOLLOWUP_MODAL_BODY_STYLE,
           }}
         >
-          {composeHomeMoreModal?.kind === 'pending-inbox' ? (
-            <PendingApprovalInboxModalContent
-              myMemberId={authMemberId}
-              myMemberPositionId={drafterProfile?.memberPositionId?.trim()}
-              onOpenDetail={(requestId) => setSelectedRequestId(requestId)}
-              onStartApprove={(approvalId) => setApprovalAction({ approvalId, mode: 'approve' })}
-              onStartReject={(approvalId) => setApprovalAction({ approvalId, mode: 'reject' })}
-            />
-          ) : composeHomeMoreModal?.kind === 'iframe' ? (
-            <iframe
-              key={`${composeHomeMoreModal.panel}-${composeHomeMoreModal.composeDraftId ?? ''}`}
-              title="전자결재 문서함"
-              src={composeHomeEmbedPanelUrl(composeHomeMoreModal.panel, {
-                composeDraftId: composeHomeMoreModal.composeDraftId,
-              })}
-              className="tw-h-full tw-min-h-0 tw-w-full tw-border-0"
-            />
-          ) : null}
+          <div className={APPROVAL_DASHBOARD_MODAL_FRAME_CLASS}>
+            {composeHomeMoreModal?.kind === 'pending-inbox' ? (
+              <PendingApprovalInboxModalContent
+                myMemberId={authMemberId}
+                myMemberPositionId={drafterProfile?.memberPositionId?.trim()}
+                onOpenDetail={(requestId) => setSelectedRequestId(requestId)}
+                onStartApprove={(approvalId) =>
+                  setApprovalAction({ approvalId, mode: 'approve' })
+                }
+                onStartReject={(approvalId) => setApprovalAction({ approvalId, mode: 'reject' })}
+              />
+            ) : composeHomeMoreModal?.kind === 'iframe' ? (
+              <iframe
+                key={`${composeHomeMoreModal.panel}-${composeHomeMoreModal.composeDraftId ?? ''}`}
+                title="전자결재 문서함"
+                src={composeHomeEmbedPanelUrl(composeHomeMoreModal.panel, {
+                  composeDraftId: composeHomeMoreModal.composeDraftId,
+                })}
+                className={APPROVAL_DASHBOARD_MODAL_IFRAME_CLASS}
+              />
+            ) : null}
+          </div>
         </AppModal>
 
         <ApprovalFormSelectModal
@@ -5740,15 +6028,21 @@ export function ApprovalsPage() {
       className={clsx(
         'tw-w-full',
         isEmbedComposeModal
-          ? 'tw-flex tw-h-full tw-min-h-0 tw-flex-col tw-gap-4 tw-overflow-y-auto'
-          : 'tw-flex tw-min-h-0 tw-flex-col tw-gap-4',
+          ? 'tw-flex tw-h-full tw-min-h-0 tw-flex-col tw-gap-4 tw-overflow-hidden'
+          : 'wf-approvals-page-shell tw-flex tw-min-h-full tw-flex-col tw-gap-4',
       )}
     >
       {/* 허브 대시보드 밖(예: sideNav=workbench)에서도 동일 모달이 필요 - 챗봇 prefill 등 */}
       {/* 허브 안(onComposeHub=true)에선 위쪽 그리드의 동일 모달이 뜨므로 중복 렌더 방지 위해 가드 */}
       {!isEmbedComposeModal && !onComposeHub ? (
         <AppModal
-          title={composeHomeMoreModal?.kind === 'pending-inbox' ? composeHomeMoreModal.title : null}
+          title={
+            composeHomeMoreModal == null
+              ? undefined
+              : composeHomeMoreModal.kind === 'pending-inbox'
+                ? composeHomeMoreModal.title
+                : composeHomeEmbedPanelModalTitle(composeHomeMoreModal)
+          }
           open={composeHomeMoreModal != null}
           onCancel={() => setComposeHomeMoreModal(null)}
           footer={null}
@@ -5760,25 +6054,29 @@ export function ApprovalsPage() {
             body: APPROVAL_FOLLOWUP_MODAL_BODY_STYLE,
           }}
         >
-          {composeHomeMoreModal?.kind === 'pending-inbox' ? (
-            <PendingApprovalInboxModalContent
-              myMemberId={authMemberId}
-              myMemberPositionId={drafterProfile?.memberPositionId?.trim()}
-              onOpenDetail={(requestId) => setSelectedRequestId(requestId)}
-              onStartApprove={(approvalId) => setApprovalAction({ approvalId, mode: 'approve' })}
-              onStartReject={(approvalId) => setApprovalAction({ approvalId, mode: 'reject' })}
-            />
-          ) : composeHomeMoreModal?.kind === 'iframe' ? (
-            <iframe
-              key={`${composeHomeMoreModal.panel}-${composeHomeMoreModal.composeDraftId ?? ''}-${composeHomeMoreModal.prefillDocumentId ?? ''}`}
-              title="전자결재 문서함"
-              src={composeHomeEmbedPanelUrl(composeHomeMoreModal.panel, {
-                composeDraftId: composeHomeMoreModal.composeDraftId,
-                prefillDocumentId: composeHomeMoreModal.prefillDocumentId,
-              })}
-              className="tw-h-full tw-min-h-0 tw-w-full tw-border-0"
-            />
-          ) : null}
+          <div className={APPROVAL_DASHBOARD_MODAL_FRAME_CLASS}>
+            {composeHomeMoreModal?.kind === 'pending-inbox' ? (
+              <PendingApprovalInboxModalContent
+                myMemberId={authMemberId}
+                myMemberPositionId={drafterProfile?.memberPositionId?.trim()}
+                onOpenDetail={(requestId) => setSelectedRequestId(requestId)}
+                onStartApprove={(approvalId) =>
+                  setApprovalAction({ approvalId, mode: 'approve' })
+                }
+                onStartReject={(approvalId) => setApprovalAction({ approvalId, mode: 'reject' })}
+              />
+            ) : composeHomeMoreModal?.kind === 'iframe' ? (
+              <iframe
+                key={`${composeHomeMoreModal.panel}-${composeHomeMoreModal.composeDraftId ?? ''}-${composeHomeMoreModal.prefillDocumentId ?? ''}`}
+                title="전자결재 문서함"
+                src={composeHomeEmbedPanelUrl(composeHomeMoreModal.panel, {
+                  composeDraftId: composeHomeMoreModal.composeDraftId,
+                  prefillDocumentId: composeHomeMoreModal.prefillDocumentId,
+                })}
+                className={APPROVAL_DASHBOARD_MODAL_IFRAME_CLASS}
+              />
+            ) : null}
+          </div>
         </AppModal>
       ) : null}
 
@@ -5807,7 +6105,7 @@ export function ApprovalsPage() {
             ) : null}
             <AppWorkspacePageTitle
               className="!tw-mb-0"
-              eyebrow="Approvals"
+              eyebrow={isComposeHubEntry ? 'Documents' : 'Approvals'}
               title={pageTitle}
               subtitle={pageDescription}
             />
@@ -5839,8 +6137,20 @@ export function ApprovalsPage() {
           className={clsx(
             'tw-border-slate-200/80 tw-shadow-sm',
             showComposeWorkbench && '!tw-rounded-lg tw-border-slate-300 !tw-p-0 tw-shadow-md',
+            isEmbedComposeModal && 'tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-hidden',
           )}
-          styles={{ body: { padding: showComposeWorkbench ? 0 : undefined } }}
+          styles={{
+            body: isEmbedComposeModal
+              ? {
+                  flex: 1,
+                  minHeight: 0,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  padding: showComposeWorkbench ? 0 : undefined,
+                  overflow: 'hidden',
+                }
+              : { padding: showComposeWorkbench ? 0 : undefined },
+          }}
         >
           {isEmbedComposeModal && !selectedDocument ? (
             <div className="tw-flex tw-min-h-[260px] tw-items-center tw-justify-center tw-bg-white">
@@ -5850,6 +6160,9 @@ export function ApprovalsPage() {
             <Form
               form={form}
               layout="vertical"
+              className={clsx(
+                isEmbedComposeModal && 'tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-hidden',
+              )}
               initialValues={{ content: {} }}
               onValuesChange={(changed) => {
                 if (composeDraftHydratingRef.current) return;
@@ -6023,7 +6336,7 @@ export function ApprovalsPage() {
                   <div
                     className={clsx(
                       'tw-min-w-0 tw-flex-1 tw-bg-white tw-p-2 sm:tw-p-3',
-                      isEmbedComposeModal && 'tw-flex tw-min-h-0 tw-flex-col',
+                      isEmbedComposeModal && 'tw-flex tw-min-h-0 tw-self-stretch tw-flex-col',
                     )}
                   >
                     {renderComposeToolbar()}
@@ -6854,7 +7167,7 @@ export function ApprovalsPage() {
                   <aside
                     className={clsx(
                       composeApprovalInfoAsideClass,
-                      'tw-max-h-[50vh] tw-shrink-0 tw-overflow-hidden tw-border-t tw-border-[#e5e7eb] tw-bg-white tw-p-0 lg:tw-max-h-none lg:tw-self-stretch lg:tw-border-l lg:tw-border-t-0',
+                      'tw-flex tw-min-h-0 tw-max-h-[50vh] tw-shrink-0 tw-flex-col tw-overflow-hidden tw-border-t tw-border-slate-200 tw-bg-white tw-p-0 lg:tw-max-h-none lg:tw-self-stretch lg:tw-border-l lg:tw-border-t-0',
                     )}
                   >
                     {renderComposeDocumentSidebar({ variant: 'flush' })}
@@ -6882,7 +7195,7 @@ export function ApprovalsPage() {
             <Card
               size="small"
               className={clsx(
-                'tw-rounded-lg tw-border-slate-200/80 tw-shadow-sm',
+                isEmbedComposeModal ? 'wf-approval-embed-card' : 'tw-rounded-lg tw-border-slate-200/80 tw-shadow-sm',
                 isEmbedComposeModal &&
                   'tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-hidden',
               )}
@@ -6906,7 +7219,7 @@ export function ApprovalsPage() {
                     {guideBox === 'per-all' ? (
                       <Tabs
                         size="small"
-                        className="[&_.ant-tabs-content]:tw-hidden [&_.ant-tabs-nav]:tw-mb-0"
+                        className={APPROVAL_NAV_FILTER_TABS_CLASS}
                         activeKey={requestStatusFilter}
                         onChange={(k) => {
                           const next = k as 'ALL' | ApprovalRequestStatus;
@@ -6927,7 +7240,7 @@ export function ApprovalsPage() {
                     {guideBox === 'per-official' ? (
                       <Tabs
                         size="small"
-                        className="[&_.ant-tabs-content]:tw-hidden [&_.ant-tabs-nav]:tw-mb-0"
+                        className={APPROVAL_NAV_FILTER_TABS_CLASS}
                         activeKey={requestStatusFilter}
                         onChange={(k) => {
                           const next = k as 'ALL' | ApprovalRequestStatus;
@@ -6946,10 +7259,11 @@ export function ApprovalsPage() {
                       />
                     ) : null}
                   </div>
-                  <div className="tw-min-h-0 tw-flex-1 tw-overflow-auto">
+                  <div className="wf-approval-modal-table-fill">
                     {guideBox === 'per-viewers' ? (
                       <Tabs
                         size="small"
+                        className={APPROVAL_CONTENT_TABS_CLASS}
                         activeKey={viewerInboxTabKey}
                         onChange={navigateViewerInboxTab}
                         items={[
@@ -6964,6 +7278,7 @@ export function ApprovalsPage() {
                                 columns={viewerCcOnlyColumns}
                                 dataSource={viewerCcRequests}
                                 pagination={{ pageSize: 10 }}
+                                className="wf-approval-modal-table"
                                 onRow={(record) => ({
                                   onClick: () => setSelectedRequestId(record.requestId),
                                   style: { cursor: 'pointer' },
@@ -6982,6 +7297,7 @@ export function ApprovalsPage() {
                                 columns={viewerCcOnlyColumns}
                                 dataSource={viewerCirculationRequests}
                                 pagination={{ pageSize: 10 }}
+                                className="wf-approval-modal-table"
                                 onRow={(record) => ({
                                   onClick: () => setSelectedRequestId(record.requestId),
                                   style: { cursor: 'pointer' },
@@ -7005,13 +7321,9 @@ export function ApprovalsPage() {
                         }
                         dataSource={myInboxRows}
                         pagination={{ pageSize: 10 }}
-                        scroll={
-                          guideBox === 'per-official'
-                            ? { x: 'max-content' }
-                            : isEmbedComposeModal
-                              ? { x: 940 }
-                              : undefined
-                        }
+                        className="wf-approval-modal-table"
+                        tableLayout={guideBox === 'per-official' ? undefined : 'fixed'}
+                        scroll={guideBox === 'per-official' ? { x: 'max-content' } : undefined}
                         onRow={(record) => ({
                           onClick: () => setSelectedRequestId(record.requestId),
                           style: { cursor: 'pointer' },
@@ -7025,7 +7337,7 @@ export function ApprovalsPage() {
                   {guideBox === 'per-all' ? (
                     <Tabs
                       size="small"
-                      className="tw-mb-3 [&_.ant-tabs-content]:tw-hidden [&_.ant-tabs-nav]:tw-mb-0"
+                      className={clsx('tw-mb-3', APPROVAL_NAV_FILTER_TABS_CLASS)}
                       activeKey={requestStatusFilter}
                       onChange={(k) => {
                         const next = k as 'ALL' | ApprovalRequestStatus;
@@ -7046,7 +7358,7 @@ export function ApprovalsPage() {
                   {guideBox === 'per-official' ? (
                     <Tabs
                       size="small"
-                      className="tw-mb-3 [&_.ant-tabs-content]:tw-hidden [&_.ant-tabs-nav]:tw-mb-0"
+                      className={clsx('tw-mb-3', APPROVAL_NAV_FILTER_TABS_CLASS)}
                       activeKey={requestStatusFilter}
                       onChange={(k) => {
                         const next = k as 'ALL' | ApprovalRequestStatus;
@@ -7066,6 +7378,7 @@ export function ApprovalsPage() {
                   ) : null}
                   {guideBox === 'per-viewers' ? (
                     <Tabs
+                      className={APPROVAL_CONTENT_TABS_CLASS}
                       activeKey={viewerInboxTabKey}
                       onChange={navigateViewerInboxTab}
                       items={[
@@ -7118,6 +7431,7 @@ export function ApprovalsPage() {
                       }
                       dataSource={myInboxRows}
                       pagination={{ pageSize: 10 }}
+                      tableLayout={guideBox === 'per-official' ? undefined : 'fixed'}
                       scroll={guideBox === 'per-official' ? { x: 'max-content' } : undefined}
                       onRow={(record) => ({
                         onClick: () => setSelectedRequestId(record.requestId),
@@ -7133,7 +7447,7 @@ export function ApprovalsPage() {
             <Card
               size="small"
               className={clsx(
-                'tw-rounded-lg tw-border-slate-200/80 tw-shadow-sm',
+                isEmbedComposeModal ? 'wf-approval-embed-card' : 'tw-rounded-lg tw-border-slate-200/80 tw-shadow-sm',
                 isEmbedComposeModal &&
                   'tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-hidden',
               )}
@@ -7160,6 +7474,7 @@ export function ApprovalsPage() {
                     columns={pendingColumns}
                     dataSource={pendingInboxRows}
                     pagination={{ pageSize: 10 }}
+                    className={isEmbedComposeModal ? 'wf-approval-modal-table' : undefined}
                     onRow={(record) => ({
                       onClick: () => setSelectedRequestId(record.requestId),
                       style: { cursor: 'pointer' },
@@ -7167,7 +7482,7 @@ export function ApprovalsPage() {
                   />
                 );
                 return isEmbedComposeModal ? (
-                  <div className="tw-min-h-0 tw-flex-1 tw-overflow-auto">{pendingTable}</div>
+                  <div className="wf-approval-modal-table-fill">{pendingTable}</div>
                 ) : (
                   pendingTable
                 );
@@ -7178,7 +7493,7 @@ export function ApprovalsPage() {
             <Card
               size="small"
               className={clsx(
-                'tw-rounded-lg tw-border-slate-200/80 tw-shadow-sm',
+                isEmbedComposeModal ? 'wf-approval-embed-card' : 'tw-rounded-lg tw-border-slate-200/80 tw-shadow-sm',
                 isEmbedComposeModal &&
                   'tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-hidden',
               )}
@@ -7235,6 +7550,7 @@ export function ApprovalsPage() {
                     ]}
                     dataSource={actedRequests}
                     pagination={{ pageSize: 10 }}
+                    className={isEmbedComposeModal ? 'wf-approval-modal-table' : undefined}
                     onRow={(record) => ({
                       onClick: () => setSelectedRequestId(record.requestId),
                       style: { cursor: 'pointer' },
@@ -7242,7 +7558,7 @@ export function ApprovalsPage() {
                   />
                 );
                 return isEmbedComposeModal ? (
-                  <div className="tw-min-h-0 tw-flex-1 tw-overflow-auto">{actedTable}</div>
+                  <div className="wf-approval-modal-table-fill">{actedTable}</div>
                 ) : (
                   actedTable
                 );
@@ -7294,6 +7610,18 @@ export function ApprovalsPage() {
         cancelText="취소"
         destroyOnHidden={false}
         width={1000}
+        zIndex={2600}
+        getContainer={
+          isEmbedComposeModal
+            ? () => {
+                try {
+                  return window.parent?.document?.body ?? document.body;
+                } catch {
+                  return document.body;
+                }
+              }
+            : undefined
+        }
       >
         <div className="tw-px-5 tw-py-2">
           {selectedDocument ? renderComposeApprovalInfoContent({ stacked: false }) : null}
@@ -7302,6 +7630,18 @@ export function ApprovalsPage() {
 
       <ApprovalRequestReadOnlyModal
         requestId={selectedRequestId}
+        zIndex={2700}
+        getContainer={
+          isEmbedComposeModal
+            ? () => {
+                try {
+                  return window.parent?.document?.body ?? document.body;
+                } catch {
+                  return document.body;
+                }
+              }
+            : undefined
+        }
         onClose={() => {
           setSelectedRequestId(null);
           if (String(routeSearch.approvalRequestId ?? '').trim()) {

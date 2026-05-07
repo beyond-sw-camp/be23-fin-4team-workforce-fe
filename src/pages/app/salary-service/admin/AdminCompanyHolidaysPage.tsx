@@ -9,7 +9,6 @@ import {
   Card,
   DatePicker,
   Form,
-  InputNumber,
   Input,
   Popconfirm,
   Select,
@@ -25,6 +24,7 @@ import clsx from 'clsx';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
+import { AppUnitInputNumber } from '@/shared/ui/AppUnitInputNumber';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import type { CompanyHoliday } from '@/features/salary-service/types';
 
@@ -317,13 +317,13 @@ export function AdminCompanyHolidaysPage({ embedded = false }: { embedded?: bool
               <Typography.Text className="tw-text-xs tw-font-medium tw-text-slate-600">
                 법정 공휴일 대상 연도
               </Typography.Text>
-              <InputNumber
+              <AppUnitInputNumber
                 value={refreshYear}
                 min={2020}
                 max={dayjs().year() + 1}
                 onChange={(v) => setRefreshYear(typeof v === 'number' ? v : dayjs().year())}
                 style={{ width: 120 }}
-                addonAfter="년"
+                unit="년"
               />
             </Space>
             <Popconfirm

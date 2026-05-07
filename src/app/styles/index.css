@@ -135,6 +135,12 @@ h4.ant-typography {
   min-height: 3rem;
 }
 
+.wf-approvals-page-shell::after {
+  content: '';
+  display: block;
+  flex: 0 0 6rem;
+}
+
 .ant-btn-primary:not(.ant-btn-dangerous) {
   border-color: #1e3a5f !important;
   background: #1e3a5f !important;
@@ -145,6 +151,24 @@ h4.ant-typography {
 .ant-btn-primary:not(.ant-btn-dangerous):focus {
   border-color: #152a45 !important;
   background: #152a45 !important;
+}
+
+.ant-btn-primary:not(.ant-btn-dangerous):disabled,
+.ant-btn-primary:not(.ant-btn-dangerous).ant-btn-disabled,
+.ant-btn-primary:not(.ant-btn-dangerous):disabled:hover,
+.ant-btn-primary:not(.ant-btn-dangerous).ant-btn-disabled:hover,
+.ant-btn-primary:not(.ant-btn-dangerous):disabled:focus,
+.ant-btn-primary:not(.ant-btn-dangerous).ant-btn-disabled:focus {
+  border-color: #1e3a5f !important;
+  background: #1e3a5f !important;
+  color: rgba(255, 255, 255, 0.72) !important;
+  opacity: 0.58 !important;
+  box-shadow: none !important;
+}
+
+.ant-btn-primary:not(.ant-btn-dangerous):disabled > *,
+.ant-btn-primary:not(.ant-btn-dangerous).ant-btn-disabled > * {
+  color: inherit !important;
 }
 
 .ant-btn {
@@ -472,6 +496,391 @@ h4.ant-typography {
 }
 
 /**
+ * 전자결재 대시보드 모달 내부 화면 — iframe/직접 렌더링 여부와 상관없이
+ * 같은 여백, 같은 탭 색상, 같은 테이블 밀도로 보이도록 고정한다.
+ */
+.wf-approval-embed-root {
+  box-sizing: border-box;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  background: #f8fafc;
+  padding: 1rem;
+}
+
+.wf-approval-embed-card {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 0%;
+  flex-direction: column;
+  overflow: hidden;
+  border-color: rgba(226, 232, 240, 0.9) !important;
+  border-radius: 0.75rem !important;
+  background: #fff !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06) !important;
+}
+
+.wf-approval-embed-card > .ant-card-body {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 0%;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 1rem !important;
+}
+
+.wf-approval-modal-tabs .ant-tabs-nav {
+  margin-bottom: 0.75rem !important;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.wf-approval-modal-tabs .ant-tabs-nav-list {
+  gap: 1.25rem !important;
+}
+
+.wf-approval-modal-tabs .ant-tabs-tab {
+  min-height: 2.125rem !important;
+  padding: 0.5rem 0 !important;
+  font-size: var(--wf-text-sm) !important;
+  font-weight: 700 !important;
+}
+
+.wf-approval-modal-tabs .ant-tabs-tab-active .ant-tabs-tab-btn,
+.wf-approval-modal-tabs .ant-tabs-tab:hover .ant-tabs-tab-btn {
+  color: #1e3a5f !important;
+}
+
+.wf-approval-modal-tabs .ant-tabs-ink-bar {
+  background: #1e3a5f !important;
+}
+
+.wf-compose-approval-sidebar-tabs,
+.wf-compose-approval-sidebar-tabs > .ant-tabs-content-holder,
+.wf-compose-approval-sidebar-tabs > .ant-tabs-content-holder > .ant-tabs-content,
+.wf-compose-approval-sidebar-tabs
+  > .ant-tabs-content-holder
+  > .ant-tabs-content
+  > .ant-tabs-tabpane {
+  min-height: 0;
+  flex: 1 1 0%;
+}
+
+.wf-compose-approval-sidebar-tabs {
+  height: 100%;
+  overflow: hidden;
+}
+
+.wf-compose-approval-sidebar-tabs > .ant-tabs-nav {
+  flex: 0 0 auto;
+  margin-bottom: 0.75rem !important;
+}
+
+.wf-compose-approval-sidebar-tabs > .ant-tabs-content-holder {
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.28) transparent;
+}
+
+.wf-compose-approval-sidebar-tabs > .ant-tabs-content-holder > .ant-tabs-content {
+  height: auto !important;
+  min-height: min-content;
+}
+
+.wf-compose-approval-sidebar-tabs
+  > .ant-tabs-content-holder
+  > .ant-tabs-content
+  > .ant-tabs-tabpane {
+  height: auto;
+  overflow: visible;
+}
+
+.wf-compose-approval-sidebar-tabs > .ant-tabs-content-holder::-webkit-scrollbar {
+  width: 5px;
+}
+
+.wf-compose-approval-sidebar-tabs > .ant-tabs-content-holder::-webkit-scrollbar-corner,
+.wf-compose-approval-sidebar-tabs > .ant-tabs-content-holder::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.wf-compose-approval-sidebar-tabs > .ant-tabs-content-holder::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 9999px;
+  background-clip: padding-box;
+  background-color: rgba(148, 163, 184, 0.28);
+}
+
+.wf-compose-approval-sidebar-tabs > .ant-tabs-content-holder::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(100, 116, 139, 0.5);
+}
+
+.wf-compose-approval-line-panel {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 0.625rem;
+  padding-right: 0.125rem;
+}
+
+.wf-compose-approval-line-card,
+.wf-compose-approval-line-empty {
+  width: 100%;
+  border: 0 !important;
+  border-radius: 0.875rem;
+  outline: 0;
+  text-align: left;
+  transition:
+    background-color 0.16s ease,
+    box-shadow 0.16s ease,
+    transform 0.16s ease;
+}
+
+.wf-compose-approval-line-card {
+  overflow: hidden;
+  background: #ffffff;
+  box-shadow:
+    inset 0 0 0 1px rgba(226, 232, 240, 0.95),
+    0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.wf-compose-approval-line-card:hover {
+  background: #f8fafc;
+  box-shadow:
+    inset 0 0 0 1px rgba(203, 213, 225, 0.95),
+    0 4px 14px rgba(15, 23, 42, 0.06);
+}
+
+.wf-compose-approval-line-card:focus-visible,
+.wf-compose-approval-line-empty:focus-visible {
+  box-shadow:
+    inset 0 0 0 1px rgba(37, 99, 235, 0.42),
+    0 0 0 3px rgba(37, 99, 235, 0.16);
+}
+
+.wf-compose-approval-line-card-drafter {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.wf-compose-approval-line-avatar {
+  height: 2.25rem !important;
+  width: 2.25rem !important;
+  flex-shrink: 0;
+  background: #f1f5f9 !important;
+  color: #1e3a5f !important;
+  font-size: var(--wf-text-sm) !important;
+  font-weight: 800 !important;
+}
+
+.wf-compose-approval-line-avatar-primary {
+  background: #e8f3ff !important;
+  color: #2563eb !important;
+}
+
+.wf-compose-approval-line-role {
+  background: #f8fafc;
+  padding: 0.375rem 0.75rem;
+  color: #1e3a5f;
+  font-size: var(--wf-text-xs);
+  font-weight: 800;
+  line-height: 1rem;
+  text-align: center;
+}
+
+.wf-compose-approval-line-empty {
+  background: #f8fafc;
+  box-shadow: inset 0 0 0 1px rgba(203, 213, 225, 0.82);
+  padding: 0.875rem 1rem;
+  color: #64748b;
+  font-size: var(--wf-text-sm);
+  font-weight: 600;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.wf-compose-approval-line-empty:hover {
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(147, 197, 253, 0.9);
+}
+
+.wf-compose-approval-line-viewers {
+  padding-top: 0.25rem;
+}
+
+.wf-approval-modal-tablist {
+  display: flex;
+  flex-shrink: 0;
+  gap: 1.25rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.wf-approval-modal-tab {
+  margin-bottom: -1px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  padding: 0.5rem 0;
+  color: #64748b;
+  font-size: var(--wf-text-sm);
+  font-weight: 700;
+  line-height: 1.25rem;
+  outline: none;
+  transition:
+    color 0.16s ease,
+    border-color 0.16s ease;
+}
+
+.wf-approval-modal-tab:hover {
+  color: #1e3a5f;
+}
+
+.wf-approval-modal-tab:focus-visible {
+  border-radius: 0.375rem;
+  outline: 2px solid rgba(37, 99, 235, 0.28);
+  outline-offset: 2px;
+}
+
+.wf-approval-modal-tab[data-active='true'] {
+  border-bottom-color: #1e3a5f;
+  color: #1e3a5f;
+}
+
+.wf-approval-modal-table-fill {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 0%;
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.wf-approval-modal-table-fill > .ant-spin-nested-loading,
+.wf-approval-modal-table-fill > .ant-table-wrapper,
+.wf-approval-modal-table-fill .ant-spin-container {
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.wf-approval-modal-table-fill > .ant-tabs {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 0%;
+  flex-direction: column;
+}
+
+.wf-approval-modal-table-fill > .ant-tabs > .ant-tabs-content-holder,
+.wf-approval-modal-table-fill > .ant-tabs > .ant-tabs-content-holder > .ant-tabs-content,
+.wf-approval-modal-table-fill
+  > .ant-tabs
+  > .ant-tabs-content-holder
+  > .ant-tabs-content
+  > .ant-tabs-tabpane-active {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 0%;
+  flex-direction: column;
+}
+
+.wf-approval-modal-table-fill
+  > .ant-tabs
+  > .ant-tabs-content-holder
+  > .ant-tabs-content
+  > .ant-tabs-tabpane-active
+  > .ant-table-wrapper {
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.wf-approval-modal-table.ant-table-wrapper,
+.wf-approval-modal-table .ant-table-wrapper {
+  border-radius: 0.625rem;
+}
+
+.wf-approval-modal-table .ant-table-thead > tr > th,
+.wf-approval-modal-table.ant-table-wrapper .ant-table-thead > tr > th {
+  background: #f8fafc !important;
+  color: #475569 !important;
+  font-size: var(--wf-text-xs) !important;
+  font-weight: 700 !important;
+}
+
+.wf-approval-modal-table .ant-table-content,
+.wf-approval-modal-table.ant-table-wrapper .ant-table-content {
+  overflow-x: hidden !important;
+}
+
+.wf-approval-modal-line-strip {
+  display: flex;
+  max-width: 100%;
+  min-width: 0;
+  gap: 0.375rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 0.125rem;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(100, 116, 139, 0.36) transparent;
+}
+
+.wf-approval-modal-line-strip::-webkit-scrollbar {
+  height: 4px;
+}
+
+.wf-approval-modal-line-strip::-webkit-scrollbar-corner,
+.wf-approval-modal-line-strip::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.wf-approval-modal-line-strip::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background-color: rgba(100, 116, 139, 0.32);
+}
+
+.wf-approval-dashboard-line-summary {
+  display: inline-flex;
+  max-width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 0.25rem;
+  color: #475569;
+  font-size: var(--wf-text-xs);
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.wf-approval-modal-line-chip {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.25rem;
+  max-width: 9rem;
+  border-radius: 9999px;
+  background: #f8fafc;
+  padding: 0.1875rem 0.5rem;
+  color: #475569;
+  font-size: var(--wf-text-xs);
+  line-height: 1.25;
+  box-shadow: inset 0 0 0 1px rgba(226, 232, 240, 0.95);
+  white-space: nowrap;
+}
+
+.wf-approval-modal-table .ant-table-placeholder .ant-table-cell,
+.wf-approval-modal-table.ant-table-wrapper .ant-table-placeholder .ant-table-cell {
+  height: 10rem;
+}
+
+.wf-approval-modal-table .ant-pagination,
+.wf-approval-modal-table.ant-table-wrapper .ant-pagination {
+  margin: 0.75rem 0 0 !important;
+}
+
+/**
  * Segmented / radio options — 탭과 같은 네이비 선택 톤으로 맞춘다.
  */
 .ant-segmented {
@@ -580,6 +989,36 @@ h4.ant-typography {
   background-color: rgba(100, 116, 139, 0.75);
 }
 
+.wf-approval-home-pending-table .ant-table-body {
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(100, 116, 139, 0.46) transparent;
+}
+
+.wf-approval-home-pending-table .ant-table-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.wf-approval-home-pending-table .ant-table-body::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.wf-approval-home-pending-table .ant-table-body::-webkit-scrollbar-track {
+  margin: 6px 0;
+  background: transparent;
+}
+
+.wf-approval-home-pending-table .ant-table-body::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 9999px;
+  background-clip: padding-box;
+  background-color: rgba(100, 116, 139, 0.38);
+}
+
+.wf-approval-home-pending-table .ant-table-body::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(71, 85, 105, 0.58);
+}
+
 /**
  * 모달 본문 — 트랙은 투명, 썸만 얇게(기본은 약하게, 호버 시만 또렷)
  */
@@ -615,6 +1054,218 @@ h4.ant-typography {
 /* 결재양식 선택 모달은 내부 영역만 스크롤; wrap 스크롤 차단 */
 .wf-approval-form-select-modal-wrap {
   overflow: hidden !important;
+}
+
+.wf-ai-recording-modal {
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  border-radius: 1rem;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18);
+}
+
+.wf-ai-recording-modal .ant-modal-header {
+  margin-bottom: 0;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 0.95rem 1.25rem;
+}
+
+.wf-ai-recording-modal .ant-modal-close {
+  top: 0.8rem;
+}
+
+.wf-ai-recording-modal-body {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  padding: 1.25rem !important;
+}
+
+.wf-ai-recording-title {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.wf-ai-recording-title-icon,
+.wf-ai-recording-card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: #2563eb;
+  background: #eff6ff;
+}
+
+.wf-ai-recording-title-icon {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.75rem;
+}
+
+.wf-ai-recording-title-main,
+.wf-ai-recording-title-sub {
+  display: block;
+}
+
+.wf-ai-recording-title-main {
+  color: #0f2542;
+  font-size: var(--wf-text-base);
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.wf-ai-recording-title-sub {
+  margin-top: 0.15rem;
+  color: #64748b;
+  font-size: var(--wf-text-xs);
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.wf-ai-recording-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  border-radius: 0.875rem;
+  background: #f8fafc;
+  padding: 0.75rem;
+}
+
+.wf-ai-recording-search {
+  width: min(100%, 24rem);
+}
+
+.wf-ai-recording-primary-button.ant-btn-primary {
+  background: #1e3a5f;
+  box-shadow: none;
+}
+
+.wf-ai-recording-primary-button.ant-btn-primary:hover,
+.wf-ai-recording-primary-button.ant-btn-primary:focus-visible {
+  background: #17365d !important;
+}
+
+.wf-ai-recording-loading,
+.wf-ai-recording-empty {
+  display: flex;
+  min-height: 18rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 1rem;
+  background: #fff;
+}
+
+.wf-ai-recording-empty {
+  border: 1px dashed #dbe4ef;
+}
+
+.wf-ai-recording-card-grid,
+.wf-ai-recording-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.wf-ai-recording-item-card,
+.wf-ai-recording-panel {
+  border-color: #e2e8f0 !important;
+  border-radius: 0.875rem;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
+}
+
+.wf-ai-recording-item-card .ant-card-body {
+  padding: 1rem;
+}
+
+.wf-ai-recording-item-card:hover {
+  border-color: #bfdbfe !important;
+  box-shadow: 0 10px 22px rgba(37, 99, 235, 0.08);
+}
+
+.wf-ai-recording-card-title-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.wf-ai-recording-card-icon {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 0.625rem;
+}
+
+.wf-ai-recording-meta {
+  color: #64748b !important;
+  font-size: var(--wf-text-xs) !important;
+  font-weight: 600;
+}
+
+.wf-ai-recording-pagination,
+.wf-ai-recording-detail-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.wf-ai-recording-create {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20rem;
+  gap: 1rem;
+}
+
+.wf-ai-recording-create-panel .ant-card-body,
+.wf-ai-recording-guide-panel .ant-card-body {
+  padding: 1rem;
+}
+
+.wf-ai-recording-controls,
+.wf-ai-recording-create-footer {
+  row-gap: 0.5rem;
+}
+
+.wf-ai-recording-timer {
+  border-radius: 9999px;
+  font-weight: 700;
+}
+
+.wf-ai-recording-live-textarea {
+  border-radius: 0.875rem;
+  background: #f8fafc;
+}
+
+.wf-ai-recording-guide-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.wf-ai-recording-guide-list > div {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  color: #475569;
+  font-size: var(--wf-text-sm);
+  font-weight: 600;
+  line-height: 1.55;
+}
+
+.wf-ai-recording-guide-list .anticon {
+  margin-top: 0.15rem;
+  color: #2563eb;
+}
+
+@media (max-width: 1024px) {
+  .wf-ai-recording-create,
+  .wf-ai-recording-card-grid,
+  .wf-ai-recording-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .wf-ai-recording-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .wf-ai-recording-search {
+    width: 100%;
+  }
 }
 
 /* Member chat font size options (floating modal settings). */

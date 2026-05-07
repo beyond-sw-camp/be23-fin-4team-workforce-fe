@@ -2,6 +2,7 @@ import { FolderOpenOutlined, ReloadOutlined } from '@ant-design/icons';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { Alert, Button, Empty, Select, Space, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import clsx from 'clsx';
 import dayjs from 'dayjs';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -14,7 +15,6 @@ import {
 } from '@/features/approvals/api/approvalSearchApi';
 import { ApprovalLineMiniStrip } from '@/features/approvals/ui/ApprovalLineMiniStrip';
 import { getApprovalSubjectFromContentJson } from '@/features/approvals/lib/approvalFormSchema';
-import { approvalRequestTypeLabelKo } from '@/features/approvals/lib/approvalRequestTypeKo';
 import {
   APPROVAL_STATUS_COLOR,
   APPROVAL_STATUS_LABEL,
@@ -298,9 +298,10 @@ export function ApprovalSearchPanel({
 
   const page = queryResult.data;
   const rows = page?.content ?? [];
+  const isEmbedModal = filters.embed === 'compose-modal';
 
   return (
-    <Space direction="vertical" size={12} className="tw-w-full">
+    <div className={clsx(isEmbedModal ? 'tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-gap-3' : 'tw-w-full tw-space-y-3')}>
       <Space wrap>
         <AppSearchBar
           value={queryInput}
@@ -357,39 +358,41 @@ export function ApprovalSearchPanel({
         <Alert type="error" showIcon message={errorMessage(queryResult.error)} />
       ) : null}
 
-      <Table
-        rowKey="requestId"
-        loading={queryResult.isFetching}
-        columns={columns}
-        dataSource={rows}
-        tableLayout="fixed"
-        className="tw-w-full [&_.ant-table]:tw-max-w-full"
-        locale={{ emptyText: <Empty description="검색 결과가 없습니다" /> }}
-        onRow={(record) => ({
-          onClick: () => onRowClick?.(record.requestId),
-          className: onRowClick ? 'tw-cursor-pointer' : '',
-        })}
-        pagination={{
-          current: (page?.number ?? filters.page) + 1,
-          pageSize: page?.size ?? filters.size,
-          total: page?.totalElements ?? 0,
-          showSizeChanger: true,
-          pageSizeOptions: [10, 20, 50],
-          showTotal: (total, range) => `총 ${total}건 (${range[0]}-${range[1]})`,
-          onChange: (nextPage, nextSize) => {
-            const sizeChanged = (page?.size ?? filters.size) !== nextSize;
-            onFiltersChange({
-              ...filters,
-              page: sizeChanged ? 0 : nextPage - 1,
-              size: nextSize,
-            });
-          },
-        }}
-      />
+      <div className={clsx(isEmbedModal && 'wf-approval-modal-table-fill')}>
+        <Table
+          rowKey="requestId"
+          loading={queryResult.isFetching}
+          columns={columns}
+          dataSource={rows}
+          tableLayout="fixed"
+          className={clsx('tw-w-full [&_.ant-table]:tw-max-w-full', isEmbedModal && 'wf-approval-modal-table')}
+          locale={{ emptyText: <Empty description="검색 결과가 없습니다" /> }}
+          onRow={(record) => ({
+            onClick: () => onRowClick?.(record.requestId),
+            className: onRowClick ? 'tw-cursor-pointer' : '',
+          })}
+          pagination={{
+            current: (page?.number ?? filters.page) + 1,
+            pageSize: page?.size ?? filters.size,
+            total: page?.totalElements ?? 0,
+            showSizeChanger: true,
+            pageSizeOptions: [10, 20, 50],
+            showTotal: (total, range) => `총 ${total}건 (${range[0]}-${range[1]})`,
+            onChange: (nextPage, nextSize) => {
+              const sizeChanged = (page?.size ?? filters.size) !== nextSize;
+              onFiltersChange({
+                ...filters,
+                page: sizeChanged ? 0 : nextPage - 1,
+                size: nextSize,
+              });
+            },
+          }}
+        />
+      </div>
 
-      <Typography.Text type="secondary" className="tw-text-xs">
+      <Typography.Text type="secondary" className="tw-shrink-0 tw-text-xs">
         결재 생성/수정 직후 최대 5초까지 검색 반영이 지연될 수 있습니다.
       </Typography.Text>
-    </Space>
+    </div>
   );
 }

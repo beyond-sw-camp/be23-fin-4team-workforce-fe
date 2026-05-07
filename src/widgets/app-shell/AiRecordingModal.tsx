@@ -443,8 +443,12 @@ export function AiRecordingModal({ open, onClose }: AiRecordingModalProps) {
   const ss = String(elapsedSec % 60).padStart(2, '0');
 
   const createBody = (
-    <div className="tw-grid tw-grid-cols-1 tw-gap-4 lg:tw-grid-cols-2">
-      <Card title="새 녹음" size="small" className="tw-border-slate-200">
+    <div className="wf-ai-recording-create">
+      <Card
+        title="새 녹음"
+        size="small"
+        className="wf-ai-recording-panel wf-ai-recording-create-panel"
+      >
         <Space direction="vertical" className="tw-w-full" size="middle">
           <Input
             value={title}
@@ -462,9 +466,14 @@ export function AiRecordingModal({ open, onClose }: AiRecordingModalProps) {
               { value: 'zh', label: '中文' },
             ]}
           />
-          <Space wrap>
+          <Space wrap className="wf-ai-recording-controls">
             {!isRecording ? (
-              <Button type="primary" icon={<PlayCircleOutlined />} onClick={() => void startRecording()}>
+              <Button
+                type="primary"
+                icon={<PlayCircleOutlined />}
+                onClick={() => void startRecording()}
+                className="wf-ai-recording-primary-button"
+              >
                 녹음 시작
               </Button>
             ) : (
@@ -472,7 +481,7 @@ export function AiRecordingModal({ open, onClose }: AiRecordingModalProps) {
                 녹음 종료
               </Button>
             )}
-            <Tag color={isRecording ? 'red' : 'default'}>
+            <Tag color={isRecording ? 'red' : 'default'} className="wf-ai-recording-timer">
               {isRecording ? `녹음 중 ${mm}:${ss}` : `대기 ${mm}:${ss}`}
             </Tag>
             <Button onClick={resetCreateForm} disabled={isRecording || createM.isPending}>
@@ -501,6 +510,7 @@ export function AiRecordingModal({ open, onClose }: AiRecordingModalProps) {
               readOnly
               value={livePreviewText}
               placeholder="말하면 여기에서 실시간으로 받아쓰기됩니다."
+              className="wf-ai-recording-live-textarea"
             />
           ) : null}
           {audioBlob ? (
@@ -513,7 +523,7 @@ export function AiRecordingModal({ open, onClose }: AiRecordingModalProps) {
           ) : null}
           {audioUrl ? <audio src={audioUrl} controls className="tw-w-full" /> : null}
           {savingStage ? <Spin tip={savingStage} /> : null}
-          <Space>
+          <Space className="wf-ai-recording-create-footer">
             <Button onClick={() => setTab('list')} disabled={createM.isPending}>
               목록으로
             </Button>
@@ -523,58 +533,75 @@ export function AiRecordingModal({ open, onClose }: AiRecordingModalProps) {
           </Space>
         </Space>
       </Card>
-      <Card title="안내" size="small" className="tw-border-slate-200">
-        <Typography.Paragraph className="!tw-mb-2">
-          1. 녹음 종료 후 저장을 누르면 AI가 원문/회의록을 생성합니다.
-        </Typography.Paragraph>
-        <Typography.Paragraph className="!tw-mb-2">
-          2. 처리 시간은 녹음 길이에 따라 5초~30초 이상 걸릴 수 있습니다.
-        </Typography.Paragraph>
-        <Typography.Paragraph className="!tw-mb-0">
-          3. 파일은 25MB 이하만 업로드됩니다.
-        </Typography.Paragraph>
+      <Card title="안내" size="small" className="wf-ai-recording-panel wf-ai-recording-guide-panel">
+        <div className="wf-ai-recording-guide-list">
+          <div>
+            <AudioOutlined />
+            <span>녹음 종료 후 AI가 원문과 회의록을 생성합니다.</span>
+          </div>
+          <div>
+            <PauseCircleOutlined />
+            <span>처리 시간은 녹음 길이에 따라 달라질 수 있습니다.</span>
+          </div>
+          <div>
+            <SaveOutlined />
+            <span>파일은 25MB 이하만 업로드됩니다.</span>
+          </div>
+        </div>
       </Card>
     </div>
   );
 
   const listBody = (
-    <Space direction="vertical" className="tw-w-full" size="middle">
-      <div className="tw-flex tw-items-center tw-gap-2">
+    <Space direction="vertical" className="tw-w-full wf-ai-recording-list" size="middle">
+      <div className="wf-ai-recording-toolbar">
         <AppSearchBar
           value={keywordInput}
           onValueChange={setKeywordInput}
           onSearch={setKeywordInput}
           placeholder="제목 검색"
           ariaLabel="AI 회의록 검색"
-          className="tw-w-full tw-max-w-md"
+          className="wf-ai-recording-search"
         />
-        <Button type="primary" icon={<AudioOutlined />} onClick={() => setTab('create')}>
+        <Button
+          type="primary"
+          icon={<AudioOutlined />}
+          onClick={() => setTab('create')}
+          className="wf-ai-recording-primary-button"
+        >
           새 녹음
         </Button>
       </div>
       {listQ.isLoading ? (
-        <div className="tw-flex tw-justify-center tw-py-14">
+        <div className="wf-ai-recording-loading">
           <Spin />
         </div>
       ) : listRows.length === 0 ? (
-        <Empty description="녹음 데이터가 없습니다." />
+        <div className="wf-ai-recording-empty">
+          <Empty description="녹음 데이터가 없습니다." />
+        </div>
       ) : (
-        <div className="tw-grid tw-grid-cols-1 tw-gap-3 lg:tw-grid-cols-2">
+        <div className="wf-ai-recording-card-grid">
           {listRows.map((row) => (
             <Card
               key={row.recordingId}
               hoverable
-              className="tw-border-slate-200"
+              className="wf-ai-recording-item-card"
               onClick={() => {
                 setSelectedId(row.recordingId);
                 setTab('detail');
               }}
             >
               <Space direction="vertical" className="tw-w-full" size={4}>
-                <Typography.Text strong className="tw-truncate" title={row.title || row.audioFileName}>
-                  {row.title || row.audioFileName}
-                </Typography.Text>
-                <Typography.Text type="secondary" className="tw-text-xs">
+                <div className="wf-ai-recording-card-title-row">
+                  <span className="wf-ai-recording-card-icon">
+                    <AudioOutlined />
+                  </span>
+                  <Typography.Text strong className="tw-truncate" title={row.title || row.audioFileName}>
+                    {row.title || row.audioFileName}
+                  </Typography.Text>
+                </div>
+                <Typography.Text type="secondary" className="wf-ai-recording-meta">
                   {dayjs(row.createdAt).format('YYYY-MM-DD HH:mm')} · {languageLabel(row.language)} ·{' '}
                   {formatApprovalAttachmentBytes(row.audioSize)}
                 </Typography.Text>
@@ -586,7 +613,7 @@ export function AiRecordingModal({ open, onClose }: AiRecordingModalProps) {
           ))}
         </div>
       )}
-      <div className="tw-flex tw-justify-end">
+      <div className="wf-ai-recording-pagination">
         <Pagination
           current={page}
           pageSize={pageSize}
@@ -599,8 +626,8 @@ export function AiRecordingModal({ open, onClose }: AiRecordingModalProps) {
   );
 
   const detailBody = (
-    <Space direction="vertical" className="tw-w-full" size="middle">
-      <div className="tw-flex tw-items-center tw-justify-between">
+    <Space direction="vertical" className="tw-w-full wf-ai-recording-detail" size="middle">
+      <div className="wf-ai-recording-detail-actions">
         <Space>
           <Button onClick={() => setTab('list')}>목록으로</Button>
           <Button onClick={() => setEditing((v) => !v)} icon={<EditOutlined />} disabled={detailQ.isLoading}>
@@ -619,12 +646,12 @@ export function AiRecordingModal({ open, onClose }: AiRecordingModalProps) {
         </Popconfirm>
       </div>
       {detailQ.isLoading || !currentDetail ? (
-        <div className="tw-flex tw-justify-center tw-py-16">
+        <div className="wf-ai-recording-loading">
           <Spin />
         </div>
       ) : (
-        <div className="tw-grid tw-grid-cols-1 tw-gap-4">
-          <Card size="small" title="기본 정보" className="tw-border-slate-200">
+        <div className="wf-ai-recording-detail-grid">
+          <Card size="small" title="기본 정보" className="wf-ai-recording-panel">
             <Space direction="vertical" className="tw-w-full" size="small">
               {editing ? (
                 <Input value={editTitle} maxLength={200} onChange={(e) => setEditTitle(e.target.value)} />
@@ -633,14 +660,14 @@ export function AiRecordingModal({ open, onClose }: AiRecordingModalProps) {
                   {currentDetail.title}
                 </Typography.Title>
               )}
-              <Typography.Text type="secondary" className="tw-text-xs">
+              <Typography.Text type="secondary" className="wf-ai-recording-meta">
                 {dayjs(currentDetail.createdAt).format('YYYY-MM-DD HH:mm')} · {currentDetail.audioFileName} ·{' '}
                 {formatApprovalAttachmentBytes(currentDetail.audioSize)}
               </Typography.Text>
               <audio src={currentDetail.audioUrl} controls className="tw-w-full" />
             </Space>
           </Card>
-          <Card size="small" title="받아쓰기 원문" className="tw-border-slate-200">
+          <Card size="small" title="받아쓰기 원문" className="wf-ai-recording-panel">
             {editing ? (
               <Input.TextArea rows={8} value={editTranscript} onChange={(e) => setEditTranscript(e.target.value)} />
             ) : (
@@ -649,7 +676,7 @@ export function AiRecordingModal({ open, onClose }: AiRecordingModalProps) {
               </Typography.Paragraph>
             )}
           </Card>
-          <Card size="small" title="AI 회의록" className="tw-border-slate-200">
+          <Card size="small" title="AI 회의록" className="wf-ai-recording-panel">
             {editing ? (
               <Input.TextArea rows={10} value={editSummary} onChange={(e) => setEditSummary(e.target.value)} />
             ) : (
@@ -671,9 +698,18 @@ export function AiRecordingModal({ open, onClose }: AiRecordingModalProps) {
   );
 
   const titleNode = useMemo(() => {
-    if (tab === 'create') return 'AI 녹음 - 새 녹음';
-    if (tab === 'detail') return 'AI 녹음 - 상세';
-    return 'AI 녹음 목록';
+    const label = tab === 'create' ? '새 녹음' : tab === 'detail' ? '상세' : '목록';
+    return (
+      <div className="wf-ai-recording-title">
+        <span className="wf-ai-recording-title-icon">
+          <AudioOutlined />
+        </span>
+        <span>
+          <span className="wf-ai-recording-title-main">AI 녹음 {label}</span>
+          <span className="wf-ai-recording-title-sub">녹음 원문과 AI 회의록을 관리합니다.</span>
+        </span>
+      </div>
+    );
   }, [tab]);
 
   return (
@@ -685,6 +721,10 @@ export function AiRecordingModal({ open, onClose }: AiRecordingModalProps) {
       centered
       width={1100}
       destroyOnHidden={false}
+      classNames={{
+        content: 'wf-ai-recording-modal',
+        body: 'wf-ai-recording-modal-body',
+      }}
       styles={{ body: { maxHeight: '76vh', overflowY: 'auto' } }}
     >
       {tab === 'list' ? listBody : tab === 'create' ? createBody : detailBody}

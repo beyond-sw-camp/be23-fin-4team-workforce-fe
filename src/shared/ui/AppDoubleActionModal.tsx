@@ -1,4 +1,4 @@
-import { Button } from 'antd';
+import { Button, type ModalProps } from 'antd';
 import type { ReactNode } from 'react';
 import clsx from 'clsx';
 import { AppModal } from '@/shared/ui/AppModal';
@@ -24,6 +24,8 @@ type AppDoubleActionModalProps = {
   hideConfirm?: boolean;
   destroyOnHidden?: boolean;
   forceRender?: boolean;
+  getContainer?: ModalProps['getContainer'];
+  centered?: ModalProps['centered'];
   zIndex?: number;
 };
 
@@ -51,6 +53,8 @@ export function AppDoubleActionModal({
   hideConfirm = false,
   destroyOnHidden = true,
   forceRender,
+  getContainer,
+  centered,
   zIndex,
 }: AppDoubleActionModalProps) {
   const visibleButtonCount = Number(!hideCancel) + Number(!hideConfirm);
@@ -60,6 +64,8 @@ export function AppDoubleActionModal({
       open={open}
       title={title}
       onCancel={onClose}
+      centered={centered}
+      getContainer={getContainer}
       zIndex={zIndex}
       footer={
         <div className={clsx('tw-grid tw-w-full tw-gap-2', visibleButtonCount === 1 ? 'tw-grid-cols-1' : 'tw-grid-cols-2')}>

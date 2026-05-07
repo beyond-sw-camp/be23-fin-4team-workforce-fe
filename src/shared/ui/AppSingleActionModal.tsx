@@ -1,4 +1,4 @@
-import { Button } from 'antd';
+import { Button, type ModalProps } from 'antd';
 import type { ReactNode } from 'react';
 import clsx from 'clsx';
 import { AppModal } from '@/shared/ui/AppModal';
@@ -15,6 +15,8 @@ type AppSingleActionModalProps = {
   submitDisabled?: boolean;
   submitButtonClassName?: string;
   destroyOnHidden?: boolean;
+  getContainer?: ModalProps['getContainer'];
+  centered?: ModalProps['centered'];
   zIndex?: number;
   /** 있으면 기본 단일 제출 버튼 대신 사용(닫기·승인 등은 이 안에서 구성) */
   customFooter?: ReactNode;
@@ -37,6 +39,8 @@ export function AppSingleActionModal({
   submitDisabled = false,
   submitButtonClassName,
   destroyOnHidden = true,
+  getContainer,
+  centered,
   zIndex,
   customFooter,
 }: AppSingleActionModalProps) {
@@ -62,6 +66,8 @@ export function AppSingleActionModal({
       open={open}
       title={title}
       onCancel={onClose}
+      centered={centered}
+      getContainer={getContainer}
       zIndex={zIndex}
       footer={customFooter !== undefined ? customFooter : defaultFooter}
       width={width}
