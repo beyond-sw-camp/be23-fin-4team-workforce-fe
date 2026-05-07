@@ -36,4 +36,4 @@ jobs:
         run: aws s3 cp ./dist s3://www.workforcehr.shop/ --recursive
 
       - name: invalidate cloudfront
-        run: aws cloudfront create-invalidation --distribution-id E13GTD49C4HDT0 --paths "/*"
+        run: aws cloudfront create-invalidation --distribution-id E1BIET0ZMCE9IC --paths "/*"
