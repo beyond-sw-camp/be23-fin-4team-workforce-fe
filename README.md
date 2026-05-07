@@ -1,7 +1,7 @@
 <div align="center">
 <img width="845" alt="WORKFORCE" src="https://github.com/user-attachments/assets/a8d3b7b8-4880-491f-9073-0dad92340ea5" />
 
-**중소·중견기업을 위한 AI 챗봇 기반 맞춤형 인사관리 플랫폼**
+**효율적인 인사 온보딩을 위한 중소기업 맞춤형 AI 기반 HR 관리 시스템**
   
 </div>
 
@@ -14,7 +14,7 @@
 
 | ![김정훈](url1) | ![박세민](url2) | ![이다은](url3) | ![이지연](url4) |
 |----------------|-----------------|-----------------|-----------------|
-| [김정훈](github1) | [박세민](github1) | [@leeda973](https://github.com/leeda973) | [이지연](github1) |
+| [김정훈](https://github.com/jeonghuny) | [박세민](https://github.com/semin980520) | [이다은](https://github.com/leeda973) | [이지연](https://github.com/jiyean99) |
 
 </div>
 
