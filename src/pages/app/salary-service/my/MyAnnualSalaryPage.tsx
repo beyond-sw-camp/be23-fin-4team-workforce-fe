@@ -60,8 +60,8 @@ const PAYROLL_TYPE_COLOR: Record<string, string> = {
 };
 
 const STATUS_KO: Record<string, string> = {
-  DRAFT: '작성 중',
-  CONFIRMED: '확정',
+  DRAFT: '검토 전',
+  CONFIRMED: '지급 대기',
   PAID: '지급 완료',
 };
 

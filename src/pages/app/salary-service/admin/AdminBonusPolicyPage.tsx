@@ -22,6 +22,7 @@ import {
   Tag,
   Typography,
 } from 'antd';
+import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs, { type Dayjs } from 'dayjs';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
@@ -54,6 +55,8 @@ type FormValues = {
   usePerformanceBonusYn: boolean;
   performanceBonusMaxRate?: number;
   performanceBonusBasis?: string;
+  // 평가 등급별 비율 매핑 - 발행 시 prefill 용
+  gradeRows?: Array<{ grade: string; rate: number | null }>;
 
   // 명절상여
   useHolidayBonusYn: boolean;
@@ -91,6 +94,18 @@ export function AdminBonusPolicyPage() {
     queryFn: () => salaryApi.bonusPolicy.getActive(),
   });
 
+  // gradeRows -> JSON 직렬화. 빈 라벨/null 비율 행은 제외, 등급 라벨 trim + 중복 검증은 onFinish에서
+  const serializeGradeRows = (rows?: FormValues['gradeRows']): string | null => {
+    if (!rows || rows.length === 0) return null;
+    const obj: Record<string, number> = {};
+    for (const r of rows) {
+      const g = (r.grade ?? '').trim();
+      if (!g || r.rate == null) continue;
+      obj[g] = Number(r.rate);
+    }
+    return Object.keys(obj).length === 0 ? null : JSON.stringify(obj);
+  };
+
   const toPayload = (v: FormValues): BonusPolicyCreatePayload => ({
     useRegularBonusYn: v.useRegularBonusYn ? 'Y' : 'N',
     regularBonusAnnualRate: v.useRegularBonusYn ? (v.regularBonusAnnualRate ?? null) : null,
@@ -98,6 +113,7 @@ export function AdminBonusPolicyPage() {
     usePerformanceBonusYn: v.usePerformanceBonusYn ? 'Y' : 'N',
     performanceBonusMaxRate: v.usePerformanceBonusYn ? (v.performanceBonusMaxRate ?? null) : null,
     performanceBonusBasis: v.usePerformanceBonusYn ? (v.performanceBonusBasis?.trim() || null) : null,
+    gradeBonusRatesJson: v.usePerformanceBonusYn ? serializeGradeRows(v.gradeRows) : null,
     useHolidayBonusYn: v.useHolidayBonusYn ? 'Y' : 'N',
     holidayBonusType: v.useHolidayBonusYn ? (v.holidayBonusType ?? null) : null,
     holidayBonusValue: v.useHolidayBonusYn ? (v.holidayBonusValue ?? null) : null,
@@ -106,6 +122,25 @@ export function AdminBonusPolicyPage() {
     effectiveTo: v.effectiveRange[1]?.format('YYYY-MM-DD') ?? null,
     memo: v.memo?.trim() || null,
   });
+
+  // gradeBonusRatesJson -> rows 역직렬화. 파싱 실패 시 디폴트 5행
+  const parseGradeRows = (json?: string | null): FormValues['gradeRows'] => {
+    const fallback = [
+      { grade: 'S', rate: null as number | null },
+      { grade: 'A', rate: null as number | null },
+      { grade: 'B', rate: null as number | null },
+      { grade: 'C', rate: null as number | null },
+      { grade: 'D', rate: null as number | null },
+    ];
+    if (!json) return fallback;
+    try {
+      const obj = JSON.parse(json) as Record<string, number>;
+      const rows = Object.entries(obj).map(([grade, rate]) => ({ grade, rate: Number(rate) }));
+      return rows.length > 0 ? rows : fallback;
+    } catch {
+      return fallback;
+    }
+  };
 
   const createM = useMutation({
     mutationFn: (v: FormValues) => salaryApi.bonusPolicy.create(toPayload(v)),
@@ -226,6 +261,7 @@ export function AdminBonusPolicyPage() {
                   usePerformanceBonusYn: r.usePerformanceBonusYn === 'Y',
                   performanceBonusMaxRate: r.performanceBonusMaxRate ?? undefined,
                   performanceBonusBasis: r.performanceBonusBasis ?? undefined,
+                  gradeRows: parseGradeRows(r.gradeBonusRatesJson),
                   useHolidayBonusYn: r.useHolidayBonusYn === 'Y',
                   holidayBonusType: (r.holidayBonusType as HolidayBonusTypeCode) ?? undefined,
                   holidayBonusValue: r.holidayBonusValue ?? undefined,
@@ -323,6 +359,7 @@ export function AdminBonusPolicyPage() {
                 holidayBonusType: 'RATE',
                 eligibilityScope: 'ALL',
                 effectiveRange: [dayjs(), null],
+                gradeRows: parseGradeRows(null),
               });
               setOpen(true);
             }}
@@ -362,11 +399,24 @@ export function AdminBonusPolicyPage() {
           form={form}
           layout="vertical"
           requiredMark={false}
-          onFinish={(v) =>
-            editing?.bonusPolicyId
-              ? updateM.mutate({ id: editing.bonusPolicyId, v })
-              : createM.mutate(v)
-          }
+          onFinish={(v) => {
+            // 등급 라벨 중복 검증 (성과급 사용 시만)
+            if (v.usePerformanceBonusYn) {
+              const labels = (v.gradeRows ?? [])
+                .map((r) => (r.grade ?? '').trim())
+                .filter((g) => g.length > 0);
+              const dup = labels.find((g, i) => labels.indexOf(g) !== i);
+              if (dup) {
+                message.error(`등급 라벨 "${dup}"이 중복되었습니다.`);
+                return;
+              }
+            }
+            if (editing?.bonusPolicyId) {
+              updateM.mutate({ id: editing.bonusPolicyId, v });
+            } else {
+              createM.mutate(v);
+            }
+          }}
         >
           {/* 종류별 탭 분리 - 라벨에 활성 점 + 자동/수동 뱃지 */}
           <Tabs
@@ -390,7 +440,7 @@ export function AdminBonusPolicyPage() {
                   <div className="tw-flex tw-flex-col tw-gap-3">
                     <div className="tw-flex tw-items-center tw-justify-between tw-rounded tw-bg-blue-50/40 tw-border tw-border-blue-100 tw-px-3 tw-py-2">
                       <Typography.Text type="secondary" className="!tw-text-xs">
-                        매월 09:00 자동 지급 잡이 정책 기반으로 Payroll(REGULAR_BONUS) 행 생성
+                        정책에 맞춰 매월 자동 지급되어 명세서가 생성됩니다
                       </Typography.Text>
                       <Form.Item name="useRegularBonusYn" valuePropName="checked" className="!tw-mb-0">
                         <Switch checkedChildren="사용" unCheckedChildren="끔" size="small" />
@@ -480,7 +530,7 @@ export function AdminBonusPolicyPage() {
                         placeholder="예: 200"
                       />
                     </Form.Item>
-                    <Form.Item label="산정 기준 (메모)" name="performanceBonusBasis" className="!tw-mb-0">
+                    <Form.Item label="산정 기준 (메모)" name="performanceBonusBasis" className="!tw-mb-2">
                       <Input.TextArea
                         disabled={!usePerf}
                         rows={2}
@@ -489,6 +539,72 @@ export function AdminBonusPolicyPage() {
                         placeholder="예: 등급별 차등, EBIT 5% 풀 등"
                       />
                     </Form.Item>
+
+                    <Divider className="!tw-my-2" />
+                    <Typography.Text strong className="!tw-text-sm">
+                      평가 등급별 지급 비율
+                    </Typography.Text>
+                    <Typography.Paragraph type="secondary" className="!tw-mb-2 !tw-mt-1 !tw-text-xs tw-leading-snug">
+                      평가 결과 불러오기 시 등급에 매핑된 비율이 자동 적용됩니다. 회차별로 다르게 주려면 발행 시점에 행별 수정 가능.
+                    </Typography.Paragraph>
+                    <Form.List name="gradeRows">
+                      {(fields, { add, remove }) => (
+                        <div className="tw-flex tw-flex-col tw-gap-2">
+                          {fields.map((field) => (
+                            <div key={field.key} className="tw-flex tw-items-center tw-gap-2">
+                              <Form.Item
+                                {...field}
+                                name={[field.name, 'grade']}
+                                className="!tw-mb-0 tw-flex-1"
+                                rules={
+                                  usePerf ? [{ required: true, message: '등급 라벨' }] : []
+                                }
+                              >
+                                <Input
+                                  disabled={!usePerf}
+                                  placeholder="등급 (예: S)"
+                                  size="small"
+                                  maxLength={20}
+                                />
+                              </Form.Item>
+                              <Form.Item
+                                {...field}
+                                name={[field.name, 'rate']}
+                                className="!tw-mb-0"
+                              >
+                                <InputNumber
+                                  disabled={!usePerf}
+                                  min={0}
+                                  max={1000}
+                                  step={5}
+                                  size="small"
+                                  placeholder="비율"
+                                  addonAfter="%"
+                                  style={{ width: 140 }}
+                                />
+                              </Form.Item>
+                              <Button
+                                type="text"
+                                danger
+                                size="small"
+                                disabled={!usePerf}
+                                icon={<DeleteOutlined />}
+                                onClick={() => remove(field.name)}
+                              />
+                            </div>
+                          ))}
+                          <Button
+                            type="dashed"
+                            size="small"
+                            disabled={!usePerf}
+                            icon={<PlusOutlined />}
+                            onClick={() => add({ grade: '', rate: null })}
+                          >
+                            등급 추가
+                          </Button>
+                        </div>
+                      )}
+                    </Form.List>
                   </div>
                 ),
               },

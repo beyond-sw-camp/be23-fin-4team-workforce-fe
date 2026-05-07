@@ -1419,6 +1419,8 @@ export type BonusPolicy = {
   usePerformanceBonusYn?: string | null;
   performanceBonusMaxRate?: number | null;
   performanceBonusBasis?: string | null;
+  // 평가 등급 -> 성과급 비율 매핑 JSON {"S":15,"A":10,"B":5,"C":0,"D":0}
+  gradeBonusRatesJson?: string | null;
 
   // 명절상여
   useHolidayBonusYn?: string | null;
@@ -1444,6 +1446,7 @@ export type BonusPolicyCreatePayload = {
   usePerformanceBonusYn?: string | null;
   performanceBonusMaxRate?: number | null;
   performanceBonusBasis?: string | null;
+  gradeBonusRatesJson?: string | null;
   useHolidayBonusYn?: string | null;
   holidayBonusType?: HolidayBonusTypeCode | null;
   holidayBonusValue?: number | null;

@@ -8,7 +8,7 @@
  *
  * 정책 메뉴는 별도 (/app/salary/bonus-policy) - 여기선 발행만.
  */
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -20,6 +20,7 @@ import {
   Form,
   Input,
   InputNumber,
+  Modal,
   Popconfirm,
   Select,
   Space,
@@ -31,6 +32,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
+import { evaluationRedesignApi } from '@/features/evaluation/api/evaluationRedesignApi';
 
 type BonusKind = 'REGULAR' | 'PERFORMANCE' | 'HOLIDAY';
 
@@ -102,21 +104,34 @@ export function AdminBonusBatchTab() {
   });
 
   const applyM = useMutation({
-    mutationFn: (v: FormValues) =>
-      salaryApi.bonusBatch.apply({
+    mutationFn: (v: FormValues) => {
+      // HOLIDAY는 정책값 그대로 -> 일괄, REGULAR/PERFORMANCE는 행별 비율로 차등 발행
+      const items = v.bonusKind !== 'HOLIDAY' && preview
+        ? preview.targets
+            .filter((t) => !t.skipReason)
+            .map((t) => ({
+              memberId: t.memberId,
+              ratePercent: editedRates[t.memberId] ?? 0,
+            }))
+            .filter((it) => it.ratePercent > 0)
+        : null;
+      return salaryApi.bonusBatch.apply({
         bonusKind: v.bonusKind,
         payDate: v.payDate.format('YYYY-MM-DD'),
         ratePercent: v.ratePercent ?? null,
         memo: v.memo?.trim() || null,
-      }),
+        items,
+      });
+    },
     onSuccess: (res, vars) => {
+      const month = vars.payDate.format('YYYY-MM');
+      // 발행한 명세서가 속한 정산월의 [정산 처리] 탭으로 이동 - 셀렉터 자동 세팅
+      // 미래월/이번달 동일 - [정산 처리]는 월 셀렉터 기반이라 어떤 달이든 처리 가능
       message.success(
-        `${res.created}건 발행 완료${res.failed > 0 ? ` (실패 ${res.failed}건)` : ''} - 이번달 정산 탭으로 이동합니다.`,
+        `${res.created}건 발행 완료${res.failed > 0 ? ` (실패 ${res.failed}건)` : ''}`,
       );
       setPreview(null);
       void qc.invalidateQueries({ queryKey: ['salary', 'payroll'] });
-      // 발행한 보너스 명세서가 속한 월의 [이번달 정산] 탭으로 자동 이동 (월 picker 자동 세팅)
-      const month = vars.payDate.format('YYYY-MM');
       void navigate({
         to: '/app/payroll/admin',
         search: { tab: 'company', month },
@@ -126,7 +141,136 @@ export function AdminBonusBatchTab() {
   });
 
   const watchKind = Form.useWatch('bonusKind', form);
+  const watchRate = Form.useWatch('ratePercent', form) as number | undefined;
+  const watchPayDate = Form.useWatch('payDate', form) as dayjs.Dayjs | undefined;
   const isHolidayAmount = watchKind === 'HOLIDAY' && policy?.holidayBonusType === 'AMOUNT';
+
+  // 지급일이 이번 달이 아니면 정산월 안내
+  const currentMonthStr = dayjs().format('YYYY-MM');
+  const targetMonthStr = watchPayDate?.format('YYYY-MM');
+  const isFuturePayMonth = !!targetMonthStr && targetMonthStr !== currentMonthStr;
+
+  // 행별 비율 - 시뮬 직후 form.ratePercent 로 초기화, 사용자가 행별 직접 수정 가능
+  // HOLIDAY는 정책값 그대로라 차등 X (입력 비활성)
+  const [editedRates, setEditedRates] = useState<Record<string, number>>({});
+  useEffect(() => {
+    if (!preview) return;
+    const baseRate = Number(form.getFieldValue('ratePercent') ?? 0);
+    const init: Record<string, number> = {};
+    for (const t of preview.targets) {
+      if (!t.skipReason) init[t.memberId] = baseRate;
+    }
+    setEditedRates(init);
+  }, [preview, form]);
+
+  // 보너스 유형/지급일 바뀌면 시뮬 결과 초기화 - 종류 다르면 대상자/충돌도 다름
+  useEffect(() => {
+    setPreview(null);
+    setEditedRates({});
+  }, [watchKind, watchPayDate]);
+
+  // 평가 결과 불러오기 모달 - 시즌 선택 후 [{memberId, finalGrade}] 로 prefill
+  const [evalModalOpen, setEvalModalOpen] = useState(false);
+  const [selectedSeasonId, setSelectedSeasonId] = useState<string | null>(null);
+  const seasonsQ = useQuery({
+    queryKey: ['evaluation', 'seasons'],
+    queryFn: () => evaluationRedesignApi.listSeasons(),
+    enabled: evalModalOpen,
+  });
+  const gradesM = useMutation({
+    mutationFn: (seasonId: string) => evaluationRedesignApi.findFinalGrades(seasonId),
+    onSuccess: (grades) => {
+      if (!preview) {
+        message.warning('먼저 [시뮬 미리보기]를 실행해 주세요.');
+        return;
+      }
+      // 정책의 등급 -> 비율 매핑 파싱
+      let mapping: Record<string, number> = {};
+      try {
+        if (policy?.gradeBonusRatesJson) {
+          mapping = JSON.parse(policy.gradeBonusRatesJson);
+        }
+      } catch {
+        message.error('정책의 등급별 비율 정보를 읽을 수 없습니다.');
+        return;
+      }
+      if (Object.keys(mapping).length === 0) {
+        message.warning('[상여/성과금 정책 → 성과급 탭]에서 평가 등급별 비율을 먼저 설정해주세요.');
+        return;
+      }
+      // memberId -> finalGrade 매핑
+      const gradeByMember: Record<string, string> = {};
+      for (const g of grades) gradeByMember[g.memberId] = g.finalGrade;
+
+      const next: Record<string, number> = {};
+      let matched = 0;
+      let unmatched = 0;
+      for (const t of preview.targets) {
+        if (t.skipReason) continue;
+        const grade = gradeByMember[t.memberId];
+        if (grade != null && mapping[grade] != null) {
+          next[t.memberId] = Number(mapping[grade]);
+          matched++;
+        } else {
+          // 매핑 없으면 0% (미지급)
+          next[t.memberId] = 0;
+          unmatched++;
+        }
+      }
+      setEditedRates(next);
+      setEvalModalOpen(false);
+      message.success(`${matched}명 등급 적용 완료${unmatched > 0 ? ` (${unmatched}명 등급 정보 없음)` : ''}`);
+    },
+    onError: (e: Error) => message.error(e.message || '평가 결과 조회 실패'),
+  });
+
+  // 행별 산출액 - 정기/성과: baseSalary x rate, 명절: 정책 산출액 그대로
+  const computeRowAmount = (t: TargetEntry, kind: BonusKind | undefined, rate: number): number => {
+    if (t.skipReason) return 0;
+    if (kind === 'HOLIDAY') return t.bonusAmount;
+    return Math.round((t.baseSalary * (rate || 0)) / 100);
+  };
+
+  // 한도 초과 - 성과급에서 정책 max 비율 초과인지
+  const isRowOverLimit = (rate: number): boolean => {
+    if (watchKind !== 'PERFORMANCE') return false;
+    const max = policy?.performanceBonusMaxRate;
+    if (max == null) return false;
+    return rate > Number(max);
+  };
+
+  // 발행 직전 합계 - 행별 비율 기준
+  const editedSummary = useMemo(() => {
+    if (!preview) return { total: 0, count: 0, eligible: 0, paying: 0 };
+    let total = 0;
+    let paying = 0;
+    let eligible = 0;
+    for (const t of preview.targets) {
+      if (t.skipReason) continue;
+      eligible++;
+      const r = editedRates[t.memberId] ?? 0;
+      const amt = computeRowAmount(t, watchKind, r);
+      if (amt > 0) {
+        total += amt;
+        paying++;
+      }
+    }
+    return { total, count: preview.targets.length, eligible, paying };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preview, editedRates, watchKind]);
+
+  // form.ratePercent 변경 시 편집 안 한 행은 따라 변경. 이미 사용자가 손댄 행은 유지하기 어려우니 단순화 - 모두 동기화
+  useEffect(() => {
+    if (!preview) return;
+    const baseRate = Number(watchRate ?? 0);
+    setEditedRates((prev) => {
+      const next: Record<string, number> = { ...prev };
+      for (const t of preview.targets) {
+        if (!t.skipReason) next[t.memberId] = baseRate;
+      }
+      return next;
+    });
+  }, [watchRate, preview]);
 
   const targetCols: ColumnsType<TargetEntry> = [
     { title: '사번', dataIndex: 'sabun', width: 90, render: (v) => v ?? '—' },
@@ -140,18 +284,43 @@ export function AdminBonusBatchTab() {
       render: (v: number) => formatWon(v),
     },
     {
+      title: '지급 비율 (%)',
+      key: 'rate',
+      width: 130,
+      align: 'right',
+      render: (_, r) => {
+        if (r.skipReason) return <Typography.Text type="secondary">—</Typography.Text>;
+        if (watchKind === 'HOLIDAY') return <Typography.Text type="secondary">정책값</Typography.Text>;
+        const rate = editedRates[r.memberId] ?? 0;
+        return (
+          <InputNumber
+            min={0}
+            max={1000}
+            step={5}
+            value={rate}
+            size="small"
+            style={{ width: 90 }}
+            onChange={(v) =>
+              setEditedRates((prev) => ({ ...prev, [r.memberId]: Number(v ?? 0) }))
+            }
+          />
+        );
+      },
+    },
+    {
       title: '산출액',
-      dataIndex: 'bonusAmount',
+      key: 'amount',
       align: 'right',
       width: 140,
-      render: (v: number, r) => {
+      render: (_, r) => {
         if (r.skipReason) return <Typography.Text type="secondary">—</Typography.Text>;
+        const rate = editedRates[r.memberId] ?? 0;
+        const amt = computeRowAmount(r, watchKind, rate);
+        if (amt <= 0) return <Typography.Text type="secondary">미지급</Typography.Text>;
+        const over = isRowOverLimit(rate);
         return (
-          <Typography.Text
-            strong
-            className={r.exceedsLimit ? '!tw-text-red-600' : '!tw-text-blue-600'}
-          >
-            {formatWon(v)}
+          <Typography.Text strong className={over ? '!tw-text-red-600' : '!tw-text-blue-600'}>
+            {formatWon(amt)}
           </Typography.Text>
         );
       },
@@ -162,7 +331,10 @@ export function AdminBonusBatchTab() {
       width: 160,
       render: (_, r) => {
         if (r.skipReason) return <Tag color="default">{r.skipReason}</Tag>;
-        if (r.exceedsLimit) return <Tag color="red">한도 초과</Tag>;
+        const rate = editedRates[r.memberId] ?? 0;
+        const amt = computeRowAmount(r, watchKind, rate);
+        if (amt <= 0) return <Tag color="default">미지급</Tag>;
+        if (isRowOverLimit(rate)) return <Tag color="red">한도 초과</Tag>;
         return <Tag color="green">대상</Tag>;
       },
     },
@@ -261,20 +433,30 @@ export function AdminBonusBatchTab() {
             </Form.Item>
           </div>
 
+          {/* 지급일 정산월 짧게 안내 */}
+          {isFuturePayMonth && (
+            <Alert
+              type="info"
+              showIcon
+              className="!tw-mb-3"
+              message={`${targetMonthStr} 정산에 추가됩니다.`}
+            />
+          )}
+
           <Space>
             <Button type="primary" htmlType="submit" loading={previewM.isPending} disabled={!policy}>
               시뮬 미리보기
             </Button>
-            {preview && preview.totalEligible > 0 && (
+            {preview && editedSummary.paying > 0 && (
               <Popconfirm
-                title={`${preview.totalEligible}명에게 ${formatWon(preview.totalGrossAmount)} 일괄 발행할까요?`}
-                description="명세서는 DRAFT 상태로 생성됩니다. 검토 후 [확정] -> [지급] 처리하세요."
+                title={`${editedSummary.paying}명에게 ${formatWon(editedSummary.total)} 발행할까요?`}
+                description="발행 후 [정산 처리] 탭에서 검토·지급하세요."
                 okText="발행"
                 cancelText="취소"
                 onConfirm={() => applyM.mutate(form.getFieldsValue())}
               >
                 <Button type="primary" danger loading={applyM.isPending}>
-                  일괄 발행 ({preview.totalEligible}명)
+                  발행 ({editedSummary.paying}명)
                 </Button>
               </Popconfirm>
             )}
@@ -283,26 +465,42 @@ export function AdminBonusBatchTab() {
       </Card>
 
       {preview && (
-        <Card title="시뮬 결과">
+        <Card
+          title={
+            <Space>
+              <span>시뮬 결과</span>
+              {watchKind === 'PERFORMANCE' && (
+                <Tag color="geekblue">평가 결과별 차등 입력</Tag>
+              )}
+            </Space>
+          }
+          extra={
+            watchKind === 'PERFORMANCE' && (
+              <Button size="small" onClick={() => setEvalModalOpen(true)}>
+                평가 결과 불러오기
+              </Button>
+            )
+          }
+        >
           <div className="tw-grid tw-grid-cols-2 md:tw-grid-cols-4 tw-gap-3 tw-mb-3">
-            <Statistic title="대상 직원" value={preview.totalEligible} suffix="명" />
+            <Statistic title="지급 대상" value={editedSummary.paying} suffix="명" />
             <Statistic
-              title="자격 미달 (스킵)"
-              value={preview.totalSkipped}
+              title="미지급 / 자격 미달"
+              value={editedSummary.count - editedSummary.paying}
               suffix="명"
-              valueStyle={{ color: preview.totalSkipped > 0 ? '#ef4444' : undefined }}
+              valueStyle={{ color: editedSummary.count - editedSummary.paying > 0 ? '#ef4444' : undefined }}
             />
             <Statistic
               title="총 지급 합계 (세전)"
-              value={preview.totalGrossAmount}
+              value={editedSummary.total}
               suffix="원"
               formatter={(v) => Number(v).toLocaleString('ko-KR')}
               valueStyle={{ color: '#1677ff', fontWeight: 700 }}
             />
             <Statistic
-              title="적용 비율"
-              value={preview.appliedRate ?? '—'}
-              suffix={preview.appliedRate != null ? '%' : ''}
+              title={watchKind === 'HOLIDAY' ? '정책값 적용' : '기본 비율'}
+              value={watchKind === 'HOLIDAY' ? '—' : (watchRate ?? '—')}
+              suffix={watchKind !== 'HOLIDAY' && watchRate != null ? '%' : ''}
             />
           </div>
 
@@ -315,6 +513,77 @@ export function AdminBonusBatchTab() {
           />
         </Card>
       )}
+
+      {/* 평가 결과 불러오기 모달 - 시즌 선택 후 등급 매핑 적용 */}
+      <Modal
+        title="평가 결과 불러오기"
+        open={evalModalOpen}
+        onCancel={() => setEvalModalOpen(false)}
+        onOk={() => {
+          if (!selectedSeasonId) {
+            message.warning('평가 사이클을 선택하세요.');
+            return;
+          }
+          gradesM.mutate(selectedSeasonId);
+        }}
+        okText="등급 적용"
+        cancelText="취소"
+        confirmLoading={gradesM.isPending}
+        destroyOnClose
+      >
+        <Space direction="vertical" className="tw-w-full" size={12}>
+          <Typography.Text type="secondary">
+            선택한 평가 사이클의 등급에 따라 행별 비율이 자동 채워집니다. 이후 수동 조정 가능합니다.
+          </Typography.Text>
+          <Select
+            placeholder="평가 사이클 선택"
+            style={{ width: '100%' }}
+            loading={seasonsQ.isPending}
+            value={selectedSeasonId ?? undefined}
+            onChange={(v) => setSelectedSeasonId(v)}
+            options={(seasonsQ.data ?? []).map((s) => ({
+              value: s.seasonId,
+              label: `${s.name ?? '(이름 없음)'} - ${s.targetCycle ?? ''}${s.resultsPublishedAt ? ' · 결과 공개됨' : ''}`,
+            }))}
+          />
+          {(() => {
+            // 정책 JSON 파싱 - 사람이 읽기 쉬운 태그로 표시 (예: S 15% / A 10%)
+            let parsed: Record<string, number> | null = null;
+            try {
+              if (policy?.gradeBonusRatesJson) {
+                parsed = JSON.parse(policy.gradeBonusRatesJson);
+              }
+            } catch {
+              parsed = null;
+            }
+            const entries = parsed ? Object.entries(parsed) : [];
+            if (entries.length > 0) {
+              return (
+                <Alert
+                  type="info"
+                  showIcon
+                  message="등급별 지급 비율"
+                  description={
+                    <Space wrap size={6}>
+                      {entries.map(([g, r]) => (
+                        <Tag key={g} color="geekblue">{g} {r}%</Tag>
+                      ))}
+                    </Space>
+                  }
+                />
+              );
+            }
+            return (
+              <Alert
+                type="warning"
+                showIcon
+                message="등급별 비율 미설정"
+                description="[상여/성과금 정책 → 성과급 탭]에서 평가 등급별 지급 비율을 먼저 설정해주세요."
+              />
+            );
+          })()}
+        </Space>
+      </Modal>
     </Space>
   );
 }

@@ -45,9 +45,9 @@ import type {
 } from '@/features/salary-service/types';
 
 const STATUS_KO: Record<string, string> = {
-  DRAFT: '작성중',
-  CONFIRMED: '확정',
-  PAID: '지급완료',
+  DRAFT: '검토 전',
+  CONFIRMED: '지급 대기',
+  PAID: '지급 완료',
 };
 
 const STATUS_COLOR: Record<string, string> = {
@@ -550,7 +550,7 @@ export function AdminPayrollPage() {
           items={[
             {
               key: 'company',
-              label: '이번달 정산',
+              label: '정산 처리',
               children: (
                 <Space direction="vertical" className="tw-w-full" size={14}>
                   {/* 정산 가드 안내 Alert 제거 - KPI 카드만 노출 */}
@@ -562,7 +562,7 @@ export function AdminPayrollPage() {
                     </div>
                     <div className="tw-rounded-xl tw-border tw-border-slate-200/80 tw-bg-slate-50/60 tw-p-4">
                       <Statistic
-                        title="작성중"
+                        title="검토 전"
                         value={kpi.draft}
                         suffix="명"
                         valueStyle={{ color: '#64748b' }}
@@ -570,7 +570,7 @@ export function AdminPayrollPage() {
                     </div>
                     <div className="tw-rounded-xl tw-border tw-border-slate-200/80 tw-bg-slate-50/60 tw-p-4">
                       <Statistic
-                        title="확정 대기"
+                        title="지급 대기"
                         value={kpi.confirmed}
                         suffix="명"
                         valueStyle={{ color: '#2563eb' }}
@@ -685,9 +685,9 @@ export function AdminPayrollPage() {
                           style={{ width: 130 }}
                           options={[
                             { value: 'ALL', label: '상태 전체' },
-                            { value: 'DRAFT', label: '작성중' },
-                            { value: 'CONFIRMED', label: '확정' },
-                            { value: 'PAID', label: '지급완료' },
+                            { value: 'DRAFT', label: '검토 전' },
+                            { value: 'CONFIRMED', label: '지급 대기' },
+                            { value: 'PAID', label: '지급 완료' },
                           ]}
                         />
                         <Select
@@ -774,7 +774,7 @@ export function AdminPayrollPage() {
             },
             {
               key: 'member',
-              label: '월별 정산 결과',
+              label: '지급 이력',
               children: <CompanyHistoryTab />,
             },
             {
