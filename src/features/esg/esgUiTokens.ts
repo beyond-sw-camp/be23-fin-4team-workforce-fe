@@ -20,3 +20,16 @@ export const esgLinkTextClass = 'tw-text-[#1e3a5f] hover:!tw-text-[#162f4d]';
 
 /** 테이블 제목 클릭 등 (antd Link 색 덮어쓰기) */
 export const esgTableLinkClass = '!tw-text-[#1e3a5f] hover:!tw-text-[#162f4d]';
+
+/** ESG 하위 화면 공통 카드 표면감 */
+export const esgSurfaceCardClass =
+  '!tw-rounded-2xl tw-border tw-border-slate-200/90 tw-shadow-sm tw-shadow-slate-900/5';
+
+/** ESG 하위 화면 공통 카드 내부 여백 */
+export const esgSurfaceCardStyles = { body: { padding: 24 } };
+
+/** ESG 하위 화면 작은 KPI 카드 내부 여백 */
+export const esgMetricCardStyles = { body: { padding: 22 } };
+
+/** ESG 전체보기·관리 모달 내부 컨텐츠 여백 */
+export const esgModalContentClass = 'tw-px-6 tw-py-5 sm:tw-px-7';

@@ -13,7 +13,15 @@ import { useCallback, useMemo, useState } from 'react';
 import { useAuth } from '@/features/auth/useAuth';
 import type { EsgActivity, EsgShopOrder, EsgSubject } from '@/features/esg/api/esgApi';
 import { esgApi } from '@/features/esg/api/esgApi';
-import { esgCardLinkButtonClass, esgLinkTextClass, esgTableLinkClass } from '@/features/esg/esgUiTokens';
+import {
+  esgCardLinkButtonClass,
+  esgLinkTextClass,
+  esgMetricCardStyles,
+  esgModalContentClass,
+  esgSurfaceCardClass,
+  esgSurfaceCardStyles,
+  esgTableLinkClass,
+} from '@/features/esg/esgUiTokens';
 import { EsgActivitySubmitModal } from '@/features/esg/ui/EsgActivitySubmitModal';
 import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
 import { AppDataTable } from '@/shared/ui/AppDataTable';
@@ -339,7 +347,7 @@ export function EsgHomePage() {
   }
 
   return (
-    <Space direction="vertical" className="tw-w-full" size={16}>
+    <Space direction="vertical" className="tw-w-full" size={20}>
       <AppWorkspacePageTitle
         className="!tw-mb-0"
         eyebrow="MY ESG"
@@ -352,8 +360,8 @@ export function EsgHomePage() {
         }
       />
 
-      <div className="tw-grid tw-grid-cols-1 tw-gap-4 md:tw-grid-cols-3">
-        <Card size="small" className="!tw-rounded-2xl tw-border-slate-200/70 tw-shadow-sm" styles={{ body: { padding: 20 } }}>
+      <div className="tw-grid tw-grid-cols-1 tw-gap-5 md:tw-grid-cols-3">
+        <Card size="small" className={esgSurfaceCardClass} styles={esgMetricCardStyles}>
           <div className="tw-text-[11px] tw-font-bold tw-uppercase tw-tracking-wide tw-text-slate-400">보유 포인트</div>
           <div className="tw-mt-2 tw-flex tw-items-end tw-gap-1">
             <span className="tw-text-3xl tw-font-bold tw-leading-none tw-text-[#1e3a5f]">
@@ -362,7 +370,7 @@ export function EsgHomePage() {
             <span className="tw-text-sm tw-font-bold tw-text-slate-400">P</span>
           </div>
         </Card>
-        <Card size="small" className="!tw-rounded-2xl tw-border-slate-200/70 tw-shadow-sm" styles={{ body: { padding: 20 } }}>
+        <Card size="small" className={esgSurfaceCardClass} styles={esgMetricCardStyles}>
           <div className="tw-text-[11px] tw-font-bold tw-uppercase tw-tracking-wide tw-text-slate-400">내 활동</div>
           <div className="tw-mt-2 tw-flex tw-items-end tw-gap-1">
             <span className="tw-text-3xl tw-font-bold tw-leading-none tw-text-[#1e3a5f]">{submittedCount.toLocaleString()}</span>
@@ -370,7 +378,7 @@ export function EsgHomePage() {
           </div>
           <div className="tw-mt-2 tw-text-xs tw-text-slate-500">승인 {approvedCount} · 대기 {pendingCount}</div>
         </Card>
-        <Card size="small" className="!tw-rounded-2xl tw-border-slate-200/70 tw-shadow-sm" styles={{ body: { padding: 20 } }}>
+        <Card size="small" className={esgSurfaceCardClass} styles={esgMetricCardStyles}>
           <div className="tw-text-[11px] tw-font-bold tw-uppercase tw-tracking-wide tw-text-slate-400">구매 내역</div>
           <div className="tw-mt-2 tw-flex tw-items-end tw-gap-1">
             <span className="tw-text-3xl tw-font-bold tw-leading-none tw-text-[#1e3a5f]">{myOrders.length.toLocaleString()}</span>
@@ -382,8 +390,8 @@ export function EsgHomePage() {
 
       <Card
         size="small"
-        className="!tw-rounded-2xl tw-border-slate-200/70 tw-shadow-sm"
-        styles={{ body: { padding: 20 } }}
+        className={esgSurfaceCardClass}
+        styles={esgSurfaceCardStyles}
         title={<span className="tw-text-sm tw-font-semibold tw-text-slate-900">활동 양식</span>}
         extra={
           <Space size={8} className="tw-flex-nowrap">
@@ -413,8 +421,8 @@ export function EsgHomePage() {
 
       <Card
         size="small"
-        className="!tw-rounded-2xl tw-border-slate-200/70 tw-shadow-sm"
-        styles={{ body: { padding: 20 } }}
+        className={esgSurfaceCardClass}
+        styles={esgSurfaceCardStyles}
         title={<span className="tw-text-sm tw-font-semibold tw-text-slate-900">내 활동</span>}
         extra={
           <Button type="link" size="small" className={esgCardLinkButtonClass} onClick={() => setModal('activities')}>
@@ -439,8 +447,8 @@ export function EsgHomePage() {
 
       <Card
         size="small"
-        className="!tw-rounded-2xl tw-border-slate-200/70 tw-shadow-sm"
-        styles={{ body: { padding: 20 } }}
+        className={esgSurfaceCardClass}
+        styles={esgSurfaceCardStyles}
         title={<span className="tw-text-sm tw-font-semibold tw-text-slate-900">내 구매 내역</span>}
         extra={
           <Button type="link" size="small" className={esgCardLinkButtonClass} onClick={() => setModal('orders')}>
@@ -473,10 +481,10 @@ export function EsgHomePage() {
         submitText="확인"
         customFooter={null}
         width={modal === 'activities' ? 1100 : 880}
-        styles={{ body: { padding: 20, maxHeight: '72vh', overflowY: 'auto' } }}
+        styles={{ body: { maxHeight: '72vh', overflowY: 'auto' } }}
         destroyOnHidden
       >
-        <div className="tw-space-y-4">
+        <div className={`${esgModalContentClass} tw-space-y-4`}>
           {modal === 'subjects' && (
             <AppDataTable<EsgSubject>
               rowKey={(r) => r.subjectId || JSON.stringify(r)}

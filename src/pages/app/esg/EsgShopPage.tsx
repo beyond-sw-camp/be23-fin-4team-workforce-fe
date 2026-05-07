@@ -2,7 +2,13 @@ import { ShoppingCartOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Button, Card, Image, Space, Typography } from 'antd';
 import { esgApi } from '@/features/esg/api/esgApi';
-import { esgCardLinkButtonClass, esgPrimaryButtonClass } from '@/features/esg/esgUiTokens';
+import {
+  esgCardLinkButtonClass,
+  esgMetricCardStyles,
+  esgPrimaryButtonClass,
+  esgSurfaceCardClass,
+  esgSurfaceCardStyles,
+} from '@/features/esg/esgUiTokens';
 import { Link } from '@tanstack/react-router';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 
@@ -42,7 +48,7 @@ export function EsgShopPage() {
   });
 
   return (
-    <Space direction="vertical" className="tw-w-full" size={16}>
+    <Space direction="vertical" className="tw-w-full" size={20}>
       <AppWorkspacePageTitle
         className="!tw-mb-0"
         eyebrow="ESG SHOP"
@@ -55,8 +61,8 @@ export function EsgShopPage() {
         }
       />
 
-      <div className="tw-grid tw-grid-cols-1 tw-gap-4 md:tw-grid-cols-3">
-        <Card size="small" className="!tw-rounded-2xl tw-border-slate-200/70 tw-shadow-sm" styles={{ body: { padding: 20 } }}>
+      <div className="tw-grid tw-grid-cols-1 tw-gap-5 md:tw-grid-cols-3">
+        <Card size="small" className={esgSurfaceCardClass} styles={esgMetricCardStyles}>
           <div className="tw-text-[11px] tw-font-bold tw-uppercase tw-tracking-wide tw-text-slate-400">보유 포인트</div>
           <div className="tw-mt-2 tw-flex tw-items-end tw-gap-1">
             <span className="tw-text-3xl tw-font-bold tw-leading-none tw-text-[#1e3a5f]">
@@ -65,14 +71,14 @@ export function EsgShopPage() {
             <span className="tw-text-sm tw-font-bold tw-text-slate-400">P</span>
           </div>
         </Card>
-        <Card size="small" className="!tw-rounded-2xl tw-border-slate-200/70 tw-shadow-sm" styles={{ body: { padding: 20 } }}>
+        <Card size="small" className={esgSurfaceCardClass} styles={esgMetricCardStyles}>
           <div className="tw-text-[11px] tw-font-bold tw-uppercase tw-tracking-wide tw-text-slate-400">등록 물품</div>
           <div className="tw-mt-2 tw-flex tw-items-end tw-gap-1">
             <span className="tw-text-3xl tw-font-bold tw-leading-none tw-text-[#1e3a5f]">{items.length.toLocaleString()}</span>
             <span className="tw-text-sm tw-font-bold tw-text-slate-400">개</span>
           </div>
         </Card>
-        <Card size="small" className="!tw-rounded-2xl tw-border-slate-200/70 tw-shadow-sm" styles={{ body: { padding: 20 } }}>
+        <Card size="small" className={esgSurfaceCardClass} styles={esgMetricCardStyles}>
           <div className="tw-text-[11px] tw-font-bold tw-uppercase tw-tracking-wide tw-text-slate-400">구매 가능</div>
           <div className="tw-mt-2 tw-flex tw-items-end tw-gap-1">
             <span className="tw-text-3xl tw-font-bold tw-leading-none tw-text-[#1e3a5f]">
@@ -83,13 +89,13 @@ export function EsgShopPage() {
         </Card>
       </div>
 
-      <div className="tw-grid tw-grid-cols-1 tw-gap-4 sm:tw-grid-cols-2 xl:tw-grid-cols-4">
+      <div className="tw-grid tw-grid-cols-1 tw-gap-5 sm:tw-grid-cols-2 xl:tw-grid-cols-4">
         {items.map((it, idx) => (
             <Card
               key={it.itemId || `shop-item-${idx}`}
               loading={isLoading}
-              className="tw-h-full !tw-rounded-2xl tw-border-slate-200/70 tw-shadow-sm"
-              styles={{ body: { padding: 18 } }}
+              className={`tw-h-full ${esgSurfaceCardClass}`}
+              styles={esgSurfaceCardStyles}
               cover={
                 it.imageUrl ? (
                   <div className="tw-flex tw-h-36 tw-items-center tw-justify-center tw-rounded-t-2xl tw-bg-slate-50">
@@ -126,7 +132,7 @@ export function EsgShopPage() {
         ))}
       </div>
       {items.length === 0 && !isLoading && (
-        <div className="tw-flex tw-min-h-64 tw-items-center tw-justify-center tw-rounded-2xl tw-border tw-border-dashed tw-border-slate-200 tw-bg-white tw-text-sm tw-font-semibold tw-text-slate-400">
+        <div className="tw-flex tw-min-h-64 tw-items-center tw-justify-center tw-rounded-2xl tw-border tw-border-dashed tw-border-slate-200/90 tw-bg-white tw-text-sm tw-font-semibold tw-text-slate-400 tw-shadow-sm tw-shadow-slate-900/5">
           등록된 물품이 없습니다.
         </div>
       )}
