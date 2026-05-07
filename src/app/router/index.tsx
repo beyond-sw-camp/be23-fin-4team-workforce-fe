@@ -611,17 +611,6 @@ const attendanceCorrectionRequestRoute = createRoute({
   component: AttendanceCorrectionRequestPage,
 });
 
-const attendanceCorrectionsRoute = createRoute({
-  getParentRoute: () => appBaseRoute,
-  path: '/attendance/corrections',
-  validateSearch: z.object({
-    date: z.string().optional(),
-    clockIn: z.string().optional(),
-    clockOut: z.string().optional(),
-  }),
-  component: AttendanceCorrectionRequestPage,
-});
-
 const myScheduleSelectionsRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/attendance/schedules/my',
@@ -1092,7 +1081,6 @@ const routeTree = rootRoute.addChildren([
       myAttendanceRoute,
       myAttendanceMonthlyRoute,
       attendanceCorrectionRequestRoute,
-      attendanceCorrectionsRoute,
       myScheduleSelectionsRoute,
       myOvertimeRequestsRoute,
       myWorkTimeRoute,

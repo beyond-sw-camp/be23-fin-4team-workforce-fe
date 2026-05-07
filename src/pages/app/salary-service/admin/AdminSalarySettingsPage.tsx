@@ -1946,9 +1946,14 @@ function SalaryItemTemplateTab() {
             onClick={() => {
               setEditing(null);
               form.resetFields();
+              // 표시 순서는 자동 - 기존 항목 max + 10 으로 마지막에 붙임
+              const maxOrder = (sortedItems ?? []).reduce(
+                (max, r) => Math.max(max, r.displayOrder ?? 0),
+                0,
+              );
               form.setFieldsValue({
                 itemType: 'EARNING',
-                displayOrder: 0,
+                displayOrder: maxOrder + 10,
                 isTaxableYn: 'Y',
                 isOrdinaryWageYn: 'N',
                 applyToAllYn: 'N',
@@ -2006,18 +2011,14 @@ function SalaryItemTemplateTab() {
               <Input />
             </Form.Item>
 
-            <Row gutter={12}>
-              <Col span={16}>
-                <Form.Item label="수당명" name="itemName" rules={[{ required: true }]}>
-                  <Input maxLength={40} placeholder="예: 직책수당, 식대" />
-                </Form.Item>
-              </Col>
-              <Col span={8}>
-                <Form.Item label="표시 순서" name="displayOrder" rules={[{ required: true }]}>
-                  <InputNumber min={0} style={{ width: '100%' }} />
-                </Form.Item>
-              </Col>
-            </Row>
+            {/* 표시 순서는 자동 - 등록 시 (max + 10), 수정 시 기존값 유지 */}
+            <Form.Item name="displayOrder" hidden>
+              <InputNumber />
+            </Form.Item>
+
+            <Form.Item label="수당명" name="itemName" rules={[{ required: true }]}>
+              <Input maxLength={40} placeholder="예: 직책수당, 식대" />
+            </Form.Item>
 
             <Row gutter={12}>
               <Col span={12}>
@@ -2059,23 +2060,35 @@ function SalaryItemTemplateTab() {
                 </Form.Item>
               </Col>
               <Col span={12}>
-                <Form.Item label="수당 금액 (월, 원)" name="defaultAmount">
-                  <InputNumber<number>
-                    min={0}
-                    step={10000}
-                    style={{ width: '100%' }}
-                    placeholder="예: 200000"
-                    formatter={(v) => (v ? `${Number(v).toLocaleString('ko-KR')}` : '')}
-                    parser={(v) => Number(String(v ?? '').replace(/[^\d]/g, ''))}
-                  />
+                {/* 회사 공통일 때만 디폴트 금액 의미 - 개인 차등이면 [수당 관리]에서 직원별 부여 */}
+                <Form.Item shouldUpdate={(prev, cur) => prev.applyToAllYn !== cur.applyToAllYn} noStyle>
+                  {({ getFieldValue }) => {
+                    const applyAll = getFieldValue('applyToAllYn') === 'Y';
+                    return (
+                      <Form.Item
+                        label="수당 금액 (월, 원)"
+                        name="defaultAmount"
+                        extra={applyAll ? '전 직원에게 매월 자동 합산' : '개인 차등 - [수당 관리]에서 직원별 금액 부여'}
+                      >
+                        <InputNumber<number>
+                          min={0}
+                          step={10000}
+                          style={{ width: '100%' }}
+                          placeholder={applyAll ? '예: 200000' : '개인 차등은 [수당 관리]에서'}
+                          disabled={!applyAll}
+                          formatter={(v) => (v ? `${Number(v).toLocaleString('ko-KR')}` : '')}
+                          parser={(v) => Number(String(v ?? '').replace(/[^\d]/g, ''))}
+                        />
+                      </Form.Item>
+                    );
+                  }}
                 </Form.Item>
               </Col>
             </Row>
 
             <Typography.Paragraph type="secondary" className="!tw-mb-0 tw-text-xs">
-              과세: 소득세·4대보험 계산에 포함 / 통상임금 포함: 연장·야간·휴일수당 환산 기준에 합산
-              / 회사 공통: 전 직원 자동 합산 (개인 차등은 [수당 관리]에서 부여)
-              {editing?.isSystemDefault && ' · 시스템 기본 항목은 이름·표시 순서만 수정 가능'}
+              과세: 소득세·4대보험 계산에 포함 / 통상임금 포함: 연장·야간·휴일수당 환산 기준에 합산.
+              {editing?.isSystemDefault && ' 시스템 기본 항목은 수당명만 수정 가능합니다.'}
             </Typography.Paragraph>
           </Form>
         </div>
