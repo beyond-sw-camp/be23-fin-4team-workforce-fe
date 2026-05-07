@@ -170,7 +170,6 @@ const APP_MENU_ICONS: Record<string, ReactNode> = {
   '/app/performance': <LineChartOutlined className="tw-text-lg" />,
   '/app/evaluations': <StarOutlined className="tw-text-lg" />,
   '/app/meetings': <VideoCameraOutlined className="tw-text-lg" />,
-  '/app/settings': <SettingOutlined className="tw-text-lg" />,
   '/app/work-trips': <EnvironmentOutlined className="tw-text-lg" />,
 };
 
@@ -1086,7 +1085,6 @@ function SiderAccountPopoverContent({
   departmentLine,
   emailLine,
   onMyPage,
-  onSettings,
   onLogout,
 }: {
   onClose: () => void;
@@ -1095,7 +1093,6 @@ function SiderAccountPopoverContent({
   departmentLine: string;
   emailLine: string;
   onMyPage: () => void;
-  onSettings: () => void;
   onLogout: () => Promise<void>;
 }) {
   return (
@@ -1149,19 +1146,6 @@ function SiderAccountPopoverContent({
             <UserOutlined />
           </span>
           <span className="tw-text-xs tw-font-medium tw-text-slate-600">마이페이지</span>
-        </button>
-        <button
-          type="button"
-          className="group tw-flex tw-flex-col tw-items-center tw-gap-2 tw-border-0 tw-bg-transparent tw-p-0 tw-text-slate-700 tw-transition-colors hover:tw-text-slate-900"
-          onClick={() => {
-            onClose();
-            onSettings();
-          }}
-        >
-          <span className="tw-flex tw-size-14 tw-items-center tw-justify-center tw-rounded-full tw-bg-slate-100 tw-text-lg tw-text-slate-600 tw-transition-colors group-hover:tw-bg-slate-200">
-            <SettingOutlined />
-          </span>
-          <span className="tw-text-xs tw-font-medium tw-text-slate-600">설정</span>
         </button>
         <button
           type="button"
@@ -1235,9 +1219,6 @@ function AppShellAccountMenu() {
       emailLine={emailLine}
       onMyPage={() => {
         void navigate({ to: '/app/me' });
-      }}
-      onSettings={() => {
-        void navigate({ to: '/app/settings' });
       }}
       onLogout={handleLogout}
     />

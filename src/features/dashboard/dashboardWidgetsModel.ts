@@ -4,8 +4,6 @@ export const DASHBOARD_LAYOUT_STORAGE_KEY = 'workforce.dashboard.layout.v1';
 export const ALL_DASHBOARD_WIDGET_IDS = [
   'profile',
   'performanceGoals',
-  'evaluationTasks',
-  'feedbackMeetings',
   'approvalInbox',
   'calendar',
   'attendance',
@@ -33,8 +31,6 @@ export type DashboardLayout = {
 export const DASHBOARD_WIDGET_LABELS: Record<DashboardWidgetId, string> = {
   profile: '프로필',
   performanceGoals: '내 목표 현황',
-  evaluationTasks: '평가 진행',
-  feedbackMeetings: '피드백 면담',
   approvalInbox: '전자결재 문서함',
   calendar: '캘린더 일정',
   attendance: '근태',
@@ -44,8 +40,8 @@ export const DASHBOARD_WIDGET_LABELS: Record<DashboardWidgetId, string> = {
 };
 
 const LEFT_COLUMN: DashboardWidgetId[] = ['profile', 'performanceGoals'];
-const MID_COLUMN: DashboardWidgetId[] = ['approvalInbox', 'evaluationTasks', 'attendance', 'leave'];
-const RIGHT_COLUMN: DashboardWidgetId[] = ['calendar', 'feedbackMeetings', 'notifications', 'payrollNewHires'];
+const MID_COLUMN: DashboardWidgetId[] = ['approvalInbox', 'attendance', 'leave'];
+const RIGHT_COLUMN: DashboardWidgetId[] = ['calendar', 'notifications', 'payrollNewHires'];
 
 export function createDashboardInstanceId(widgetId: DashboardWidgetId): string {
   return `${widgetId}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;

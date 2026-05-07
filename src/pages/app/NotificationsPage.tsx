@@ -41,10 +41,17 @@ function isLeavePromotionNotification(type: string): boolean {
   );
 }
 
+function isMeetingNotification(type: string, targetType?: string): boolean {
+  const t = String(type ?? '').toUpperCase();
+  const tt = String(targetType ?? '').toUpperCase();
+  return t.startsWith('MEETING_') || tt.startsWith('MEETING_');
+}
+
 function isRoutableNotification(item: NotificationItem): boolean {
   return (
     isApprovalNotification(item.notificationType) ||
     isGoalBundleNotification(item.notificationType, item.targetType) ||
+    isMeetingNotification(item.notificationType, item.targetType) ||
     isLeavePromotionNotification(item.notificationType) ||
     isContractNotificationRoutable(item)
   );
@@ -56,6 +63,7 @@ function notificationTone(item: NotificationItem): string {
   if (t.startsWith('GOAL_BUNDLE_') || tt.startsWith('GOAL_BUNDLE_')) return 'blue';
   if (t.startsWith('APPROVAL_')) return 'purple';
   if (t.startsWith('LEAVE_')) return 'green';
+  if (t.startsWith('MEETING_') || tt.startsWith('MEETING_')) return 'cyan';
   if (t.startsWith('EVALUATION_') || t === 'GOAL_EVALUATED') return 'orange';
   if (t.startsWith('CONTRACT_')) return 'cyan';
   return 'default';
@@ -246,6 +254,15 @@ export function NotificationsPage() {
           targetId: item.targetId,
         }),
       );
+      return;
+    }
+
+    if (isMeetingNotification(item.notificationType, item.targetType)) {
+      if (item.targetId) {
+        await navigate({ to: '/app/meetings/$meetingId', params: { meetingId: item.targetId } });
+      } else {
+        await navigate({ to: '/app/meetings' });
+      }
       return;
     }
 

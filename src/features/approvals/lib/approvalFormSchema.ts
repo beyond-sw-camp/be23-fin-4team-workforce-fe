@@ -13,6 +13,8 @@ export const FORM_SCHEMA_FIELD_TYPES = [
   'static_note',
   /** 회의록 등: 녹음 후 STT·요약, contentJson에는 포함하지 않음 */
   'ai_transcribe',
+  /** 인사발령품의서 전용 반복 항목 입력 위젯 */
+  'personnel_order_items',
 ] as const;
 
 export type FormFieldType = (typeof FORM_SCHEMA_FIELD_TYPES)[number];
@@ -212,7 +214,7 @@ export function stripNonPersistedApprovalContentFields(
   fields: FormFieldSchema[],
 ): void {
   for (const f of fields) {
-    if (f.type === 'ai_transcribe' || f.type === 'static_note') {
+    if (f.type === 'ai_transcribe' || f.type === 'static_note' || f.type === 'personnel_order_items') {
       delete content[f.name];
     }
   }

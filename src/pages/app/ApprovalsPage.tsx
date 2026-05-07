@@ -1586,6 +1586,8 @@ export function ApprovalsPage() {
         embed?: string;
         composeDraftId?: string;
         docId?: string;
+        documentId?: string;
+        prefill?: string | boolean | number;
         approvalModal?: string;
         approvalOpenAt?: string;
         approvalRequestId?: string;

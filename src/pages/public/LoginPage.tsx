@@ -62,7 +62,8 @@ function LoginPage({ embedded = false }: LoginPageProps) {
 
       // SaaS 운영자 분기 - actor_type=OPERATOR 면 운영자 콘솔로
       void session;
-      const tokenPayload = decodeJwtPayload(getAccessToken());
+      const token = getAccessToken();
+      const tokenPayload = token ? decodeJwtPayload(token) : null;
       const actorType = (tokenPayload?.actor_type ?? tokenPayload?.actorType) as string | undefined;
       if (actorType === 'OPERATOR') {
         void navigate({ to: '/saas/dashboard', replace: true });

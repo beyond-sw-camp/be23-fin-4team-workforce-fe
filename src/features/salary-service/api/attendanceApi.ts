@@ -65,6 +65,37 @@ function isApiError(e: unknown): e is ApiError {
   return typeof e === 'object' && e !== null && 'status' in e && typeof (e as ApiError).status === 'number';
 }
 
+function parseDateOnly(value?: string): Date {
+  const raw = value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : new Date().toISOString().slice(0, 10);
+  const [year = 1970, month = 1, day = 1] = raw.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function formatDateOnly(value: Date): string {
+  const y = value.getFullYear();
+  const m = String(value.getMonth() + 1).padStart(2, '0');
+  const d = String(value.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function addDays(value: Date, days: number): Date {
+  const next = new Date(value);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function getWeekRange(date?: string) {
+  const base = parseDateOnly(date);
+  const day = base.getDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  const weekStart = addDays(base, mondayOffset);
+  const weekEnd = addDays(weekStart, 6);
+  return {
+    weekStart: formatDateOnly(weekStart),
+    weekEnd: formatDateOnly(weekEnd),
+  };
+}
+
 export const attendanceApi = {
   /** /attendance — 출퇴근·근태 로그 */
   attendance: {
@@ -147,10 +178,30 @@ export const attendanceApi = {
 
     /** 본인 주간 근무시간 요약, date 기준 월요일~일요일 집계. date 생략 시 오늘 */
     async getMyWorkTimeSummary(date?: string): Promise<WorkTimeSummary> {
-      const { data } = await httpClient.get(`${BASE}/attendance/my/work-time-summary`, {
-        params: date ? { date } : undefined,
+      const { weekStart, weekEnd } = getWeekRange(date);
+      const page = await attendanceApi.attendance.getMyMonthly({
+        from: weekStart,
+        to: weekEnd,
+        page: 0,
+        size: 7,
       });
-      return unwrapApiResponse<WorkTimeSummary>(data);
+      const rows = Array.isArray(page.content) ? page.content : [];
+      const totalWorkedMinutes = rows.reduce((sum, row) => sum + (row.workedMinutes ?? 0), 0);
+      const overtimeApprovedMinutes = rows.reduce((sum, row) => sum + (row.overtimeMinutes ?? 0), 0);
+      const totalLimitMinutes = 40 * 60;
+      const overtimeLimitMinutes = 12 * 60;
+
+      return {
+        weekStart,
+        weekEnd,
+        totalWorkedMinutes,
+        totalLimitMinutes,
+        totalUsagePercent: totalLimitMinutes > 0 ? Math.round((totalWorkedMinutes / totalLimitMinutes) * 100) : 0,
+        overtimeApprovedMinutes,
+        overtimeLimitMinutes,
+        overtimeUsagePercent:
+          overtimeLimitMinutes > 0 ? Math.round((overtimeApprovedMinutes / overtimeLimitMinutes) * 100) : 0,
+      };
     },
 
     /* ─────────────────────────────────────────────────
