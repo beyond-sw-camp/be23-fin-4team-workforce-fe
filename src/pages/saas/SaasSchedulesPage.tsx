@@ -30,7 +30,7 @@ function parseCronToForm(expr: string | null): {
   if (!expr) return fallback;
   const parts = expr.trim().split(/\s+/);
   if (parts.length < 6) return fallback;
-  const [, min, hour, day, month, dow] = parts;
+  const [, min = '0', hour = '0', day = '', month = '', dow = ''] = parts;
   const time = dayjs().hour(Number(hour) || 0).minute(Number(min) || 0);
   // 매시간: hour='*' & day=='*'/'?' & dow=='*'/'?'
   if (hour === '*' && (day === '*' || day === '?') && (dow === '*' || dow === '?')) {
@@ -141,7 +141,7 @@ function cronToHuman(expr: string | null): string {
   if (!expr) return '-';
   const parts = expr.trim().split(/\s+/);
   if (parts.length < 6) return expr;
-  const [sec, min, hour, day, month, dow] = parts;
+  const [sec = '', min = '', hour = '', day = '', month = '', dow = ''] = parts;
   const allWild = (v: string) => v === '*' || v === '?';
   const isNum = (v: string) => /^\d+$/.test(v);
   const pad = (v: string) => String(v).padStart(2, '0');
@@ -247,7 +247,7 @@ function SaasSchedulesPageInner() {
     if (!expr) return 99;
     const parts = expr.trim().split(/\s+/);
     if (parts.length < 6) return 99;
-    const [, , hour, day, month, dow] = parts;
+    const [, , hour = '', day = '', month = '', dow = ''] = parts;
     const allWild = (v: string) => v === '*' || v === '?';
     const isNum = (v: string) => /^\d+$/.test(v);
     if (isNum(month) && isNum(day) && allWild(dow)) return 4; // 매년
@@ -262,7 +262,7 @@ function SaasSchedulesPageInner() {
     if (!expr) return 24 * 60;
     const parts = expr.trim().split(/\s+/);
     if (parts.length < 6) return 24 * 60;
-    const [, min, hour] = parts;
+    const [, min = '0', hour = '0'] = parts;
     const h = Number(hour) || 0;
     const m = Number(min) || 0;
     return h * 60 + m;

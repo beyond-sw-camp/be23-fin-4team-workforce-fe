@@ -1,12 +1,10 @@
 import { useMemo, useState } from 'react';
 import {
-  Button,
   Card,
   DatePicker,
   Empty,
   Form,
   Input,
-  Segmented,
   Space,
   Table,
   Tag,
@@ -31,19 +29,18 @@ import { meetingApi } from '@/features/meetings/api/meetingApi';
 import type { CreateMeetingPayload, MeetingRecord } from '@/features/meetings/model/types';
 import { useMemberDisplayNames } from '@/features/members/hooks/useMemberDisplayNames';
 import { MemberRemoteSelect } from '@/features/members/ui/MemberRemoteSelect';
+import { AppButton } from '@/shared/ui/AppButton';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 
 dayjs.extend(relativeTime);
 dayjs.locale('ko');
 
-type MeetingKind = 'all' | 'feedback' | 'general' | 'pending';
 type MeetingListItem = MeetingRecord & { myRole: 'member' | 'manager' | 'unknown' };
 
 export default function MeetingsPage() {
   const qc = useQueryClient();
   const { user } = useAuth();
-  const [kind, setKind] = useState<MeetingKind>('all');
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [form] = Form.useForm();
 
@@ -87,15 +84,6 @@ export default function MeetingsPage() {
 
   const loading = memberQ.isLoading || managerQ.isLoading;
 
-  const filteredMeetings = useMemo(() => {
-    return meetings.filter((meeting) => {
-      if (kind === 'feedback') return !!meeting.relatedSeasonId;
-      if (kind === 'general') return !meeting.relatedSeasonId;
-      if (kind === 'pending') return !meeting.completedAt;
-      return true;
-    });
-  }, [kind, meetings]);
-
   const stats = useMemo(() => {
     const feedback = meetings.filter((meeting) => !!meeting.relatedSeasonId).length;
     const pending = meetings.filter((meeting) => !meeting.completedAt).length;
@@ -114,14 +102,14 @@ export default function MeetingsPage() {
   const { labelFor } = useMemberDisplayNames(allPartnerIds);
 
   return (
-    <div className="tw-mx-auto tw-w-full tw-space-y-8">
+    <div className="tw-mx-auto tw-w-full tw-space-y-5">
       <AppWorkspacePageTitle
         eyebrow="MEETINGS"
         title="면담"
         subtitle="예정된 면담과 평가 피드백 면담을 한곳에서 확인하고 기록합니다."
       />
 
-      <section className="tw-grid tw-grid-cols-1 tw-gap-4 lg:tw-grid-cols-4">
+      <section className="tw-grid tw-grid-cols-2 tw-gap-3 xl:tw-grid-cols-4">
         <StatCard label="전체 면담" value={stats.total} icon={<TeamOutlined />} />
         <StatCard
           label="피드백 면담"
@@ -139,26 +127,25 @@ export default function MeetingsPage() {
       </section>
 
       <Card
-        className="tw-rounded-2xl tw-border tw-border-slate-200/90 tw-shadow-sm tw-shadow-slate-900/5"
-        styles={{ body: { padding: 0 } }}
+        className="tw-rounded-xl tw-border tw-border-slate-200/90 tw-shadow-sm tw-shadow-slate-900/5"
+        styles={{ body: { padding: 20 } }}
       >
-        <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-3 tw-border-b tw-border-slate-100 tw-px-5 tw-py-4">
-          <Segmented
-            value={kind}
-            onChange={(value) => setKind(value as MeetingKind)}
-            options={[
-              { value: 'all', label: '전체' },
-              { value: 'feedback', label: '피드백' },
-              { value: 'general', label: '일반' },
-              { value: 'pending', label: '미완료' },
-            ]}
-          />
-          <Button type="primary" onClick={() => setCreateModalOpen(true)}>
+        <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-3">
+          <div>
+            <Typography.Text className="tw-text-sm tw-font-semibold tw-text-slate-900">
+              면담 목록
+            </Typography.Text>
+            <Typography.Text className="tw-ml-2 tw-text-xs tw-text-slate-500">
+              유형과 상태는 표 컬럼에서 바로 필터링할 수 있습니다.
+            </Typography.Text>
+          </div>
+          <AppButton onClick={() => setCreateModalOpen(true)}>
             면담 예약
-          </Button>
+          </AppButton>
         </div>
         <Table
           rowKey="meetingRecordId"
+          className="app-table-compact tw-mt-4"
           columns={[
             {
               title: '면담 상대',
@@ -179,6 +166,22 @@ export default function MeetingsPage() {
               ),
             },
             {
+              title: '유형',
+              key: 'type',
+              width: 140,
+              filters: [
+                { text: '피드백', value: 'feedback' },
+                { text: '일반', value: 'general' },
+              ],
+              onFilter: (value, record) =>
+                value === 'feedback' ? !!record.relatedSeasonId : !record.relatedSeasonId,
+              render: (_: unknown, record: MeetingRecord) => (
+                <Tag color={record.relatedSeasonId ? 'blue' : 'default'}>
+                  {record.relatedSeasonId ? '피드백' : '일반'}
+                </Tag>
+              ),
+            },
+            {
               title: '일정',
               dataIndex: 'scheduledAt',
               key: 'scheduledAt',
@@ -196,6 +199,12 @@ export default function MeetingsPage() {
               title: '상태',
               key: 'status',
               width: 120,
+              filters: [
+                { text: '미완료', value: 'pending' },
+                { text: '완료', value: 'completed' },
+              ],
+              onFilter: (value, record) =>
+                value === 'pending' ? !record.completedAt : !!record.completedAt,
               render: (_: unknown, record: MeetingRecord) => statusTag(record),
             },
             {
@@ -213,16 +222,14 @@ export default function MeetingsPage() {
               ),
             },
           ]}
-          dataSource={filteredMeetings}
+          dataSource={meetings}
           loading={loading}
           pagination={{ pageSize: 15, showSizeChanger: false }}
           locale={{
             emptyText: (
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description={
-                  kind === 'feedback' ? '피드백 면담이 없습니다.' : '조건에 맞는 면담이 없습니다.'
-                }
+                description="조건에 맞는 면담이 없습니다."
               />
             ),
           }}
