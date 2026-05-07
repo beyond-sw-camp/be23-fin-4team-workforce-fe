@@ -57,10 +57,13 @@ const TYPE_LABEL: Record<FormFieldType, string> = {
   hidden: '숨김(자동)',
   static_note: '안내 문구(표시만)',
   ai_transcribe: '녹음 받아쓰기(AI)',
+  personnel_order_items: '인사발령 항목',
 };
 
 /** 신규 필드 추가 시 선택 목록에서 제외 (기존 양식에 남아 있으면 해당 행에서만 표시) */
-const SCHEMA_BUILDER_FIELD_TYPES = FORM_SCHEMA_FIELD_TYPES.filter((t) => t !== 'ai_transcribe');
+const SCHEMA_BUILDER_FIELD_TYPES = FORM_SCHEMA_FIELD_TYPES.filter(
+  (t) => t !== 'ai_transcribe' && t !== 'personnel_order_items',
+);
 
 const SchemaRowLockedMapContext = createContext<Map<string, boolean>>(new Map());
 
