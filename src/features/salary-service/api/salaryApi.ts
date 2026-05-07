@@ -920,6 +920,8 @@ export const salaryApi = {
       payDate: string;
       ratePercent?: number | null;
       memo?: string | null;
+      // 차등 모드 - items 있으면 행별 ratePercent override, 없으면 전 직원 일괄
+      items?: Array<{ memberId: string; ratePercent: number }> | null;
     }): Promise<{
       created: number;
       failed: number;

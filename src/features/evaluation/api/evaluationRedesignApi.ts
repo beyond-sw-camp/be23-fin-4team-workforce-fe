@@ -145,6 +145,20 @@ export const evaluationRedesignApi = {
     return mapSeason(unwrapApiResponse<unknown>(res.data));
   },
 
+  // 회사 + 시즌 단위 직원별 최종 등급 조회 - 성과급 발행 prefill 용
+  async findFinalGrades(seasonId: string): Promise<Array<{
+    memberId: string;
+    finalGrade: string;
+    confirmedAt: string | null;
+  }>> {
+    const res = await httpClient.get(`/evaluation/seasons/${seasonId}/grades`);
+    const raw = unwrapApiResponse<unknown>(res.data);
+    return normalizeArray<{ memberId: string; finalGrade: string; confirmedAt: string | null }>(
+      raw,
+      ['items', 'data', 'list'],
+    );
+  },
+
   async activateSeason(seasonId: string): Promise<void> {
     await httpClient.post(`/evaluation/seasons/${seasonId}/open-self-eval`);
   },

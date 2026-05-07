@@ -14,8 +14,8 @@ import type { RetroactiveMonthlyDiff, RetroactivePayrollResult, PayrollItem, Sal
 import { memberApi } from '@/features/member/api/memberApi';
 
 const STATUS_KO: Record<string, string> = {
-  DRAFT: '작성 중',
-  CONFIRMED: '확정',
+  DRAFT: '검토 전',
+  CONFIRMED: '지급 대기',
   PAID: '지급 완료',
 };
 

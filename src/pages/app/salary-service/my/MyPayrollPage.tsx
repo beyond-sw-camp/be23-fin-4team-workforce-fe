@@ -11,8 +11,8 @@ import type { Payroll } from '@/features/salary-service/types';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 
 const STATUS_KO: Record<string, string> = {
-  DRAFT: '작성 중',
-  CONFIRMED: '확정',
+  DRAFT: '검토 전',
+  CONFIRMED: '지급 대기',
   PAID: '지급 완료',
 };
 

@@ -32,8 +32,8 @@ import type {
 const QK_LIST = ['salary', 'payroll', 'admin-list', 'retirement-settlement'] as const;
 
 const STATUS_LABEL: Record<string, string> = {
-  DRAFT: '대기',
-  CONFIRMED: '확정',
+  DRAFT: '검토 전',
+  CONFIRMED: '지급 대기',
   PAID: '지급 완료',
 };
 const STATUS_COLOR: Record<string, string> = {
@@ -219,8 +219,8 @@ export function AdminRetirementSettlementPage({ embedded = false }: { embedded?:
       )}
 
       <div className="tw-grid tw-grid-cols-2 md:tw-grid-cols-4 tw-gap-3">
-        <SummaryCard label="대기 (DRAFT)" value={`${draftCount}건`} tone="gold" />
-        <SummaryCard label="확정" value={`${confirmedCount}건`} tone="blue" />
+        <SummaryCard label="검토 전" value={`${draftCount}건`} tone="gold" />
+        <SummaryCard label="지급 대기" value={`${confirmedCount}건`} tone="blue" />
         <SummaryCard label="지급 완료" value={`${paidCount}건`} tone="green" />
         <SummaryCard label="누적 지급액" value={formatWon(totalAmount)} tone="slate" />
       </div>
@@ -228,8 +228,13 @@ export function AdminRetirementSettlementPage({ embedded = false }: { embedded?:
       <Alert
         type="info"
         showIcon
-        message="퇴직 정산 항목 안내"
-        description="사직서 결재 승인 직후 회사 RetirementPolicy(LEGAL/DB/DC)에 따라 자동 계산됩니다. 1년 미만 근속은 퇴직금 0원으로 생성됩니다. 명세서 총액은 [퇴직금 + 미사용 연차 수당 + 퇴직월 일할 급여 - 세금 등 공제] 입니다. 순수 퇴직금만 따로 보려면 [시뮬 상세] 버튼을 클릭하세요."
+        message="퇴직 정산 안내"
+        description={
+          <span className="tw-text-xs">
+            사직 결재 승인 시 회사 퇴직급여 정책(법정/DB/DC)에 따라 자동 생성됩니다. 1년 미만 근속은 0원.<br />
+            실수령액 = 퇴직금 + 미사용 연차 수당 + 퇴직월 일할 급여 − 공제. 순수 퇴직금만 보려면 행의 [시뮬 상세] 클릭.
+          </span>
+        }
       />
 
       <Card className="tw-border-slate-200/80 tw-shadow-sm">
