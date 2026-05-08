@@ -1,6 +1,11 @@
 /** /app/attendance/company — 전사 일별 근태 페이징 (관리자) */
-import { useQuery } from '@tanstack/react-query';
-import { Alert, Card, DatePicker, Table, Typography } from 'antd';
+import {
+  useQuery } from '@tanstack/react-query';
+import { Alert,
+  Card,
+  DatePicker,
+  Typography,
+} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useMemo, useState } from 'react';
@@ -8,6 +13,8 @@ import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import { normalizeSpringPage } from '@/features/salary-service/lib/normalizePage';
 import type { DailyAttendance } from '@/features/salary-service/types';
 import { AttendanceStatusTag } from '@/features/salary-service/ui/AttendanceStatusTag';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 function formatDt(iso?: string | null) {
   if (!iso) return '—';
@@ -111,7 +118,7 @@ export function AdminAttendanceDailyPage() {
             description="네트워크 또는 권한 상태를 확인해 주세요."
           />
         )}
-        <Table<DailyAttendance>
+        <AppDataTable<DailyAttendance>
           rowKey={(r) => r.dailyAttendanceId ?? `${r.memberId}-${r.attendanceDate}`}
           loading={listQ.isLoading}
           columns={columns}

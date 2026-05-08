@@ -1,15 +1,15 @@
 import {
   CalendarOutlined,
   CheckCircleOutlined,
-  ClockCircleOutlined,
-  DollarOutlined,
+  LoginOutlined,
+  LogoutOutlined,
   UserOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Avatar, Button, Card, List, Progress, Spin, Tabs, Tag, Typography } from 'antd';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
 import type { Me } from '@/features/auth/types';
 import { calendarApi } from '@/features/calendar/api/calendarApi';
@@ -20,8 +20,6 @@ import { goalApi } from '@/features/goals/api/goalApi';
 import type { Goal, KpiCycle } from '@/features/goals/model/types';
 import { memberApi } from '@/features/member/api/memberApi';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
-import { salaryApi } from '@/features/salary-service/api/salaryApi';
-import type { Salary } from '@/features/salary-service/types';
 import { MyLeaveHistoryModal } from '@/features/salary-service/ui/MyLeaveHistoryModal';
 import { notificationApi, type NotificationItem } from '@/features/notification/api/notificationApi';
 import {
@@ -122,10 +120,10 @@ function buildMiniCalendarDays(base: dayjs.Dayjs) {
 function cardShell(title: string, extra: ReactNode | undefined, children: ReactNode) {
   return (
     <Card
-      className="tw-rounded-2xl tw-border tw-border-slate-200/90 tw-shadow-sm tw-shadow-slate-900/5"
-      title={<span className="tw-text-[15px] tw-font-semibold tw-text-slate-900">{title}</span>}
+      className="wf-dashboard-widget-card"
+      title={<span className="wf-dashboard-widget-title">{title}</span>}
       extra={extra}
-      styles={{ body: { paddingTop: 12 } }}
+      styles={{ body: { paddingTop: 14 } }}
     >
       {children}
     </Card>
@@ -135,18 +133,27 @@ function cardShell(title: string, extra: ReactNode | undefined, children: ReactN
 function compactStat(label: string, value: ReactNode, tone: 'blue' | 'green' | 'amber' | 'slate' = 'slate') {
   const toneClass =
     tone === 'blue'
-      ? 'tw-bg-blue-50 tw-text-blue-700'
+      ? 'tw-bg-blue-50 tw-text-blue-700 tw-ring-blue-100'
       : tone === 'green'
-        ? 'tw-bg-emerald-50 tw-text-emerald-700'
+        ? 'tw-bg-emerald-50 tw-text-emerald-700 tw-ring-emerald-100'
         : tone === 'amber'
-          ? 'tw-bg-amber-50 tw-text-amber-700'
-          : 'tw-bg-slate-50 tw-text-slate-700';
+          ? 'tw-bg-amber-50 tw-text-amber-700 tw-ring-amber-100'
+          : 'tw-bg-slate-50 tw-text-slate-700 tw-ring-slate-100';
   return (
-    <div className={`tw-rounded-xl tw-px-3 tw-py-2 ${toneClass}`}>
-      <div className="tw-text-[11px] tw-font-medium tw-opacity-80">{label}</div>
-      <div className="tw-mt-0.5 tw-text-lg tw-font-bold tw-tabular-nums">{value}</div>
+    <div className={`tw-rounded-xl tw-px-3 tw-py-2.5 tw-ring-1 ${toneClass}`}>
+      <div className="tw-text-[11px] tw-font-semibold tw-opacity-80">{label}</div>
+      <div className="tw-mt-0.5 tw-text-xl tw-font-bold tw-leading-none tw-tabular-nums">{value}</div>
     </div>
   );
+}
+
+function useDashboardNow() {
+  const [now, setNow] = useState(() => dayjs());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(dayjs()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return now;
 }
 
 function goalStatusLabel(status: Goal['status']): string {
@@ -272,20 +279,21 @@ export function DashboardProfileBlock({ user }: { user: Me | null }) {
     <Link to="/app/me" className="tw-text-xs tw-font-medium tw-text-blue-600 hover:tw-text-blue-700">
       {TXT.myInfo}
     </Link>,
-    <div className="tw-space-y-4">
-      <div className="tw-flex tw-items-start tw-gap-3">
-        <Avatar size={56} className="tw-bg-slate-200 tw-text-slate-700" icon={<UserOutlined />} src={avatarSrc} />
-        <div className="tw-min-w-0 tw-flex-1">
-          <div className="tw-flex tw-flex-wrap tw-items-baseline tw-gap-x-2">
-            <Typography.Text className="tw-text-base tw-font-bold tw-text-slate-900">{name}</Typography.Text>
-            {jobTitle ? <Typography.Text type="secondary" className="tw-text-sm">{jobTitle}</Typography.Text> : null}
-          </div>
-          <Typography.Text type="secondary" className="tw-mt-0.5 tw-block tw-text-xs">{deptLine}</Typography.Text>
-        </div>
+    <div className="tw-flex tw-flex-col tw-items-center tw-text-center">
+      <div className="tw-relative tw-mt-1">
+        <Avatar size={68} className="tw-border-4 tw-border-white tw-bg-slate-200 tw-text-slate-700 tw-shadow-md tw-shadow-slate-900/10" icon={<UserOutlined />} src={avatarSrc} />
+        <span className="tw-absolute tw-bottom-1 tw-right-1 tw-size-4 tw-rounded-full tw-border-2 tw-border-white tw-bg-emerald-500" />
       </div>
-      <div className="tw-rounded-xl tw-bg-slate-50 tw-px-4 tw-py-3 tw-text-center">
-        <Typography.Text type="secondary" className="tw-text-xs">{TXT.todaySchedule}</Typography.Text>
-        <div className="tw-mt-1 tw-flex tw-min-h-[2.5rem] tw-items-center tw-justify-center tw-text-3xl tw-font-bold tw-tabular-nums tw-text-slate-900">
+      <div className="tw-mt-4 tw-min-w-0">
+        <div className="tw-flex tw-flex-wrap tw-items-baseline tw-justify-center tw-gap-x-2">
+          <Typography.Text className="tw-text-lg tw-font-bold tw-text-slate-950">{name}</Typography.Text>
+          {jobTitle ? <Typography.Text type="secondary" className="tw-text-sm">{jobTitle}</Typography.Text> : null}
+        </div>
+        <Typography.Text type="secondary" className="tw-mt-1 tw-block tw-text-xs">{deptLine}</Typography.Text>
+      </div>
+      <div className="tw-mt-5 tw-w-full tw-rounded-2xl tw-bg-slate-50 tw-px-4 tw-py-3.5 tw-ring-1 tw-ring-slate-100">
+        <Typography.Text type="secondary" className="tw-text-xs tw-font-medium">{TXT.todaySchedule}</Typography.Text>
+        <div className="tw-mt-1 tw-flex tw-min-h-[2.4rem] tw-items-center tw-justify-center tw-text-3xl tw-font-bold tw-tabular-nums tw-text-blue-600">
           {profileQuery.isLoading ? <Spin size="small" /> : (p?.todayEventCount ?? 0)}
         </div>
       </div>
@@ -351,7 +359,7 @@ export function DashboardPerformanceGoalsBlock() {
     </Link>,
     <Spin spinning={myGoalsQ.isLoading || objectivesQ.isLoading || seasonsQ.isLoading}>
       <div className="tw-space-y-4">
-        <div className="tw-rounded-2xl tw-border tw-border-slate-100 tw-bg-slate-50/80 tw-p-3">
+        <div className="tw-rounded-2xl tw-bg-slate-50 tw-p-4 tw-ring-1 tw-ring-slate-100">
           <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2">
             <div>
               <div className="tw-text-sm tw-font-semibold tw-text-slate-900">{formatGoalCycle(cycleAnchor)}</div>
@@ -363,14 +371,14 @@ export function DashboardPerformanceGoalsBlock() {
             </div>
             <Tag color={readiness.color} className="!tw-m-0 !tw-rounded-full">{readiness.label}</Tag>
           </div>
-          <div className="tw-mt-2 tw-text-xs tw-text-slate-600">{readiness.help}</div>
+          <div className="tw-mt-2 tw-text-xs tw-leading-5 tw-text-slate-600">{readiness.help}</div>
         </div>
         <div className="tw-grid tw-grid-cols-3 tw-gap-2">
           {compactStat('승인 완료', approvedGoals.length, approvedGoals.length > 0 ? 'green' : 'slate')}
           {compactStat('승인 대기', pendingGoals.length, pendingGoals.length > 0 ? 'amber' : 'slate')}
           {compactStat('조직 목표', cycleObjectives.length, 'blue')}
         </div>
-        <div>
+        <div className="tw-rounded-2xl tw-bg-white tw-p-1">
           <div className="tw-mb-1 tw-flex tw-justify-between tw-text-xs tw-text-slate-600">
             <span>개인 목표 가중치 합</span>
             <span className="tw-font-medium tw-text-slate-900">{weightTotal}% / 100%</span>
@@ -628,105 +636,196 @@ export function DashboardCalendarBlock() {
 
 export function DashboardAttendanceBlock() {
   const queryClient = useQueryClient();
-  const todayIso = dayjs().format('YYYY-MM-DD');
-  // \uC624\uB298 \uC77C\uBCC4 \uADFC\uD0DC - \uCD9C\uADFC/\uD1F4\uADFC \uC2DC\uAC01
+  const now = useDashboardNow();
+  const todayIso = now.format('YYYY-MM-DD');
   const dailyQ = useQuery({
-    queryKey: ['dashboard', 'attendance', 'daily', todayIso],
+    queryKey: ['salary', 'attendance', 'my', 'daily', todayIso],
     queryFn: async () => {
       try {
         return await attendanceApi.attendance.getMyDaily(todayIso);
-      } catch {
-        return null;
+      } catch (e) {
+        if (
+          typeof e === 'object' &&
+          e !== null &&
+          'status' in e &&
+          (e as { status?: unknown }).status === 404
+        ) {
+          return null;
+        }
+        throw e;
       }
     },
     staleTime: 30_000,
   });
-  // \uC8FC\uAC04 \uADFC\uBB34\uC2DC\uAC04 \uC694\uC57D - \uB204\uC801 / \uD55C\uB3C4
   const summaryQ = useQuery({
-    queryKey: ['dashboard', 'attendance', 'summary', todayIso],
-    queryFn: () => attendanceApi.attendance.getMyWorkTimeSummary(todayIso),
+    queryKey: ['salary', 'attendance', 'my', 'work-time-summary', todayIso],
+    queryFn: async () => {
+      try {
+        return await attendanceApi.attendance.getMyWorkTimeSummary(todayIso);
+      } catch (e) {
+        if (
+          typeof e === 'object' &&
+          e !== null &&
+          'status' in e &&
+          (e as { status?: unknown }).status === 404
+        ) {
+          return null;
+        }
+        throw e;
+      }
+    },
     staleTime: 30_000,
   });
+  const invalidateAttendance = () => {
+    void queryClient.invalidateQueries({ queryKey: ['salary', 'attendance', 'my'] });
+  };
   const clockInM = useMutation({
     mutationFn: () => attendanceApi.attendance.clockIn({}),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['dashboard', 'attendance'] });
+    onSuccess: (daily) => {
+      queryClient.setQueryData(['salary', 'attendance', 'my', 'daily', todayIso], daily);
+      invalidateAttendance();
     },
   });
   const clockOutM = useMutation({
     mutationFn: () => attendanceApi.attendance.clockOut({}),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['dashboard', 'attendance'] });
+    onSuccess: (daily) => {
+      queryClient.setQueryData(['salary', 'attendance', 'my', 'daily', todayIso], daily);
+      invalidateAttendance();
     },
   });
 
   const fmtTime = (iso?: string | null) => (iso ? dayjs(iso).format('HH:mm') : '--:--');
   const fmtMinutes = (m?: number | null) => {
-    if (m == null) return '0h 0m';
-    const h = Math.floor(m / 60);
-    const mm = m % 60;
-    return `${h}h ${mm}m`;
+    const safe = Math.max(0, Math.floor(m ?? 0));
+    const h = Math.floor(safe / 60);
+    const mm = safe % 60;
+    return `${h}시간 ${mm}분`;
   };
-  const totalMin = summaryQ.data?.totalWorkedMinutes ?? 0;
-  const limitMin = summaryQ.data?.totalLimitMinutes ?? 40 * 60;
-  const pct = limitMin > 0 ? Math.min(100, Math.round((totalMin / limitMin) * 100)) : 0;
-  const remainMin = Math.max(0, limitMin - totalMin);
-  const remainText = `\uC8FC\uAC04 \uBAA9\uD45C\uAE4C\uC9C0 \uC57D ${Math.round(remainMin / 60)}\uC2DC\uAC04 \uB0A8\uC558\uC2B5\uB2C8\uB2E4.`;
+  const percentColor = (percent?: number | null) => {
+    const p = percent ?? 0;
+    if (p >= 100) return '#CF1322';
+    if (p >= 92) return '#D4380D';
+    if (p >= 75) return '#D48806';
+    return '#2563EB';
+  };
+  const percentOf = (value?: number | null, limit?: number | null, percent?: number | null) => {
+    if (typeof percent === 'number') return Math.max(0, Math.min(100, Math.round(percent)));
+    if (!limit || limit <= 0) return 0;
+    return Math.max(0, Math.min(100, Math.round(((value ?? 0) / limit) * 100)));
+  };
+
+  const summary = summaryQ.data ?? null;
+  const totalMin = summary?.totalWorkedMinutes ?? 0;
+  const limitMin = summary?.totalLimitMinutes ?? null;
+  const totalPct = percentOf(totalMin, limitMin, summary?.totalUsagePercent);
+  const overtimeLimitMin = summary?.overtimeLimitMinutes ?? null;
+  const overtimeMin = summary?.overtimeApprovedMinutes ?? 0;
+  const weekRange =
+    summary?.weekStart && summary?.weekEnd
+      ? `${dayjs(summary.weekStart).format('MM.DD')} ~ ${dayjs(summary.weekEnd).format('MM.DD')}`
+      : '이번 주';
 
   const hasClockedIn = !!dailyQ.data?.firstClockIn;
   const hasClockedOut = !!dailyQ.data?.lastClockOut;
+  const todayWorkedMinutes = (() => {
+    const daily = dailyQ.data;
+    if (!daily) return 0;
+    if (daily.firstClockIn && !daily.lastClockOut) {
+      return Math.max(0, now.diff(dayjs(daily.firstClockIn), 'minute'));
+    }
+    if (daily.workedMinutes != null) return daily.workedMinutes;
+    if (daily.firstClockIn && daily.lastClockOut) {
+      return Math.max(0, dayjs(daily.lastClockOut).diff(dayjs(daily.firstClockIn), 'minute'));
+    }
+    return 0;
+  })();
+  const todayStatusLabel = hasClockedOut ? '퇴근 완료' : hasClockedIn ? '근무 중' : '근무 전';
 
   return cardShell(
     DASHBOARD_WIDGET_LABELS.attendance,
-    <Tag color="processing" className="!tw-m-0">{TXT.employed}</Tag>,
-    <div className="tw-space-y-4">
-      <div className="tw-flex tw-items-baseline tw-justify-between tw-gap-2">
+    undefined,
+    <Spin spinning={dailyQ.isLoading || summaryQ.isLoading}>
+      <div className="tw-space-y-3">
         <div>
-          <Typography.Text type="secondary" className="tw-text-xs">{dayjs().format('YYYY.MM.DD (ddd)')}</Typography.Text>
-          <div className="tw-mt-1 tw-font-mono tw-text-2xl tw-font-semibold tw-tabular-nums tw-text-slate-900">{dayjs().format('HH:mm:ss')}</div>
-        </div>
-        <ClockCircleOutlined className="tw-text-2xl tw-text-blue-600" />
-      </div>
-      <div className="tw-grid tw-grid-cols-2 tw-gap-3 tw-rounded-xl tw-bg-slate-50 tw-p-3">
-        <div>
-          <Typography.Text type="secondary" className="tw-text-xs">{TXT.checkIn}</Typography.Text>
-          <div className={`tw-text-sm tw-font-semibold ${hasClockedIn ? 'tw-text-slate-900' : 'tw-text-slate-400'}`}>
-            {fmtTime(dailyQ.data?.firstClockIn)}
+          <div className="tw-flex tw-items-start tw-justify-between tw-gap-3">
+            <div className="tw-min-w-0">
+              <Typography.Text type="secondary" className="tw-text-xs tw-font-medium">{now.format('YYYY.MM.DD (ddd)')}</Typography.Text>
+              <div className="tw-mt-1 tw-text-[11px] tw-font-medium tw-text-slate-500">오늘 근무시간</div>
+              <div className="tw-mt-0.5 tw-text-2xl tw-font-bold tw-tracking-tight tw-tabular-nums tw-text-slate-950">
+                {fmtMinutes(todayWorkedMinutes)}
+              </div>
+            </div>
+            <span className="tw-whitespace-nowrap tw-rounded-full tw-bg-slate-100 tw-px-2.5 tw-py-1 tw-text-xs tw-font-semibold tw-text-slate-600">
+              {todayStatusLabel}
+            </span>
+          </div>
+          <div className="tw-mt-3 tw-grid tw-grid-cols-2 tw-gap-3 tw-border-y tw-border-slate-100 tw-py-2.5">
+            <div>
+              <Typography.Text type="secondary" className="tw-text-[11px]">{TXT.checkIn}</Typography.Text>
+              <div className={`tw-text-sm tw-font-semibold ${hasClockedIn ? 'tw-text-slate-900' : 'tw-text-slate-400'}`}>
+                {fmtTime(dailyQ.data?.firstClockIn)}
+              </div>
+            </div>
+            <div>
+              <Typography.Text type="secondary" className="tw-text-[11px]">{TXT.checkOut}</Typography.Text>
+              <div className={`tw-text-sm tw-font-semibold ${hasClockedOut ? 'tw-text-slate-900' : 'tw-text-slate-400'}`}>
+                {fmtTime(dailyQ.data?.lastClockOut)}
+              </div>
+            </div>
           </div>
         </div>
         <div>
-          <Typography.Text type="secondary" className="tw-text-xs">{TXT.checkOut}</Typography.Text>
-          <div className={`tw-text-sm tw-font-semibold ${hasClockedOut ? 'tw-text-slate-900' : 'tw-text-slate-400'}`}>
-            {fmtTime(dailyQ.data?.lastClockOut)}
+          <div className="tw-mb-1 tw-flex tw-items-baseline tw-justify-between tw-gap-2">
+            <Typography.Text className="tw-text-xs tw-font-semibold tw-text-slate-700">주간 누적</Typography.Text>
+            <span className="tw-text-[11px] tw-font-medium tw-text-slate-400">{weekRange}</span>
           </div>
+          <div className="tw-flex tw-items-baseline tw-justify-between tw-gap-2">
+            <span className="tw-text-sm tw-font-semibold" style={{ color: percentColor(totalPct) }}>
+              {fmtMinutes(totalMin)}
+              {limitMin != null ? <span className="tw-ml-1 tw-text-xs tw-font-normal tw-text-slate-400">/ {fmtMinutes(limitMin)}</span> : null}
+            </span>
+            <span className="tw-whitespace-nowrap tw-text-[11px] tw-font-medium tw-text-slate-500">
+              연장 {fmtMinutes(overtimeMin)}
+              {overtimeLimitMin != null ? ` / ${fmtMinutes(overtimeLimitMin)}` : ''}
+            </span>
+          </div>
+          <Progress
+            percent={totalPct}
+            showInfo={false}
+            size="small"
+            strokeColor={percentColor(totalPct)}
+            trailColor="#e2e8f0"
+            className="!tw-mt-1"
+          />
+          {summaryQ.isError ? (
+            <Typography.Text type="danger" className="tw-mt-1 tw-block tw-text-[11px]">
+              주간 모니터링 정보를 불러오지 못했습니다.
+            </Typography.Text>
+          ) : null}
+        </div>
+        <div className="tw-grid tw-grid-cols-2 tw-gap-2">
+          <Button
+            type="primary"
+            icon={<LoginOutlined />}
+            className="!tw-h-10 !tw-rounded-xl !tw-font-semibold"
+            loading={clockInM.isPending}
+            disabled={hasClockedIn || clockOutM.isPending}
+            onClick={() => clockInM.mutate()}
+          >
+            {TXT.checkInAction}
+          </Button>
+          <Button
+            icon={<LogoutOutlined />}
+            className="!tw-h-10 !tw-rounded-xl !tw-font-semibold"
+            loading={clockOutM.isPending}
+            disabled={!hasClockedIn || hasClockedOut || clockInM.isPending}
+            onClick={() => clockOutM.mutate()}
+          >
+            {TXT.checkOutAction}
+          </Button>
         </div>
       </div>
-      <div>
-        <div className="tw-mb-1 tw-flex tw-justify-between tw-text-xs tw-text-slate-600">
-          <span>{TXT.weeklyTotal}</span>
-          <span className="tw-font-medium tw-text-slate-900">{fmtMinutes(totalMin)} / {fmtMinutes(limitMin)}</span>
-        </div>
-        <Progress percent={pct} showInfo={false} strokeColor="#2563EB" trailColor="#e2e8f0" />
-        <Typography.Text type="secondary" className="tw-mt-1 tw-block tw-text-[11px]">{remainText}</Typography.Text>
-      </div>
-      <div className="tw-flex tw-flex-wrap tw-gap-2">
-        <Button
-          type="primary"
-          loading={clockInM.isPending}
-          disabled={hasClockedIn}
-          onClick={() => clockInM.mutate()}
-        >
-          {TXT.checkInAction}
-        </Button>
-        <Button
-          loading={clockOutM.isPending}
-          disabled={!hasClockedIn || hasClockedOut}
-          onClick={() => clockOutM.mutate()}
-        >
-          {TXT.checkOutAction}
-        </Button>
-      </div>
-    </div>,
+    </Spin>,
   );
 }
 
@@ -761,10 +860,14 @@ export function DashboardLeaveBlock() {
           { label: TXT.used, value: fmtDays(totalUsed), icon: <CalendarOutlined className="tw-text-blue-500" /> },
           { label: TXT.yearly, value: fmtDays(totalGranted), icon: <UserOutlined className="tw-text-slate-500" /> },
         ].map((x) => (
-          <div key={x.label} className="tw-rounded-xl tw-border tw-border-slate-100 tw-bg-slate-50/80 tw-py-3">
-            <div className="tw-mb-1 tw-flex tw-justify-center">{x.icon}</div>
-            <div className="tw-text-lg tw-font-bold tw-tabular-nums tw-text-slate-900">{x.value}</div>
-            <div className="tw-text-[11px] tw-text-slate-500">{x.label}</div>
+          <div key={x.label} className="tw-rounded-2xl tw-bg-slate-50 tw-px-2 tw-py-3 tw-ring-1 tw-ring-slate-100">
+            <div className="tw-mb-2 tw-flex tw-justify-center">
+              <span className="tw-flex tw-size-9 tw-items-center tw-justify-center tw-rounded-full tw-bg-white tw-shadow-sm tw-shadow-slate-900/5">
+                {x.icon}
+              </span>
+            </div>
+            <div className="tw-text-xl tw-font-bold tw-tabular-nums tw-text-slate-950">{x.value}</div>
+            <div className="tw-text-[11px] tw-font-medium tw-text-slate-500">{x.label}</div>
           </div>
         ))}
       </div>
@@ -773,7 +876,7 @@ export function DashboardLeaveBlock() {
           <span className="tw-text-slate-600">{TXT.usedRate}</span>
           <span className="tw-font-medium tw-text-slate-900">{usedPct}%</span>
         </div>
-        <Progress percent={usedPct} strokeColor="#2563EB" trailColor="#e2e8f0" size="small" />
+        <Progress percent={usedPct} showInfo={false} strokeColor="#2563EB" trailColor="#e2e8f0" size="small" />
       </div>
       <MyLeaveHistoryModal open={historyOpen} onClose={() => setHistoryOpen(false)} />
     </div>,
@@ -888,111 +991,6 @@ export function DashboardNotificationsBlock() {
   );
 }
 
-/**
- * 시스템 관리자만 의미 있는 위젯 — 회사 Salary 목록에서 활성·기본급 0원인 행 = 급여 미등록 신규 입사자.
- * 클릭 시 [직원 급여 관리] 의 신규 입사자 필터가 켜진 화면으로 이동.
- */
-function DashboardPayrollNewHiresBlock({ user }: { user: Me | null }) {
-  const isAdmin = Boolean(user?.isSystemAdmin);
-  // 권한 없는 사용자는 query 자체를 발사하지 않는다 (백엔드 403 이슈 + 무의미한 0명 표시 방지).
-  const salariesQ = useQuery({
-    queryKey: ['salary', 'salaries'],
-    queryFn: () => salaryApi.salary.listByCompany(),
-    enabled: isAdmin,
-    retry: false,
-    staleTime: 60_000,
-  });
-  // 임시 Salary 시그니처 — SalaryTab 의 isProvisionalSalary 와 동일 기준.
-  // - 연봉제 자동 행: baseSalary === 0 && step == null
-  // - 호봉제 자동 행: step === 1 (호봉표 1호봉 가격이 baseSalary 에 자동 적용되므로 baseSalary 만으로는 식별 불가)
-  const newHires = useMemo(() => {
-    const today = dayjs().startOf('day');
-    const list = salariesQ.data ?? [];
-    return list.filter((s) => {
-      if (!s.effectiveFrom) return false;
-      const startedOk = !dayjs(s.effectiveFrom).startOf('day').isAfter(today);
-      const notEnded = !s.effectiveTo || !dayjs(s.effectiveTo).startOf('day').isBefore(today);
-      const isActive = startedOk && notEnded;
-      if (!isActive) return false;
-      const isAutoYearly = (s.baseSalary ?? 0) === 0 && s.step == null;
-      const isAutoStep = s.step === 1;
-      return isAutoYearly || isAutoStep;
-    });
-  }, [salariesQ.data]);
-
-  if (!isAdmin) {
-    // 비관리자에게는 위젯 자체를 비워둔다 (껍데기만 남기면 혼란).
-    return null;
-  }
-
-  return cardShell(
-    DASHBOARD_WIDGET_LABELS.payrollNewHires,
-    <Link
-      to="/app/payroll/admin"
-      search={{ tab: 'register' }}
-      className="tw-text-[13px] tw-font-medium tw-text-[#2563EB]"
-    >
-      바로 등록 →
-    </Link>,
-    salariesQ.isLoading ? (
-      <div className="tw-flex tw-justify-center tw-py-6">
-        <Spin />
-      </div>
-    ) : newHires.length === 0 ? (
-      <div className="tw-py-2 tw-text-sm tw-text-slate-500">
-        급여 미등록 신규 입사자가 없습니다.
-      </div>
-    ) : (
-      <div>
-        <div className="tw-flex tw-items-baseline tw-gap-2">
-          <DollarOutlined className="tw-text-amber-500" />
-          <span className="tw-text-2xl tw-font-bold tw-text-slate-900">{newHires.length}</span>
-          <span className="tw-text-sm tw-text-slate-500">명 — 기본급 등록 필요</span>
-        </div>
-        <List<Salary>
-          size="small"
-          className="tw-mt-2"
-          dataSource={newHires.slice(0, 5)}
-          renderItem={(s) => (
-            <List.Item
-              actions={[
-                s.memberId ? (
-                  <Link
-                    key="register"
-                    to="/app/payroll/admin"
-                    search={{ tab: 'register', createForMemberId: s.memberId }}
-                    className="tw-text-xs tw-font-medium tw-text-[#2563EB]"
-                  >
-                    등록
-                  </Link>
-                ) : null,
-              ].filter(Boolean)}
-            >
-              <List.Item.Meta
-                title={
-                  <span className="tw-text-sm tw-font-medium tw-text-slate-800">
-                    {s.name ?? '—'}
-                  </span>
-                }
-                description={
-                  <span className="tw-text-xs tw-text-slate-500">
-                    {[s.organizationName, s.sabun].filter(Boolean).join(' · ') || '—'}
-                  </span>
-                }
-              />
-            </List.Item>
-          )}
-        />
-        {newHires.length > 5 ? (
-          <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-1 !tw-text-xs">
-            외 {newHires.length - 5}명 — [바로 등록] 에서 전체 보기
-          </Typography.Paragraph>
-        ) : null}
-      </div>
-    ),
-  );
-}
-
 export function renderDashboardWidget(id: DashboardWidgetId, user: Me | null): ReactNode {
   switch (id) {
     case 'profile':
@@ -1009,8 +1007,6 @@ export function renderDashboardWidget(id: DashboardWidgetId, user: Me | null): R
       return <DashboardLeaveBlock key={id} />;
     case 'notifications':
       return <DashboardNotificationsBlock key={id} />;
-    case 'payrollNewHires':
-      return <DashboardPayrollNewHiresBlock key={id} user={user} />;
     default:
       return null;
   }

@@ -1,6 +1,17 @@
-import { FolderOpenOutlined, ReloadOutlined } from '@ant-design/icons';
+import {
+  DeleteOutlined,
+  FolderOpenOutlined,
+  ReloadOutlined } from '@ant-design/icons';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { Alert, Button, Empty, Select, Space, Table, Tag, Typography } from 'antd';
+import { Alert,
+  Button,
+  Empty,
+  Select,
+  Space,
+  Tag,
+  Tooltip,
+  Typography,
+} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import clsx from 'clsx';
 import dayjs from 'dayjs';
@@ -21,6 +32,8 @@ import {
   APPROVAL_TYPE_LABEL,
 } from '@/features/approvals/lib/approvalSearchMeta';
 import { AppSearchBar } from '@/shared/ui';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 export type ApprovalSearchPanelFilters = {
   query?: string;
@@ -261,15 +274,29 @@ export function ApprovalSearchPanel({
                   </Button>
                 ) : null}
                 {showCancel ? (
-                  <Button
-                    type="link"
-                    size="small"
-                    className="!tw-h-7 !tw-px-2"
-                    danger
-                    onClick={() => myDraftManageActions.onOpenCancelOrDelete(r.requestId, st)}
-                  >
-                    {st === 'DRAFT' ? '삭제' : '취소'}
-                  </Button>
+                  st === 'DRAFT' ? (
+                    <Tooltip title="삭제">
+                      <Button
+                        type="link"
+                        size="small"
+                        className="!tw-inline-flex !tw-h-7 !tw-w-7 !tw-items-center !tw-justify-center !tw-p-0"
+                        danger
+                        icon={<DeleteOutlined />}
+                        aria-label="임시저장 문서 삭제"
+                        onClick={() => myDraftManageActions.onOpenCancelOrDelete(r.requestId, st)}
+                      />
+                    </Tooltip>
+                  ) : (
+                    <Button
+                      type="link"
+                      size="small"
+                      className="!tw-h-7 !tw-px-2"
+                      danger
+                      onClick={() => myDraftManageActions.onOpenCancelOrDelete(r.requestId, st)}
+                    >
+                      취소
+                    </Button>
+                  )
                 ) : null}
               </div>
             );
@@ -359,12 +386,12 @@ export function ApprovalSearchPanel({
       ) : null}
 
       <div className={clsx(isEmbedModal && 'wf-approval-modal-table-fill')}>
-        <Table
+        <AppDataTable
           rowKey="requestId"
           loading={queryResult.isFetching}
           columns={columns}
           dataSource={rows}
-          tableLayout="fixed"
+          tableLayout="auto"
           className={clsx('tw-w-full [&_.ant-table]:tw-max-w-full', isEmbedModal && 'wf-approval-modal-table')}
           locale={{ emptyText: <Empty description="검색 결과가 없습니다" /> }}
           onRow={(record) => ({

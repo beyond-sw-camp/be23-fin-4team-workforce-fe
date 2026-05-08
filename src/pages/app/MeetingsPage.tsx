@@ -1,4 +1,6 @@
-import { useMemo, useState } from 'react';
+import {
+  useMemo,
+  useState } from 'react';
 import {
   Card,
   DatePicker,
@@ -6,7 +8,6 @@ import {
   Form,
   Input,
   Space,
-  Table,
   Tag,
   Typography,
   message,
@@ -33,6 +34,8 @@ import { MemberRemoteSelect } from '@/features/members/ui/MemberRemoteSelect';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 dayjs.extend(relativeTime);
 dayjs.locale('ko');
@@ -219,7 +222,7 @@ export default function MeetingsPage() {
             면담 예약
           </AppButton>
         </div>
-        <Table
+        <AppDataTable
           rowKey="meetingRecordId"
           className="app-table-compact tw-mt-4"
           columns={columns}

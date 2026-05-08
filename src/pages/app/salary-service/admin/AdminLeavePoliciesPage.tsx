@@ -1,7 +1,12 @@
 /** /app/leave/policies — 연차 정책 CRUD (시스템 관리자) */
-import { Link } from '@tanstack/react-router';
-import { useMemo, useState, type ReactNode } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  Link } from '@tanstack/react-router';
+import { useMemo,
+  useState,
+  type ReactNode } from 'react';
+import { useMutation,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
 import {
   App,
   Alert,
@@ -13,7 +18,6 @@ import {
   Select,
   Space,
   Switch,
-  Table,
   Tag,
   Typography,
 } from 'antd';
@@ -22,7 +26,7 @@ import {
   CheckCircleTwoTone,
   CloseCircleTwoTone,
   DeleteOutlined,
-  EditOutlined,
+  EditOutlined, PlusOutlined,
   WarningOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
@@ -31,6 +35,8 @@ import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppUnitInputNumber } from '@/shared/ui/AppUnitInputNumber';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import type { AccrualBaseCode, LeavePolicy } from '@/features/salary-service/types';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 type FormValues = {
   accrualBase: AccrualBaseCode;
@@ -195,7 +201,7 @@ export function AdminLeavePoliciesPage({ embedded = false }: { embedded?: boolea
               title="수정"
               aria-label="연차 정책 수정"
               icon={<EditOutlined />}
-              className={`${TABLE_ACTION_BUTTON_CLASS} !tw-text-slate-500 hover:!tw-bg-slate-100 hover:!tw-text-slate-900`}
+              className={`${TABLE_ACTION_BUTTON_CLASS} !tw-text-blue-600 hover:!tw-bg-blue-50 hover:!tw-text-blue-700`}
               onClick={() => {
                 setEditing(r);
                 setOpen(true);
@@ -291,6 +297,7 @@ export function AdminLeavePoliciesPage({ embedded = false }: { embedded?: boolea
       <Button
         type="primary"
         className={NAVY_BUTTON_CLASS}
+        icon={<PlusOutlined />}
         onClick={() => {
           setEditing(null);
           form.resetFields();
@@ -346,7 +353,7 @@ export function AdminLeavePoliciesPage({ embedded = false }: { embedded?: boolea
 
       <Card>
         {/* TODO: 서버 페이지네이션 전환 필요 */}
-        <Table<LeavePolicy>
+        <AppDataTable<LeavePolicy>
           rowKey={(r, index) => (r.policyId ? r.policyId : `row-${index}`)}
           loading={listQ.isLoading || listQ.isFetching}
           dataSource={listQ.data ?? []}

@@ -6,3 +6,4 @@ export { AppEmptyIllustrated, APP_EMPTY_ILLUSTRATED_IMAGE_HEIGHT_PX } from '@/sh
 export { AppSearchBar } from '@/shared/ui/AppSearchBar';
 export { AppSearchField, appSearchFieldShellClassName } from '@/shared/ui/AppSearchField';
 export type { AppSearchFieldProps } from '@/shared/ui/AppSearchField';
+export { AppTabLabel } from '@/shared/ui/AppTabLabel';

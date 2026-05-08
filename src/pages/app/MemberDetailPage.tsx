@@ -10,8 +10,14 @@ import {
   SafetyCertificateOutlined,
   TeamOutlined,
   UnlockOutlined,
-} from '@ant-design/icons';
-import { Alert, Avatar, Card, Modal, Spin, Table, Tag, Typography } from 'antd';
+  } from '@ant-design/icons';
+import { Alert,
+  Avatar,
+  Card,
+  Spin,
+  Tag,
+  Typography,
+} from 'antd';
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
@@ -35,6 +41,9 @@ import { usePermissions } from '@/features/permissions/usePermissionsHook';
 import { AppButton } from '@/shared/ui/AppButton';
 import { twMerge } from 'tailwind-merge';
 import { MemberHrEditModal } from '@/features/members/ui/MemberHrEditModal';
+import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 function memberStatusLabel(code: string | undefined): string {
   if (!code?.trim()) return '—';
@@ -453,7 +462,7 @@ export function MemberDetailPage() {
         </main>
       </div>
 
-      <Modal
+      <AppSingleActionModal
         title={
           <span>
             직원 인사 이력
@@ -463,35 +472,38 @@ export function MemberDetailPage() {
           </span>
         }
         open={historyOpen}
-        onCancel={() => setHistoryOpen(false)}
-        footer={null}
+        onClose={() => setHistoryOpen(false)}
+        onSubmit={() => undefined}
+        submitText="확인"
+        customFooter={null}
         width={960}
         destroyOnHidden
         centered
         className="[&_.ant-modal-body]:tw-max-h-[min(85vh,800px)] [&_.ant-modal-body]:tw-overflow-y-auto"
       >
-        <Typography.Paragraph type="secondary" className="!tw-mb-3 !tw-text-xs">
-          승진·부서 이동 등 인사 변경 이력입니다. 적용 종료일이 없으면 현재 적용 중인 이력입니다.
-        </Typography.Paragraph>
-        {historyQuery.isLoading ? (
-          <div className="tw-flex tw-justify-center tw-py-12">
-            <Spin />
-          </div>
-        ) : historyQuery.isError ? (
-          <Alert
-            type="error"
-            showIcon
-            message="이력을 불러오지 못했습니다."
-            description={historyQuery.error instanceof Error ? historyQuery.error.message : String(historyQuery.error)}
-          />
-        ) : (
-          <Table<MemberHistoryItem>
-            rowKey={(r) => r.historyId || `${r.effectiveFrom}-${r.changeType}`}
-            size="small"
-            pagination={{ pageSize: 10, showSizeChanger: false }}
-            scroll={{ x: 1280 }}
-            dataSource={historyQuery.data ?? []}
-            columns={[
+        <div className="tw-px-5 tw-py-4">
+          <Typography.Paragraph type="secondary" className="!tw-mb-3 !tw-text-xs">
+            승진·부서 이동 등 인사 변경 이력입니다. 적용 종료일이 없으면 현재 적용 중인 이력입니다.
+          </Typography.Paragraph>
+          {historyQuery.isLoading ? (
+            <div className="tw-flex tw-justify-center tw-py-12">
+              <Spin />
+            </div>
+          ) : historyQuery.isError ? (
+            <Alert
+              type="error"
+              showIcon
+              message="이력을 불러오지 못했습니다."
+              description={historyQuery.error instanceof Error ? historyQuery.error.message : String(historyQuery.error)}
+            />
+          ) : (
+            <AppDataTable<MemberHistoryItem>
+              rowKey={(r) => r.historyId || `${r.effectiveFrom}-${r.changeType}`}
+              size="small"
+              pagination={{ pageSize: 10, showSizeChanger: false }}
+              scroll={{ x: 1280 }}
+              dataSource={historyQuery.data ?? []}
+              columns={[
               {
                 title: '변경 유형',
                 dataIndex: 'changeType',
@@ -532,10 +544,11 @@ export function MemberDetailPage() {
                   return d.isValid() ? d.format('YYYY-MM-DD HH:mm') : v || '—';
                 },
               },
-            ]}
-          />
-        )}
-      </Modal>
+              ]}
+            />
+          )}
+        </div>
+      </AppSingleActionModal>
       <MemberHrEditModal memberId={memberId} open={hrEditOpen} onClose={() => setHrEditOpen(false)} />
     </div>
   );

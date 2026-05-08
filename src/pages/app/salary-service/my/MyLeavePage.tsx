@@ -7,8 +7,12 @@
  *  - 받은 촉진 통보 (연도 필터 적용, 인라인 회신)
  *  - 휴가 계획 내역 (연도 필터 적용)
  */
-import { Link, useNavigate } from '@tanstack/react-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  Link,
+  useNavigate } from '@tanstack/react-router';
+import { useMutation,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
 import {
   App,
   Button,
@@ -16,7 +20,6 @@ import {
   Empty,
   InputNumber,
   Space,
-  Table,
   Tag,
   Tooltip,
   Typography,
@@ -42,6 +45,8 @@ import type {
 } from '@/features/salary-service/types';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import { PromotionResponseModal } from './components/PromotionResponseModal';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 // 결재 작성 화면에서 자동 prefill 받을 sessionStorage 키 (ApprovalsPage 와 동기화)
 const LEAVE_REQUEST_PREFILL_STORAGE_KEY = 'wf-approval-prefill-leave-request';
@@ -899,7 +904,7 @@ export function MyLeavePage() {
           </Space>
         }
       >
-        <Table<LeavePromotionMy>
+        <AppDataTable<LeavePromotionMy>
           rowKey={(r) => r.promotionLogId}
           loading={promotionQ.isLoading}
           size="small"
@@ -1034,7 +1039,7 @@ export function MyLeavePage() {
           </Space>
         }
       >
-        <Table<LeavePlanRow>
+        <AppDataTable<LeavePlanRow>
           rowKey={(r) => r.leaveRequestId ?? `${r.rowNo}`}
           loading={requestsQ.isLoading || leaveTypesQ.isLoading}
           columns={planColumns}

@@ -1,5 +1,12 @@
-import { useQuery } from '@tanstack/react-query';
-import { Alert, Button, Card, Spin, Table, Tag, Typography } from 'antd';
+import {
+  useQuery } from '@tanstack/react-query';
+import { Alert,
+  Button,
+  Card,
+  Spin,
+  Tag,
+  Typography,
+} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { useMemo, useState } from 'react';
@@ -11,6 +18,8 @@ import {
 } from '@/features/approvals/api/approvalRequestApi';
 import { getApprovalRequestSubjectLine } from '@/features/approvals/lib/approvalFormSchema';
 import { ApprovalLineMiniStrip } from '@/features/approvals/ui/ApprovalLineMiniStrip';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 /** 전체(inbox) · 결재 대기(pending) · 결재 예정(waiting) · 결재 완료(acted) */
 export type PendingApprovalInboxTab = 'all' | 'pending' | 'waiting' | 'acted';
@@ -325,7 +334,7 @@ export function PendingApprovalInboxModalContent({
 
           <div className="wf-approval-modal-table-fill">
             <Spin spinning={loading} className="tw-min-h-0 tw-w-full [&_.ant-spin-container]:tw-min-h-0">
-              <Table<PendingApprovalInboxRow>
+              <AppDataTable<PendingApprovalInboxRow>
                 size="small"
                 rowKey="requestId"
                 columns={columns}
@@ -347,7 +356,7 @@ export function PendingApprovalInboxModalContent({
                   },
                 }}
                 locale={{ emptyText: loading ? ' ' : '문서가 없습니다.' }}
-                tableLayout="fixed"
+              tableLayout="auto"
                 className="wf-approval-modal-table"
               />
             </Spin>

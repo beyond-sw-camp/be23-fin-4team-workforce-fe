@@ -14,6 +14,7 @@ import {
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppModal } from '@/shared/ui/AppModal';
+import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
 import { AppSearchBar } from '@/shared/ui';
 
 /**
@@ -195,11 +196,13 @@ export function GroupParticipantsDrawer({
 
   return (
     <>
-      <AppModal
+      <AppSingleActionModal
         title={roomTitle ? `${roomTitle} · 참여자` : '참여자'}
         open={showParticipantsModal}
-        onCancel={onClose}
-        footer={null}
+        onClose={onClose}
+        onSubmit={() => undefined}
+        submitText="확인"
+        customFooter={null}
         // 플로팅 채팅 패널(z≈1060) 위에 확실히 뜨도록
         zIndex={10_100}
         width={420}
@@ -264,7 +267,7 @@ export function GroupParticipantsDrawer({
           </>
         )}
         </div>
-      </AppModal>
+      </AppSingleActionModal>
       <AppDoubleActionModal
         title="참여자 초대"
         open={inviteOpen}

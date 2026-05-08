@@ -1,3 +1,4 @@
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 /**
  * /app/salary/negotiations 연봉 협상 관리 (시스템 관리자)
  *  자체 워크플로 DRAFT → SUBMITTED → APPROVED/REJECTED → APPLIED
@@ -7,21 +8,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  App,
-  Button,
-  Card,
-  DatePicker,
-  Form,
-  Input,
-  InputNumber,
-  Popconfirm,
-  Select,
-  Space,
-  Table,
-  Tag,
-  Tooltip,
-  Typography,
-} from 'antd';
+  DeleteOutlined, EditOutlined, PlusOutlined, } from '@ant-design/icons';
+import {
+  App, Button, Card, DatePicker, Form, Input, InputNumber, Popconfirm, Select, Space, Tag, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppSearchBar } from '@/shared/ui';
@@ -293,15 +282,15 @@ export function AdminSalaryNegotiationsPage() {
             style={{ minWidth: 180 }}
             options={[{ value: 'ALL', label: '전체 시즌' }, ...groupOptions]}
           />
-          <Button onClick={() => setCreateOpen(true)}>단건 등록</Button>
-          <Button type="primary" onClick={() => setBulkOpen(true)}>
+          <Button icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>단건 등록</Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setBulkOpen(true)}>
             일괄 등록 (시즌)
           </Button>
         </Space>
       </div>
 
       <Card className="tw-border-slate-200/80 tw-shadow-sm">
-        <Table<SalaryNegotiation>
+        <AppDataTable<SalaryNegotiation>
           rowKey={(r) => r.negotiationId ?? `${r.memberId}-${r.proposedEffectiveFrom}`}
           loading={listQ.isLoading}
           columns={columns}
@@ -384,9 +373,14 @@ function RowActions({
     <Space size={4} wrap>
       {status === 'DRAFT' && (
         <>
-          <Button size="small" onClick={() => onEdit(row)}>
-            수정
-          </Button>
+          <Tooltip title="수정">
+            <Button
+              size="small"
+              icon={<EditOutlined />}
+              aria-label="연봉 협상 수정"
+              onClick={() => onEdit(row)}
+            />
+          </Tooltip>
           <Button size="small" type="primary" onClick={() => onSubmit(id)}>
             직원 통보
           </Button>
@@ -422,9 +416,9 @@ function RowActions({
           cancelText="취소"
           onConfirm={() => onDelete(id)}
         >
-          <Button size="small" danger>
-            삭제
-          </Button>
+          <Tooltip title="삭제">
+            <Button size="small" danger icon={<DeleteOutlined />} aria-label="연봉 협상 삭제" />
+          </Tooltip>
         </Popconfirm>
       )}
     </Space>
@@ -859,7 +853,7 @@ function BulkCreateModal({
               </Button>
             </Space>
 
-            <Table<MemberLookupRow>
+            <AppDataTable<MemberLookupRow>
               rowKey={(r) => r.memberId}
               dataSource={filteredMemberRows}
               loading={memberLookupQ.isLoading || memberLookupQ.isFetching}
@@ -914,7 +908,7 @@ function BulkCreateModal({
           </div>
         </div>
 
-        <Table<BulkRow>
+        <AppDataTable<BulkRow>
           rowKey={(r) => r.memberId}
           dataSource={rows}
           pagination={false}
@@ -1198,4 +1192,3 @@ function MemberLookupField({ name = 'memberId' }: { name?: string }) {
     </Form.Item>
   );
 }
-

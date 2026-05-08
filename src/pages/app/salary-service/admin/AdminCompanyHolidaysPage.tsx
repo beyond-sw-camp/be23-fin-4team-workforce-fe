@@ -15,9 +15,10 @@ import {
   Space,
   Spin,
   Tag,
+  Tooltip,
   Typography,
 } from 'antd';
-import { LeftOutlined, ReloadOutlined, RightOutlined } from '@ant-design/icons';
+import {EditOutlined, LeftOutlined, PlusOutlined, ReloadOutlined, RightOutlined} from '@ant-design/icons';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import type { CalendarProps } from 'antd';
 import clsx from 'clsx';
@@ -266,6 +267,7 @@ export function AdminCompanyHolidaysPage({ embedded = false }: { embedded?: bool
       type="primary"
       className={PRIMARY_BUTTON_CLASS}
       onClick={() => openCreateForDay(selectedDay)}
+      icon={<PlusOutlined />}
     >
       공휴일 추가
     </Button>
@@ -459,6 +461,7 @@ export function AdminCompanyHolidaysPage({ embedded = false }: { embedded?: bool
             <Button
               type="primary"
               block
+              icon={<PlusOutlined />}
               className={PRIMARY_BUTTON_CLASS}
               onClick={() => openCreateForDay(selectedDay)}
             >
@@ -485,9 +488,14 @@ export function AdminCompanyHolidaysPage({ embedded = false }: { embedded?: bool
                         </Tag>
                       </div>
                       <Space size="small">
-                        <Button size="small" onClick={() => openEdit(h)}>
-                          수정
-                        </Button>
+                        <Tooltip title="수정">
+                          <Button
+                            size="small"
+                            icon={<EditOutlined />}
+                            aria-label={`${h.holidayName} 공휴일 수정`}
+                            onClick={() => openEdit(h)}
+                          />
+                        </Tooltip>
                         <Popconfirm
                           title="삭제하시겠어요?"
                           okText="삭제"

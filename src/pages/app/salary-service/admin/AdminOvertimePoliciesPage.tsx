@@ -1,6 +1,10 @@
 /** /app/attendance/overtime-policies - 연장근로 정책 관리 (시스템 관리자) */
-import { useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useMemo,
+  useState } from 'react';
+import { useMutation,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
   App,
@@ -13,9 +17,10 @@ import {
   Row,
   Select,
   Space,
-  Table,
+  Tooltip,
   Typography,
 } from 'antd';
+import { EditOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
@@ -23,6 +28,8 @@ import { AppButton } from '@/shared/ui/AppButton';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import type { OvertimePolicy } from '@/features/salary-service/types';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 type FormValues = {
   overtimeFloorMinutes: number;
@@ -216,25 +223,27 @@ export function AdminOvertimePoliciesPage({ embedded = false }: { embedded?: boo
         width: 90,
         render: (_, r) =>
           r.overtimePolicyId ? (
-            <Button
-              size="small"
-              onClick={() => {
-                setEditing(r);
-                setOpen(true);
-                form.setFieldsValue({
-                  overtimeFloorMinutes: r.overtimeFloorMinutes ?? 15,
-                  postApprovalDeadlineHours: r.postApprovalDeadlineHours ?? undefined,
-                  weeklyOvertimeLimitMinutes: r.weeklyOvertimeLimitMinutes ?? undefined,
-                  weeklyTotalLimitMinutes: r.weeklyTotalLimitMinutes ?? undefined,
-                  dailyOvertimeLimitMinutes: r.dailyOvertimeLimitMinutes ?? undefined,
-                  monthlyOvertimeLimitMinutes: r.monthlyOvertimeLimitMinutes ?? undefined,
-                  effectiveFrom: r.effectiveFrom ? dayjs(r.effectiveFrom) : dayjs(),
-                  effectiveTo: r.effectiveTo ? dayjs(r.effectiveTo) : null,
-                });
-              }}
-            >
-              수정
-            </Button>
+            <Tooltip title="수정">
+              <Button
+                size="small"
+                icon={<EditOutlined />}
+                aria-label="연장근로 정책 수정"
+                onClick={() => {
+                  setEditing(r);
+                  setOpen(true);
+                  form.setFieldsValue({
+                    overtimeFloorMinutes: r.overtimeFloorMinutes ?? 15,
+                    postApprovalDeadlineHours: r.postApprovalDeadlineHours ?? undefined,
+                    weeklyOvertimeLimitMinutes: r.weeklyOvertimeLimitMinutes ?? undefined,
+                    weeklyTotalLimitMinutes: r.weeklyTotalLimitMinutes ?? undefined,
+                    dailyOvertimeLimitMinutes: r.dailyOvertimeLimitMinutes ?? undefined,
+                    monthlyOvertimeLimitMinutes: r.monthlyOvertimeLimitMinutes ?? undefined,
+                    effectiveFrom: r.effectiveFrom ? dayjs(r.effectiveFrom) : dayjs(),
+                    effectiveTo: r.effectiveTo ? dayjs(r.effectiveTo) : null,
+                  });
+                }}
+              />
+            </Tooltip>
           ) : (
             '-'
           ),
@@ -287,7 +296,7 @@ export function AdminOvertimePoliciesPage({ embedded = false }: { embedded?: boo
         className="tw-border-slate-200/80 tw-shadow-sm [&_.ant-card-body]:!tw-p-6"
         loading={listQ.isLoading}
       >
-        <Table<OvertimePolicy>
+        <AppDataTable<OvertimePolicy>
           rowKey={(r) => r.overtimePolicyId ?? `${r.effectiveFrom}-${r.effectiveTo}`}
           dataSource={rows}
           columns={columns}

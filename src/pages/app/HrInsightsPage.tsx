@@ -5,11 +5,20 @@ import {
   FileDoneOutlined,
   TeamOutlined,
   UserAddOutlined,
-} from '@ant-design/icons';
-import { Card, Col, Progress, Row, Space, Table, Tag, Typography } from 'antd';
+  } from '@ant-design/icons';
+import { Card,
+  Col,
+  Progress,
+  Row,
+  Space,
+  Tag,
+  Typography,
+} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import clsx from 'clsx';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 /** HR insights — sample metrics until APIs are wired */
 
@@ -238,7 +247,7 @@ export function HrInsightsPage() {
         className="tw-rounded-2xl tw-border-slate-200/90 tw-shadow-sm"
         styles={{ body: { paddingTop: 12 } }}
       >
-        <Table<DeptRow>
+        <AppDataTable<DeptRow>
           size="small"
           pagination={false}
           columns={deptColumns}

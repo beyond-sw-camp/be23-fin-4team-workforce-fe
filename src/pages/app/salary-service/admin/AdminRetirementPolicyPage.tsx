@@ -1,8 +1,16 @@
 // /app/salary/retirement-policy 회사별 퇴직급여 제도 정책 관리
 // LEGAL DB DC 3가지 모드 effectiveFrom effectiveTo 기간 분할 이력 관리
 // 등록 시 이전 활성 정책 백엔드가 자동 마감 처리
-import { useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useMemo,
+  useState } from 'react';
+import { useMutation,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
+import {
+    DeleteOutlined,
+    EditOutlined, PlusOutlined
+} from '@ant-design/icons';
 import {
   Alert,
   App,
@@ -15,8 +23,8 @@ import {
   Popconfirm,
   Select,
   Space,
-  Table,
   Tag,
+  Tooltip,
   Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
@@ -24,6 +32,8 @@ import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import dayjs from 'dayjs';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
+import { AppDataTable } from '@/shared/ui/AppDataTable';
+
 import type {
   RetirementPolicy,
   RetirementTypeCode,
@@ -163,27 +173,29 @@ export function AdminRetirementPolicyPage() {
         width: 160,
         render: (_, r) => (
           <Space>
-            <Button
-              size="small"
-              onClick={() => {
-                setEditing(r);
-                form.setFieldsValue({
-                  retirementType: (r.retirementType as RetirementTypeCode) ?? 'LEGAL',
-                  effectiveRange: [
-                    r.effectiveFrom ? dayjs(r.effectiveFrom) : dayjs(),
-                    r.effectiveTo ? dayjs(r.effectiveTo) : null,
-                  ],
-                  memo: r.memo ?? undefined,
-                  dcContributionRate: r.dcContributionRate ?? undefined,
-                  providerName: r.providerName ?? undefined,
-                  contractNumber: r.contractNumber ?? undefined,
-                  allowEarlySettlementYn: (r.allowEarlySettlementYn as 'Y' | 'N') ?? undefined,
-                });
-                setOpen(true);
-              }}
-            >
-              수정
-            </Button>
+            <Tooltip title="수정">
+              <Button
+                size="small"
+                icon={<EditOutlined />}
+                aria-label="퇴직급여 정책 수정"
+                onClick={() => {
+                  setEditing(r);
+                  form.setFieldsValue({
+                    retirementType: (r.retirementType as RetirementTypeCode) ?? 'LEGAL',
+                    effectiveRange: [
+                      r.effectiveFrom ? dayjs(r.effectiveFrom) : dayjs(),
+                      r.effectiveTo ? dayjs(r.effectiveTo) : null,
+                    ],
+                    memo: r.memo ?? undefined,
+                    dcContributionRate: r.dcContributionRate ?? undefined,
+                    providerName: r.providerName ?? undefined,
+                    contractNumber: r.contractNumber ?? undefined,
+                    allowEarlySettlementYn: (r.allowEarlySettlementYn as 'Y' | 'N') ?? undefined,
+                  });
+                  setOpen(true);
+                }}
+              />
+            </Tooltip>
             <Popconfirm
               title="정책을 삭제할까요?"
               description="삭제는 소프트 처리되며, 활성 정책 삭제 후엔 화면 진입 시 기본 LEGAL 정책이 자동 생성됩니다."
@@ -193,9 +205,9 @@ export function AdminRetirementPolicyPage() {
                 r.retirementPolicyId && deleteM.mutate(r.retirementPolicyId)
               }
             >
-              <Button size="small" danger>
-                삭제
-              </Button>
+              <Tooltip title="삭제">
+                <Button size="small" danger icon={<DeleteOutlined />} aria-label="퇴직급여 정책 삭제" />
+              </Tooltip>
             </Popconfirm>
           </Space>
         ),
@@ -256,6 +268,7 @@ export function AdminRetirementPolicyPage() {
         <div className="tw-flex tw-justify-end tw-mb-3">
           <Button
             type="primary"
+            icon={<PlusOutlined />}
             onClick={() => {
               setEditing(null);
               form.resetFields();
@@ -270,7 +283,7 @@ export function AdminRetirementPolicyPage() {
           </Button>
         </div>
 
-        <Table<RetirementPolicy>
+        <AppDataTable<RetirementPolicy>
           rowKey={(r) => r.retirementPolicyId ?? Math.random().toString()}
           loading={listQ.isLoading}
           dataSource={listQ.data ?? []}

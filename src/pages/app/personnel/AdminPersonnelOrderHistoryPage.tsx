@@ -1,7 +1,16 @@
 /** /app/personnel-order/admin - 회사 인사발령 이력 (관리자) */
-import { useMemo, useState } from 'react';
+import {
+  useMemo,
+  useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Card, DatePicker, Empty, Select, Space, Table, Tag, Typography } from 'antd';
+import { Card,
+  DatePicker,
+  Empty,
+  Select,
+  Space,
+  Tag,
+  Typography,
+} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs, { type Dayjs } from 'dayjs';
 import {
@@ -10,6 +19,8 @@ import {
   type PersonnelOrderType,
 } from '@/features/personnel/api/personnelOrderApi';
 import { AppSearchBar } from '@/shared/ui';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 const TYPE_KO: Record<PersonnelOrderType, string> = {
   TRANSFER: '부서 이동',
@@ -162,7 +173,7 @@ export function AdminPersonnelOrderHistoryPage() {
             총 {filtered.length}건
           </Typography.Text>
         </Space>
-        <Table<PersonnelOrder>
+        <AppDataTable<PersonnelOrder>
           rowKey={(r) => r.personnelOrderId}
           loading={listQ.isLoading}
           dataSource={filtered}

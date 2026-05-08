@@ -1,5 +1,10 @@
-import { ArrowLeftOutlined, PlusOutlined } from '@ant-design/icons';
-import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  ArrowLeftOutlined,
+  PlusOutlined } from '@ant-design/icons';
+import { useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
   App,
@@ -8,7 +13,6 @@ import {
   DatePicker,
   Divider,
   Space,
-  Table,
   Tabs,
   Tag,
   Tree,
@@ -32,6 +36,8 @@ import { organizationApi } from '@/features/organization/api/organizationApi';
 import { parseApiError } from '@/shared/api/error-parser';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppSearchBar } from '@/shared/ui';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 /** `toISOString()`은 UTC로 바뀌어 한국 등 로컬 '오늘'이 전날로 밀릴 수 있음 — LocalDateTime용 로컬 벽시각 */
 function toLocalDateTimePayload(d: Dayjs): string {
@@ -521,7 +527,7 @@ export function AbsenceProxyPage() {
               key: 'mine',
               label: '내가 등록한 위임',
               children: tabTableWrap(
-                <Table<AbsenceProxyRecord>
+                <AppDataTable<AbsenceProxyRecord>
                   rowKey="proxyId"
                   loading={mineLoading}
                   columns={mineColumns}
@@ -536,7 +542,7 @@ export function AbsenceProxyPage() {
               key: 'delegated',
               label: '나에게 위임된 목록',
               children: tabTableWrap(
-                <Table<AbsenceProxyRecord>
+                <AppDataTable<AbsenceProxyRecord>
                   rowKey="proxyId"
                   loading={delegatedLoading}
                   columns={delegatedColumns}
@@ -551,7 +557,7 @@ export function AbsenceProxyPage() {
               key: 'all',
               label: '전체',
               children: tabTableWrap(
-                <Table<AbsenceProxyHistoryRow>
+                <AppDataTable<AbsenceProxyHistoryRow>
                   rowKey={(r) => `${r.kind}-${r.row.proxyId}`}
                   loading={absenceHistoryLoading}
                   columns={allHistoryColumns}

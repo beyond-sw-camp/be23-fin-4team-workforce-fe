@@ -1,3 +1,4 @@
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 /** /app/salary/unused-leave — 미사용 연차수당 미리보기 · 확정 (시스템 관리자)
  *
  *  백엔드 컨트롤러: UnusedLeavePayoutController (`/salary/unused-leave`)
@@ -7,19 +8,7 @@
 import { Link } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  App,
-  Alert,
-  Badge,
-  Button,
-  Card,
-  Form,
-  InputNumber,
-  Space,
-  Table,
-  Tag,
-  Tooltip,
-  Typography,
-} from 'antd';
+  App, Alert, Badge, Button, Card, Form, InputNumber, Space, Tag, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { useEffect, useMemo, useState } from 'react';
@@ -309,7 +298,7 @@ export function AdminUnusedLeavePayoutPage() {
           </Space>
         }
       >
-        <Table<UnusedLeavePayoutPreview>
+        <AppDataTable<UnusedLeavePayoutPreview>
           rowKey={(r) => r.memberId ?? ''}
           loading={previewQ.isLoading || previewQ.isFetching}
           columns={columns}

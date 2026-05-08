@@ -1,6 +1,14 @@
-import { ArrowLeftOutlined, SearchOutlined } from '@ant-design/icons';
+import {
+  ArrowLeftOutlined,
+  SearchOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, App, Button, Card, Table, Tag, Typography } from 'antd';
+import { Alert,
+  App,
+  Button,
+  Card,
+  Tag,
+  Typography,
+} from 'antd';
 import clsx from 'clsx';
 import dayjs from 'dayjs';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -15,6 +23,8 @@ import { useAuth } from '@/features/auth/useAuth';
 import { memberApi } from '@/features/member/api/memberApi';
 import { organizationApi } from '@/features/organization/api/organizationApi';
 import { findMemberOrganizationId } from '@/features/organization/lib/findMemberOrganizationInOrgChart';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 function formatDateTime(value?: string | null) {
   if (!value) return '—';
@@ -292,7 +302,7 @@ export function DepartmentApprovalsInboxPage() {
           ) : null}
 
           <div className={clsx(isEmbedModal && 'wf-approval-modal-table-fill')}>
-          <Table
+          <AppDataTable
             size="small"
             rowKey="requestId"
             loading={pageLoading}

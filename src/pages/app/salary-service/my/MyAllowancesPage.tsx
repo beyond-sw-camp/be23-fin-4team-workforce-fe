@@ -1,11 +1,28 @@
 /** /app/payroll/allowances - 개인 수당 신청/이력 (사원) */
-import { useMemo } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Card, DatePicker, Form, Input, InputNumber, Popconfirm, Select, Space, Table, Tag, Typography } from 'antd';
+import {
+  useMemo } from 'react';
+import { useMutation,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
+import { App,
+  Button,
+  Card,
+  DatePicker,
+  Form,
+  Input,
+  InputNumber,
+  Popconfirm,
+  Select,
+  Space,
+  Tag,
+  Typography,
+} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import type { MemberAllowance, SalaryItemTemplate } from '@/features/salary-service/types';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 type FormValues = {
   salaryItemTemplateId: string;
@@ -165,7 +182,7 @@ export function MyAllowancesPage() {
       </Card>
 
       <Card title="내 수당 이력" className="tw-border-slate-200/80 tw-shadow-sm" loading={listQ.isLoading}>
-        <Table<MemberAllowance>
+        <AppDataTable<MemberAllowance>
           rowKey={(r) => r.memberAllowanceId ?? `${r.salaryItemTemplateId}-${r.createdAt}`}
           dataSource={rows}
           columns={columns}

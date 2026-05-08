@@ -1,3 +1,4 @@
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 /** /app/payroll/annual — 연봉 조회 (직원 본인)
  *
  *  연도 선택 + KPI 4장 (총지급 / 총공제 / 실수령 / 정산 건수)
@@ -7,7 +8,7 @@
  */
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Card, DatePicker, Empty, Space, Statistic, Table, Tag, Typography } from 'antd';
+import { Alert, Card, DatePicker, Empty, Space, Statistic, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs, { type Dayjs } from 'dayjs';
 import {
@@ -404,7 +405,7 @@ export function MyAnnualSalaryPage() {
         size="small"
         className="tw-border-slate-200/80 tw-shadow-sm"
       >
-        <Table<AnnualSalaryMonthlyRow>
+        <AppDataTable<AnnualSalaryMonthlyRow>
           rowKey={(r) => `m-${r.month}`}
           loading={summaryQ.isLoading}
           dataSource={data?.monthly ?? []}
@@ -424,7 +425,7 @@ export function MyAnnualSalaryPage() {
               return <Empty description="지급 항목 없음" image={Empty.PRESENTED_IMAGE_SIMPLE} />;
             }
             return (
-              <Table<AnnualSalaryItemBreakdown>
+              <AppDataTable<AnnualSalaryItemBreakdown>
                 rowKey="itemName"
                 loading={summaryQ.isLoading}
                 dataSource={earningRows}
@@ -434,14 +435,14 @@ export function MyAnnualSalaryPage() {
                 summary={(rows) => {
                   const sum = rows.reduce((a, r) => a + r.totalAmount, 0);
                   return (
-                    <Table.Summary.Row className="tw-bg-slate-50">
-                      <Table.Summary.Cell index={0}>
+                    <AppDataTable.Summary.Row className="tw-bg-slate-50">
+                      <AppDataTable.Summary.Cell index={0}>
                         <Typography.Text strong>합계</Typography.Text>
-                      </Table.Summary.Cell>
-                      <Table.Summary.Cell index={1} align="right">
+                      </AppDataTable.Summary.Cell>
+                      <AppDataTable.Summary.Cell index={1} align="right">
                         <Typography.Text strong>{formatWon(sum)} 원</Typography.Text>
-                      </Table.Summary.Cell>
-                    </Table.Summary.Row>
+                      </AppDataTable.Summary.Cell>
+                    </AppDataTable.Summary.Row>
                   );
                 }}
               />
@@ -456,7 +457,7 @@ export function MyAnnualSalaryPage() {
               return <Empty description="공제 항목 없음" image={Empty.PRESENTED_IMAGE_SIMPLE} />;
             }
             return (
-              <Table<AnnualSalaryItemBreakdown>
+              <AppDataTable<AnnualSalaryItemBreakdown>
                 rowKey="itemName"
                 loading={summaryQ.isLoading}
                 dataSource={deductionRows}
@@ -466,16 +467,16 @@ export function MyAnnualSalaryPage() {
                 summary={(rows) => {
                   const sum = rows.reduce((a, r) => a + r.totalAmount, 0);
                   return (
-                    <Table.Summary.Row className="tw-bg-slate-50">
-                      <Table.Summary.Cell index={0}>
+                    <AppDataTable.Summary.Row className="tw-bg-slate-50">
+                      <AppDataTable.Summary.Cell index={0}>
                         <Typography.Text strong>합계</Typography.Text>
-                      </Table.Summary.Cell>
-                      <Table.Summary.Cell index={1} align="right">
+                      </AppDataTable.Summary.Cell>
+                      <AppDataTable.Summary.Cell index={1} align="right">
                         <Typography.Text strong type="secondary">
                           {formatWon(sum)} 원
                         </Typography.Text>
-                      </Table.Summary.Cell>
-                    </Table.Summary.Row>
+                      </AppDataTable.Summary.Cell>
+                    </AppDataTable.Summary.Row>
                   );
                 }}
               />

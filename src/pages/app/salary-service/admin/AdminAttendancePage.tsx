@@ -1,9 +1,9 @@
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 /** /app/attendance/company — 전사 근태 통합 페이지 (관리자)
  *
  * 기존 일별/월별 두 화면을 한 페이지로 통합:
  *  - 기간 프리셋: 오늘 / 이번 주 / 이번 달 / 사용자 지정
- *  - 단일일자(`day` 모드)에는 GET /attendance/company/daily,
- *    그 외 기간에는 GET /attendance/company/monthly 자동 선택
+ *  - 단일일자(`day` 모드)에는 GET /attendance/company/daily, *    그 외 기간에는 GET /attendance/company/monthly 자동 선택
  *  - KPI 요약 카드(현재 페이지 데이터 기준 집계)
  *  - 구성원 이름/이메일/사번/부서 검색 (memberId 부분 매칭은 fallback)
  *  - antd Table `virtual` 가상 스크롤
@@ -12,20 +12,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import {
-  Alert,
-  Button,
-  Card,
-  DatePicker,
-  Descriptions,
-  Drawer,
-  Empty,
-  Switch,
-  Segmented,
-  Space,
-  Table,
-  Tag,
-  Typography,
-} from 'antd';
+  Alert, Button, Card, DatePicker, Descriptions, Drawer, Empty, Switch, Segmented, Space, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useMemo, useState } from 'react';
@@ -344,6 +331,7 @@ export function AdminAttendancePage() {
   }, [memberMap, period.isSingleDay]);
 
   const drawerMember = drawerRow?.memberId ? memberMap.get(drawerRow.memberId) : undefined;
+  const tableScrollX = period.isSingleDay ? 1080 : 820;
 
   return (
     <div className="tw-space-y-4">
@@ -435,14 +423,15 @@ export function AdminAttendancePage() {
               description="네트워크 또는 권한 상태를 확인해 주세요."
             />
           ) : null}
-          <Table<DailyAttendance>
+          <AppDataTable<DailyAttendance>
             rowKey={(r) => r.dailyAttendanceId ?? `${r.memberId}-${r.attendanceDate}`}
             loading={listQ.isLoading || membersQ.isLoading}
             columns={columns}
             dataSource={filteredContent}
             size="small"
+            tableLayout="fixed"
             virtual
-            scroll={{ y: 520, x: 1280 }}
+            scroll={{ y: 520, x: tableScrollX }}
             onRow={(record) => ({
               onClick: () => setDrawerRow(record),
               style: { cursor: 'pointer' },

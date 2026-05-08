@@ -1,7 +1,16 @@
 /** /app/payroll — 로그인 user.id 기준 급여대장 목록 */
-import { Link } from '@tanstack/react-router';
+import {
+  Link } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Button, Card, DatePicker, Space, Table, Tag, Typography, Select } from 'antd';
+import { Alert,
+  Button,
+  Card,
+  DatePicker,
+  Space,
+  Tag,
+  Typography,
+  Select,
+} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useMemo, useState } from 'react';
 import dayjs, { type Dayjs } from 'dayjs';
@@ -9,6 +18,8 @@ import { useAuth } from '@/features/auth/useAuth';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import type { Payroll } from '@/features/salary-service/types';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 const STATUS_KO: Record<string, string> = {
   DRAFT: '검토 전',
@@ -228,7 +239,7 @@ export function MyPayrollPage() {
             조회
           </Button>
         </Space>
-        <Table<Payroll>
+        <AppDataTable<Payroll>
           rowKey={(r) => r.payrollId ?? `${r.payrollYearMonthDay}`}
           loading={listQ.isLoading}
           columns={columns}

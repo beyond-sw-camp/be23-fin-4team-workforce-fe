@@ -1,16 +1,38 @@
 import type { ReactNode } from 'react';
-import { useEffect, useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useSearch } from '@tanstack/react-router';
-import { App, Button, Card, DatePicker, Empty, Form, Input, Popconfirm, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
+import {
+  useEffect,
+  useMemo,
+  useState } from 'react';
+import { useMutation,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
+import { useNavigate,
+  useSearch } from '@tanstack/react-router';
+import { App,
+  Button,
+  Card,
+  DatePicker,
+  Empty,
+  Form,
+  Input,
+  Popconfirm,
+  Select,
+  Space,
+  Tabs,
+  Tooltip,
+  Typography,
+} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
   ArrowRightOutlined,
   CalendarOutlined,
+  DeleteOutlined,
+  EditOutlined,
   PlusOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import EvaluationFlowPage from '@/pages/app/EvaluationFlowPage';
+import { AppTabLabel } from '@/shared/ui/AppTabLabel';
 import MyEvaluationResultV2Page from '@/pages/app/MyEvaluationResultV2Page';
 import { evaluationRedesignApi } from '@/features/evaluation/api/evaluationRedesignApi';
 import { pickDefaultSeasonFilter } from '@/features/evaluation/lib/defaultSeasonFilter';
@@ -22,6 +44,8 @@ import { usePermissions } from '@/features/permissions/usePermissionsHook';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 const { Text } = Typography;
 const { RangePicker } = DatePicker;
@@ -173,9 +197,14 @@ export default function EvaluationsHubPage() {
       render: (_: unknown, record) => (
         <Space size={6} onClick={(event) => event.stopPropagation()}>
           {canUpdate && record.status === 'DRAFT' ? (
-            <AppButton variant="subtle" size="small" onClick={() => setEditingSeason(record)}>
-              수정
-            </AppButton>
+            <Tooltip title="수정">
+              <Button
+                size="small"
+                icon={<EditOutlined />}
+                aria-label={`${record.name} 평가 기간 수정`}
+                onClick={() => setEditingSeason(record)}
+              />
+            </Tooltip>
           ) : null}
           {canDelete && record.status === 'DRAFT' ? (
             <Popconfirm
@@ -186,9 +215,15 @@ export default function EvaluationsHubPage() {
               okButtonProps={{ danger: true }}
               onConfirm={() => deleteSeasonMut.mutate(record.seasonId)}
             >
-              <Button danger size="small" loading={deleteSeasonMut.isPending}>
-                삭제
-              </Button>
+              <Tooltip title="삭제">
+                <Button
+                  danger
+                  size="small"
+                  icon={<DeleteOutlined />}
+                  aria-label={`${record.name} 평가 기간 삭제`}
+                  loading={deleteSeasonMut.isPending}
+                />
+              </Tooltip>
             </Popconfirm>
           ) : null}
           <AppButton
@@ -231,7 +266,7 @@ export default function EvaluationsHubPage() {
               {visibleSeasons.length === 0 ? (
                 <Empty description="생성된 평가가 없습니다." />
               ) : (
-                <Table
+                <AppDataTable
                   rowKey="seasonId"
                   columns={seasonCols}
                   dataSource={visibleSeasons}
@@ -353,11 +388,7 @@ function MyEvaluationHome() {
         items={[
           {
             key: 'write',
-            label: (
-              <span>
-                평가 작성 <Tag className="!tw-ml-1 !tw-mr-0">{writeCount}</Tag>
-              </span>
-            ),
+            label: <AppTabLabel count={writeCount}>평가 작성</AppTabLabel>,
             children: (
               <EvaluationFlowPage
                 embedded
@@ -368,11 +399,7 @@ function MyEvaluationHome() {
           },
           {
             key: 'results',
-            label: (
-              <span>
-                평가 결과 <Tag className="!tw-ml-1 !tw-mr-0">{resultCount}</Tag>
-              </span>
-            ),
+            label: <AppTabLabel count={resultCount}>평가 결과</AppTabLabel>,
             children: (
               <MyEvaluationResultV2Page
                 embedded

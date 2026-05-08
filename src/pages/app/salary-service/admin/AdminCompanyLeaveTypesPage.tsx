@@ -1,53 +1,22 @@
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 /**
  * /app/leave/types — 회사 휴가 종류 관리 (시스템 관리자)
  * 시스템 기본 휴가(연차, 반차, 병가 등)는 이름/순서만 수정 가능, 삭제 불가.
  * 커스텀 휴가는 전 필드 수정/삭제 가능.
  */
 import {
-  useCallback,
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type CSSProperties,
-  type HTMLAttributes,
-  type Key,
-} from 'react';
+  useCallback, createContext, useContext, useEffect, useMemo, useState, type CSSProperties, type HTMLAttributes, type Key, } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  DndContext,
-  KeyboardSensor,
-  PointerSensor,
-  closestCenter,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from '@dnd-kit/core';
+  DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent, } from '@dnd-kit/core';
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import {
-  App,
-  Button,
-  Card,
-  Checkbox,
-  DatePicker,
-  Divider,
-  Form,
-  Input,
-  InputNumber,
-  Popconfirm,
-  Select,
-  Space,
-  Table,
-  Tag,
-  Tooltip,
-  Typography,
-} from 'antd';
+  App, Button, Card, Checkbox, DatePicker, Divider, Form, Input, InputNumber, Popconfirm, Select, Space, Tag, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
   DeleteOutlined,
-  EditOutlined,
+  EditOutlined, PlusOutlined,
 } from '@ant-design/icons';
 import dayjs, { type Dayjs } from 'dayjs';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
@@ -715,18 +684,19 @@ export function AdminCompanyLeaveTypesPage() {
               </Button>
               <Button
                 type="primary"
-                className={NAVY_BUTTON_CLASS}
-                onClick={openCreate}
-              >
-                휴가 종류 추가
-              </Button>
-              <Button
-                type="primary"
                 icon={<EditOutlined />}
                 className={NAVY_BUTTON_CLASS}
                 onClick={handleStartListEdit}
               >
-                수정하기
+                휴가 순서 수정
+              </Button>
+              <Button
+                type="primary"
+                className={NAVY_BUTTON_CLASS}
+                onClick={openCreate}
+                icon={<PlusOutlined />}
+              >
+                휴가 종류 추가
               </Button>
             </>
           )}
@@ -737,7 +707,7 @@ export function AdminCompanyLeaveTypesPage() {
         <div className="tw-overflow-hidden tw-rounded-xl tw-border tw-border-slate-200">
           <DndContext sensors={leaveTypeSensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={sortableRowIds} strategy={verticalListSortingStrategy}>
-              <Table<CompanyLeaveType>
+              <AppDataTable<CompanyLeaveType>
                 rowKey={getLeaveTypeRowKey}
                 loading={listQ.isLoading}
                 dataSource={displayedRows}

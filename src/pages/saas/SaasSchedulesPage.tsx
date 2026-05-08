@@ -1,14 +1,37 @@
-import { ArrowLeftOutlined, BankOutlined, EditOutlined, ReloadOutlined, ScheduleOutlined } from '@ant-design/icons';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  ArrowLeftOutlined,
+  BankOutlined,
+  EditOutlined,
+  ReloadOutlined,
+  ScheduleOutlined } from '@ant-design/icons';
+import { useMutation,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { Alert, App, Button, Form, Input, Select, Space, Switch, Table, Tabs, Tag, TimePicker, Typography } from 'antd';
+import { Alert,
+  App,
+  Button,
+  Form,
+  Input,
+  Select,
+  Space,
+  Switch,
+  Tabs,
+  Tag,
+  Tooltip,
+  TimePicker,
+  Typography,
+} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { useState } from 'react';
 import { saasApi, type SaasCompany, type SaasSchedule } from '@/features/saas/api/saasApi';
 import { SaasConsoleShell } from '@/pages/saas/SaasConsoleShell';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
+import { AppTabLabel } from '@/shared/ui/AppTabLabel';
 import { AppUnitInputNumber } from '@/shared/ui/AppUnitInputNumber';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 type Frequency = 'hourly' | 'daily' | 'weekly' | 'monthly' | 'yearly';
 const WEEKDAYS = [
@@ -389,9 +412,14 @@ function SaasSchedulesPageInner() {
       key: 'action',
       width: 100,
       render: (_, row) => (
-        <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(row)}>
-          시간 변경
-        </Button>
+        <Tooltip title="시간 변경">
+          <Button
+            size="small"
+            icon={<EditOutlined />}
+            aria-label={`${jobName(row.jobKey).name} 시간 변경`}
+            onClick={() => openEdit(row)}
+          />
+        </Tooltip>
       ),
     },
   ];
@@ -460,9 +488,9 @@ function SaasSchedulesPageInner() {
           items={[
             {
               key: 'system',
-              label: `공통 자동 작업 (${globalRows.length})`,
+              label: <AppTabLabel count={globalRows.length}>공통 자동 작업</AppTabLabel>,
               children: (
-                <Table<SaasSchedule>
+                <AppDataTable<SaasSchedule>
                   rowKey={(r) => r.jobKey}
                   loading={isLoading}
                   dataSource={applyFilter(globalRows, filter, keyword)}
@@ -743,7 +771,7 @@ function PerCompanyView(props: {
               </Tag>
             </div>
             <div className="tw-p-4">
-              <Table<SaasSchedule>
+              <AppDataTable<SaasSchedule>
                 rowKey={(r) => r.jobKey}
                 loading={isLoading}
                 dataSource={effectiveRows}
