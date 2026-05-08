@@ -143,7 +143,7 @@ export function AdminPayrollTaxSummaryPage() {
             <Button
               size="small"
               type={isLastMonth ? 'primary' : 'default'}
-              onClick={() => setMonth(dayjs().subtract(1, 'month'))}
+              onClick={() => setMonth((prev) => prev.subtract(1, 'month'))}
             >
               지난달
             </Button>

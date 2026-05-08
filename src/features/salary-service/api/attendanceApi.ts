@@ -651,6 +651,13 @@ export const attendanceApi = {
       const unwrapped = unwrapApiResponse<OvertimePolicy[] | null>(data);
       return Array.isArray(unwrapped) ? unwrapped : [];
     },
+
+    async delete(policyId: string): Promise<void> {
+      const { data } = await httpClient.delete(
+        `${BASE}/attendance/overtime-policies/${encodeURIComponent(policyId)}`,
+      );
+      unwrapMessage(data);
+    },
   },
 
   /** /attendance/flexible-slots — 시차출퇴근 슬롯(관리자) */
