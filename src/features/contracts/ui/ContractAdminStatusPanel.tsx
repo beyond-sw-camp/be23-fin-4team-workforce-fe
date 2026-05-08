@@ -1,5 +1,8 @@
-import { DownloadOutlined } from '@ant-design/icons';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  DownloadOutlined } from '@ant-design/icons';
+import { useMutation,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
   App,
@@ -13,7 +16,6 @@ import {
   Space,
   Spin,
   Switch,
-  Table,
   Tag,
   Timeline,
   Typography,
@@ -47,6 +49,8 @@ import { ContractAdminFormFieldInput } from '@/features/contracts/ui/ContractAdm
 import { CONTRACT_HUB_CARD_CLASS } from '@/features/contracts/ui/contractHubStyles';
 import { ContractPartySignaturesCard } from '@/features/contracts/ui/ContractPartySignaturesCard';
 import { ContractSignaturePad, type ContractSignaturePadHandle } from '@/features/contracts/ui/ContractSignaturePad';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 type ContractSchemaField = { key: string; label: string; type: string; sourceField?: string };
 
@@ -575,7 +579,7 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
   );
 
   const renderContractsTable = (compact: boolean) => (
-    <Table<ContractRecord>
+    <AppDataTable<ContractRecord>
       rowKey="contractId"
       size={compact ? 'small' : 'middle'}
       loading={contractsLoading || contractsRefreshing}
@@ -633,7 +637,7 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
   );
 
   const renderBatchesTable = (compact: boolean) => (
-    <Table<ContractBatchSummary>
+    <AppDataTable<ContractBatchSummary>
       rowKey="batchId"
       size={compact ? 'small' : 'middle'}
       loading={batchesLoading || batchesRefreshing}
@@ -964,14 +968,16 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
         </div>
       </AppModal>
 
-      <AppModal
+      <AppSingleActionModal
         title={selectedBatch ? `배치 상세 - ${selectedBatch.batchName || selectedBatch.batchId}` : '배치 상세'}
         open={selectedBatch != null}
-        onCancel={() => {
+        onClose={() => {
           setSelectedBatch(null);
           setOnlyUnsigned(false);
         }}
-        footer={null}
+        onSubmit={() => undefined}
+        submitText="확인"
+        customFooter={null}
         width={980}
         destroyOnHidden
       >
@@ -1023,7 +1029,7 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
             <Switch checked={onlyUnsigned} onChange={setOnlyUnsigned} />
           </Space>
         </div>
-        <Table<ContractRecord>
+        <AppDataTable<ContractRecord>
           rowKey="contractId"
           loading={batchContractsLoading}
           dataSource={visibleBatchContracts}
@@ -1063,7 +1069,7 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
           ]}
         />
         </div>
-      </AppModal>
+      </AppSingleActionModal>
 
       <AppDoubleActionModal
         title="계약 회수"

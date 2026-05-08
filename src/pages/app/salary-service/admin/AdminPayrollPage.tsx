@@ -1,3 +1,4 @@
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 /** /app/payroll/admin — 회사 월 단위 급여대장 관리 (시스템 관리자)
  *
  *  메인: 회사 전체 그 달 급여대장 행 (KPI + 필터 + 다중 선택 + 일괄 액션)
@@ -25,7 +26,7 @@ import {
   Tooltip,
   Typography,
 } from 'antd';
-import { DownloadOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
+import { DeleteOutlined, DownloadOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import React, { useMemo, useState } from 'react';
@@ -619,9 +620,16 @@ export function AdminPayrollPage() {
               cancelText="취소"
               onConfirm={() => deleteM.mutate(r.payrollId)}
             >
-              <Button type="link" size="small" danger className="!tw-p-0">
-                삭제
-              </Button>
+              <Tooltip title="삭제">
+                <Button
+                  type="link"
+                  size="small"
+                  danger
+                  className="!tw-inline-flex !tw-h-7 !tw-w-7 !tw-items-center !tw-justify-center !tw-p-0"
+                  icon={<DeleteOutlined />}
+                  aria-label="급여대장 삭제"
+                />
+              </Tooltip>
             </Popconfirm>
           </Space>
         ),
@@ -930,7 +938,7 @@ export function AdminPayrollPage() {
                       </Space>
                     </Space>
 
-                    <Table<PayrollAdminListItem>
+                    <AppDataTable<PayrollAdminListItem>
                       rowKey={(r) => r.payrollId}
                       loading={listQ.isLoading}
                       dataSource={filtered}
@@ -1390,7 +1398,7 @@ function CompanyHistoryTab() {
         </Typography.Text>
       </Space>
 
-      <Table<PayrollAdminListItem>
+      <AppDataTable<PayrollAdminListItem>
         rowKey={(r) => r.payrollId}
         loading={listQ.isLoading}
         dataSource={filtered}

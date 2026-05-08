@@ -1,6 +1,22 @@
-import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Alert, Button, Checkbox, Form, Input, Popover, Radio, Space, Table, Tooltip, Typography } from 'antd';
+import {
+  DeleteOutlined,
+  EditOutlined,
+  PlusOutlined } from '@ant-design/icons';
+import { useMutation,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
+import { App,
+  Alert,
+  Button,
+  Checkbox,
+  Form,
+  Input,
+  Popover,
+  Radio,
+  Space,
+  Tooltip,
+  Typography,
+} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -23,6 +39,8 @@ import { PERM } from '@/features/permissions/backend-permissions';
 import { PermissionGuard } from '@/features/permissions/permission-guard';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { usePermissions } from '@/features/permissions/usePermissionsHook';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 const RESOURCE_LABELS: Record<PermissionResource, string> = {
   MEMBER: '구성원',
@@ -416,7 +434,7 @@ export function OrganizationRolesSection(props: { onMoveToEsgStep?: () => void }
           </PermissionGuard>
         </div>
         <div className="tw-overflow-hidden tw-rounded-xl tw-border tw-border-slate-200/90">
-          <Table<MemberRoleListItem>
+          <AppDataTable<MemberRoleListItem>
             rowKey={(r) => r.id}
             loading={isFetching}
             columns={columns}

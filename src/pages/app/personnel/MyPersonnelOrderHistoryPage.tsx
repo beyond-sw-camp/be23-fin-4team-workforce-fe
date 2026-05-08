@@ -1,9 +1,17 @@
 /** /app/personnel-order/my - 직원 본인 발령 이력 조회
  *  부서 이동 / 직급 변경 / 직책 변경 시간순 (최신부터)
  */
-import { useQuery } from '@tanstack/react-query';
-import { Card, Empty, Space, Table, Tag, Typography } from 'antd';
+import {
+  useQuery } from '@tanstack/react-query';
+import { Card,
+  Empty,
+  Space,
+  Tag,
+  Typography,
+} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import { AppDataTable } from '@/shared/ui/AppDataTable';
+
 import {
   personnelOrderApi,
   type PersonnelOrder,
@@ -111,7 +119,7 @@ export function MyPersonnelOrderHistoryPage() {
         </Typography.Paragraph>
       </div>
       <Card size="small">
-        <Table<PersonnelOrder>
+        <AppDataTable<PersonnelOrder>
           rowKey={(r) => r.personnelOrderId}
           loading={listQ.isLoading}
           dataSource={list}

@@ -1,13 +1,33 @@
-import { EditOutlined, ReloadOutlined, ScheduleOutlined } from '@ant-design/icons';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Card, Form, Input, InputNumber, Segmented, Select, Space, Switch, Table, Tag, TimePicker, Typography } from 'antd';
+import {
+  EditOutlined,
+  ReloadOutlined,
+  ScheduleOutlined } from '@ant-design/icons';
+import { useMutation,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
+import { App,
+  Card,
+  Form,
+  Input,
+  Segmented,
+  Select,
+  Space,
+  Switch,
+  Tag,
+  Tooltip,
+  TimePicker,
+  Typography,
+} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { useState } from 'react';
 import { companyBatchScheduleApi, type CompanyBatchSchedule } from '@/features/salary-service/api/companyBatchScheduleApi';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppButton } from '@/shared/ui/AppButton';
+import { AppUnitInputNumber } from '@/shared/ui/AppUnitInputNumber';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 type Frequency = 'hourly' | 'daily' | 'weekly' | 'monthly' | 'yearly';
 const WEEKDAYS = [
@@ -253,9 +273,15 @@ function Inner() {
       key: 'action',
       width: 100,
       render: (_, row) => (
-        <AppButton size="small" variant="secondary" icon={<EditOutlined />} onClick={() => openEdit(row)}>
-          시간 변경
-        </AppButton>
+        <Tooltip title="시간 변경">
+          <AppButton
+            size="small"
+            variant="text"
+            icon={<EditOutlined />}
+            aria-label={`${jobLabel(row.jobKey).name} 시간 변경`}
+            onClick={() => openEdit(row)}
+          />
+        </Tooltip>
       ),
     },
   ];
@@ -328,7 +354,7 @@ function Inner() {
             </div>
           </div>
 
-          <Table<CompanyBatchSchedule>
+          <AppDataTable<CompanyBatchSchedule>
             rowKey={(r) => r.jobKey}
             loading={listQ.isLoading}
             dataSource={filtered}
@@ -381,7 +407,7 @@ function Inner() {
 
             {frequency === 'monthly' ? (
               <Form.Item label="매월 며칠" name="dayOfMonth" rules={[{ required: true, message: '날짜를 입력해주세요.' }]}>
-                <InputNumber min={1} max={31} addonAfter="일" style={{ width: '100%' }} />
+                <AppUnitInputNumber min={1} max={31} unit="일" />
               </Form.Item>
             ) : null}
 
@@ -393,7 +419,7 @@ function Inner() {
                   rules={[{ required: true, message: '월을 선택해주세요.' }]}
                   style={{ flex: 1, marginRight: 8 }}
                 >
-                  <InputNumber min={1} max={12} addonAfter="월" style={{ width: '100%' }} />
+                  <AppUnitInputNumber min={1} max={12} unit="월" />
                 </Form.Item>
                 <Form.Item
                   label="며칠"
@@ -401,7 +427,7 @@ function Inner() {
                   rules={[{ required: true, message: '날짜를 입력해주세요.' }]}
                   style={{ flex: 1 }}
                 >
-                  <InputNumber min={1} max={31} addonAfter="일" style={{ width: '100%' }} />
+                  <AppUnitInputNumber min={1} max={31} unit="일" />
                 </Form.Item>
               </Space.Compact>
             ) : null}
@@ -415,7 +441,7 @@ function Inner() {
                 getValueFromEvent={(v: number | null) => dayjs().hour(0).minute(v ?? 0)}
                 getValueProps={(v) => ({ value: v ? (v as dayjs.Dayjs).minute() : 0 })}
               >
-                <InputNumber min={0} max={59} addonAfter="분" style={{ width: '100%' }} />
+                <AppUnitInputNumber min={0} max={59} unit="분" />
               </Form.Item>
             ) : (
               <Form.Item

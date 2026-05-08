@@ -1,12 +1,35 @@
 /** /app/attendance/flexible-slots - 시차출퇴근 슬롯 관리 (시스템 관리자) */
-import { useEffect, useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Button, Card, Form, Input, InputNumber, Popconfirm, Select, Space, Table, Tag, TimePicker, Typography } from 'antd';
+import {
+  useEffect,
+  useMemo,
+  useState } from 'react';
+import { useMutation,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
+import { DeleteOutlined,
+  EditOutlined } from '@ant-design/icons';
+import { Alert,
+  App,
+  Button,
+  Card,
+  Form,
+  Input,
+  InputNumber,
+  Popconfirm,
+  Select,
+  Space,
+  Tag,
+  TimePicker,
+  Tooltip,
+  Typography,
+} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs, { type Dayjs } from 'dayjs';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import type { FlexibleTimeSlot, WorkSchedule } from '@/features/salary-service/types';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 type FormValues = {
   workScheduleId: string;
@@ -228,40 +251,44 @@ export function AdminFlexibleSlotsPage() {
                 <Button size="small" onClick={() => r.slotId && defaultM.mutate(r.slotId)} disabled={!!r.isDefault}>
                   기본
                 </Button>
-                <Button
-                  size="small"
-                  onClick={() => {
-                    setEditing(r);
-                    setOpen(true);
-                    const breakStartTime = dayjs(
-                      (r.breakStart ?? `${DEFAULT_BREAK_START_HHMM}:00`).slice(0, 5),
-                      'HH:mm',
-                    );
-                    const breakEndTime = dayjs(
-                      (r.breakEnd ?? `${DEFAULT_BREAK_END_HHMM}:00`).slice(0, 5),
-                      'HH:mm',
-                    );
-                    form.setFieldsValue({
-                      workScheduleId: r.workScheduleId ?? selectedScheduleId,
-                      slotLabel: r.slotLabel ?? '',
-                      startTime: dayjs(r.startTime ?? '09:00', 'HH:mm'),
-                      endTime: dayjs(r.endTime ?? '18:00', 'HH:mm'),
-                      breakStartTime,
-                      breakEndTime,
-                      workMinutes: calcWorkMinutes(
-                        r.startTime ?? '09:00',
-                        r.endTime ?? '18:00',
+                <Tooltip title="수정">
+                  <Button
+                    size="small"
+                    icon={<EditOutlined />}
+                    aria-label="스케줄 수정"
+                    onClick={() => {
+                      setEditing(r);
+                      setOpen(true);
+                      const breakStartTime = dayjs(
+                        (r.breakStart ?? `${DEFAULT_BREAK_START_HHMM}:00`).slice(0, 5),
+                        'HH:mm',
+                      );
+                      const breakEndTime = dayjs(
+                        (r.breakEnd ?? `${DEFAULT_BREAK_END_HHMM}:00`).slice(0, 5),
+                        'HH:mm',
+                      );
+                      form.setFieldsValue({
+                        workScheduleId: r.workScheduleId ?? selectedScheduleId,
+                        slotLabel: r.slotLabel ?? '',
+                        startTime: dayjs(r.startTime ?? '09:00', 'HH:mm'),
+                        endTime: dayjs(r.endTime ?? '18:00', 'HH:mm'),
                         breakStartTime,
                         breakEndTime,
-                      ),
-                      isDefault: Boolean(r.isDefault),
-                    });
-                  }}
-                >
-                  수정
-                </Button>
+                        workMinutes: calcWorkMinutes(
+                          r.startTime ?? '09:00',
+                          r.endTime ?? '18:00',
+                          breakStartTime,
+                          breakEndTime,
+                        ),
+                        isDefault: Boolean(r.isDefault),
+                      });
+                    }}
+                  />
+                </Tooltip>
                 {r.isDefault ? (
-                  <Button size="small" danger disabled>삭제</Button>
+                  <Tooltip title="기본 스케줄은 삭제할 수 없습니다">
+                    <Button size="small" danger disabled icon={<DeleteOutlined />} aria-label="스케줄 삭제" />
+                  </Tooltip>
                 ) : (
                   <Popconfirm
                     title="스케줄을 삭제할까요?"
@@ -275,7 +302,15 @@ export function AdminFlexibleSlotsPage() {
                     disabled={(slotsQ.data ?? []).length <= 1}
                     onConfirm={() => deleteM.mutate(r.slotId!)}
                   >
-                    <Button size="small" danger disabled={(slotsQ.data ?? []).length <= 1}>삭제</Button>
+                    <Tooltip title="삭제">
+                      <Button
+                        size="small"
+                        danger
+                        disabled={(slotsQ.data ?? []).length <= 1}
+                        icon={<DeleteOutlined />}
+                        aria-label="스케줄 삭제"
+                      />
+                    </Tooltip>
                   </Popconfirm>
                 )}
               </>
@@ -331,7 +366,7 @@ export function AdminFlexibleSlotsPage() {
           </Button>
         </Space>
 
-        <Table<FlexibleTimeSlot>
+        <AppDataTable<FlexibleTimeSlot>
           rowKey={(r) => r.slotId ?? `${r.slotCode}-${r.startTime}`}
           dataSource={slotsQ.data ?? []}
           columns={columns}

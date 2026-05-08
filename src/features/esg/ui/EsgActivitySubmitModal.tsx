@@ -4,7 +4,12 @@ import { Alert, App, Button, Form, Input, Select, Typography, Upload } from 'ant
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { useEffect, useState } from 'react';
 import { esgApi } from '@/features/esg/api/esgApi';
-import { esgCardLinkButtonClass, esgOutlinedAccentClass, esgPrimaryButtonClass } from '@/features/esg/esgUiTokens';
+import {
+  esgCardLinkButtonClass,
+  esgModalContentClass,
+  esgOutlinedAccentClass,
+  esgPrimaryButtonClass,
+} from '@/features/esg/esgUiTokens';
 
 const ACCEPT = '.pdf,.doc,.docx,.txt,.jpg,.jpeg,.png';
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -88,7 +93,7 @@ export function EsgActivitySubmitModal({ open, onClose, initialSubjectId }: Prop
         width={520}
         destroyOnHidden
       >
-        <div className="tw-px-5 tw-py-4">
+        <div className={esgModalContentClass}>
         {subError && (
         <Alert
           type="error"

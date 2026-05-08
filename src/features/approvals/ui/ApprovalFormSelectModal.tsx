@@ -1,7 +1,7 @@
 import { CloseOutlined, ExpandOutlined, FileAddOutlined, FileTextOutlined, FolderOutlined, ShrinkOutlined } from '@ant-design/icons';
 import { Button, Empty, Spin, Tooltip, Tree, Typography } from 'antd';
 import { AppSearchBar } from '@/shared/ui';
-import { AppModal } from '@/shared/ui/AppModal';
+import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
 import type { TreeProps } from 'antd';
 import type { DataNode } from 'antd/es/tree';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -181,7 +181,7 @@ export function ApprovalFormSelectModal({
   };
 
   return (
-    <AppModal
+    <AppSingleActionModal
       title={
         <div className="tw-flex tw-items-center tw-justify-between tw-gap-2">
             <span className="tw-text-sm tw-font-semibold tw-text-slate-800">전자결재</span>
@@ -210,10 +210,12 @@ export function ApprovalFormSelectModal({
         </div>
       }
       open={open}
-      onCancel={onCancel}
+      onClose={onCancel}
+      onSubmit={() => undefined}
+      submitText="확인"
       wrapClassName="wf-approval-form-select-modal-wrap"
       closable={false}
-      footer={null}
+      customFooter={null}
       width={isMaximized ? 'calc(100vw - 32px)' : 1120}
       destroyOnHidden
       centered={!isMaximized}
@@ -389,6 +391,6 @@ export function ApprovalFormSelectModal({
           </div>
         </div>
       </div>
-    </AppModal>
+    </AppSingleActionModal>
   );
 }

@@ -1,5 +1,10 @@
-import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { DownloadOutlined, SendOutlined } from '@ant-design/icons';
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
+import { DownloadOutlined,
+  SendOutlined } from '@ant-design/icons';
 import {
   Alert,
   Button,
@@ -10,9 +15,9 @@ import {
   Modal,
   Popconfirm,
   Space,
-  Table,
   Tag,
   Typography,
+  type ModalProps,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
@@ -35,7 +40,11 @@ import {
   formatApprovalAttachmentBytes,
   type ApprovalAttachment,
 } from '@/features/approvals/api/approvalAttachmentsApi';
-import { syncApprovalQueryCachesAfterAct } from '@/features/approvals/lib/syncApprovalQueryCaches';
+import {
+  invalidateApprovalRequestQueries,
+  notifyApprovalRequestChanged,
+  syncApprovalQueryCachesAfterAct,
+} from '@/features/approvals/lib/syncApprovalQueryCaches';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
 import { useAuth } from '@/features/auth/useAuth';
@@ -56,6 +65,8 @@ import {
 import { memberApi } from '@/features/member/api/memberApi';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 const REQUEST_STATUS_LABEL: Record<ApprovalRequestStatus, string> = {
   DRAFT: '임시저장',
@@ -257,12 +268,16 @@ export type ApprovalRequestReadOnlyModalProps = {
   requestId: string | null;
   onClose: () => void;
   title?: string;
+  getContainer?: ModalProps['getContainer'];
+  zIndex?: number;
 };
 
 export function ApprovalRequestReadOnlyModal({
   requestId,
   onClose,
   title = '결재 상세',
+  getContainer,
+  zIndex,
 }: ApprovalRequestReadOnlyModalProps) {
   const open = requestId != null;
   const qc = useQueryClient();
@@ -405,6 +420,14 @@ export function ApprovalRequestReadOnlyModal({
 
   const myActionableApprovalLine = useMemo(() => {
     if (!selectedRequestDetail) return undefined;
+    const drafterMemberId = selectedRequestDetail.memberId?.trim() ?? '';
+    if (
+      authMemberId.trim() &&
+      drafterMemberId &&
+      normalizeUuidMapKey(drafterMemberId) === normalizeUuidMapKey(authMemberId)
+    ) {
+      return undefined;
+    }
     const rs = String(selectedRequestDetail.requestStatus).toUpperCase();
     /** 서버가 제출 직후·첫 결재 대기를 WAIT로 두는 경우가 있어 PENDING과 동일하게 처리 */
     if (rs !== 'PENDING' && rs !== 'WAIT') return undefined;
@@ -428,6 +451,7 @@ export function ApprovalRequestReadOnlyModal({
         myMemberId: authMemberId,
         myMemberPositionId: pid,
       });
+      notifyApprovalRequestChanged(detail);
       const proxy = requestIncludesMyProxyAct(detail, {
         myMemberId: authMemberId,
         myMemberPositionId: pid,
@@ -435,7 +459,10 @@ export function ApprovalRequestReadOnlyModal({
       message.success(proxy ? '대결로 승인 처리했습니다.' : '승인 처리했습니다.');
       setApprovalAction(null);
       setApprovalComment('');
-      await qc.invalidateQueries({ queryKey: ['approval', 'documents', 'active'] });
+      await Promise.all([
+        invalidateApprovalRequestQueries(qc),
+        qc.invalidateQueries({ queryKey: ['approval', 'documents', 'active'] }),
+      ]);
     },
     onError: (e: Error) => message.error(e.message || '승인 처리에 실패했습니다.'),
   });
@@ -449,6 +476,7 @@ export function ApprovalRequestReadOnlyModal({
         myMemberId: authMemberId,
         myMemberPositionId: pid,
       });
+      notifyApprovalRequestChanged(detail);
       const proxy = requestIncludesMyProxyAct(detail, {
         myMemberId: authMemberId,
         myMemberPositionId: pid,
@@ -456,7 +484,10 @@ export function ApprovalRequestReadOnlyModal({
       message.success(proxy ? '대결로 반려 처리했습니다.' : '반려 처리했습니다.');
       setApprovalAction(null);
       setApprovalComment('');
-      await qc.invalidateQueries({ queryKey: ['approval', 'documents', 'active'] });
+      await Promise.all([
+        invalidateApprovalRequestQueries(qc),
+        qc.invalidateQueries({ queryKey: ['approval', 'documents', 'active'] }),
+      ]);
     },
     onError: (e: Error) => message.error(e.message || '반려 처리에 실패했습니다.'),
   });
@@ -876,6 +907,8 @@ export function ApprovalRequestReadOnlyModal({
       customFooter={detailModalFooter}
       width={920}
       destroyOnHidden
+      getContainer={getContainer}
+      zIndex={zIndex}
     >
       <div className="tw-px-5 tw-py-4">
       {detailLoading || !selectedRequestDetail ? (
@@ -940,7 +973,7 @@ export function ApprovalRequestReadOnlyModal({
           {normalizeApprovalRequestType(selectedRequestDetail.requestType) === 'OFFICIAL' &&
           (selectedRequestDetail.recipients?.length ?? 0) > 0 ? (
             <Card size="small" title="수신 부서">
-              <Table
+              <AppDataTable
                 size="small"
                 pagination={false}
                 rowKey={(r) => r.recipientId ?? `${r.recipientOrganizationId}-${r.recipientOrganizationName}`}
@@ -1055,7 +1088,7 @@ export function ApprovalRequestReadOnlyModal({
             ) : attachments.length === 0 ? (
               <Typography.Text type="secondary">첨부파일이 없습니다.</Typography.Text>
             ) : (
-              <Table
+              <AppDataTable
                 size="small"
                 pagination={false}
                 rowKey="attachmentId"
@@ -1065,7 +1098,7 @@ export function ApprovalRequestReadOnlyModal({
             )}
           </Card>
           <Card size="small" title="결재라인">
-            <Table
+            <AppDataTable
               size="small"
               rowKey="approvalId"
               pagination={false}
@@ -1145,7 +1178,7 @@ export function ApprovalRequestReadOnlyModal({
             />
           </Card>
           <Card size="small" title="참조·공람">
-            <Table
+            <AppDataTable
               size="small"
               rowKey="viewerId"
               pagination={false}
@@ -1207,6 +1240,8 @@ export function ApprovalRequestReadOnlyModal({
       confirmDanger
       confirmLoading={cancelOfficialBeforeSendM.isPending}
       destroyOnHidden
+      getContainer={getContainer}
+      zIndex={zIndex != null ? zIndex + 10 : undefined}
       onConfirm={async () => {
         if (!officialCancelReason.trim()) {
           message.warning('취소 사유를 입력해 주세요.');
@@ -1243,6 +1278,8 @@ export function ApprovalRequestReadOnlyModal({
       okButtonProps={{ danger: true }}
       confirmLoading={cancelRequestM.isPending}
       destroyOnHidden
+      getContainer={getContainer}
+      zIndex={zIndex != null ? zIndex + 10 : undefined}
       onOk={async () => {
         if (!requestCancelReason.trim()) {
           message.warning('취소 사유를 입력해 주세요.');
@@ -1291,6 +1328,8 @@ export function ApprovalRequestReadOnlyModal({
       confirmLoading={approveM.isPending || rejectM.isPending}
       confirmDanger={approvalAction?.mode === 'reject'}
       destroyOnHidden
+      getContainer={getContainer}
+      zIndex={zIndex != null ? zIndex + 10 : undefined}
     >
       <div className="tw-px-5 tw-py-4">
         <Input.TextArea

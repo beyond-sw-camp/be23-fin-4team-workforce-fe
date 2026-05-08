@@ -1,11 +1,30 @@
-import { ArrowLeftOutlined, FileExcelOutlined, InboxOutlined, ReloadOutlined } from '@ant-design/icons';
-import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  ArrowLeftOutlined,
+  FileExcelOutlined,
+  InboxOutlined,
+  ReloadOutlined } from '@ant-design/icons';
+import { useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { Alert, App, Button, InputNumber, Modal, Space, Table, Tag, Typography, Upload } from 'antd';
+import { Alert,
+  App,
+  Button,
+  Space,
+  Tag,
+  Typography,
+  Upload,
+} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import type { UploadFile } from 'antd/es/upload/interface';
 import { useState } from 'react';
 import { saasApi } from '@/features/saas/api/saasApi';
+import { SaasConsoleShell } from '@/pages/saas/SaasConsoleShell';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
+import { AppUnitInputNumber } from '@/shared/ui/AppUnitInputNumber';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 const QK_YEARS = ['saas', 'tax-table', 'years'] as const;
 
@@ -28,6 +47,7 @@ function SaasTaxTablePageInner() {
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState<number>(currentYear);
   const [fileList, setFileList] = useState<UploadFile[]>([]);
+  const [overwriteRequest, setOverwriteRequest] = useState<{ year: number; file: File } | null>(null);
 
   // 등록된 연도 목록
   const yearsQ = useQuery({
@@ -60,14 +80,7 @@ function SaasTaxTablePageInner() {
       const err = e as { status?: number; message?: string };
       // 409 = 같은 연도 이미 등록됨. 덮어쓰기 확인 모달
       if (err?.status === 409) {
-        Modal.confirm({
-          title: `${vars.year}년이 이미 등록되어 있어요`,
-          content: '덮어쓰면 기존 데이터가 모두 삭제되고 새 파일로 교체돼요. 진행할까요?',
-          okText: '덮어쓰기',
-          cancelText: '취소',
-          okButtonProps: { danger: true },
-          onOk: () => uploadM.mutate({ ...vars, force: true }),
-        });
+        setOverwriteRequest({ year: vars.year, file: vars.file });
         return;
       }
       message.error(err?.message ?? '업로드 실패');
@@ -104,8 +117,7 @@ function SaasTaxTablePageInner() {
   ];
 
   return (
-    <div className="tw-min-h-screen tw-bg-slate-50 tw-p-8">
-      <div className="tw-mx-auto tw-max-w-4xl tw-space-y-6">
+    <SaasConsoleShell contentClassName="tw-space-y-5">
         <div className="tw-flex tw-items-center tw-justify-between">
           <Space align="center" size={12}>
             <Button
@@ -135,7 +147,7 @@ function SaasTaxTablePageInner() {
           message="국세청 고시 간이세액표 엑셀을 매년 1월에 업로드하면 그 해 모든 회사의 급여 계산에 자동 반영돼요."
         />
 
-        <div className="tw-rounded-lg tw-border tw-border-slate-200 tw-bg-white tw-p-6 tw-space-y-4">
+        <div className="tw-space-y-4 tw-rounded-xl tw-border tw-border-slate-200 tw-bg-white tw-p-5 tw-shadow-sm">
           <Typography.Title level={4} className="!tw-mt-0">
             새 연도 업로드
           </Typography.Title>
@@ -145,12 +157,12 @@ function SaasTaxTablePageInner() {
                 <Typography.Text type="secondary" className="tw-text-xs">
                   적용 연도
                 </Typography.Text>
-                <InputNumber
+                <AppUnitInputNumber
                   min={2000}
                   max={2100}
                   value={year}
                   onChange={(v) => setYear(Number(v) || currentYear)}
-                  addonAfter="년"
+                  unit="년"
                   style={{ width: 160, display: 'block' }}
                 />
               </div>
@@ -181,11 +193,11 @@ function SaasTaxTablePageInner() {
           </Space>
         </div>
 
-        <div className="tw-rounded-lg tw-border tw-border-slate-200 tw-bg-white tw-p-6">
+        <div className="tw-rounded-xl tw-border tw-border-slate-200 tw-bg-white tw-p-5 tw-shadow-sm">
           <Typography.Title level={4} className="!tw-mt-0">
             등록된 연도
           </Typography.Title>
-          <Table<Row>
+          <AppDataTable<Row>
             rowKey={(r) => String(r.year)}
             loading={yearsQ.isLoading}
             dataSource={rows}
@@ -194,7 +206,28 @@ function SaasTaxTablePageInner() {
             locale={{ emptyText: '아직 등록된 연도가 없어요.' }}
           />
         </div>
-      </div>
-    </div>
+
+        <AppDoubleActionModal
+          title={`${overwriteRequest?.year ?? year}년 간이세액표 덮어쓰기`}
+          open={!!overwriteRequest}
+          onClose={() => setOverwriteRequest(null)}
+          onConfirm={() => {
+            if (!overwriteRequest) return;
+            uploadM.mutate({ year: overwriteRequest.year, file: overwriteRequest.file, force: true });
+            setOverwriteRequest(null);
+          }}
+          confirmText="덮어쓰기"
+          cancelText="취소"
+          confirmDanger
+          confirmLoading={uploadM.isPending}
+          width={460}
+        >
+          <div className="tw-space-y-2 tw-px-5 tw-py-4">
+            <Typography.Paragraph className="!tw-m-0 tw-text-sm tw-leading-6 !tw-text-slate-600">
+              이미 등록된 연도의 데이터가 있습니다. 덮어쓰면 기존 데이터가 모두 삭제되고 새 파일로 교체됩니다.
+            </Typography.Paragraph>
+          </div>
+        </AppDoubleActionModal>
+    </SaasConsoleShell>
   );
 }

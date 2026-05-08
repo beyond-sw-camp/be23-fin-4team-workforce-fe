@@ -4,8 +4,12 @@
  *  + 협상 이력 테이블 (현재→제안 비교 / 상태 / 적용일)
  *  + SUBMITTED 상태 협상에 대한 수락/거절 응답 모달
  */
-import { useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useMemo,
+  useState } from 'react';
+import { useMutation,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
 import {
   App,
   Button,
@@ -15,7 +19,6 @@ import {
   Popconfirm,
   Space,
   Statistic,
-  Table,
   Tag,
   Typography,
 } from 'antd';
@@ -29,6 +32,8 @@ import type {
 } from '@/features/salary-service/types';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 const NEG_TYPE_KO: Record<string, string> = {
   REGULAR: '정기',
@@ -280,7 +285,7 @@ export function MyNegotiationHistoryPage() {
       </div>
 
       <Card className="tw-border-slate-200/80 tw-shadow-sm">
-        <Table<SalaryNegotiation>
+        <AppDataTable<SalaryNegotiation>
           rowKey={(r) => r.negotiationId ?? Math.random().toString()}
           loading={listQ.isLoading}
           dataSource={list}

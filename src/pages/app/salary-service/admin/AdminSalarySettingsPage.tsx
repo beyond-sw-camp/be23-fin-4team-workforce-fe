@@ -1,6 +1,12 @@
 /** /app/salary/settings — 급여 정책·템플릿·직원 급여·세율 등 (시스템 관리자) */
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState } from 'react';
+import { useMutation,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
   App,
@@ -17,13 +23,13 @@ import {
   Select,
   Space,
   Switch,
-  Table,
   Tabs,
   Tag,
+  Tooltip,
   Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { LeftOutlined, RightOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EditOutlined, LeftOutlined, PlusOutlined, RightOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import { hasActivePayGradeSalaryPolicy } from '@/features/salary-service/lib/salaryPolicyAccess';
@@ -48,6 +54,8 @@ import type {
   ItemTypeCode,
 } from '@/features/salary-service/types';
 import { TAX_CAP_SUPPORTED_TYPES } from '@/features/salary-service/types';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 /* ─── 공통 한글 맵 ─── */
 
@@ -597,31 +605,39 @@ export function SalaryTab({
         width: 140,
         render: (_, r) => (
           <Space>
-            <Button
-              size="small"
-              onClick={() => {
-                setEditing(r);
-                setOpen(true);
-                form.setFieldsValue({
-                  memberId: r.memberId ?? '',
-                  salaryPolicyId: r.salaryPolicyId ?? '',
-                  baseSalary: Number(r.baseSalary ?? 0),
-                  step: r.step ?? null,
-                  jobGradeName: r.jobGradeName ?? '',
-                  jobTitleName: r.jobTitleName ?? '',
-                  effectiveRange: [
-                    r.effectiveFrom ? dayjs(r.effectiveFrom) : dayjs(),
-                    r.effectiveTo ? dayjs(r.effectiveTo) : null,
-                  ],
-                  dependentCount: r.dependentCount ?? 1,
-                });
-              }}
-            >
-              수정
-            </Button>
-            <Button size="small" danger onClick={() => handleDelete(r)}>
-              삭제
-            </Button>
+            <Tooltip title="수정">
+              <Button
+                size="small"
+                icon={<EditOutlined />}
+                aria-label="급여 이력 수정"
+                onClick={() => {
+                  setEditing(r);
+                  setOpen(true);
+                  form.setFieldsValue({
+                    memberId: r.memberId ?? '',
+                    salaryPolicyId: r.salaryPolicyId ?? '',
+                    baseSalary: Number(r.baseSalary ?? 0),
+                    step: r.step ?? null,
+                    jobGradeName: r.jobGradeName ?? '',
+                    jobTitleName: r.jobTitleName ?? '',
+                    effectiveRange: [
+                      r.effectiveFrom ? dayjs(r.effectiveFrom) : dayjs(),
+                      r.effectiveTo ? dayjs(r.effectiveTo) : null,
+                    ],
+                    dependentCount: r.dependentCount ?? 1,
+                  });
+                }}
+              />
+            </Tooltip>
+            <Tooltip title="삭제">
+              <Button
+                size="small"
+                danger
+                icon={<DeleteOutlined />}
+                aria-label="급여 이력 삭제"
+                onClick={() => handleDelete(r)}
+              />
+            </Tooltip>
           </Space>
         ),
       },
@@ -710,7 +726,7 @@ export function SalaryTab({
               )}
             </Space>
           </Space>
-          <Table<Salary>
+          <AppDataTable<Salary>
             rowKey={(r) => r.salaryId ?? Math.random().toString()}
             loading={listQ.isLoading}
             dataSource={filteredRows}
@@ -975,32 +991,34 @@ export function SalaryTab({
         destroyOnHidden
         width={520}
       >
-        <Alert
-          type="warning"
-          showIcon
-          className="tw-mb-3"
-          message="활성 급여정책(SalaryPolicy)이 없으면 백엔드가 조용히 skip 합니다."
-          description="먼저 '급여 정책' 탭에서 입사일 기준 활성 정책을 등록했는지 확인하세요."
-        />
-        <Form<BootstrapFormValues>
-          form={bootstrapForm}
-          layout="vertical"
-          onFinish={(v) => bootstrapM.mutate(v)}
-        >
-          <MemberIdSearchField />
-          <Form.Item label="입사일 (hireDate)" name="hireDate" rules={[{ required: true }]}>
-            <DatePicker className="tw-w-full" format="YYYY-MM-DD" />
-          </Form.Item>
-          <Form.Item label="기본급 (원, 생략 시 회사 기본값)" name="baseSalary">
-            <InputNumber min={0} step={10000} style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item label="직급명" name="jobGradeName">
-            <Input maxLength={40} />
-          </Form.Item>
-          <Form.Item label="직책명" name="jobTitleName">
-            <Input maxLength={40} />
-          </Form.Item>
-        </Form>
+        <div className="tw-px-5 tw-py-4">
+          <Alert
+            type="warning"
+            showIcon
+            className="tw-mb-3"
+            message="활성 급여정책(SalaryPolicy)이 없으면 백엔드가 조용히 skip 합니다."
+            description="먼저 '급여 정책' 탭에서 입사일 기준 활성 정책을 등록했는지 확인하세요."
+          />
+          <Form<BootstrapFormValues>
+            form={bootstrapForm}
+            layout="vertical"
+            onFinish={(v) => bootstrapM.mutate(v)}
+          >
+            <MemberIdSearchField />
+            <Form.Item label="입사일 (hireDate)" name="hireDate" rules={[{ required: true }]}>
+              <DatePicker className="tw-w-full" format="YYYY-MM-DD" />
+            </Form.Item>
+            <Form.Item label="기본급 (원, 생략 시 회사 기본값)" name="baseSalary">
+              <InputNumber min={0} step={10000} style={{ width: '100%' }} />
+            </Form.Item>
+            <Form.Item label="직급명" name="jobGradeName">
+              <Input maxLength={40} />
+            </Form.Item>
+            <Form.Item label="직책명" name="jobTitleName">
+              <Input maxLength={40} />
+            </Form.Item>
+          </Form>
+        </div>
       </AppDoubleActionModal>
     </>
   );
@@ -1166,38 +1184,40 @@ function SalaryPolicyTab() {
         width: 140,
         render: (_, r) => (
           <Space>
-            <Button
-              size="small"
-              onClick={() => {
-                setEditing(r);
-                setOpen(true);
-                form.setFieldsValue({
-                  policyName: r.policyName ?? '',
-                  payDay: r.payDay ?? 25,
-                  usePayGradeYn: r.usePayGradeYn === 'Y' ? 'Y' : 'N',
-                  wageSystemType: (r.wageSystemType as WageSystemTypeCode) ?? 'NON_COMPREHENSIVE',
-                  fixedOvertimeMinutes: r.fixedOvertimeMinutes ?? undefined,
-                  payDayShiftRule: (r.payDayShiftRule as PayDayShiftRuleCode) ?? 'BEFORE',
-                  prorationMethod: (r.prorationMethod as ProrationMethodCode) ?? 'DAYS_IN_MONTH',
-                  payCycleType: (r.payCycleType as PayCycleTypeCode) ?? 'CURRENT_MONTH',
-                  effectiveRange: [
-                    r.effectiveFrom ? dayjs(r.effectiveFrom) : dayjs(),
-                    r.effectiveTo ? dayjs(r.effectiveTo) : null,
-                  ],
-                });
-              }}
-            >
-              수정
-            </Button>
+            <Tooltip title="수정">
+              <Button
+                size="small"
+                icon={<EditOutlined />}
+                aria-label="급여 정책 수정"
+                onClick={() => {
+                  setEditing(r);
+                  setOpen(true);
+                  form.setFieldsValue({
+                    policyName: r.policyName ?? '',
+                    payDay: r.payDay ?? 25,
+                    usePayGradeYn: r.usePayGradeYn === 'Y' ? 'Y' : 'N',
+                    wageSystemType: (r.wageSystemType as WageSystemTypeCode) ?? 'NON_COMPREHENSIVE',
+                    fixedOvertimeMinutes: r.fixedOvertimeMinutes ?? undefined,
+                    payDayShiftRule: (r.payDayShiftRule as PayDayShiftRuleCode) ?? 'BEFORE',
+                    prorationMethod: (r.prorationMethod as ProrationMethodCode) ?? 'DAYS_IN_MONTH',
+                    payCycleType: (r.payCycleType as PayCycleTypeCode) ?? 'CURRENT_MONTH',
+                    effectiveRange: [
+                      r.effectiveFrom ? dayjs(r.effectiveFrom) : dayjs(),
+                      r.effectiveTo ? dayjs(r.effectiveTo) : null,
+                    ],
+                  });
+                }}
+              />
+            </Tooltip>
             <Popconfirm
               title="삭제?"
               okText="삭제"
               cancelText="취소"
               onConfirm={() => r.salaryPolicyId && deleteM.mutate(r.salaryPolicyId)}
             >
-              <Button size="small" danger>
-                삭제
-              </Button>
+              <Tooltip title="삭제">
+                <Button size="small" danger icon={<DeleteOutlined />} aria-label="급여 정책 삭제" />
+              </Tooltip>
             </Popconfirm>
           </Space>
         ),
@@ -1229,7 +1249,7 @@ function SalaryPolicyTab() {
           정책 등록
         </Button>
       </div>
-      <Table<SalaryPolicy>
+      <AppDataTable<SalaryPolicy>
         rowKey={(r) => r.salaryPolicyId ?? Math.random().toString()}
         loading={listQ.isLoading}
         dataSource={listQ.data ?? []}
@@ -1547,32 +1567,34 @@ function TaxRateTab({ readOnly = false }: { readOnly?: boolean } = {}) {
         width: 140,
         render: (_, r) => (
           <Space>
-            <Button
-              size="small"
-              onClick={() => {
-                setEditing(r);
-                setOpen(true);
-                form.setFieldsValue({
-                  taxType: r.taxType as TaxTypeCode,
-                  rate: Number(r.rate ?? 0),
-                  applyYear: r.applyYear ?? dayjs().year(),
-                  employerRate: r.employerRate != null ? Number(r.employerRate) : undefined,
-                  incomeCeiling: r.incomeCeiling != null ? Number(r.incomeCeiling) : undefined,
-                  incomeFloor: r.incomeFloor != null ? Number(r.incomeFloor) : undefined,
-                });
-              }}
-            >
-              수정
-            </Button>
+            <Tooltip title="수정">
+              <Button
+                size="small"
+                icon={<EditOutlined />}
+                aria-label="세율 수정"
+                onClick={() => {
+                  setEditing(r);
+                  setOpen(true);
+                  form.setFieldsValue({
+                    taxType: r.taxType as TaxTypeCode,
+                    rate: Number(r.rate ?? 0),
+                    applyYear: r.applyYear ?? dayjs().year(),
+                    employerRate: r.employerRate != null ? Number(r.employerRate) : undefined,
+                    incomeCeiling: r.incomeCeiling != null ? Number(r.incomeCeiling) : undefined,
+                    incomeFloor: r.incomeFloor != null ? Number(r.incomeFloor) : undefined,
+                  });
+                }}
+              />
+            </Tooltip>
             <Popconfirm
               title="삭제?"
               okText="삭제"
               cancelText="취소"
               onConfirm={() => r.taxRateId && deleteM.mutate(r.taxRateId)}
             >
-              <Button size="small" danger>
-                삭제
-              </Button>
+              <Tooltip title="삭제">
+                <Button size="small" danger icon={<DeleteOutlined />} aria-label="세율 삭제" />
+              </Tooltip>
             </Popconfirm>
           </Space>
         ),
@@ -1616,6 +1638,7 @@ function TaxRateTab({ readOnly = false }: { readOnly?: boolean } = {}) {
             </Popconfirm>
             <Button
               type="primary"
+              icon={<PlusOutlined />}
               onClick={() => {
                 setEditing(null);
                 form.resetFields();
@@ -1628,7 +1651,7 @@ function TaxRateTab({ readOnly = false }: { readOnly?: boolean } = {}) {
           </Space>
         )}
       </div>
-      <Table<TaxRate>
+      <AppDataTable<TaxRate>
         rowKey={(r) => r.taxRateId ?? Math.random().toString()}
         loading={listQ.isLoading}
         dataSource={listQ.data ?? []}
@@ -1894,24 +1917,26 @@ function SalaryItemTemplateTab() {
         width: 180,
         render: (_, r) => (
           <Space>
-            <Button
-              size="middle"
-              onClick={() => {
-                setEditing(r);
-                setOpen(true);
-                form.setFieldsValue({
-                  itemName: r.itemName ?? '',
-                  itemType: (r.itemType as ItemTypeCode) ?? 'EARNING',
-                  displayOrder: r.displayOrder ?? 0,
-                  isTaxableYn: (r.isTaxableYn as 'Y' | 'N') ?? 'Y',
-                  isOrdinaryWageYn: (r.isOrdinaryWageYn as 'Y' | 'N') ?? 'N',
-                  defaultAmount: r.defaultAmount ?? null,
-                  fixedAmountYn: (r.fixedAmountYn as 'Y' | 'N') ?? 'N',
-                });
-              }}
-            >
-              수정
-            </Button>
+            <Tooltip title="수정">
+              <Button
+                size="middle"
+                icon={<EditOutlined />}
+                aria-label="급여 항목 수정"
+                onClick={() => {
+                  setEditing(r);
+                  setOpen(true);
+                  form.setFieldsValue({
+                    itemName: r.itemName ?? '',
+                    itemType: (r.itemType as ItemTypeCode) ?? 'EARNING',
+                    displayOrder: r.displayOrder ?? 0,
+                    isTaxableYn: (r.isTaxableYn as 'Y' | 'N') ?? 'Y',
+                    isOrdinaryWageYn: (r.isOrdinaryWageYn as 'Y' | 'N') ?? 'N',
+                    defaultAmount: r.defaultAmount ?? null,
+                    fixedAmountYn: (r.fixedAmountYn as 'Y' | 'N') ?? 'N',
+                  });
+                }}
+              />
+            </Tooltip>
             {r.isSystemDefault ? (
               <Typography.Text type="secondary" className="!tw-text-xs">
                 삭제 불가
@@ -1923,9 +1948,9 @@ function SalaryItemTemplateTab() {
                 cancelText="취소"
                 onConfirm={() => r.salaryItemTemplateId && deleteM.mutate(r.salaryItemTemplateId)}
               >
-                <Button size="middle" danger>
-                  삭제
-                </Button>
+                <Tooltip title="삭제">
+                  <Button size="middle" danger icon={<DeleteOutlined />} aria-label="급여 항목 삭제" />
+                </Tooltip>
               </Popconfirm>
             )}
           </Space>
@@ -1961,6 +1986,7 @@ function SalaryItemTemplateTab() {
           </Popconfirm>
           <Button
             type="primary"
+            icon={<PlusOutlined />}
             onClick={() => {
               setEditing(null);
               form.resetFields();
@@ -1983,7 +2009,7 @@ function SalaryItemTemplateTab() {
           </Button>
         </Space>
       </div>
-      <Table<SalaryItemTemplate>
+      <AppDataTable<SalaryItemTemplate>
         rowKey={(r) => r.salaryItemTemplateId ?? Math.random().toString()}
         loading={listQ.isLoading}
         dataSource={sortedItems}
@@ -2487,7 +2513,7 @@ export function OvertimeUsageTab() {
         </div>
       </Card>
 
-      <Table<OvertimeUsage>
+      <AppDataTable<OvertimeUsage>
         rowKey={(r) => r.memberId ?? `${r.name}-${r.approvedMinutes}`}
         loading={listQ.isLoading}
         dataSource={filteredRows}

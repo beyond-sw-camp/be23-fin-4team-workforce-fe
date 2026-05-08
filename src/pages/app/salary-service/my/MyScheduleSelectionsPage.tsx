@@ -1,7 +1,10 @@
 /** /app/attendance/schedules/my - 개인 근무 스케줄 (사원) */
 import React, { Fragment, useMemo, useState } from 'react';
-import { useNavigate } from '@tanstack/react-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useNavigate } from '@tanstack/react-router';
+import { useMutation,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
   App,
@@ -13,7 +16,6 @@ import {
   Popconfirm,
   Select,
   Space,
-  Table,
   Tabs,
   Tag,
   Typography,
@@ -25,6 +27,8 @@ import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import { approvalApi } from '@/features/approvals/api/approvalApi';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
+import { AppDataTable } from '@/shared/ui/AppDataTable';
+
 import type {
   DailyAttendance,
   FlexibleTimeSlot,
@@ -862,7 +866,7 @@ export function MyScheduleSelectionsPage() {
                       ‹ 근무 스케줄로 돌아가기
                     </Button>
                   </div>
-                  <Table<MemberScheduleSelection>
+                  <AppDataTable<MemberScheduleSelection>
                     rowKey={(r) => r.selectionId ?? `${r.targetYearMonth}-${r.createdAt}`}
                     dataSource={historyQ.data ?? []}
                     columns={columns}

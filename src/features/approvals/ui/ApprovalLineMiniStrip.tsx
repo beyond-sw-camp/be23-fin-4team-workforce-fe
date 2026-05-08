@@ -1,7 +1,5 @@
-import { CheckCircleFilled, ClockCircleOutlined, CloseCircleOutlined, MinusOutlined } from '@ant-design/icons';
 import clsx from 'clsx';
-import { Fragment } from 'react';
-import { Typography } from 'antd';
+import { Typography, Tooltip } from 'antd';
 import type { ApprovalLine } from '@/features/approvals/api/approvalRequestApi';
 
 function lineStatusLabel(status: string): string {
@@ -13,41 +11,25 @@ function lineStatusLabel(status: string): string {
   return '대기';
 }
 
-function lineCardShellClass(status: string): string {
+function lineDotClass(status: string): string {
   const s = String(status).toUpperCase();
-  if (s === 'APPROVED') return 'tw-border-blue-200 tw-bg-blue-50/95';
-  if (s === 'REJECTED') return 'tw-border-rose-200 tw-bg-rose-50/95';
-  if (s === 'PENDING') return 'tw-border-amber-200 tw-bg-amber-50/95';
-  if (s === 'CANCELED') return 'tw-border-slate-200 tw-bg-slate-100/90';
-  return 'tw-border-slate-200 tw-bg-slate-50/95';
+  if (s === 'APPROVED') return 'tw-bg-blue-500';
+  if (s === 'REJECTED') return 'tw-bg-rose-500';
+  if (s === 'PENDING') return 'tw-bg-amber-500';
+  if (s === 'CANCELED') return 'tw-bg-slate-300';
+  return 'tw-bg-slate-300';
 }
 
-function lineTextClass(status: string): string {
-  const s = String(status).toUpperCase();
-  if (s === 'APPROVED') return 'tw-text-blue-700';
-  if (s === 'REJECTED') return 'tw-text-rose-700';
-  if (s === 'PENDING') return 'tw-text-amber-900';
-  if (s === 'CANCELED') return 'tw-text-slate-600';
-  return 'tw-text-slate-500';
-}
-
-function LineStepIcon({ status }: { status: string }) {
-  const s = String(status).toUpperCase();
-  if (s === 'APPROVED') return <CheckCircleFilled className="!tw-text-lg tw-text-blue-500" />;
-  if (s === 'REJECTED') return <CloseCircleOutlined className="!tw-text-lg tw-text-rose-500" />;
-  if (s === 'PENDING') return <ClockCircleOutlined className="!tw-text-lg tw-text-amber-500" />;
-  if (s === 'CANCELED') return <MinusOutlined className="!tw-text-lg tw-text-slate-400" />;
-  return <MinusOutlined className="!tw-text-lg tw-text-slate-400" />;
-}
-
-/** 목록·검색 테이블용 가로 결재선 요약 (내 결재함 스타일과 동일 톤) */
+/** 목록·검색 테이블용 가로 결재선 요약. 모든 표 안 결재선은 이 스타일을 기준으로 맞춘다. */
 export function ApprovalLineMiniStrip({
   lines,
   visibleSlots = 3,
+  variant = 'modal',
 }: {
   lines: ApprovalLine[];
   /** 0이면 가로 스크롤만, 양수면 최소 너비 고정 */
   visibleSlots?: number;
+  variant?: 'modal' | 'dashboard';
 }) {
   const sorted = [...lines].sort((a, b) => a.stepOrder - b.stepOrder);
   if (sorted.length === 0) {
@@ -57,60 +39,100 @@ export function ApprovalLineMiniStrip({
       </Typography.Text>
     );
   }
-  const viewportWidthClass = visibleSlots > 0 ? 'tw-w-[21rem]' : '';
+  const firstLine = sorted[0]!;
+  const representativeLine =
+    sorted.find((line) => String(line.approvalStatus).toUpperCase() === 'PENDING') ??
+    sorted.find((line) => String(line.approvalStatus).toUpperCase() === 'WAITING') ??
+    firstLine;
+  const tooltipTitle = (
+    <div className="tw-min-w-[13rem] tw-space-y-1.5">
+      {sorted.map((line) => {
+        const status = String(line.approvalStatus ?? '');
+        const name =
+          line.approverName?.trim() ||
+          line.approverJobTitleName?.trim() ||
+          `결재 ${line.stepOrder}차`;
+        return (
+          <div key={line.approvalId} className="tw-flex tw-items-center tw-justify-between tw-gap-4">
+            <span className="tw-min-w-0 tw-truncate tw-text-xs tw-font-semibold tw-text-slate-800">
+              {line.stepOrder}. {name}
+            </span>
+            <span className="tw-shrink-0 tw-text-[11px] tw-font-medium tw-text-slate-500">
+              {lineStatusLabel(status)}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+  if (variant === 'dashboard') {
+    const status = String(representativeLine.approvalStatus ?? '');
+    const name =
+      representativeLine.approverName?.trim() ||
+      representativeLine.approverJobTitleName?.trim() ||
+      `결재 ${representativeLine.stepOrder}차`;
+    return (
+      <Tooltip
+        title={tooltipTitle}
+        placement="topLeft"
+        color="#ffffff"
+        styles={{
+          body: {
+            border: '1px solid #e2e8f0',
+            borderRadius: 10,
+            boxShadow: '0 12px 28px rgba(15, 23, 42, 0.14)',
+            color: '#0f172a',
+            padding: '8px',
+          },
+        }}
+      >
+        <span className="wf-approval-dashboard-line-summary" aria-label="결재선">
+          <span className={`tw-h-1.5 tw-w-1.5 tw-shrink-0 tw-rounded-full ${lineDotClass(status)}`} />
+          <span className="tw-min-w-0 tw-truncate">{name}</span>
+          <span className="tw-shrink-0 tw-text-slate-500">{lineStatusLabel(status)}</span>
+          {sorted.length > 1 ? (
+            <span className="tw-shrink-0 tw-text-slate-400">· {sorted.length}</span>
+          ) : null}
+        </span>
+      </Tooltip>
+    );
+  }
+  const viewportWidthClass = visibleSlots > 0 ? 'tw-w-full' : '';
   return (
-    <div className={clsx('tw-min-w-0 tw-overflow-x-auto wf-scrollbar tw-pr-0.5', viewportWidthClass)} aria-label="결재선">
-      <div className="tw-inline-flex tw-min-w-max tw-items-stretch tw-gap-1">
+    <Tooltip
+      title={tooltipTitle}
+      placement="topLeft"
+      color="#ffffff"
+      styles={{
+        body: {
+          border: '1px solid #e2e8f0',
+          borderRadius: 10,
+          boxShadow: '0 12px 28px rgba(15, 23, 42, 0.14)',
+          color: '#0f172a',
+          padding: '8px',
+        },
+      }}
+    >
+      <div
+        className={clsx('wf-approval-modal-line-strip', viewportWidthClass)}
+        aria-label="결재선"
+      >
         {sorted.map((line, i) => {
           const name =
             line.approverName?.trim() ||
             line.approverJobTitleName?.trim() ||
             `결재 ${line.stepOrder}차`;
           const st = String(line.approvalStatus);
-          const title = `${name} (${st})`;
           return (
-            <Fragment key={line.approvalId}>
-              {i > 0 ? (
-                <span
-                  className="tw-flex tw-shrink-0 tw-items-center tw-px-0.5 tw-text-sm tw-font-light tw-text-slate-300"
-                  aria-hidden
-                >
-                  -
-                </span>
-              ) : null}
-              <div
-                title={title}
-                className={clsx(
-                  'tw-flex tw-h-full tw-min-w-[5.25rem] tw-max-w-[6.5rem] tw-shrink-0 tw-items-center tw-gap-1.5 tw-rounded-lg tw-border tw-px-2 tw-py-1',
-                  lineCardShellClass(st),
-                )}
-              >
-                <span className="tw-flex tw-flex-shrink-0 tw-items-center tw-leading-none">
-                  <LineStepIcon status={st} />
-                </span>
-                <div className="tw-min-w-0 tw-flex-1">
-                  <div
-                    className={clsx(
-                      'tw-truncate tw-text-[11px] tw-font-semibold tw-leading-tight',
-                      lineTextClass(st),
-                    )}
-                  >
-                    {name}
-                  </div>
-                  <div
-                    className={clsx(
-                      'tw-truncate tw-text-[10px] tw-font-medium tw-leading-tight tw-opacity-95',
-                      lineTextClass(st),
-                    )}
-                  >
-                    {lineStatusLabel(st)}
-                  </div>
-                </div>
-              </div>
-            </Fragment>
+            <span key={line.approvalId} className="wf-approval-modal-line-chip">
+              <span className={`tw-h-1.5 tw-w-1.5 tw-shrink-0 tw-rounded-full ${lineDotClass(st)}`} />
+              <span className="tw-shrink-0 tw-font-semibold tw-text-slate-700">{name}</span>
+              <span className="tw-shrink-0 tw-text-slate-500">{lineStatusLabel(st)}</span>
+              {i === sorted.length - 1 ? null : <span className="tw-sr-only">, </span>}
+            </span>
           );
         })}
       </div>
-    </div>
+    </Tooltip>
   );
 }

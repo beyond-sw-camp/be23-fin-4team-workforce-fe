@@ -1,49 +1,14 @@
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 import {
-  DeleteOutlined,
-  EditOutlined,
-  EyeOutlined,
-  FormOutlined,
-  PlusOutlined,
-  ReloadOutlined,
-  UploadOutlined,
-} from '@ant-design/icons';
+  DeleteOutlined, EditOutlined, EyeOutlined, PlusOutlined, ReloadOutlined, UploadOutlined, } from '@ant-design/icons';
 import {
-  DndContext,
-  KeyboardSensor,
-  PointerSensor,
-  closestCenter,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from '@dnd-kit/core';
+  DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent, } from '@dnd-kit/core';
 import {
-  SortableContext,
-  arrayMove,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
+  SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy, } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Alert,
-  App,
-  Button,
-  Card,
-  Checkbox,
-  Form,
-  Input,
-  InputNumber,
-  Popconfirm,
-  Select,
-  Space,
-  Switch,
-  Table,
-  Tabs,
-  Tag,
-  Tooltip,
-  Typography,
-} from 'antd';
+  Alert, App, Button, Card, Checkbox, Form, Input, InputNumber, Popconfirm, Select, Space, Switch, Tabs, Tag, Tooltip, Typography } from 'antd';
 import {
   createContext,
   useContext,
@@ -862,7 +827,7 @@ export function ApprovalsAdminPage() {
   };
 
   return (
-    <div className="tw-w-full">
+    <div className="tw-w-full tw-pb-24">
       {!canRead ? (
         <Alert
           type="warning"
@@ -920,7 +885,7 @@ export function ApprovalsAdminPage() {
                     </div>
 
                     <div className="tw-overflow-hidden tw-rounded-xl tw-border tw-border-slate-200">
-                      <Table
+                      <AppDataTable
                         rowKey="documentId"
                         loading={docsLoading}
                         dataSource={documents}
@@ -987,14 +952,15 @@ export function ApprovalsAdminPage() {
                             render: (_, row) => (
                               <div className="tw-flex tw-items-center tw-gap-2 tw-whitespace-nowrap">
                                 {canUpdate ? (
-                                  <Button
-                                    size="small"
-                                    icon={<FormOutlined />}
-                                    className="!tw-h-8 !tw-rounded-full !tw-border-slate-200 !tw-bg-white !tw-px-3 !tw-text-xs !tw-font-semibold !tw-text-slate-700 hover:!tw-border-[#1e3a5f]/30 hover:!tw-bg-slate-50 hover:!tw-text-[#1e3a5f]"
-                                    onClick={() => handleOpenEdit(row)}
-                                  >
-                                    양식 수정
-                                  </Button>
+                                  <Tooltip title="양식 수정">
+                                    <Button
+                                      size="small"
+                                      icon={<EditOutlined />}
+                                      aria-label="양식 수정"
+                                      className="!tw-inline-flex !tw-h-8 !tw-w-8 !tw-items-center !tw-justify-center !tw-rounded-full !tw-border-transparent !tw-bg-transparent !tw-p-0 !tw-text-blue-600 !tw-shadow-none hover:!tw-border-transparent hover:!tw-bg-blue-50 hover:!tw-text-blue-700"
+                                      onClick={() => handleOpenEdit(row)}
+                                    />
+                                  </Tooltip>
                                 ) : null}
                                 <Button
                                   size="small"
@@ -1133,7 +1099,7 @@ export function ApprovalsAdminPage() {
                           items={policyLineSortableIds}
                           strategy={verticalListSortingStrategy}
                         >
-                          <Table<PolicyLineDraft>
+                          <AppDataTable<PolicyLineDraft>
                             rowKey="key"
                             loading={policyLoading}
                             dataSource={sortedPolicyDrafts}
@@ -1453,7 +1419,7 @@ export function ApprovalsAdminPage() {
           ) : null}
 
           <div className="tw-overflow-hidden tw-rounded-xl tw-border tw-border-slate-200">
-            <Table<ApprovalPolicyLine>
+            <AppDataTable<ApprovalPolicyLine>
               rowKey="policyLineId"
               loading={policyPreviewLoading}
               dataSource={policyPreviewLines}

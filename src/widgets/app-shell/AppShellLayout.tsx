@@ -39,7 +39,7 @@ import {
   UserOutlined,
   VideoCameraOutlined,
 } from '@ant-design/icons';
-import { Avatar, Badge, Button, Empty, Layout, Menu, Popover, Spin, Tooltip, message } from 'antd';
+import { Avatar, Badge, Button, Empty, Layout, Menu, Popover, Spin, Tooltip } from 'antd';
 import type { MenuProps } from 'antd';
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
@@ -99,6 +99,7 @@ import { AppSearchField } from '@/shared/ui/AppSearchField';
 import { AiChatbotFab } from '@/widgets/app-shell/AiChatbotFab';
 import { AiRecordingModal } from '@/widgets/app-shell/AiRecordingModal';
 import { MemberChatProvider, useMemberChatOpener } from '@/widgets/app-shell/MemberChatOpener';
+import { SessionAccessTimer } from '@/widgets/app-shell/SessionAccessTimer';
 import { OrgChartModal } from '@/widgets/organization/OrgChartModal';
 import { HeaderSearchMemberDetailModal } from '@/widgets/app-shell/HeaderSearchMemberDetailModal';
 import {
@@ -820,113 +821,11 @@ const headerSearchFieldClass =
 const headerAiRecordButtonClass =
   'tw-inline-flex tw-h-10 tw-appearance-none tw-items-center tw-justify-center tw-gap-1.5 tw-rounded-full tw-border-0 tw-bg-gradient-to-r tw-from-[#1598ff] tw-via-[#2563eb] tw-to-[#8b5cf6] tw-px-4 tw-text-sm tw-font-bold tw-text-white tw-shadow-[0_8px_18px_rgba(37,99,235,0.20)] tw-transition-[background,box-shadow,filter] hover:tw-brightness-105 hover:tw-shadow-[0_10px_22px_rgba(99,102,241,0.24)] focus-visible:tw-outline focus-visible:tw-outline-2 focus-visible:tw-outline-offset-2 focus-visible:tw-outline-[#60a5fa]';
 
+const headerAiRecordActiveButtonClass =
+  'tw-inline-flex tw-h-10 tw-appearance-none tw-items-center tw-justify-center tw-gap-2 tw-rounded-full tw-border tw-border-solid tw-border-blue-200 tw-bg-white tw-px-3.5 tw-text-sm tw-font-bold tw-text-[#0f2542] tw-shadow-[0_10px_24px_rgba(15,23,42,0.10)] tw-transition-[border-color,box-shadow,transform] hover:tw-border-blue-300 hover:tw-shadow-[0_12px_28px_rgba(37,99,235,0.16)] focus-visible:tw-outline focus-visible:tw-outline-2 focus-visible:tw-outline-offset-2 focus-visible:tw-outline-[#60a5fa]';
+
 const headerAiRecordHintClass =
   'tw-pointer-events-none tw-absolute tw-left-1/2 tw-top-[calc(100%+10px)] tw-z-[1070] -tw-translate-x-1/2 tw-translate-y-1 tw-whitespace-nowrap tw-rounded-2xl tw-bg-white tw-px-3.5 tw-py-2 tw-text-xs tw-font-semibold tw-text-slate-700 tw-shadow-[0_10px_24px_rgba(15,23,42,0.14)] tw-ring-1 tw-ring-slate-200/80 tw-opacity-0 tw-transition-all tw-duration-200 before:tw-absolute before:tw-bottom-full before:tw-left-1/2 before:-tw-translate-x-1/2 before:tw-border-x-[6px] before:tw-border-b-[7px] before:tw-border-x-transparent before:tw-border-b-white group-hover:tw-translate-y-0 group-hover:tw-opacity-100 group-focus-within:tw-translate-y-0 group-focus-within:tw-opacity-100';
-
-function formatSessionCountdown(totalSeconds: number): string {
-  const s = Math.max(0, totalSeconds);
-  const m = Math.floor(s / 60);
-  const sec = s % 60;
-  return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
-}
-
-function SessionAccessTimer() {
-  const { accessExpiresAtMs, refreshAuth } = useAuth();
-  const [remainingSec, setRemainingSec] = useState(0);
-  const [extending, setExtending] = useState(false);
-
-  useEffect(() => {
-    if (accessExpiresAtMs == null) {
-      setRemainingSec(0);
-      return;
-    }
-    const tick = () => {
-      setRemainingSec(Math.max(0, Math.ceil((accessExpiresAtMs - Date.now()) / 1000)));
-    };
-    tick();
-    const id = window.setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [accessExpiresAtMs]);
-
-  const handleExtend = async () => {
-    setExtending(true);
-    try {
-      const ok = await refreshAuth();
-      if (ok) {
-        void message.success('세션이 연장되었습니다.');
-      } else {
-        void message.error('세션 연장에 실패했습니다. 다시 로그인해 주세요.');
-      }
-    } catch {
-      void message.error('세션 연장에 실패했습니다.');
-    } finally {
-      setExtending(false);
-    }
-  };
-
-  const sessionTone =
-    remainingSec > 0 && remainingSec <= 60
-      ? 'danger'
-      : remainingSec > 0 && remainingSec <= 5 * 60
-        ? 'warning'
-        : 'safe';
-  const sessionStyle = {
-    safe: {
-      shell: 'tw-border-blue-100/70 tw-bg-blue-50/50',
-      dot: 'tw-bg-blue-500',
-      icon: 'tw-text-blue-500',
-      time: 'tw-text-blue-950',
-      button:
-        '!tw-border-blue-200 !tw-bg-white !tw-text-blue-600 hover:!tw-border-blue-600 hover:!tw-bg-blue-600 hover:!tw-text-white',
-    },
-    warning: {
-      shell: 'tw-border-orange-200/70 tw-bg-orange-50/70',
-      dot: 'tw-animate-pulse tw-bg-orange-500',
-      icon: 'tw-text-orange-500',
-      time: 'tw-text-orange-950',
-      button:
-        '!tw-border-orange-300 !tw-bg-orange-500 !tw-text-white hover:!tw-border-orange-600 hover:!tw-bg-orange-600 hover:!tw-text-white',
-    },
-    danger: {
-      shell: 'tw-border-red-200 tw-bg-red-50/80',
-      dot: 'tw-animate-ping tw-bg-red-600',
-      icon: 'tw-text-red-600',
-      time: 'tw-text-red-950',
-      button:
-        '!tw-border-red-400 !tw-bg-red-600 !tw-text-white !tw-shadow-[0_4px_12px_rgba(220,38,38,0.18)] hover:!tw-border-red-700 hover:!tw-bg-red-700 hover:!tw-text-white',
-    },
-  }[sessionTone];
-
-  return (
-    <div
-      className={`tw-flex tw-h-11 tw-w-fit tw-items-center tw-gap-2.5 tw-rounded-full tw-border tw-border-solid tw-py-1 tw-pl-3 tw-pr-1.5 tw-shadow-[0_1px_2px_rgba(15,23,42,0.04)] tw-backdrop-blur-md tw-transition-all tw-duration-500 ${sessionStyle.shell}`}
-      title="액세스 토큰 만료까지 남은 시간"
-    >
-      <div className="tw-flex tw-items-center tw-gap-2">
-        <span className="tw-relative tw-inline-flex tw-size-4 tw-items-center tw-justify-center">
-          <span
-            className={`tw-absolute -tw-right-0.5 -tw-top-0.5 tw-size-1.5 tw-rounded-full ${sessionStyle.dot}`}
-          />
-          <ClockCircleOutlined className={`tw-text-[16px] ${sessionStyle.icon}`} aria-hidden />
-        </span>
-        <span
-          className={`tw-min-w-[48px] tw-tabular-nums tw-text-sm tw-font-semibold tw-leading-none tw-tracking-tight ${sessionStyle.time}`}
-        >
-          {formatSessionCountdown(remainingSec)}
-        </span>
-      </div>
-      <Button
-        type="default"
-        size="small"
-        loading={extending}
-        onClick={() => void handleExtend()}
-        className={`!tw-h-8 !tw-rounded-full !tw-px-3.5 !tw-text-xs !tw-font-bold !tw-transition-all active:!tw-scale-95 ${sessionStyle.button}`}
-      >
-        연장
-      </Button>
-    </div>
-  );
-}
 
 function SiderBrandHeader({
   collapsed,
@@ -1237,6 +1136,12 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
   const [notificationPopoverOpen, setNotificationPopoverOpen] = useState(false);
   const [notificationTab, setNotificationTab] = useState<'all' | 'unread'>('all');
   const [aiRecordingModalOpen, setAiRecordingModalOpen] = useState(false);
+  const [aiRecordingRestoreSignal, setAiRecordingRestoreSignal] = useState(0);
+  const [aiRecordingState, setAiRecordingState] = useState({
+    isRecording: false,
+    elapsedSec: 0,
+    minimized: false,
+  });
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -1331,6 +1236,8 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
       ? notifications.filter((item) => item.isRead !== 'YES')
       : notifications;
   const latestNotifications = filteredNotifications.slice(0, 8);
+  const aiRecordingMm = String(Math.floor(aiRecordingState.elapsedSec / 60)).padStart(2, '0');
+  const aiRecordingSs = String(aiRecordingState.elapsedSec % 60).padStart(2, '0');
 
   const routeApprovalNotification = async (item: (typeof notifications)[number]) => {
     if (item.isRead !== 'YES') {
@@ -1560,33 +1467,48 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
         <div className="tw-group tw-relative tw-inline-flex tw-overflow-visible">
           <button
             type="button"
-            className={headerAiRecordButtonClass}
+            className={aiRecordingState.isRecording ? headerAiRecordActiveButtonClass : headerAiRecordButtonClass}
             aria-label="AI 회의록"
             aria-describedby="header-ai-record-hint"
             onClick={() => {
+              setAiRecordingRestoreSignal((v) => v + 1);
               setAiRecordingModalOpen(true);
             }}
           >
-            <svg
-              className="tw-size-3.5 tw-shrink-0 tw-origin-center tw-transition-transform tw-duration-200 group-hover:tw-scale-125 group-focus-within:tw-scale-125"
-              viewBox="0 0 16 16"
-              fill="none"
-              aria-hidden
-            >
-              <path
-                d="M8 1.75L9.18 5.28L12.75 6.5L9.18 7.72L8 11.25L6.82 7.72L3.25 6.5L6.82 5.28L8 1.75Z"
-                fill="currentColor"
-              />
-              <path
-                d="M3.15 9.8L3.62 11.18L5 11.65L3.62 12.12L3.15 13.5L2.68 12.12L1.3 11.65L2.68 11.18L3.15 9.8Z"
-                fill="currentColor"
-                opacity="0.9"
-              />
-            </svg>
-            <span className="tw-whitespace-nowrap">AI 회의록</span>
+            {aiRecordingState.isRecording ? (
+              <>
+                <span className="tw-size-2 tw-shrink-0 tw-rounded-full tw-bg-red-500 tw-shadow-[0_0_0_4px_rgba(239,68,68,0.12)]" />
+                <span className="tw-whitespace-nowrap">AI 녹음 중</span>
+                <span className="tw-rounded-full tw-bg-blue-50 tw-px-2 tw-py-0.5 tw-text-xs tw-font-extrabold tw-tabular-nums tw-text-blue-600">
+                  {aiRecordingMm}:{aiRecordingSs}
+                </span>
+              </>
+            ) : (
+              <>
+                <svg
+                  className="tw-size-3.5 tw-shrink-0 tw-origin-center tw-transition-transform tw-duration-200 group-hover:tw-scale-125 group-focus-within:tw-scale-125"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  aria-hidden
+                >
+                  <path
+                    d="M8 1.75L9.18 5.28L12.75 6.5L9.18 7.72L8 11.25L6.82 7.72L3.25 6.5L6.82 5.28L8 1.75Z"
+                    fill="currentColor"
+                  />
+                  <path
+                    d="M3.15 9.8L3.62 11.18L5 11.65L3.62 12.12L3.15 13.5L2.68 12.12L1.3 11.65L2.68 11.18L3.15 9.8Z"
+                    fill="currentColor"
+                    opacity="0.9"
+                  />
+                </svg>
+                <span className="tw-whitespace-nowrap">AI 회의록</span>
+              </>
+            )}
           </button>
           <div id="header-ai-record-hint" className={headerAiRecordHintClass}>
-            녹음 원문을 정리해 AI 회의록을 만들어드려요.
+            {aiRecordingState.isRecording
+              ? '녹음 중인 회의록 화면으로 돌아갑니다.'
+              : '녹음 원문을 정리해 AI 회의록을 만들어드려요.'}
           </div>
         </div>
         <Tooltip title="멤버 채팅">
@@ -1635,6 +1557,8 @@ function AppShellHeader({ hideSearch = false }: { hideSearch?: boolean }) {
       </div>
       <AiRecordingModal
         open={aiRecordingModalOpen}
+        restoreSignal={aiRecordingRestoreSignal}
+        onRecordingStateChange={setAiRecordingState}
         onClose={() => setAiRecordingModalOpen(false)}
       />
     </Layout.Header>
@@ -1673,7 +1597,6 @@ function menuSelectedKeyFromPath(pathname: string, search: Record<string, unknow
   if (pathname === '/app/attendance/work-time') return ['/app/attendance'];
   if (pathname === '/app/attendance/company/monthly') return ['/app/attendance/company'];
   if (pathname === '/app/attendance/company') return ['/app/attendance/company'];
-  if (pathname === '/app/attendance/corrections') return ['/app/attendance/corrections'];
   if (pathname === '/app/attendance/holidays') return ['/app/attendance/holidays'];
   if (pathname === '/app/attendance/schedules') return ['/app/attendance/schedules'];
   if (pathname === '/app/attendance/overtime-policies')

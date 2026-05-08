@@ -9,22 +9,23 @@ import {
   Card,
   DatePicker,
   Form,
-  InputNumber,
   Input,
   Popconfirm,
   Select,
   Space,
   Spin,
   Tag,
+  Tooltip,
   Typography,
 } from 'antd';
-import { LeftOutlined, ReloadOutlined, RightOutlined } from '@ant-design/icons';
+import {EditOutlined, LeftOutlined, PlusOutlined, ReloadOutlined, RightOutlined} from '@ant-design/icons';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import type { CalendarProps } from 'antd';
 import clsx from 'clsx';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
+import { AppUnitInputNumber } from '@/shared/ui/AppUnitInputNumber';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import type { CompanyHoliday } from '@/features/salary-service/types';
 
@@ -266,6 +267,7 @@ export function AdminCompanyHolidaysPage({ embedded = false }: { embedded?: bool
       type="primary"
       className={PRIMARY_BUTTON_CLASS}
       onClick={() => openCreateForDay(selectedDay)}
+      icon={<PlusOutlined />}
     >
       공휴일 추가
     </Button>
@@ -317,13 +319,13 @@ export function AdminCompanyHolidaysPage({ embedded = false }: { embedded?: bool
               <Typography.Text className="tw-text-xs tw-font-medium tw-text-slate-600">
                 법정 공휴일 대상 연도
               </Typography.Text>
-              <InputNumber
+              <AppUnitInputNumber
                 value={refreshYear}
                 min={2020}
                 max={dayjs().year() + 1}
                 onChange={(v) => setRefreshYear(typeof v === 'number' ? v : dayjs().year())}
                 style={{ width: 120 }}
-                addonAfter="년"
+                unit="년"
               />
             </Space>
             <Popconfirm
@@ -459,6 +461,7 @@ export function AdminCompanyHolidaysPage({ embedded = false }: { embedded?: bool
             <Button
               type="primary"
               block
+              icon={<PlusOutlined />}
               className={PRIMARY_BUTTON_CLASS}
               onClick={() => openCreateForDay(selectedDay)}
             >
@@ -485,9 +488,14 @@ export function AdminCompanyHolidaysPage({ embedded = false }: { embedded?: bool
                         </Tag>
                       </div>
                       <Space size="small">
-                        <Button size="small" onClick={() => openEdit(h)}>
-                          수정
-                        </Button>
+                        <Tooltip title="수정">
+                          <Button
+                            size="small"
+                            icon={<EditOutlined />}
+                            aria-label={`${h.holidayName} 공휴일 수정`}
+                            onClick={() => openEdit(h)}
+                          />
+                        </Tooltip>
                         <Popconfirm
                           title="삭제하시겠어요?"
                           okText="삭제"

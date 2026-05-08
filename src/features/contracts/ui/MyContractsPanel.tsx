@@ -1,7 +1,22 @@
-import { DownloadOutlined } from '@ant-design/icons';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useSearch } from '@tanstack/react-router';
-import { Alert, App, Button, Card, Input, Space, Spin, Table, Tabs, Tag, Timeline, Typography } from 'antd';
+import {
+  DownloadOutlined } from '@ant-design/icons';
+import { useMutation,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
+import { useNavigate,
+  useSearch } from '@tanstack/react-router';
+import { Alert,
+  App,
+  Button,
+  Card,
+  Input,
+  Space,
+  Spin,
+  Tabs,
+  Tag,
+  Timeline,
+  Typography,
+} from 'antd';
 import dayjs from 'dayjs';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
@@ -25,6 +40,8 @@ import { uploadSignaturePngForContract } from '@/features/contracts/lib/uploadSi
 import { parseContractFormSchema } from '@/features/contracts/lib/parseContractFormSchema';
 import { ContractPartySignaturesCard } from '@/features/contracts/ui/ContractPartySignaturesCard';
 import { ContractSignaturePad, type ContractSignaturePadHandle } from '@/features/contracts/ui/ContractSignaturePad';
+import { AppDataTable } from '@/shared/ui/AppDataTable';
+
 import {
   ApprovalFormPaperFieldRow,
   ApprovalFormPaperLayout,
@@ -353,7 +370,7 @@ export function MyContractsPanel() {
           </Button>
         </div>
         {statusFilter === 'NEGOTIATION' ? (
-          <Table<MySalaryHistory>
+          <AppDataTable<MySalaryHistory>
             rowKey={(row) => row.salaryId ?? `${row.effectiveFrom ?? ''}-${row.currentBaseSalary ?? 0}-${row.jobTitleName ?? ''}`}
             loading={salaryHistoryLoading}
             dataSource={sortedSalaryHistory}
@@ -418,7 +435,7 @@ export function MyContractsPanel() {
             ]}
           />
         ) : (
-          <Table<ContractRecord>
+          <AppDataTable<ContractRecord>
             rowKey="contractId"
             loading={isFetching}
             dataSource={myContracts}

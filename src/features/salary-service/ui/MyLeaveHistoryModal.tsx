@@ -1,9 +1,16 @@
-import { useMemo } from 'react';
+import {
+  useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Empty, Modal, Table, Tag, Tooltip } from 'antd';
+import { Empty,
+  Tag,
+  Tooltip,
+} from 'antd';
 import dayjs from 'dayjs';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import type { LeaveRequest } from '@/features/salary-service/types';
+import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 // 본인 휴가 신청 이력 모달
 // 내 근태 [전체 보기] + 대시보드 휴가 위젯 [휴가 이력] 양쪽에서 재사용
@@ -33,22 +40,25 @@ export function MyLeaveHistoryModal({
   }, [leaveTypesQ.data]);
 
   return (
-    <Modal
+    <AppSingleActionModal
       open={open}
-      onCancel={onClose}
+      onClose={onClose}
+      onSubmit={() => undefined}
       title="내 휴가 신청 이력"
-      footer={null}
+      submitText="확인"
+      customFooter={null}
       width={920}
       destroyOnHidden
     >
-      <Table<LeaveRequest>
-        rowKey={(r) => r.leaveRequestId ?? `${r.startDate}-${r.requestedAt}`}
-        loading={leaveHistoryQ.isLoading || leaveTypesQ.isLoading}
-        dataSource={leaveHistoryQ.data?.content ?? []}
-        pagination={{ pageSize: 15 }}
-        size="small"
-        locale={{ emptyText: <Empty description="휴가 신청 이력이 없습니다" /> }}
-        columns={[
+      <div className="tw-px-5 tw-py-4">
+        <AppDataTable<LeaveRequest>
+          rowKey={(r) => r.leaveRequestId ?? `${r.startDate}-${r.requestedAt}`}
+          loading={leaveHistoryQ.isLoading || leaveTypesQ.isLoading}
+          dataSource={leaveHistoryQ.data?.content ?? []}
+          pagination={{ pageSize: 15 }}
+          size="small"
+          locale={{ emptyText: <Empty description="휴가 신청 이력이 없습니다" /> }}
+          columns={[
           {
             title: '신청일',
             dataIndex: 'requestedAt',
@@ -122,8 +132,9 @@ export function MyLeaveHistoryModal({
             ellipsis: true,
             render: (v?: string | null) => v || '-',
           },
-        ]}
-      />
-    </Modal>
+          ]}
+        />
+      </div>
+    </AppSingleActionModal>
   );
 }

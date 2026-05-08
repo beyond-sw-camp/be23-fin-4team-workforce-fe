@@ -1,15 +1,32 @@
-import { Link } from '@tanstack/react-router';
+import {
+  Link } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Button, Card, Col, Row, Space, Statistic, Table, Typography } from 'antd';
+import { Alert,
+  Button,
+  Card,
+  Space,
+  Typography,
+} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { useCallback, useMemo, useState } from 'react';
 import { useAuth } from '@/features/auth/useAuth';
 import type { EsgActivity, EsgShopOrder, EsgSubject } from '@/features/esg/api/esgApi';
 import { esgApi } from '@/features/esg/api/esgApi';
-import { esgCardLinkButtonClass, esgLinkTextClass, esgTableLinkClass } from '@/features/esg/esgUiTokens';
+import {
+  esgCardLinkButtonClass,
+  esgLinkTextClass,
+  esgMetricCardStyles,
+  esgModalContentClass,
+  esgSurfaceCardClass,
+  esgSurfaceCardStyles,
+  esgTableLinkClass,
+} from '@/features/esg/esgUiTokens';
 import { EsgActivitySubmitModal } from '@/features/esg/ui/EsgActivitySubmitModal';
-import { AppModal } from '@/shared/ui/AppModal';
+import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
+import { AppDataTable } from '@/shared/ui/AppDataTable';
+import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
+
 import {
   formatActivityDateTime,
   formatActivityStatusKo,
@@ -295,7 +312,10 @@ export function EsgHomePage() {
     [],
   );
 
-  const cardTableCls = 'tw-text-[12px] [&_.ant-table-thead>tr>th]:!tw-py-1.5 [&_.ant-table-tbody>tr>td]:!tw-py-1';
+  const cardTableCls = 'tw-text-[12px] [&_.ant-table-thead>tr>th]:!tw-py-2 [&_.ant-table-tbody>tr>td]:!tw-py-1.5';
+  const submittedCount = mine.length;
+  const approvedCount = mine.filter((row) => String(row.status ?? '').toUpperCase() === 'APPROVED').length;
+  const pendingCount = mine.filter((row) => String(row.status ?? '').toUpperCase() === 'PENDING').length;
 
   if (cfg?.esgEnabledYn !== 'YES') {
     if (user?.isSystemAdmin) {
@@ -327,29 +347,52 @@ export function EsgHomePage() {
   }
 
   return (
-    <Space direction="vertical" className="tw-w-full" size={12}>
-      <div>
-        <Typography.Title level={4} className="!tw-m-0 !tw-text-base tw-font-semibold tw-text-slate-900">
-          My ESG
-        </Typography.Title>
-        
-      </div>
+    <Space direction="vertical" className="tw-w-full" size={20}>
+      <AppWorkspacePageTitle
+        className="!tw-mb-0"
+        eyebrow="MY ESG"
+        title="나의 ESG 활동"
+        subtitle="참여 가능한 활동과 제출 이력, 포인트 사용 내역을 한곳에서 확인합니다."
+        extra={
+          <Link to="/app/esg/shop" className={`${esgCardLinkButtonClass} tw-leading-6`}>
+            ESG 샵으로 이동
+          </Link>
+        }
+      />
 
-      {pts != null && Number.isFinite(pts) && (
-        <Row gutter={[12, 12]}>
-          <Col xs={24} sm={12} md={8}>
-            <Card size="small" className="tw-rounded-lg tw-border-slate-200/80 tw-shadow-sm" styles={{ body: { padding: '12px 16px' } }}>
-              <Statistic title={<span className="tw-text-xs tw-text-slate-500">포인트 잔액</span>} value={pts} suffix="P" valueStyle={{ fontSize: 20 }} />
-            </Card>
-          </Col>
-        </Row>
-      )}
+      <div className="tw-grid tw-grid-cols-1 tw-gap-5 md:tw-grid-cols-3">
+        <Card size="small" className={esgSurfaceCardClass} styles={esgMetricCardStyles}>
+          <div className="tw-text-[11px] tw-font-bold tw-uppercase tw-tracking-wide tw-text-slate-400">보유 포인트</div>
+          <div className="tw-mt-2 tw-flex tw-items-end tw-gap-1">
+            <span className="tw-text-3xl tw-font-bold tw-leading-none tw-text-[#1e3a5f]">
+              {pts != null && Number.isFinite(pts) ? pts.toLocaleString() : '—'}
+            </span>
+            <span className="tw-text-sm tw-font-bold tw-text-slate-400">P</span>
+          </div>
+        </Card>
+        <Card size="small" className={esgSurfaceCardClass} styles={esgMetricCardStyles}>
+          <div className="tw-text-[11px] tw-font-bold tw-uppercase tw-tracking-wide tw-text-slate-400">내 활동</div>
+          <div className="tw-mt-2 tw-flex tw-items-end tw-gap-1">
+            <span className="tw-text-3xl tw-font-bold tw-leading-none tw-text-[#1e3a5f]">{submittedCount.toLocaleString()}</span>
+            <span className="tw-text-sm tw-font-bold tw-text-slate-400">건</span>
+          </div>
+          <div className="tw-mt-2 tw-text-xs tw-text-slate-500">승인 {approvedCount} · 대기 {pendingCount}</div>
+        </Card>
+        <Card size="small" className={esgSurfaceCardClass} styles={esgMetricCardStyles}>
+          <div className="tw-text-[11px] tw-font-bold tw-uppercase tw-tracking-wide tw-text-slate-400">구매 내역</div>
+          <div className="tw-mt-2 tw-flex tw-items-end tw-gap-1">
+            <span className="tw-text-3xl tw-font-bold tw-leading-none tw-text-[#1e3a5f]">{myOrders.length.toLocaleString()}</span>
+            <span className="tw-text-sm tw-font-bold tw-text-slate-400">건</span>
+          </div>
+          <div className="tw-mt-2 tw-text-xs tw-text-slate-500">ESG 샵 사용 이력</div>
+        </Card>
+      </div>
 
       <Card
         size="small"
-        className="tw-rounded-lg tw-border-slate-200/80 tw-shadow-sm"
-        styles={{ body: { padding: 12 } }}
-        title={<span className="tw-text-sm tw-font-semibold">활동 양식</span>}
+        className={esgSurfaceCardClass}
+        styles={esgSurfaceCardStyles}
+        title={<span className="tw-text-sm tw-font-semibold tw-text-slate-900">활동 양식</span>}
         extra={
           <Space size={8} className="tw-flex-nowrap">
             <Button type="link" size="small" className={esgCardLinkButtonClass} onClick={() => openActivitySubmitModal()}>
@@ -361,8 +404,10 @@ export function EsgHomePage() {
           </Space>
         }
       >
-        
-        <Table<EsgSubject>
+        <Typography.Paragraph className="!tw-mb-3 !tw-text-xs !tw-text-slate-500">
+          제출할 수 있는 ESG 활동 양식입니다. 제목을 누르면 바로 활동을 제출할 수 있습니다.
+        </Typography.Paragraph>
+        <AppDataTable<EsgSubject>
           className={cardTableCls}
           rowKey={(r) => r.subjectId || JSON.stringify(r)}
           loading={subjectsLoading}
@@ -376,17 +421,19 @@ export function EsgHomePage() {
 
       <Card
         size="small"
-        className="tw-rounded-lg tw-border-slate-200/80 tw-shadow-sm"
-        styles={{ body: { padding: 12 } }}
-        title={<span className="tw-text-sm tw-font-semibold">내 활동</span>}
+        className={esgSurfaceCardClass}
+        styles={esgSurfaceCardStyles}
+        title={<span className="tw-text-sm tw-font-semibold tw-text-slate-900">내 활동</span>}
         extra={
           <Button type="link" size="small" className={esgCardLinkButtonClass} onClick={() => setModal('activities')}>
             더보기
           </Button>
         }
       >
-       
-        <Table<EsgActivity>
+        <Typography.Paragraph className="!tw-mb-3 !tw-text-xs !tw-text-slate-500">
+          최근 제출한 ESG 활동과 승인 상태입니다.
+        </Typography.Paragraph>
+        <AppDataTable<EsgActivity>
           className={cardTableCls}
           rowKey={(r) => pickActivityId(r) || JSON.stringify(r)}
           loading={mineLoading}
@@ -400,17 +447,19 @@ export function EsgHomePage() {
 
       <Card
         size="small"
-        className="tw-rounded-lg tw-border-slate-200/80 tw-shadow-sm"
-        styles={{ body: { padding: 12 } }}
-        title={<span className="tw-text-sm tw-font-semibold">내 구매 내역</span>}
+        className={esgSurfaceCardClass}
+        styles={esgSurfaceCardStyles}
+        title={<span className="tw-text-sm tw-font-semibold tw-text-slate-900">내 구매 내역</span>}
         extra={
           <Button type="link" size="small" className={esgCardLinkButtonClass} onClick={() => setModal('orders')}>
             더보기
           </Button>
         }
       >
-       
-        <Table<EsgShopOrder>
+        <Typography.Paragraph className="!tw-mb-3 !tw-text-xs !tw-text-slate-500">
+          ESG 샵에서 사용한 포인트 내역입니다.
+        </Typography.Paragraph>
+        <AppDataTable<EsgShopOrder>
           className={cardTableCls}
           rowKey={(row) => row.esgShopOrderId || JSON.stringify(row)}
           loading={myOrdersLoading}
@@ -424,49 +473,53 @@ export function EsgHomePage() {
 
       <EsgActivitySubmitModal open={submitModalOpen} initialSubjectId={submitModalSubjectId} onClose={closeActivitySubmitModal} />
 
-      <AppModal
+      <AppSingleActionModal
         title={modal === 'subjects' ? '활동 양식 전체' : modal === 'activities' ? '내 활동 전체' : '내 구매 내역 전체'}
         open={modal !== null}
-        onCancel={() => setModal(null)}
-        footer={null}
+        onClose={() => setModal(null)}
+        onSubmit={() => undefined}
+        submitText="확인"
+        customFooter={null}
         width={modal === 'activities' ? 1100 : 880}
-        styles={{ body: { maxHeight: '72vh', overflowY: 'auto', paddingTop: 12 } }}
+        styles={{ body: { maxHeight: '72vh', overflowY: 'auto' } }}
         destroyOnHidden
       >
-        {modal === 'subjects' && (
-          <Table<EsgSubject>
-            rowKey={(r) => r.subjectId || JSON.stringify(r)}
-            loading={subjectsLoading}
-            dataSource={subjects}
-            pagination={{ pageSize: 10, showSizeChanger: false }}
-            size="small"
-            scroll={{ x: 720 }}
-            columns={subjectColumns}
-          />
-        )}
-        {modal === 'activities' && (
-          <Table<EsgActivity>
-            rowKey={(r) => pickActivityId(r) || JSON.stringify(r)}
-            loading={mineLoading}
-            dataSource={activitiesSorted}
-            pagination={{ pageSize: 10, showSizeChanger: false }}
-            size="small"
-            scroll={{ x: 1280 }}
-            columns={activityColumnsFull}
-          />
-        )}
-        {modal === 'orders' && (
-          <Table<EsgShopOrder>
-            rowKey={(row) => row.esgShopOrderId || JSON.stringify(row)}
-            loading={myOrdersLoading}
-            dataSource={ordersSorted}
-            pagination={{ pageSize: 10, showSizeChanger: false }}
-            size="small"
-            scroll={{ x: 640 }}
-            columns={orderColumns}
-          />
-        )}
-      </AppModal>
+        <div className={`${esgModalContentClass} tw-space-y-4`}>
+          {modal === 'subjects' && (
+            <AppDataTable<EsgSubject>
+              rowKey={(r) => r.subjectId || JSON.stringify(r)}
+              loading={subjectsLoading}
+              dataSource={subjects}
+              pagination={{ pageSize: 10, showSizeChanger: false }}
+              size="small"
+              scroll={{ x: 720 }}
+              columns={subjectColumns}
+            />
+          )}
+          {modal === 'activities' && (
+            <AppDataTable<EsgActivity>
+              rowKey={(r) => pickActivityId(r) || JSON.stringify(r)}
+              loading={mineLoading}
+              dataSource={activitiesSorted}
+              pagination={{ pageSize: 10, showSizeChanger: false }}
+              size="small"
+              scroll={{ x: 1280 }}
+              columns={activityColumnsFull}
+            />
+          )}
+          {modal === 'orders' && (
+            <AppDataTable<EsgShopOrder>
+              rowKey={(row) => row.esgShopOrderId || JSON.stringify(row)}
+              loading={myOrdersLoading}
+              dataSource={ordersSorted}
+              pagination={{ pageSize: 10, showSizeChanger: false }}
+              size="small"
+              scroll={{ x: 640 }}
+              columns={orderColumns}
+            />
+          )}
+        </div>
+      </AppSingleActionModal>
     </Space>
   );
 }

@@ -2,30 +2,24 @@ import {
   CheckCircleOutlined,
   DeleteOutlined,
   EditOutlined,
-  FileTextOutlined,
-  FormOutlined,
   LineChartOutlined,
   PlusOutlined,
-  SaveOutlined,
-  ShoppingOutlined,
-  UnorderedListOutlined,
-} from '@ant-design/icons';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+  } from '@ant-design/icons';
+import { useMutation,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
   App,
   Button,
   Card,
-  Col,
   Form,
   Input,
   InputNumber,
   Popconfirm,
   Radio,
-  Row,
   Select,
   Space,
-  Table,
   Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
@@ -33,11 +27,18 @@ import dayjs from 'dayjs';
 import { useEffect, useMemo, useState } from 'react';
 import type { ApiError } from '@/shared/api/types';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
-import { AppModal } from '@/shared/ui/AppModal';
+import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import type { EsgActivity, EsgShopItem, EsgShopOrder, EsgSubject, EsgSubjectCategory } from '@/features/esg/api/esgApi';
 import { esgApi } from '@/features/esg/api/esgApi';
-import { esgCardLinkButtonClass, esgIconAccentClass, esgPrimaryButtonClass } from '@/features/esg/esgUiTokens';
+import {
+  esgCardLinkButtonClass,
+  esgMetricCardStyles,
+  esgModalContentClass,
+  esgPrimaryButtonClass,
+  esgSurfaceCardClass,
+  esgSurfaceCardStyles,
+} from '@/features/esg/esgUiTokens';
 import {
   formatActivityDateTime,
   formatActivityStatusKo,
@@ -52,6 +53,8 @@ import {
   resolveVerificationContent,
 } from '@/features/esg/esgActivityDisplay';
 import type { EsgScoreHistoryRow } from '@/features/esg/esgScoreDisplay';
+import { AppDataTable } from '@/shared/ui/AppDataTable';
+
 import {
   pickEsgScoreRowId,
   pickGrade,
@@ -343,10 +346,17 @@ export function EsgAdminPage() {
     setSubModalOpen(true);
   };
 
-  const modalBodyPadding = { paddingTop: 12 };
+  const modalScrollableBody = { maxHeight: '78vh', overflowY: 'auto' as const };
   const wideTableScroll = { x: 1280 as const };
   const cardTableCls =
     'tw-text-[12px] [&_.ant-table-thead>tr>th]:!tw-py-1.5 [&_.ant-table-tbody>tr>td]:!tw-py-1';
+  const esgSoftRowButtonClass =
+    'tw-flex tw-w-full tw-items-center tw-justify-between tw-gap-4 tw-rounded-xl tw-bg-slate-50/70 tw-px-4 tw-py-3 tw-text-left';
+  const esgEmptyStateClass =
+    'tw-flex tw-items-center tw-justify-center tw-rounded-2xl tw-bg-slate-50/70 tw-text-xs tw-font-semibold tw-text-slate-400';
+  const esgCardActionGroupClass = 'tw-flex tw-items-center tw-gap-3';
+  const modalPanelCardClass = '!tw-border-0 tw-shadow-sm';
+  const modalPanelCardStyles = { header: { borderBottom: 0 } };
 
   const pendingSorted = useMemo(() => sortActivitiesNewestFirst(pendingActs), [pendingActs]);
   const ordersSorted = useMemo(() => sortOrdersNewestFirst(allOrders), [allOrders]);
@@ -372,6 +382,27 @@ export function EsgAdminPage() {
       { key: '5', label: '상세 편집', value: '관리 버튼에서 저장' },
     ];
   }, [cfg]);
+
+  const adminSummary = useMemo(() => {
+    const totalApprovedPoints = approvedActs.reduce((sum, row) => {
+      const n = Number(resolveEarnedPointsDisplay(row).replace(/[^\d.-]/g, ''));
+      return Number.isFinite(n) ? sum + n : sum;
+    }, 0);
+    const participants = new Set(
+      approvedActs
+        .map((row) => resolveMemberName(row))
+        .filter((name) => name && name !== '—' && name !== '알 수 없음'),
+    ).size;
+    const lowStock = shopItems.filter((item) => Number(item.stock ?? 0) <= 0).length;
+    const latestScore = scoreHistSorted[0];
+    return {
+      totalApprovedPoints,
+      participants,
+      lowStock,
+      latestGrade: latestScore ? pickGrade(latestScore) : '—',
+      latestScore: latestScore ? pickTotalScore(latestScore) : '—',
+    };
+  }, [approvedActs, shopItems, scoreHistSorted]);
 
   const previewSubjectColumns: ColumnsType<EsgSubject> = useMemo(
     () => [
@@ -466,12 +497,13 @@ export function EsgAdminPage() {
   );
 
   return (
-    <Space direction="vertical" className="tw-w-full" size={16}>
+    <Space direction="vertical" className="tw-w-full" size={20}>
       <AppWorkspacePageTitle
         className="!tw-mb-0"
-        eyebrow="ESG"
-        title="ESG 관리"
-        subtitle="요약 카드에서 각 영역을 열어 설정·승인·샵·점수를 관리합니다."
+        eyebrow="ESG OPERATIONS"
+        title="ESG 운영 관리"
+        subtitle="활동 승인, 포인트 정책, 샵 운영을 한 화면에서 관리합니다."
+        subtitleClassName="!tw-mt-1 !tw-max-w-none"
       />
 
       {cfgQuery.isSuccess && cfg?.esgEnabledYn === 'NO' ? (
@@ -503,15 +535,38 @@ export function EsgAdminPage() {
         />
       ) : null}
 
-      <Row gutter={[12, 12]}>
-        <Col xs={24} lg={12}>
+      <div className="tw-grid tw-grid-cols-1 tw-gap-5 sm:tw-grid-cols-2 xl:tw-grid-cols-4">
+        <EsgMetricCard
+          label="승인 적립 포인트"
+          value={esgModuleOn ? adminSummary.totalApprovedPoints.toLocaleString() : '—'}
+          unit="P"
+        />
+        <EsgMetricCard
+          label="승인 대기"
+          value={esgModuleOn ? pendingActs.length.toLocaleString() : '—'}
+          unit="건"
+        />
+        <EsgMetricCard
+          label="재고 확인 필요"
+          value={esgModuleOn ? adminSummary.lowStock.toLocaleString() : '—'}
+          unit="품목"
+        />
+        <EsgMetricCard
+          label="최근 등급 / 참여자"
+          value={esgModuleOn ? String(adminSummary.latestGrade) : '—'}
+          unit={esgModuleOn ? `${adminSummary.participants.toLocaleString()}명` : ''}
+          subValue={esgModuleOn ? `최근 점수 ${adminSummary.latestScore}` : undefined}
+        />
+      </div>
+
+      <div className="tw-grid tw-w-full tw-grid-cols-1 tw-gap-5 xl:tw-grid-cols-12">
+        <div className="tw-min-w-0 tw-space-y-5 xl:tw-col-span-4">
           <Card
             size="small"
-            className="tw-rounded-lg tw-border-slate-200/80 tw-shadow-sm"
-            styles={{ body: { padding: 12 } }}
+            className={`tw-overflow-hidden ${esgSurfaceCardClass}`}
+            styles={esgSurfaceCardStyles}
             title={
-              <span className="tw-flex tw-items-center tw-gap-2 tw-text-sm tw-font-semibold tw-text-slate-900">
-                <FormOutlined className={esgIconAccentClass} />
+              <span className="tw-text-sm tw-font-semibold tw-text-slate-900">
                 기능 설정
               </span>
             }
@@ -521,90 +576,103 @@ export function EsgAdminPage() {
               </Button>
             }
           >
-            <Typography.Paragraph type="secondary" className="!tw-mb-2 !tw-text-[11px] tw-leading-snug">
-              주요 옵션 {PREVIEW_ROWS}건 미리보기입니다. 변경은 관리에서 저장합니다.
+            <Typography.Paragraph type="secondary" className="!tw-mb-4 !tw-text-xs tw-leading-relaxed">
+              운영 중인 ESG 기능과 포인트 한도를 확인합니다. 변경은 관리에서 저장합니다.
             </Typography.Paragraph>
             {cfg ? (
-              <Table<{ key: string; label: string; value: string }>
-                className={cardTableCls}
-                size="small"
-                rowKey="key"
-                pagination={false}
-                dataSource={configPreviewRows}
-                columns={[
-                  { title: '항목', dataIndex: 'label', width: '40%', ellipsis: true },
-                  { title: '내용', dataIndex: 'value', ellipsis: true },
-                ]}
-              />
+              <div className="tw-space-y-3">
+                {configPreviewRows.slice(0, 4).map((row) => (
+                  <div
+                    key={row.key}
+                    className="tw-flex tw-items-center tw-justify-between tw-gap-3 tw-rounded-xl tw-bg-slate-50 tw-px-4 tw-py-3"
+                  >
+                    <span className="tw-text-sm tw-font-medium tw-text-slate-600">{row.label}</span>
+                    <span className="tw-text-sm tw-font-bold tw-text-[#1e3a5f]">{row.value}</span>
+                  </div>
+                ))}
+              </div>
             ) : (
               <Typography.Text type="secondary" className="tw-text-xs">
                 불러오는 중…
               </Typography.Text>
             )}
           </Card>
-        </Col>
 
-        <Col xs={24} lg={12}>
           <Card
             size="small"
-            className="tw-rounded-lg tw-border-slate-200/80 tw-shadow-sm"
-            styles={{ body: { padding: 12 } }}
+            className={`tw-overflow-hidden !tw-bg-[#1e3a5f] ${esgSurfaceCardClass}`}
+            styles={esgSurfaceCardStyles}
             title={
-              <span className="tw-flex tw-items-center tw-gap-2 tw-text-sm tw-font-semibold tw-text-slate-900">
-                <FileTextOutlined className={esgIconAccentClass} />
-                활동 양식
+              <span className="tw-flex tw-items-center tw-gap-2 tw-text-sm tw-font-semibold tw-text-white">
+                <LineChartOutlined className="tw-text-white/80" />
+                월별 ESG 성과 집계
               </span>
             }
             extra={
-              <Space size={4} className="tw-flex-nowrap">
-                <Button
-                  type="link"
-                  size="small"
-                  className={esgCardLinkButtonClass}
-                  disabled={!esgModuleOn}
-                  onClick={() => setDashboardModal('subjects')}
-                >
-                  더보기
-                </Button>
-                <Button
-                  type="link"
-                  size="small"
-                  className={esgCardLinkButtonClass}
-                  disabled={!esgModuleOn}
-                  onClick={() => openSubjectModal(null)}
-                >
-                  추가
-                </Button>
-              </Space>
+              <Button
+                type="link"
+                size="small"
+                className="!tw-px-0 !tw-text-xs !tw-font-bold !tw-text-white/80 hover:!tw-text-white"
+                disabled={!esgModuleOn}
+                onClick={() => setDashboardModal('scores')}
+              >
+                더보기
+              </Button>
             }
           >
-            <Typography.Paragraph type="secondary" className="!tw-mb-2 !tw-text-[11px] tw-leading-snug">
-              등록 {esgModuleOn ? subjects.length : '—'}건 · 상위 {PREVIEW_ROWS}건 미리보기
-              {!esgModuleOn ? ' (ESG OFF 시 목록 미조회)' : ''}
-            </Typography.Paragraph>
-            {esgModuleOn ? (
-              <Table<EsgSubject>
-                className={cardTableCls}
-                rowKey={(r) => r.subjectId || JSON.stringify(r)}
-                loading={subLoad}
-                dataSource={previewSubjects}
-                pagination={false}
-                size="small"
-                scroll={{ x: 520 }}
-                columns={previewSubjectColumns}
-              />
-            ) : null}
+            <div className="tw-space-y-6 tw-text-white">
+              <Typography.Paragraph className="!tw-mb-0 !tw-text-xs !tw-leading-relaxed !tw-text-white/60">
+                월별 활동 점수를 집계하고 최근 등급 산정 결과를 확인합니다.
+              </Typography.Paragraph>
+              <div>
+                <div className="tw-text-[11px] tw-font-bold tw-uppercase tw-tracking-wide tw-text-white/45">
+                  Latest Monthly Result
+                </div>
+                <div className="tw-mt-2 tw-flex tw-items-end tw-justify-between tw-gap-4">
+                  <div className="tw-text-4xl tw-font-bold tw-leading-none">
+                    {esgModuleOn ? adminSummary.latestGrade : '—'}
+                  </div>
+                  <div className="tw-text-right">
+                    <div className="tw-text-[11px] tw-font-semibold tw-text-white/45">최근 점수</div>
+                    <div className="tw-text-xl tw-font-bold">{esgModuleOn ? adminSummary.latestScore : '—'}</div>
+                  </div>
+                </div>
+              </div>
+              <div className="tw-space-y-3">
+                {previewScores.length > 0 ? (
+                  previewScores.slice(0, 2).map((row) => (
+                    <div
+                      key={pickEsgScoreRowId(row) || JSON.stringify(row)}
+                      className="tw-flex tw-w-full tw-appearance-none tw-items-center tw-justify-between tw-gap-3 tw-rounded-xl !tw-border-0 tw-bg-white/10 tw-px-4 tw-py-3 tw-text-left tw-shadow-none tw-transition hover:tw-bg-white/15 focus:tw-outline-none focus-visible:tw-ring-2 focus-visible:tw-ring-white/20"
+                    >
+                      <span>
+                        <span className="tw-block tw-text-[11px] tw-font-bold tw-uppercase tw-tracking-wide tw-text-white/45">
+                          {pickYearMonth(row)}
+                        </span>
+                        <span className="tw-mt-1 tw-block tw-text-sm tw-font-semibold tw-text-white">
+                          {pickGradeDescription(row) || '등급 설명 없음'}
+                        </span>
+                      </span>
+                      <span className="tw-shrink-0 tw-text-lg tw-font-bold tw-text-white">{pickGrade(row)}</span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="tw-rounded-xl tw-bg-white/10 tw-px-4 tw-py-6 tw-text-center tw-text-sm tw-font-semibold tw-text-white/60">
+                    점수 이력이 없습니다.
+                  </div>
+                )}
+              </div>
+            </div>
           </Card>
-        </Col>
+        </div>
 
-        <Col xs={24} lg={12}>
+        <div className="tw-min-w-0 tw-space-y-5 xl:tw-col-span-8">
           <Card
             size="small"
-            className="tw-rounded-lg tw-border-slate-200/80 tw-shadow-sm"
-            styles={{ body: { padding: 12 } }}
+            className={`tw-overflow-hidden ${esgSurfaceCardClass}`}
+            styles={esgSurfaceCardStyles}
             title={
-              <span className="tw-flex tw-items-center tw-gap-2 tw-text-sm tw-font-semibold tw-text-slate-900">
-                <CheckCircleOutlined className={esgIconAccentClass} />
+              <span className="tw-text-sm tw-font-semibold tw-text-slate-900">
                 활동 승인
               </span>
             }
@@ -620,170 +688,222 @@ export function EsgAdminPage() {
               </Button>
             }
           >
-            <Typography.Paragraph type="secondary" className="!tw-mb-2 !tw-text-[11px] tw-leading-snug">
-              대기 {esgModuleOn ? pendingActs.length : '—'}건 · 승인됨 {esgModuleOn ? approvedActs.length : '—'}건 · 승인 대기 상위{' '}
-              {PREVIEW_ROWS}건
+            <Typography.Paragraph type="secondary" className="!tw-mb-4 !tw-text-xs tw-leading-relaxed">
+              임직원이 제출한 활동 중 검토가 필요한 항목입니다. 승인 후 포인트 적립과 이력에 반영됩니다.
             </Typography.Paragraph>
             {esgModuleOn ? (
-              <Table<EsgActivity>
-                className={cardTableCls}
-                rowKey={(r) => pickActivityId(r) || JSON.stringify(r)}
-                loading={pendLoad}
-                dataSource={previewPendingActs}
-                pagination={false}
-                size="small"
-                scroll={{ x: 560 }}
-                columns={previewPendingColumns}
-              />
+              pendingSorted.length > 0 ? (
+                <div className="tw-space-y-3">
+                  {previewPendingActs.map((row) => (
+                    <div
+                      key={pickActivityId(row) || JSON.stringify(row)}
+                      className={esgSoftRowButtonClass}
+                    >
+                      <span className="tw-min-w-0">
+                        <span className="tw-block tw-truncate tw-text-sm tw-font-bold tw-text-slate-900">
+                          {resolveActivitySubjectTitle(row, subjectTitleById)}
+                        </span>
+                        <span className="tw-mt-1 tw-block tw-truncate tw-text-xs tw-text-slate-500">
+                          {resolveMemberName(row)} · {resolveActivityCategoryDisplay(row)}
+                        </span>
+                      </span>
+                      <span className="tw-shrink-0 tw-text-xs tw-font-semibold tw-text-blue-700">
+                        {formatActivityDateTime(resolveActivityCreatedAt(row))}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className={`${esgEmptyStateClass} tw-min-h-48 tw-flex-col tw-text-center`}>
+                  <CheckCircleOutlined className="tw-text-3xl tw-text-slate-300" />
+                  <div className="tw-mt-4 tw-text-base tw-font-bold tw-text-slate-800">모든 검토가 끝났습니다</div>
+                  <div className="tw-mt-1 tw-text-sm tw-text-slate-400">새로 등록된 임직원 활동이 없습니다.</div>
+                </div>
+              )
             ) : null}
           </Card>
-        </Col>
 
-        <Col xs={24} lg={12}>
-          <Card
-            size="small"
-            className="tw-rounded-lg tw-border-slate-200/80 tw-shadow-sm"
-            styles={{ body: { padding: 12 } }}
-            title={
-              <span className="tw-flex tw-items-center tw-gap-2 tw-text-sm tw-font-semibold tw-text-slate-900">
-                <ShoppingOutlined className={esgIconAccentClass} />
-                샵 물품
-              </span>
-            }
-            extra={
-              <Space size={4} className="tw-flex-nowrap">
+          <div className="tw-grid tw-grid-cols-1 tw-gap-5 md:tw-grid-cols-2">
+            <Card
+              size="small"
+              className={`tw-h-full tw-overflow-hidden ${esgSurfaceCardClass}`}
+              styles={esgSurfaceCardStyles}
+              title={
+                <span className="tw-text-sm tw-font-semibold tw-text-slate-900">
+                  샵 물품
+                </span>
+              }
+              extra={
+                <div className={esgCardActionGroupClass}>
+                  <Button
+                    type="link"
+                    size="small"
+                    className={esgCardLinkButtonClass}
+                    disabled={!esgModuleOn}
+                    onClick={() => setDashboardModal('shop')}
+                  >
+                    더보기
+                  </Button>
+                  <span className="tw-h-3 tw-w-px tw-bg-slate-200" />
+                  <Button
+                    type="link"
+                    size="small"
+                    className={esgCardLinkButtonClass}
+                    disabled={!esgModuleOn}
+                    onClick={() => setDashboardModal('shopRegister')}
+                  >
+                    등록
+                  </Button>
+                </div>
+              }
+            >
+              <div className="tw-mb-4 tw-text-xs tw-text-slate-500">
+                등록 {esgModuleOn ? shopItems.length : '—'}건 · 재고 확인 {esgModuleOn ? adminSummary.lowStock : '—'}건
+              </div>
+              {esgModuleOn ? (
+                previewShopItems.length > 0 ? (
+                  <div className="tw-space-y-3">
+                    {previewShopItems.slice(0, 3).map((item) => (
+                      <div
+                        key={item.itemId || JSON.stringify(item)}
+                        className={esgSoftRowButtonClass}
+                      >
+                        <span className="tw-min-w-0">
+                          <span className="tw-block tw-truncate tw-text-sm tw-font-bold tw-text-slate-900">{item.title}</span>
+                          <span className="tw-mt-1 tw-block tw-text-xs tw-text-slate-500">재고 {item.stock ?? 0}개</span>
+                        </span>
+                        <span className="tw-shrink-0 tw-text-sm tw-font-bold tw-text-[#1e3a5f]">{item.requiredPoints}P</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className={`${esgEmptyStateClass} tw-h-32`}>
+                    등록된 물품이 없습니다.
+                  </div>
+                )
+              ) : null}
+            </Card>
+
+            <Card
+              size="small"
+              className={`tw-h-full tw-overflow-hidden ${esgSurfaceCardClass}`}
+              styles={esgSurfaceCardStyles}
+              title={
+                <span className="tw-text-sm tw-font-semibold tw-text-slate-900">
+                  최근 주문
+                </span>
+              }
+              extra={
                 <Button
                   type="link"
                   size="small"
                   className={esgCardLinkButtonClass}
                   disabled={!esgModuleOn}
-                  onClick={() => setDashboardModal('shop')}
+                  onClick={() => setDashboardModal('orders')}
                 >
                   더보기
                 </Button>
+              }
+            >
+              <div className="tw-mb-4 tw-text-xs tw-text-slate-500">
+                누적 {esgModuleOn ? allOrders.length : '—'}건 · 최신순
+              </div>
+              {esgModuleOn ? (
+                previewOrders.length > 0 ? (
+                  <div className="tw-space-y-3">
+                    {previewOrders.slice(0, 3).map((order) => (
+                      <div
+                        key={order.esgShopOrderId || JSON.stringify(order)}
+                        className={esgSoftRowButtonClass}
+                      >
+                        <span className="tw-min-w-0">
+                          <span className="tw-block tw-truncate tw-text-sm tw-font-bold tw-text-slate-900">{order.itemTitle}</span>
+                          <span className="tw-mt-1 tw-block tw-truncate tw-text-xs tw-text-slate-500">
+                            {order.memberName} · {formatActivityDateTime(order.createdAt)}
+                          </span>
+                        </span>
+                        <span className="tw-shrink-0 tw-text-sm tw-font-bold tw-text-[#1e3a5f]">{order.usedPoints}P</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className={`${esgEmptyStateClass} tw-h-32`}>
+                    주문 이력이 없습니다.
+                  </div>
+                )
+              ) : null}
+            </Card>
+          </div>
+
+          <Card
+            size="small"
+            className={`tw-overflow-hidden ${esgSurfaceCardClass}`}
+            styles={esgSurfaceCardStyles}
+            title={
+              <span className="tw-text-sm tw-font-semibold tw-text-slate-900">
+                활동 양식 리스트
+              </span>
+            }
+            extra={
+              <div className={esgCardActionGroupClass}>
                 <Button
                   type="link"
                   size="small"
                   className={esgCardLinkButtonClass}
                   disabled={!esgModuleOn}
-                  onClick={() => setDashboardModal('shopRegister')}
+                  onClick={() => setDashboardModal('subjects')}
                 >
-                  등록
+                  더보기
                 </Button>
-              </Space>
+                <span className="tw-h-3 tw-w-px tw-bg-slate-200" />
+                <Button
+                  type="link"
+                  size="small"
+                  className={esgCardLinkButtonClass}
+                  disabled={!esgModuleOn}
+                  onClick={() => openSubjectModal(null)}
+                >
+                  추가
+                </Button>
+              </div>
             }
           >
-            <Typography.Paragraph type="secondary" className="!tw-mb-2 !tw-text-[11px] tw-leading-snug">
-              등록 {esgModuleOn ? shopItems.length : '—'}건 · 상위 {PREVIEW_ROWS}건 미리보기
+            <Typography.Paragraph type="secondary" className="!tw-mb-4 !tw-text-xs tw-leading-relaxed">
+              임직원이 선택해 인증하는 활동 양식입니다. 등록 {esgModuleOn ? subjects.length : '—'}건
+              {!esgModuleOn ? ' (ESG OFF 시 목록 미조회)' : ''}
             </Typography.Paragraph>
             {esgModuleOn ? (
-              <Table<EsgShopItem>
+              <AppDataTable<EsgSubject>
                 className={cardTableCls}
-                rowKey={(r) => r.itemId || JSON.stringify(r)}
-                loading={shopLoad}
-                dataSource={previewShopItems}
+                rowKey={(r) => r.subjectId || JSON.stringify(r)}
+                loading={subLoad}
+                dataSource={previewSubjects}
                 pagination={false}
                 size="small"
-                scroll={{ x: 400 }}
-                columns={previewShopColumns}
+                scroll={{ x: 520 }}
+                columns={previewSubjectColumns}
               />
             ) : null}
           </Card>
-        </Col>
+        </div>
+      </div>
 
-        <Col xs={24} lg={12}>
-          <Card
-            size="small"
-            className="tw-rounded-lg tw-border-slate-200/80 tw-shadow-sm"
-            styles={{ body: { padding: 12 } }}
-            title={
-              <span className="tw-flex tw-items-center tw-gap-2 tw-text-sm tw-font-semibold tw-text-slate-900">
-                <UnorderedListOutlined className={esgIconAccentClass} />
-                주문(전체)
-              </span>
-            }
-            extra={
-              <Button
-                type="link"
-                size="small"
-                className={esgCardLinkButtonClass}
-                disabled={!esgModuleOn}
-                onClick={() => setDashboardModal('orders')}
-              >
-                더보기
-              </Button>
-            }
-          >
-            <Typography.Paragraph type="secondary" className="!tw-mb-2 !tw-text-[11px] tw-leading-snug">
-              누적 {esgModuleOn ? allOrders.length : '—'}건 · 최신순 상위 {PREVIEW_ROWS}건
-            </Typography.Paragraph>
-            {esgModuleOn ? (
-              <Table<EsgShopOrder>
-                className={cardTableCls}
-                rowKey={(row) => row.esgShopOrderId || JSON.stringify(row)}
-                loading={ordLoad}
-                dataSource={previewOrders}
-                pagination={false}
-                size="small"
-                scroll={{ x: 560 }}
-                columns={previewOrderColumns}
-              />
-            ) : null}
-          </Card>
-        </Col>
-
-        <Col xs={24} lg={12}>
-          <Card
-            size="small"
-            className="tw-rounded-lg tw-border-slate-200/80 tw-shadow-sm"
-            styles={{ body: { padding: 12 } }}
-            title={
-              <span className="tw-flex tw-items-center tw-gap-2 tw-text-sm tw-font-semibold tw-text-slate-900">
-                <LineChartOutlined className={esgIconAccentClass} />
-                점수
-              </span>
-            }
-            extra={
-              <Button
-                type="link"
-                size="small"
-                className={esgCardLinkButtonClass}
-                disabled={!esgModuleOn}
-                onClick={() => setDashboardModal('scores')}
-              >
-                더보기
-              </Button>
-            }
-          >
-            <Typography.Paragraph type="secondary" className="!tw-mb-2 !tw-text-[11px] tw-leading-snug">
-              이력 {esgModuleOn ? scoreHist.length : '—'}건 · 최신 연월 기준 상위 {PREVIEW_ROWS}건
-            </Typography.Paragraph>
-            {esgModuleOn ? (
-              <Table<EsgScoreHistoryRow>
-                className={cardTableCls}
-                rowKey={(row) => pickEsgScoreRowId(row) || JSON.stringify(row)}
-                loading={scoreLoad}
-                dataSource={previewScores}
-                pagination={false}
-                size="small"
-                scroll={{ x: 480 }}
-                columns={previewScoreColumns}
-              />
-            ) : null}
-          </Card>
-        </Col>
-      </Row>
-
-      <AppModal
+      <AppSingleActionModal
         title="기능 설정"
         open={dashboardModal === 'config'}
-        onCancel={() => setDashboardModal(null)}
-        footer={null}
+        onClose={() => setDashboardModal(null)}
+        onSubmit={() => {
+          void cfgForm.validateFields().then(() => saveCfg.mutate());
+        }}
+        submitText="저장"
+        submitLoading={saveCfg.isPending}
+        submitButtonClassName={esgPrimaryButtonClass}
         width={520}
         destroyOnHidden
-        styles={{ body: modalBodyPadding }}
+        styles={{ body: modalScrollableBody }}
       >
-        <Card className="tw-border-slate-200/80 tw-shadow-sm" size="small">
+        <div className={esgModalContentClass}>
+        <Card className={modalPanelCardClass} size="small" styles={modalPanelCardStyles}>
           <Form form={cfgForm} layout="vertical" className="tw-max-w-md">
             <Form.Item
               name="esgEnabledYn"
@@ -798,32 +918,26 @@ export function EsgAdminPage() {
             <Form.Item name="monthlyPointLimit" label="월간 포인트 상한">
               <InputNumber min={0} className="tw-w-full" />
             </Form.Item>
-            <Button
-              type="primary"
-              className={esgPrimaryButtonClass}
-              icon={<SaveOutlined />}
-              loading={saveCfg.isPending}
-              onClick={() => {
-                void cfgForm.validateFields().then(() => saveCfg.mutate());
-              }}
-            >
-              저장
-            </Button>
           </Form>
         </Card>
-      </AppModal>
+        </div>
+      </AppSingleActionModal>
 
-      <AppModal
+      <AppSingleActionModal
         title="활동 양식"
         open={dashboardModal === 'subjects'}
-        onCancel={() => setDashboardModal(null)}
-        footer={null}
+        onClose={() => setDashboardModal(null)}
+        onSubmit={() => undefined}
+        submitText="확인"
+        customFooter={null}
         width={960}
         destroyOnHidden
-        styles={{ body: modalBodyPadding }}
+        styles={{ body: modalScrollableBody }}
       >
+        <div className={esgModalContentClass}>
         <Card
-          className="tw-border-slate-200/80 tw-shadow-sm"
+          className={modalPanelCardClass}
+          styles={modalPanelCardStyles}
           size="small"
           extra={
             <Button
@@ -837,7 +951,7 @@ export function EsgAdminPage() {
             </Button>
           }
         >
-          <Table<EsgSubject>
+          <AppDataTable<EsgSubject>
             rowKey="subjectId"
             loading={subLoad}
             dataSource={subjects}
@@ -868,20 +982,24 @@ export function EsgAdminPage() {
             ]}
           />
         </Card>
-      </AppModal>
+        </div>
+      </AppSingleActionModal>
 
-      <AppModal
+      <AppSingleActionModal
         title="활동 승인"
         open={dashboardModal === 'approve'}
-        onCancel={() => setDashboardModal(null)}
-        footer={null}
+        onClose={() => setDashboardModal(null)}
+        onSubmit={() => undefined}
+        submitText="확인"
+        customFooter={null}
         width={1120}
         destroyOnHidden
-        styles={{ body: { ...modalBodyPadding, maxHeight: '78vh', overflowY: 'auto' } }}
+        styles={{ body: modalScrollableBody }}
       >
-        <Space direction="vertical" className="tw-w-full" size={16}>
-          <Card className="tw-border-slate-200/80 tw-shadow-sm" size="small" title="승인 대기">
-            <Table<EsgActivity>
+        <div className={esgModalContentClass}>
+        <Space direction="vertical" className="tw-w-full" size={20}>
+          <Card className={modalPanelCardClass} size="small" title="승인 대기" styles={modalPanelCardStyles}>
+            <AppDataTable<EsgActivity>
               rowKey={(r) => pickActivityId(r) || JSON.stringify(r)}
               loading={pendLoad}
               dataSource={pendingActs}
@@ -990,11 +1108,11 @@ export function EsgAdminPage() {
               ]}
             />
           </Card>
-          <Card className="tw-border-slate-200/80 tw-shadow-sm" size="small" title="승인된 활동">
+          <Card className={modalPanelCardClass} size="small" title="승인된 활동" styles={modalPanelCardStyles}>
             <Typography.Paragraph type="secondary" className="!tw-mb-3 !tw-text-xs">
               회사 전체 직원 기준 승인 완료된 활동입니다.
             </Typography.Paragraph>
-            <Table<EsgActivity>
+            <AppDataTable<EsgActivity>
               rowKey={(r) => pickActivityId(r) || JSON.stringify(r)}
               loading={approvedLoad}
               dataSource={approvedActs}
@@ -1074,22 +1192,26 @@ export function EsgAdminPage() {
             />
           </Card>
         </Space>
-      </AppModal>
+        </div>
+      </AppSingleActionModal>
 
-      <AppModal
+      <AppSingleActionModal
         title="샵 물품 조회"
         open={dashboardModal === 'shop'}
-        onCancel={() => setDashboardModal(null)}
-        footer={null}
+        onClose={() => setDashboardModal(null)}
+        onSubmit={() => undefined}
+        submitText="확인"
+        customFooter={null}
         width={920}
         destroyOnHidden
-        styles={{ body: { ...modalBodyPadding, maxHeight: '78vh', overflowY: 'auto' } }}
+        styles={{ body: modalScrollableBody }}
       >
+        <div className={esgModalContentClass}>
         <Typography.Paragraph type="secondary" className="!tw-mb-3 !tw-text-xs">
           등록된 포인트샵 물품 목록입니다. 새 물품은 샵 물품 카드의「등록」에서 추가하세요.
         </Typography.Paragraph>
-        <Card className="tw-border-slate-200/80 tw-shadow-sm" size="small" title="등록 물품">
-          <Table<EsgShopItem>
+        <Card className={modalPanelCardClass} size="small" title="등록 물품" styles={modalPanelCardStyles}>
+          <AppDataTable<EsgShopItem>
             rowKey={(r) => r.itemId || JSON.stringify(r)}
             loading={shopLoad}
             dataSource={shopItems}
@@ -1108,21 +1230,27 @@ export function EsgAdminPage() {
             ]}
           />
         </Card>
-      </AppModal>
+        </div>
+      </AppSingleActionModal>
 
-      <AppModal
+      <AppSingleActionModal
         title="물품 등록"
         open={dashboardModal === 'shopRegister'}
-        onCancel={() => setDashboardModal(null)}
-        footer={null}
+        onClose={() => setDashboardModal(null)}
+        onSubmit={() => void createShop.mutateAsync()}
+        submitText="등록"
+        submitLoading={createShop.isPending}
+        submitIcon={<PlusOutlined />}
+        submitButtonClassName={esgPrimaryButtonClass}
         width={560}
         destroyOnHidden
-        styles={{ body: { ...modalBodyPadding, maxHeight: '78vh', overflowY: 'auto' } }}
+        styles={{ body: modalScrollableBody }}
       >
+        <div className={esgModalContentClass}>
         <Typography.Paragraph type="secondary" className="!tw-mb-3 !tw-text-xs">
           새 물품을 등록합니다. 전체 목록은「더보기」에서 확인할 수 있습니다.
         </Typography.Paragraph>
-        <Card className="tw-border-slate-200/80 tw-shadow-sm" size="small">
+        <Card className={modalPanelCardClass} size="small" styles={modalPanelCardStyles}>
           <Form form={shopForm} layout="vertical" className="tw-max-w-xl">
             <Form.Item name="title" label="물품명" rules={[{ required: true }]}>
               <Input />
@@ -1139,31 +1267,27 @@ export function EsgAdminPage() {
             <Form.Item label="이미지">
               <input type="file" accept="image/*" onChange={(e) => setShopFile(e.target.files?.[0] ?? null)} />
             </Form.Item>
-            <Button
-              type="primary"
-              className={esgPrimaryButtonClass}
-              loading={createShop.isPending}
-              onClick={() => void createShop.mutateAsync()}
-            >
-              등록
-            </Button>
           </Form>
         </Card>
-      </AppModal>
+        </div>
+      </AppSingleActionModal>
 
-      <AppModal
+      <AppSingleActionModal
         title="주문(전체)"
         open={dashboardModal === 'orders'}
-        onCancel={() => setDashboardModal(null)}
-        footer={null}
+        onClose={() => setDashboardModal(null)}
+        onSubmit={() => undefined}
+        submitText="확인"
+        customFooter={null}
         width={960}
         destroyOnHidden
-        styles={{ body: { ...modalBodyPadding, maxHeight: '78vh', overflowY: 'auto' } }}
+        styles={{ body: modalScrollableBody }}
       >
+        <div className={esgModalContentClass}>
         <Typography.Paragraph type="secondary" className="!tw-mb-3 !tw-text-xs">
           회사 전체 직원 구매 이력입니다. 최신순으로 표시됩니다. (관리자·ESG READ 권한)
         </Typography.Paragraph>
-        <Table<EsgShopOrder>
+        <AppDataTable<EsgShopOrder>
           rowKey={(row) => row.esgShopOrderId || JSON.stringify(row)}
           loading={ordLoad}
           dataSource={allOrders}
@@ -1187,19 +1311,26 @@ export function EsgAdminPage() {
             },
           ]}
         />
-      </AppModal>
+        </div>
+      </AppSingleActionModal>
 
-      <AppModal
-        title="점수"
+      <AppSingleActionModal
+        title="월별 ESG 성과 집계"
         open={dashboardModal === 'scores'}
-        onCancel={() => setDashboardModal(null)}
-        footer={null}
+        onClose={() => setDashboardModal(null)}
+        onSubmit={() => undefined}
+        submitText="확인"
+        customFooter={null}
         width={880}
         destroyOnHidden
-        styles={{ body: { ...modalBodyPadding, maxHeight: '78vh', overflowY: 'auto' } }}
+        styles={{ body: modalScrollableBody }}
       >
-        <Space direction="vertical" className="tw-w-full" size={16}>
-          <Card className="tw-border-slate-200/80 tw-shadow-sm" size="small" title="월별 집계">
+        <div className={esgModalContentClass}>
+        <Space direction="vertical" className="tw-w-full" size={20}>
+          <Card className={modalPanelCardClass} size="small" title="월별 성과 집계 실행" styles={modalPanelCardStyles}>
+            <Typography.Paragraph type="secondary" className="!tw-mb-3 !tw-text-xs">
+              지정한 월의 ESG 활동 점수와 등급을 다시 산정합니다.
+            </Typography.Paragraph>
             <Space wrap>
               <Input
                 placeholder="YYYY-MM (예: 2026-04)"
@@ -1217,8 +1348,8 @@ export function EsgAdminPage() {
               </Button>
             </Space>
           </Card>
-          <Card className="tw-border-slate-200/80 tw-shadow-sm" size="small" title="점수 이력">
-            <Table<EsgScoreHistoryRow>
+          <Card className={modalPanelCardClass} size="small" title="월별 점수·등급 이력" styles={modalPanelCardStyles}>
+            <AppDataTable<EsgScoreHistoryRow>
               rowKey={(row) => pickEsgScoreRowId(row) || JSON.stringify(row)}
               loading={scoreLoad}
               dataSource={scoreHist as EsgScoreHistoryRow[]}
@@ -1238,7 +1369,8 @@ export function EsgAdminPage() {
             />
           </Card>
         </Space>
-      </AppModal>
+        </div>
+      </AppSingleActionModal>
 
       <AppDoubleActionModal
         title={editingSubject ? '활동 양식 수정' : '활동 양식 추가'}
@@ -1299,5 +1431,38 @@ export function EsgAdminPage() {
         </div>
       </AppDoubleActionModal>
     </Space>
+  );
+}
+
+type EsgMetricCardProps = {
+  label: string;
+  value: string;
+  unit?: string;
+  subValue?: string;
+};
+
+function EsgMetricCard({ label, value, unit, subValue }: EsgMetricCardProps) {
+  return (
+    <Card
+      className={`tw-h-full ${esgSurfaceCardClass}`}
+      styles={esgMetricCardStyles}
+    >
+      <div className="tw-flex tw-h-full tw-flex-col tw-gap-4">
+        <div className="tw-text-[11px] tw-font-bold tw-uppercase tw-tracking-wide tw-text-slate-400">
+          {label}
+        </div>
+        <div className="tw-mt-auto">
+          <div className="tw-min-w-0">
+            <div className="tw-flex tw-items-baseline tw-gap-1">
+              <span className="tw-text-3xl tw-font-bold tw-leading-none tw-text-[#1e3a5f]">
+                {value}
+              </span>
+              {unit ? <span className="tw-text-xs tw-font-bold tw-text-slate-400">{unit}</span> : null}
+            </div>
+            {subValue ? <div className="tw-mt-2 tw-text-xs tw-font-medium tw-text-slate-500">{subValue}</div> : null}
+          </div>
+        </div>
+      </div>
+    </Card>
   );
 }

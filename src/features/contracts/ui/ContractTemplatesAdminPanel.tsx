@@ -5,8 +5,10 @@ import {
   ReloadOutlined,
   TeamOutlined,
   UserAddOutlined,
-} from '@ant-design/icons';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+  } from '@ant-design/icons';
+import { useMutation,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
   App,
@@ -18,8 +20,8 @@ import {
   Select,
   Space,
   Switch,
-  Table,
   Tag,
+  Tooltip,
   Typography,
 } from 'antd';
 import dayjs from 'dayjs';
@@ -58,6 +60,8 @@ import { ContractAdminFormFieldInput } from '@/features/contracts/ui/ContractAdm
 import { CONTRACT_HUB_CARD_CLASS } from '@/features/contracts/ui/contractHubStyles';
 import { ContractRecipientOrgChartModal } from '@/features/contracts/ui/ContractRecipientOrgChartModal';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 const NAVY_BUTTON_CLASS =
   '!tw-border-0 !tw-bg-[#1e3a5f] !tw-text-white hover:!tw-bg-[#152a45] hover:!tw-text-white disabled:!tw-opacity-60';
@@ -705,7 +709,7 @@ export function ContractTemplatesAdminPanel({
             </Space>
           </div>
           <div className="tw-overflow-hidden tw-rounded-xl tw-border tw-border-slate-200">
-            <Table<ContractTemplate>
+            <AppDataTable<ContractTemplate>
               rowKey="templateId"
               loading={isFetching}
               dataSource={templates}
@@ -775,14 +779,15 @@ export function ContractTemplatesAdminPanel({
                   width: 130,
                   render: (_, row) =>
                     canUpdate ? (
-                      <Button
-                        size="small"
-                        icon={<EditOutlined />}
-                        className="!tw-h-8 !tw-rounded-lg !tw-border-slate-200 !tw-font-medium"
-                        onClick={() => openEdit(row)}
-                      >
-                        수정
-                      </Button>
+                      <Tooltip title="수정">
+                        <Button
+                          size="small"
+                          icon={<EditOutlined />}
+                          className="!tw-h-8 !tw-w-8 !tw-rounded-lg !tw-border-slate-200 !tw-p-0"
+                          aria-label={`${row.templateName} 계약서 양식 수정`}
+                          onClick={() => openEdit(row)}
+                        />
+                      </Tooltip>
                     ) : null,
                 },
               ]}

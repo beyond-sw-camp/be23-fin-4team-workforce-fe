@@ -8,9 +8,14 @@
  *
  * 정책 메뉴는 별도 (/app/salary/bonus-policy) - 여기선 발행만.
  */
-import { useEffect, useMemo, useState } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
   App,
@@ -26,7 +31,6 @@ import {
   Space,
   Statistic,
   Switch,
-  Table,
   Tag,
   Typography,
 } from 'antd';
@@ -34,14 +38,11 @@ import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import { evaluationRedesignApi } from '@/features/evaluation/api/evaluationRedesignApi';
+import { AppUnitInputNumber } from '@/shared/ui/AppUnitInputNumber';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 type BonusKind = 'REGULAR' | 'PERFORMANCE' | 'HOLIDAY';
-
-const KIND_LABEL: Record<BonusKind, string> = {
-  REGULAR: '정기상여',
-  PERFORMANCE: '성과급',
-  HOLIDAY: '명절상여',
-};
 
 type FormValues = {
   bonusKind: BonusKind;
@@ -473,7 +474,7 @@ export function AdminBonusBatchTab() {
                     ]
               }
             >
-              <InputNumber
+              <AppUnitInputNumber
                 min={0}
                 max={(() => {
                   if (isHolidayAmount) return 1000;
@@ -486,9 +487,8 @@ export function AdminBonusBatchTab() {
                   return 1000;
                 })()}
                 step={5}
-                style={{ width: '100%' }}
                 disabled={isHolidayAmount}
-                addonAfter="%"
+                unit="%"
               />
             </Form.Item>
             <Form.Item label="메모 (선택)" name="memo">
@@ -567,7 +567,7 @@ export function AdminBonusBatchTab() {
             />
           </div>
 
-          <Table<TargetEntry>
+          <AppDataTable<TargetEntry>
             rowKey="memberId"
             dataSource={preview.targets}
             columns={targetCols}
@@ -592,7 +592,7 @@ export function AdminBonusBatchTab() {
         okText="등급 적용"
         cancelText="취소"
         confirmLoading={gradesM.isPending}
-        destroyOnClose
+        destroyOnHidden
       >
         <Space direction="vertical" className="tw-w-full" size={12}>
           <Typography.Text type="secondary">

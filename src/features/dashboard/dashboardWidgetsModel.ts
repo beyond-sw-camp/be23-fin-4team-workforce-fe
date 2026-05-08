@@ -9,8 +9,6 @@ export const ALL_DASHBOARD_WIDGET_IDS = [
   'attendance',
   'leave',
   'notifications',
-  // 시스템 관리자에게만 의미 있는 위젯. 백엔드 권한 없으면 카드가 0명으로 보일 수 있음.
-  'payrollNewHires',
 ] as const;
 
 export type DashboardWidgetId = (typeof ALL_DASHBOARD_WIDGET_IDS)[number];
@@ -36,12 +34,11 @@ export const DASHBOARD_WIDGET_LABELS: Record<DashboardWidgetId, string> = {
   attendance: '근태',
   leave: '휴가',
   notifications: '최근 알림',
-  payrollNewHires: '급여 미등록 신규 입사자',
 };
 
 const LEFT_COLUMN: DashboardWidgetId[] = ['profile', 'performanceGoals'];
 const MID_COLUMN: DashboardWidgetId[] = ['approvalInbox', 'attendance', 'leave'];
-const RIGHT_COLUMN: DashboardWidgetId[] = ['calendar', 'notifications', 'payrollNewHires'];
+const RIGHT_COLUMN: DashboardWidgetId[] = ['calendar', 'notifications'];
 
 export function createDashboardInstanceId(widgetId: DashboardWidgetId): string {
   return `${widgetId}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;

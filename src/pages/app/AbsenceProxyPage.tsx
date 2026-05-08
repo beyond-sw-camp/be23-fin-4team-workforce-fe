@@ -1,5 +1,10 @@
-import { ArrowLeftOutlined, PlusOutlined } from '@ant-design/icons';
-import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  ArrowLeftOutlined,
+  PlusOutlined } from '@ant-design/icons';
+import { useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
   App,
@@ -7,9 +12,7 @@ import {
   Card,
   DatePicker,
   Divider,
-  Input,
   Space,
-  Table,
   Tabs,
   Tag,
   Tree,
@@ -33,6 +36,8 @@ import { organizationApi } from '@/features/organization/api/organizationApi';
 import { parseApiError } from '@/shared/api/error-parser';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppSearchBar } from '@/shared/ui';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 /** `toISOString()`은 UTC로 바뀌어 한국 등 로컬 '오늘'이 전날로 밀릴 수 있음 — LocalDateTime용 로컬 벽시각 */
 function toLocalDateTimePayload(d: Dayjs): string {
@@ -79,6 +84,14 @@ export function AbsenceProxyPage() {
     select: (s) => s.location.search as { embed?: string },
   });
   const isEmbedModal = routeSearch.embed === 'compose-modal';
+  const embeddedModalGetContainer = useCallback(() => {
+    try {
+      return window.parent?.document?.body ?? document.body;
+    } catch {
+      return document.body;
+    }
+  }, []);
+  const nestedModalGetContainer = isEmbedModal ? embeddedModalGetContainer : undefined;
   const { user } = useAuth();
   const myMemberId = user?.id?.trim();
   const qc = useQueryClient();
@@ -391,8 +404,7 @@ export function AbsenceProxyPage() {
   const tabTableWrap = (node: ReactNode) => (
     <div
       className={clsx(
-        isEmbedModal &&
-          'tw-box-border tw-flex tw-h-full tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-auto tw-p-4 tw-pt-3',
+        isEmbedModal && 'wf-approval-modal-table-fill',
       )}
     >
       {node}
@@ -403,7 +415,7 @@ export function AbsenceProxyPage() {
     <div
       className={clsx(
         isEmbedModal
-          ? 'tw-flex tw-h-full tw-min-h-0 tw-w-full tw-flex-col tw-gap-4 tw-overflow-hidden'
+          ? 'wf-approval-embed-root'
           : 'tw-mx-auto tw-max-w-5xl',
       )}
     >
@@ -475,12 +487,13 @@ export function AbsenceProxyPage() {
       <Card
         size="small"
         className={clsx(
-          'tw-border-slate-200/80 tw-shadow-sm',
-          isEmbedModal && 'tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-hidden tw-rounded-lg',
+          isEmbedModal
+            ? 'wf-approval-embed-card'
+            : 'tw-border-slate-200/80 tw-shadow-sm',
         )}
         styles={
           isEmbedModal
-            ? { body: { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 0 } }
+            ? { body: { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 16 } }
             : undefined
         }
       >
@@ -499,9 +512,10 @@ export function AbsenceProxyPage() {
           rootClassName={
             isEmbedModal
               ? clsx(
+                  'wf-approval-modal-tabs',
                   'tw-min-h-0 tw-flex-1 tw-flex tw-flex-col',
                   '[&_.ant-tabs]:tw-mb-0 [&_.ant-tabs]:tw-flex [&_.ant-tabs]:tw-h-full [&_.ant-tabs]:tw-min-h-0 [&_.ant-tabs]:tw-flex-col',
-                  '[&_.ant-tabs-nav]:tw-mb-0 [&_.ant-tabs-nav]:tw-shrink-0 [&_.ant-tabs-nav]:tw-px-4 [&_.ant-tabs-nav]:tw-pt-1',
+                  '[&_.ant-tabs-nav]:tw-shrink-0',
                   '[&_.ant-tabs-content-holder]:tw-min-h-0 [&_.ant-tabs-content-holder]:tw-flex-1 [&_.ant-tabs-content-holder]:tw-flex [&_.ant-tabs-content-holder]:tw-flex-col',
                   '[&_.ant-tabs-content]:tw-min-h-0 [&_.ant-tabs-content]:tw-flex-1 [&_.ant-tabs-content]:tw-flex [&_.ant-tabs-content]:tw-flex-col',
                   '[&_.ant-tabs-tabpane.ant-tabs-tabpane-active]:tw-flex [&_.ant-tabs-tabpane.ant-tabs-tabpane-active]:tw-min-h-0 [&_.ant-tabs-tabpane.ant-tabs-tabpane-active]:tw-flex-1 [&_.ant-tabs-tabpane.ant-tabs-tabpane-active]:tw-flex-col',
@@ -513,14 +527,14 @@ export function AbsenceProxyPage() {
               key: 'mine',
               label: '내가 등록한 위임',
               children: tabTableWrap(
-                <Table<AbsenceProxyRecord>
+                <AppDataTable<AbsenceProxyRecord>
                   rowKey="proxyId"
                   loading={mineLoading}
                   columns={mineColumns}
                   dataSource={mine}
                   pagination={{ pageSize: 8 }}
                   locale={{ emptyText: '등록된 위임이 없습니다.' }}
-                  className={isEmbedModal ? '[&_.ant-table-wrapper]:tw-min-h-0' : undefined}
+                  className={isEmbedModal ? 'wf-approval-modal-table' : undefined}
                 />,
               ),
             },
@@ -528,14 +542,14 @@ export function AbsenceProxyPage() {
               key: 'delegated',
               label: '나에게 위임된 목록',
               children: tabTableWrap(
-                <Table<AbsenceProxyRecord>
+                <AppDataTable<AbsenceProxyRecord>
                   rowKey="proxyId"
                   loading={delegatedLoading}
                   columns={delegatedColumns}
                   dataSource={delegated}
                   pagination={{ pageSize: 8 }}
                   locale={{ emptyText: '나에게 위임된 일정이 없습니다.' }}
-                  className={isEmbedModal ? '[&_.ant-table-wrapper]:tw-min-h-0' : undefined}
+                  className={isEmbedModal ? 'wf-approval-modal-table' : undefined}
                 />,
               ),
             },
@@ -543,14 +557,14 @@ export function AbsenceProxyPage() {
               key: 'all',
               label: '전체',
               children: tabTableWrap(
-                <Table<AbsenceProxyHistoryRow>
+                <AppDataTable<AbsenceProxyHistoryRow>
                   rowKey={(r) => `${r.kind}-${r.row.proxyId}`}
                   loading={absenceHistoryLoading}
                   columns={allHistoryColumns}
                   dataSource={absenceHistoryRows}
                   pagination={{ pageSize: 10 }}
                   locale={{ emptyText: '표시할 위임 기록이 없습니다.' }}
-                  className={isEmbedModal ? '[&_.ant-table-wrapper]:tw-min-h-0' : undefined}
+                  className={isEmbedModal ? 'wf-approval-modal-table' : undefined}
                 />,
               ),
             },
@@ -573,6 +587,8 @@ export function AbsenceProxyPage() {
         onConfirm={() => submitCreate()}
         width={640}
         destroyOnHidden
+        getContainer={nestedModalGetContainer}
+        zIndex={2700}
       >
         <div className="tw-px-5 tw-py-4">
         <Space direction="vertical" size="middle" className="tw-w-full">

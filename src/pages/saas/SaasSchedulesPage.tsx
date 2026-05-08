@@ -1,11 +1,37 @@
-import { ArrowLeftOutlined, EditOutlined, ReloadOutlined, ScheduleOutlined } from '@ant-design/icons';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  ArrowLeftOutlined,
+  BankOutlined,
+  EditOutlined,
+  ReloadOutlined,
+  ScheduleOutlined } from '@ant-design/icons';
+import { useMutation,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { Alert, App, Button, Form, Input, InputNumber, Modal, Select, Space, Switch, Table, Tabs, Tag, TimePicker, Typography } from 'antd';
+import { Alert,
+  App,
+  Button,
+  Form,
+  Input,
+  Select,
+  Space,
+  Switch,
+  Tabs,
+  Tag,
+  Tooltip,
+  TimePicker,
+  Typography,
+} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { useState } from 'react';
 import { saasApi, type SaasCompany, type SaasSchedule } from '@/features/saas/api/saasApi';
+import { SaasConsoleShell } from '@/pages/saas/SaasConsoleShell';
+import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
+import { AppTabLabel } from '@/shared/ui/AppTabLabel';
+import { AppUnitInputNumber } from '@/shared/ui/AppUnitInputNumber';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 type Frequency = 'hourly' | 'daily' | 'weekly' | 'monthly' | 'yearly';
 const WEEKDAYS = [
@@ -229,18 +255,12 @@ function SaasSchedulesPageInner() {
   const isLoading = memberQ.isLoading || salaryQ.isLoading;
   const isFetching = memberQ.isFetching || salaryQ.isFetching;
 
-  const companyMap: Record<string, SaasCompany> = (companyQ.data ?? []).reduce(
-    (acc, c) => ({ ...acc, [c.companyId]: c }),
-    {} as Record<string, SaasCompany>,
-  );
-
   // 글로벌 잡 (jobKey 에 __ 없음) vs 회사별 잡 (__{uuid} 포함) 분리
   const globalRows = allData.filter((it) => extractCompanyId(it.jobKey) == null);
   const perCompanyRows = allData.filter((it) => extractCompanyId(it.jobKey) != null);
 
   // 회사별 탭에서 선택한 회사 (default 첫 회사)
   const [selectedCompany, setSelectedCompany] = useState<string | undefined>(undefined);
-  const companyOptions = (companyQ.data ?? []).map((c) => ({ value: c.companyId, label: c.companyName || c.companyId.slice(0, 8) }));
 
   /** 실행주기 짧은 순 + 같은 주기면 시각 빠른 순 */
   function frequencyRank(expr: string | null): number {
@@ -286,23 +306,6 @@ function SaasSchedulesPageInner() {
         return timeOfDay(a.cronExpression) - timeOfDay(b.cronExpression);
       });
   }
-
-  const filteredSorted = allData
-    .filter((it) => {
-      if (filter === 'active' && it.paused) return false;
-      if (filter === 'paused' && !it.paused) return false;
-      if (keyword.trim()) {
-        const meta = jobName(it.jobKey);
-        const haystack = `${meta.name} ${meta.description}`.toLowerCase();
-        if (!haystack.includes(keyword.trim().toLowerCase())) return false;
-      }
-      return true;
-    })
-    .sort((a, b) => {
-      const r = frequencyRank(a.cronExpression) - frequencyRank(b.cronExpression);
-      if (r !== 0) return r;
-      return timeOfDay(a.cronExpression) - timeOfDay(b.cronExpression);
-    });
 
   const updateM = useMutation({
     mutationFn: (vars: { source: SaasSchedule['source']; jobKey: string; cron: string }) =>
@@ -409,16 +412,20 @@ function SaasSchedulesPageInner() {
       key: 'action',
       width: 100,
       render: (_, row) => (
-        <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(row)}>
-          시간 변경
-        </Button>
+        <Tooltip title="시간 변경">
+          <Button
+            size="small"
+            icon={<EditOutlined />}
+            aria-label={`${jobName(row.jobKey).name} 시간 변경`}
+            onClick={() => openEdit(row)}
+          />
+        </Tooltip>
       ),
     },
   ];
 
   return (
-    <div className="tw-min-h-screen tw-bg-slate-50 tw-p-8">
-      <div className="tw-mx-auto tw-max-w-6xl tw-space-y-6">
+    <SaasConsoleShell contentClassName="tw-space-y-5">
         <div className="tw-flex tw-items-center tw-justify-between">
           <Space align="center" size={12}>
             <Button
@@ -481,9 +488,9 @@ function SaasSchedulesPageInner() {
           items={[
             {
               key: 'system',
-              label: `공통 자동 작업 (${globalRows.length})`,
+              label: <AppTabLabel count={globalRows.length}>공통 자동 작업</AppTabLabel>,
               children: (
-                <Table<SaasSchedule>
+                <AppDataTable<SaasSchedule>
                   rowKey={(r) => r.jobKey}
                   loading={isLoading}
                   dataSource={applyFilter(globalRows, filter, keyword)}
@@ -513,115 +520,117 @@ function SaasSchedulesPageInner() {
           ]}
         />
 
-        <Modal
+        <AppDoubleActionModal
           title="실행 시간 변경"
           open={!!editing}
-          onCancel={() => setEditing(null)}
-          onOk={onSubmit}
+          onClose={() => setEditing(null)}
+          onConfirm={onSubmit}
           confirmLoading={updateM.isPending}
-          okText="변경"
+          confirmText="변경"
           cancelText="취소"
+          width={520}
         >
-          <Form form={form} layout="vertical">
-            <Form.Item
-              label="실행 주기"
-              name="frequency"
-              rules={[{ required: true }]}
-              initialValue="daily"
-            >
-              <Select
-                onChange={(v) => {
-                  // 주기 변경 시 보조 필드 default 강제 셋업 (이전 값 잔존 방지)
-                  if (v === 'weekly') {
-                    if (!form.getFieldValue('dayOfWeek')) form.setFieldValue('dayOfWeek', 2);
-                  }
-                  if (v === 'monthly') {
-                    if (!form.getFieldValue('dayOfMonth')) form.setFieldValue('dayOfMonth', 1);
-                  }
-                  if (v === 'yearly') {
-                    if (!form.getFieldValue('dayOfMonth')) form.setFieldValue('dayOfMonth', 1);
-                    if (!form.getFieldValue('monthOfYear')) form.setFieldValue('monthOfYear', 1);
-                  }
-                }}
-                options={[
-                  { value: 'hourly', label: '매시간' },
-                  { value: 'daily', label: '매일' },
-                  { value: 'weekly', label: '매주' },
-                  { value: 'monthly', label: '매월' },
-                  { value: 'yearly', label: '매년' },
-                ]}
-              />
-            </Form.Item>
-
-            {frequency === 'weekly' ? (
+          <div className="tw-px-5 tw-py-4">
+            <Form form={form} layout="vertical">
               <Form.Item
-                label="요일"
-                name="dayOfWeek"
-                rules={[{ required: true, message: '요일을 선택해주세요.' }]}
+                label="실행 주기"
+                name="frequency"
+                rules={[{ required: true }]}
+                initialValue="daily"
               >
-                <Select options={WEEKDAYS} />
+                <Select
+                  onChange={(v) => {
+                    // 주기 변경 시 보조 필드 default 강제 셋업 (이전 값 잔존 방지)
+                    if (v === 'weekly') {
+                      if (!form.getFieldValue('dayOfWeek')) form.setFieldValue('dayOfWeek', 2);
+                    }
+                    if (v === 'monthly') {
+                      if (!form.getFieldValue('dayOfMonth')) form.setFieldValue('dayOfMonth', 1);
+                    }
+                    if (v === 'yearly') {
+                      if (!form.getFieldValue('dayOfMonth')) form.setFieldValue('dayOfMonth', 1);
+                      if (!form.getFieldValue('monthOfYear')) form.setFieldValue('monthOfYear', 1);
+                    }
+                  }}
+                  options={[
+                    { value: 'hourly', label: '매시간' },
+                    { value: 'daily', label: '매일' },
+                    { value: 'weekly', label: '매주' },
+                    { value: 'monthly', label: '매월' },
+                    { value: 'yearly', label: '매년' },
+                  ]}
+                />
               </Form.Item>
-            ) : null}
 
-            {frequency === 'monthly' ? (
-              <Form.Item
-                label="매월 며칠"
-                name="dayOfMonth"
-                rules={[{ required: true, message: '날짜를 입력해주세요.' }]}
-              >
-                <InputNumber min={1} max={31} addonAfter="일" style={{ width: '100%' }} />
-              </Form.Item>
-            ) : null}
-
-            {frequency === 'yearly' ? (
-              <Space.Compact block>
+              {frequency === 'weekly' ? (
                 <Form.Item
-                  label="매년 몇 월"
-                  name="monthOfYear"
-                  rules={[{ required: true, message: '월을 선택해주세요.' }]}
-                  style={{ flex: 1, marginRight: 8 }}
+                  label="요일"
+                  name="dayOfWeek"
+                  rules={[{ required: true, message: '요일을 선택해주세요.' }]}
                 >
-                  <InputNumber min={1} max={12} addonAfter="월" style={{ width: '100%' }} />
+                  <Select options={WEEKDAYS} />
                 </Form.Item>
+              ) : null}
+
+              {frequency === 'monthly' ? (
                 <Form.Item
-                  label="며칠"
+                  label="매월 며칠"
                   name="dayOfMonth"
                   rules={[{ required: true, message: '날짜를 입력해주세요.' }]}
-                  style={{ flex: 1 }}
                 >
-                  <InputNumber min={1} max={31} addonAfter="일" style={{ width: '100%' }} />
+                  <AppUnitInputNumber min={1} max={31} unit="일" />
                 </Form.Item>
-              </Space.Compact>
-            ) : null}
+              ) : null}
 
-            {/* 매시간일 땐 시각이 의미없음. 분(0~59)만 입력 - 내부적으로 time 의 minute 만 사용됨 */}
-            {frequency === 'hourly' ? (
-              <Form.Item
-                label="매시간 몇 분에"
-                name="time"
-                rules={[{ required: true, message: '분을 선택해주세요.' }]}
-                initialValue={dayjs().hour(0).minute(0)}
-                getValueFromEvent={(v: number | null) =>
-                  dayjs().hour(0).minute(v ?? 0)
-                }
-                getValueProps={(v) => ({ value: v ? (v as dayjs.Dayjs).minute() : 0 })}
-              >
-                <InputNumber min={0} max={59} addonAfter="분" style={{ width: '100%' }} />
-              </Form.Item>
-            ) : (
-              <Form.Item
-                label="실행 시각"
-                name="time"
-                rules={[{ required: true, message: '시간을 선택해주세요.' }]}
-                initialValue={dayjs().hour(0).minute(0)}
-              >
-                <TimePicker format="HH:mm" minuteStep={5} style={{ width: '100%' }} />
-              </Form.Item>
-            )}
-          </Form>
-        </Modal>
-      </div>
-    </div>
+              {frequency === 'yearly' ? (
+                <Space.Compact block>
+                  <Form.Item
+                    label="매년 몇 월"
+                    name="monthOfYear"
+                    rules={[{ required: true, message: '월을 선택해주세요.' }]}
+                    style={{ flex: 1, marginRight: 8 }}
+                  >
+                    <AppUnitInputNumber min={1} max={12} unit="월" />
+                  </Form.Item>
+                  <Form.Item
+                    label="며칠"
+                    name="dayOfMonth"
+                    rules={[{ required: true, message: '날짜를 입력해주세요.' }]}
+                    style={{ flex: 1 }}
+                  >
+                    <AppUnitInputNumber min={1} max={31} unit="일" />
+                  </Form.Item>
+                </Space.Compact>
+              ) : null}
+
+              {/* 매시간일 땐 시각이 의미없음. 분(0~59)만 입력 - 내부적으로 time 의 minute 만 사용됨 */}
+              {frequency === 'hourly' ? (
+                <Form.Item
+                  label="매시간 몇 분에"
+                  name="time"
+                  rules={[{ required: true, message: '분을 선택해주세요.' }]}
+                  initialValue={dayjs().hour(0).minute(0)}
+                  getValueFromEvent={(v: number | null) =>
+                    dayjs().hour(0).minute(v ?? 0)
+                  }
+                  getValueProps={(v) => ({ value: v ? (v as dayjs.Dayjs).minute() : 0 })}
+                >
+                  <AppUnitInputNumber min={0} max={59} unit="분" />
+                </Form.Item>
+              ) : (
+                <Form.Item
+                  label="실행 시각"
+                  name="time"
+                  rules={[{ required: true, message: '시간을 선택해주세요.' }]}
+                  initialValue={dayjs().hour(0).minute(0)}
+                >
+                  <TimePicker format="HH:mm" minuteStep={5} style={{ width: '100%' }} />
+                </Form.Item>
+              )}
+            </Form>
+          </div>
+        </AppDoubleActionModal>
+    </SaasConsoleShell>
   );
 }
 
@@ -660,98 +669,124 @@ function PerCompanyView(props: {
     );
   });
 
-  const selectedRows = selectedCompany
-    ? applyFilter(rows.filter((r) => extractCompanyId(r.jobKey) === selectedCompany), filter, keyword)
+  const effectiveCompanyId = selectedCompany ?? filteredCompanies[0]?.companyId;
+  const effectiveCompany = companies.find((c) => c.companyId === effectiveCompanyId);
+  const effectiveRows = effectiveCompanyId
+    ? applyFilter(rows.filter((r) => extractCompanyId(r.jobKey) === effectiveCompanyId), filter, keyword)
     : [];
 
   return (
-    <div className="tw-flex tw-gap-4">
-      {/* 좌측 사이드 패널 */}
-      <div
-        className="tw-w-72 tw-flex-shrink-0 tw-rounded-lg tw-border tw-border-slate-200 tw-bg-white"
-        style={{ maxHeight: 'calc(100vh - 320px)', display: 'flex', flexDirection: 'column' }}
-      >
-        <div className="tw-p-3 tw-border-b tw-border-slate-200">
+    <div className="tw-grid tw-grid-cols-[300px_minmax(0,1fr)] tw-overflow-hidden tw-rounded-xl tw-border tw-border-solid tw-border-slate-200 tw-bg-white tw-shadow-sm">
+      <aside className="tw-flex tw-min-h-[460px] tw-flex-col tw-border-0 tw-border-r tw-border-solid tw-border-slate-100 tw-bg-slate-50/60">
+        <div className="tw-border-0 tw-border-b tw-border-solid tw-border-slate-100 tw-p-4">
           <Input.Search
             placeholder="회사명/사업자번호 검색"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             allowClear
           />
-          <Typography.Text type="secondary" className="tw-text-xs tw-mt-2 tw-block">
+          <Typography.Text type="secondary" className="tw-mt-2 tw-block tw-text-xs">
             총 {filteredCompanies.length}개
           </Typography.Text>
         </div>
-        <div className="tw-overflow-y-auto tw-flex-1">
+        <div className="wf-scrollbar tw-flex-1 tw-overflow-y-auto tw-p-2">
           {filteredCompanies.length === 0 ? (
-            <div className="tw-p-4 tw-text-xs tw-text-slate-400 tw-text-center">검색 결과 없음</div>
+            <div className="tw-flex tw-min-h-40 tw-items-center tw-justify-center tw-text-xs tw-text-slate-400">
+              검색 결과 없음
+            </div>
           ) : (
             filteredCompanies.map((c) => {
               const stats = statsByCompany[c.companyId];
-              const isSelected = selectedCompany === c.companyId;
+              const isSelected = effectiveCompanyId === c.companyId;
               return (
                 <button
                   key={c.companyId}
                   type="button"
                   onClick={() => onSelectCompany(c.companyId)}
-                  className={
-                    'tw-w-full tw-text-left tw-px-3 tw-py-2.5 tw-border-b tw-border-slate-100 ' +
-                    'hover:tw-bg-slate-50 tw-transition ' +
-                    (isSelected ? 'tw-bg-blue-50' : '')
-                  }
+                  className={[
+                    'tw-mb-1 tw-w-full tw-rounded-lg tw-border-0 tw-bg-transparent tw-px-3 tw-py-3 tw-text-left tw-transition',
+                    'hover:tw-bg-white hover:tw-shadow-sm',
+                    isSelected ? 'tw-bg-white tw-shadow-sm tw-ring-1 tw-ring-slate-200' : '',
+                  ].join(' ')}
                 >
-                  <div className="tw-flex tw-items-center tw-justify-between tw-gap-2">
-                    <Typography.Text
-                      strong={isSelected}
-                      className="tw-text-sm tw-truncate"
-                      style={{ color: isSelected ? '#1677ff' : undefined }}
+                  <div className="tw-flex tw-items-start tw-gap-3">
+                    <span
+                      className={[
+                        'tw-mt-0.5 tw-flex tw-size-8 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-lg',
+                        isSelected ? 'tw-bg-blue-50 tw-text-[#2563eb]' : 'tw-bg-white tw-text-slate-500',
+                      ].join(' ')}
                     >
-                      {c.companyName || c.companyId.slice(0, 8)}
-                    </Typography.Text>
-                    {stats ? (
-                      <Space size={4}>
-                        <Tag color="blue" className="!tw-text-xs !tw-mr-0">{stats.total}</Tag>
-                        {stats.paused > 0 ? (
-                          <Tag color="default" className="!tw-text-xs !tw-mr-0">중지 {stats.paused}</Tag>
+                      <BankOutlined />
+                    </span>
+                    <div className="tw-min-w-0 tw-flex-1">
+                      <div className="tw-flex tw-items-center tw-justify-between tw-gap-2">
+                        <Typography.Text
+                          strong={isSelected}
+                          className="tw-truncate tw-text-sm"
+                          style={{ color: isSelected ? '#0f2747' : undefined }}
+                        >
+                          {c.companyName || c.companyId.slice(0, 8)}
+                        </Typography.Text>
+                        {stats ? (
+                          <Space size={4}>
+                            <Tag color="blue" className="!tw-mr-0 !tw-text-xs">
+                              {stats.total}
+                            </Tag>
+                            {stats.paused > 0 ? (
+                              <Tag color="default" className="!tw-mr-0 !tw-text-xs">
+                                중지 {stats.paused}
+                              </Tag>
+                            ) : null}
+                          </Space>
                         ) : null}
-                      </Space>
-                    ) : null}
+                      </div>
+                      {c.businessNumber ? (
+                        <Typography.Text type="secondary" className="tw-mt-1 tw-block tw-text-xs">
+                          {c.businessNumber}
+                        </Typography.Text>
+                      ) : null}
+                    </div>
                   </div>
-                  {c.businessNumber ? (
-                    <Typography.Text type="secondary" className="tw-text-xs tw-block tw-mt-0.5">
-                      {c.businessNumber}
-                    </Typography.Text>
-                  ) : null}
                 </button>
               );
             })
           )}
         </div>
-      </div>
+      </aside>
 
-      {/* 우측 잡 테이블 */}
-      <div className="tw-flex-1 tw-min-w-0">
-        {selectedCompany ? (
-          <>
-            <Typography.Text strong className="tw-block tw-mb-2">
-              {companies.find((c) => c.companyId === selectedCompany)?.companyName ?? selectedCompany}
-              <Typography.Text type="secondary" className="tw-text-xs tw-ml-2">
-                {selectedRows.length}건
-              </Typography.Text>
-            </Typography.Text>
-            <Table<SaasSchedule>
-              rowKey={(r) => r.jobKey}
-              loading={isLoading}
-              dataSource={selectedRows}
-              columns={cols}
-              pagination={false}
-              size="small"
-            />
-          </>
+      <section className="tw-min-w-0 tw-bg-white">
+        {effectiveCompanyId ? (
+          <div className="tw-flex tw-min-h-[460px] tw-flex-col">
+            <div className="tw-flex tw-items-start tw-justify-between tw-gap-4 tw-border-0 tw-border-b tw-border-solid tw-border-slate-100 tw-px-5 tw-py-4">
+              <div className="tw-min-w-0">
+                <Typography.Text strong className="tw-block tw-truncate tw-text-[15px] tw-text-slate-900">
+                  {effectiveCompany?.companyName ?? effectiveCompanyId}
+                </Typography.Text>
+                <Typography.Text type="secondary" className="tw-mt-1 tw-block tw-text-xs">
+                  {effectiveCompany?.businessNumber ?? '사업자번호 없음'} · 작업 {effectiveRows.length}건
+                </Typography.Text>
+              </div>
+              <Tag className="!tw-mr-0" color={effectiveRows.some((row) => row.paused) ? 'default' : 'blue'}>
+                {effectiveRows.filter((row) => !row.paused).length}개 활성
+              </Tag>
+            </div>
+            <div className="tw-p-4">
+              <AppDataTable<SaasSchedule>
+                rowKey={(r) => r.jobKey}
+                loading={isLoading}
+                dataSource={effectiveRows}
+                columns={cols}
+                pagination={false}
+                size="small"
+              />
+            </div>
+          </div>
         ) : (
-          <Alert type="info" showIcon message="좌측에서 회사를 선택하면 그 회사의 자동 작업 목록이 표시됩니다." />
+          <div className="tw-flex tw-min-h-[460px] tw-items-center tw-justify-center tw-p-6">
+            <Alert type="info" showIcon message="좌측에서 회사를 선택하면 그 회사의 자동 작업 목록이 표시됩니다." />
+          </div>
         )}
-      </div>
+      </section>
     </div>
   );
 }

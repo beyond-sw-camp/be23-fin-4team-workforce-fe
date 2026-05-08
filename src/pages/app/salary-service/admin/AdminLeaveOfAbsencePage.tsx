@@ -6,26 +6,17 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  App,
-  Button,
-  Card,
-  DatePicker,
-  Form,
-  Space,
-  Table,
-  Tag,
-  Tooltip,
-  Typography,
-} from 'antd';
+  App, Button, Card, DatePicker, Form, Space, Tag, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppSearchBar } from '@/shared/ui/AppSearchBar';
-import { AppTablePanel } from '@/shared/ui/AppTablePanel';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import { membersApi } from '@/features/members/api/membersApi';
 import type { Member } from '@/features/members/model/types';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
+import { AppDataTable } from '@/shared/ui/AppDataTable';
+
 import type {
   LeaveOfAbsence,
   LeaveOfAbsenceApprovalStatusCode,
@@ -126,7 +117,7 @@ export function AdminLeaveOfAbsencePage() {
         title: '직원',
         dataIndex: 'memberId',
         key: 'memberId',
-        width: 280,
+        width: 220,
         render: (v: string) => {
           const m = v ? memberMap.get(v) : undefined;
           if (!m) {
@@ -141,10 +132,14 @@ export function AdminLeaveOfAbsencePage() {
           }
           return (
             <div className="tw-flex tw-flex-col">
-              <span className="tw-text-sm tw-font-medium tw-text-slate-800">{m.name}</span>
-              <span className="tw-text-xs tw-text-slate-500">
-                {[m.department, m.jobTitleName, m.jobGradeName].filter(Boolean).join(' · ') || '—'}
-              </span>
+              <span className="wf-table-ellipsis tw-text-sm tw-font-medium tw-text-slate-800">{m.name}</span>
+              <Tooltip
+                title={[m.department, m.jobTitleName, m.jobGradeName].filter(Boolean).join(' · ') || '—'}
+              >
+                <span className="wf-table-muted-line">
+                  {[m.department, m.jobTitleName, m.jobGradeName].filter(Boolean).join(' · ') || '—'}
+                </span>
+              </Tooltip>
             </div>
           );
         },
@@ -168,9 +163,17 @@ export function AdminLeaveOfAbsencePage() {
       {
         title: '기간',
         key: 'period',
+        width: 200,
         sorter: (a, b) => (a.startDate ?? '').localeCompare(b.startDate ?? ''),
         defaultSortOrder: 'descend',
-        render: (_, r) => `${r.startDate ?? '—'} ~ ${r.endDate ?? '—'}`,
+        render: (_, r) => {
+          const period = `${r.startDate ?? '—'} ~ ${r.endDate ?? '—'}`;
+          return (
+            <Tooltip title={period}>
+              <span className="wf-table-ellipsis">{period}</span>
+            </Tooltip>
+          );
+        },
       },
       {
         title: '실제 종료',
@@ -254,14 +257,13 @@ export function AdminLeaveOfAbsencePage() {
           />
         </div>
 
-        <AppTablePanel className="tw-mt-3">
-          <Table<LeaveOfAbsence>
+        <AppDataTable<LeaveOfAbsence> panelClassName="tw-mt-3"
             rowKey={(r) => r.leaveOfAbsenceId ?? `${r.memberId}-${r.startDate}`}
             loading={listQ.isLoading || membersQ.isLoading}
             dataSource={filteredList}
             columns={columns}
             pagination={{ pageSize: 20 }}
-            scroll={{ x: 'max-content' }}
+            tableLayout="auto"
             size="small"
             locale={{
               emptyText: memberSearch.trim()
@@ -269,7 +271,6 @@ export function AdminLeaveOfAbsencePage() {
                 : '조회된 휴직 내역이 없습니다.',
             }}
           />
-        </AppTablePanel>
       </Card>
 
       <AppDoubleActionModal

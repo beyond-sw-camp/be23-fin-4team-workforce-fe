@@ -1,6 +1,14 @@
-import { ArrowLeftOutlined, SearchOutlined } from '@ant-design/icons';
+import {
+  ArrowLeftOutlined,
+  SearchOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, App, Button, Card, Table, Tag, Typography } from 'antd';
+import { Alert,
+  App,
+  Button,
+  Card,
+  Tag,
+  Typography,
+} from 'antd';
 import clsx from 'clsx';
 import dayjs from 'dayjs';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -16,21 +24,12 @@ import { memberApi } from '@/features/member/api/memberApi';
 import { organizationApi } from '@/features/organization/api/organizationApi';
 import { findMemberOrganizationId } from '@/features/organization/lib/findMemberOrganizationInOrgChart';
 
+import { AppDataTable } from '@/shared/ui/AppDataTable';
+
 function formatDateTime(value?: string | null) {
   if (!value) return '—';
   const d = dayjs(value);
   return d.isValid() ? d.format('YYYY-MM-DD HH:mm') : value;
-}
-
-function formatOfficialRecipientsLine(r: {
-  recipients?: { recipientOrganizationName?: string; recipientOrganizationId?: string }[] | null;
-}): string {
-  const list = r.recipients ?? [];
-  if (!list.length) return '—';
-  return list
-    .map((x) => x.recipientOrganizationName?.trim() || x.recipientOrganizationId || '')
-    .filter(Boolean)
-    .join(', ');
 }
 
 function requestStatusTag(status: string) {
@@ -77,6 +76,14 @@ export function DepartmentApprovalsInboxPage() {
   /** 모달 iframe에서는 탭 전환 시 URL을 바꾸지 않고 로컬 상태만 사용 */
   const [embedDeptView, setEmbedDeptView] = useState<DeptView | null>(null);
   const isEmbedModal = routeSearch.embed === 'compose-modal';
+  const embeddedModalGetContainer = useCallback(() => {
+    try {
+      return window.parent?.document?.body ?? document.body;
+    } catch {
+      return document.body;
+    }
+  }, []);
+  const nestedModalGetContainer = isEmbedModal ? embeddedModalGetContainer : undefined;
   const deptView = isEmbedModal ? (embedDeptView ?? routerDeptView) : routerDeptView;
   const urlOrgId = routeSearch.organizationId?.trim() ?? '';
 
@@ -179,7 +186,7 @@ export function DepartmentApprovalsInboxPage() {
     <div
       className={clsx(
         isEmbedModal
-          ? 'tw-flex tw-h-full tw-min-h-0 tw-w-full tw-flex-col tw-gap-4 tw-overflow-hidden'
+          ? 'wf-approval-embed-root'
           : 'tw-mx-auto tw-max-w-6xl tw-space-y-4',
       )}
     >
@@ -232,8 +239,9 @@ export function DepartmentApprovalsInboxPage() {
       <Card
         size="small"
         className={clsx(
-          'tw-overflow-hidden tw-rounded-lg tw-border-slate-200/80 tw-shadow-sm',
-          isEmbedModal && 'tw-flex tw-min-h-0 tw-flex-1 tw-flex-col',
+          isEmbedModal
+            ? 'wf-approval-embed-card'
+            : 'tw-overflow-hidden tw-rounded-lg tw-border-slate-200/80 tw-shadow-sm',
         )}
         styles={
           isEmbedModal
@@ -250,7 +258,7 @@ export function DepartmentApprovalsInboxPage() {
           <div
             role="tablist"
             aria-label="부서 문서함 구분"
-            className="tw-flex tw-gap-8"
+            className="wf-approval-modal-tablist"
           >
             {(
               [
@@ -264,28 +272,14 @@ export function DepartmentApprovalsInboxPage() {
                 type="button"
                 role="tab"
                 aria-selected={deptView === key}
-                className={clsx(
-                  '-tw-mb-px tw-border-0 tw-bg-transparent tw-px-0 tw-pb-2 tw-text-sm tw-font-medium tw-outline-none tw-transition-colors',
-                  'focus-visible:tw-ring-2 focus-visible:tw-ring-blue-500 focus-visible:tw-ring-offset-2',
-                  deptView === key
-                    ? 'tw-border-b-2 tw-border-solid tw-border-blue-600 tw-text-blue-600'
-                    : 'tw-border-b-2 tw-border-transparent tw-text-slate-600 hover:tw-text-slate-900',
-                )}
+                data-active={deptView === key}
+                className="wf-approval-modal-tab"
                 onClick={() => navigateDeptView(key)}
               >
                 {label}
               </button>
             ))}
           </div>
-
-          {deptView === 'received' ? (
-            <Alert
-              type="info"
-              showIcon
-              className="tw-text-sm"
-              message="최종 승인된 공문만 표시됩니다."
-            />
-          ) : null}
 
           {pageError ? (
             <Alert
@@ -307,8 +301,8 @@ export function DepartmentApprovalsInboxPage() {
             />
           ) : null}
 
-          <div className={clsx(isEmbedModal && 'tw-min-h-0 tw-flex-1 tw-overflow-auto')}>
-          <Table
+          <div className={clsx(isEmbedModal && 'wf-approval-modal-table-fill')}>
+          <AppDataTable
             size="small"
             rowKey="requestId"
             loading={pageLoading}
@@ -337,6 +331,7 @@ export function DepartmentApprovalsInboxPage() {
                 className: masked ? 'tw-cursor-not-allowed' : 'tw-cursor-pointer',
               };
             }}
+            className={isEmbedModal ? 'wf-approval-modal-table' : undefined}
             columns={
               deptView === 'received'
                 ? [
@@ -458,6 +453,8 @@ export function DepartmentApprovalsInboxPage() {
         requestId={detailRequestId}
         onClose={() => setDetailRequestId(null)}
         title="부서 문서함 — 결재 상세"
+        getContainer={nestedModalGetContainer}
+        zIndex={2700}
       />
     </div>
   );

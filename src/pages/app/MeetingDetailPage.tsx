@@ -562,6 +562,7 @@ export default function MeetingDetailPage() {
               <Space>
                 <Button
                   type="primary"
+                  icon={<PlusOutlined />}
                   loading={createActionMut.isPending}
                   onClick={() => actionForm.submit()}
                 >

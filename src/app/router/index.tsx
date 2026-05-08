@@ -610,6 +610,14 @@ const attendanceCorrectionRequestRoute = createRoute({
   component: AttendanceCorrectionRequestPage,
 });
 
+const attendanceCorrectionsRedirectRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/attendance/corrections',
+  beforeLoad: () => {
+    throw redirect({ to: '/app/attendance' });
+  },
+});
+
 const myScheduleSelectionsRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/attendance/schedules/my',
@@ -1074,6 +1082,7 @@ const routeTree = rootRoute.addChildren([
       myAttendanceRoute,
       myAttendanceMonthlyRoute,
       attendanceCorrectionRequestRoute,
+      attendanceCorrectionsRedirectRoute,
       myScheduleSelectionsRoute,
       myOvertimeRequestsRoute,
       myWorkTimeRoute,

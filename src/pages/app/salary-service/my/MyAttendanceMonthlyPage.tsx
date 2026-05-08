@@ -1,5 +1,7 @@
 /** /app/attendance/monthly - 내 월별 일자별 근태 + 결재 통합 정정 신청 진입점 */
-import { Link, useNavigate } from '@tanstack/react-router';
+import {
+  Link,
+  useNavigate } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import {
   Alert,
@@ -8,7 +10,6 @@ import {
   DatePicker,
   Form,
   Input,
-  Table,
   Tag,
   Typography,
 } from 'antd';
@@ -22,6 +23,8 @@ import type {
   DailyAttendance,
 } from '@/features/salary-service/types';
 import { AttendanceStatusTag } from '@/features/salary-service/ui/AttendanceStatusTag';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 export function MyAttendanceMonthlyPage() {
   const [month, setMonth] = useState<Dayjs>(() => dayjs().startOf('month'));
@@ -154,7 +157,7 @@ export function MyAttendanceMonthlyPage() {
             description="잠시 후 다시 시도해 주세요."
           />
         )}
-        <Table<DailyAttendance>
+        <AppDataTable<DailyAttendance>
           rowKey={(r) => r.dailyAttendanceId ?? `${r.attendanceDate}-${r.status}`}
           loading={listQ.isLoading}
           columns={columns}

@@ -7,7 +7,7 @@ import {
   type Key,
   type ReactNode,
   type RefObject,
-} from 'react';
+  } from 'react';
 import {
   DndContext,
   PointerSensor,
@@ -15,15 +15,17 @@ import {
   useSensor,
   useSensors,
   type DragEndEvent,
-} from '@dnd-kit/core';
+  } from '@dnd-kit/core';
 import {
   SortableContext,
   arrayMove,
   useSortable,
   verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
+  } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import {
   App,
@@ -38,7 +40,6 @@ import {
   Radio,
   Space,
   Spin,
-  Table,
   Tag,
   Tooltip,
   Tree,
@@ -83,6 +84,8 @@ import { AdminOvertimePoliciesPage } from '@/pages/app/salary-service/admin/Admi
 import { AdminLeavePoliciesPage } from '@/pages/app/salary-service/admin/AdminLeavePoliciesPage';
 import { AdminRetirementPolicyPage } from '@/pages/app/salary-service/admin/AdminRetirementPolicyPage';
 import { AdminBonusPolicyPage } from '@/pages/app/salary-service/admin/AdminBonusPolicyPage';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 type StepStatus = 'pending' | 'completed' | 'skipped';
 type JobSettingModalState =
@@ -1567,7 +1570,7 @@ export default function OnboardingStepperPage() {
             title={<PanelDescription>업로드된 문서는 AI 비서 답변에 반영됩니다.</PanelDescription>}
           >
             <Spin spinning={hrDocQuery.isLoading}>
-              <Table
+              <AppDataTable
                 size="small"
                 className="[&_.ant-table-thead>tr>th]:!tw-bg-slate-50 [&_.ant-table-thead>tr>th]:!tw-text-xs [&_.ant-table-thead>tr>th]:!tw-font-semibold [&_.ant-table-thead>tr>th]:!tw-text-slate-500"
                 rowKey="id"
@@ -1604,10 +1607,10 @@ export default function OnboardingStepperPage() {
                       >
                         <button
                           type="button"
-                          className="tw-inline-flex tw-items-center tw-gap-1 tw-border-0 tw-bg-transparent tw-text-red-600 hover:tw-underline"
+                          aria-label="HR 정책 문서 삭제"
+                          className="tw-inline-flex tw-h-7 tw-w-7 tw-items-center tw-justify-center tw-rounded-lg tw-border-0 tw-bg-transparent tw-text-red-600 hover:tw-bg-red-50"
                         >
                           <DeleteOutlined />
-                          삭제
                         </button>
                       </Popconfirm>
                     ),

@@ -3,30 +3,17 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Alert,
-  App,
-  Button,
-  Card,
-  DatePicker,
-  Empty,
-  Input,
-  Modal,
-  Select,
-  Space,
-  Table,
-  Tabs,
-  Tag,
-  Tooltip,
-  Typography,
-} from 'antd';
+  Alert, App, Button, Card, DatePicker, Empty, Input, Modal, Select, Space, Tabs, Tag, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { membersApi } from '@/features/members/api/membersApi';
 import type { Member } from '@/features/members/model/types';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
-import { AppTablePanel } from '@/shared/ui/AppTablePanel';
 import { AppSearchBar } from '@/shared/ui';
+import { AppDataTable } from '@/shared/ui/AppDataTable';
+import { AppTabLabel } from '@/shared/ui/AppTabLabel';
+
 import type {
   LeavePromotionHistory,
   LeavePromotionNoResponse,
@@ -177,13 +164,48 @@ export function AdminLeavePromotionNoResponsePage() {
     </Space>
   );
 
+  const renderDateTagSummary = (dates: string[] | null | undefined, color: string) => {
+    const values = dates ?? [];
+    if (values.length === 0) {
+      return (
+        <Typography.Text type="secondary" className="!tw-text-xs">
+          —
+        </Typography.Text>
+      );
+    }
+    const visible = values.slice(0, 2);
+    return (
+      <Tooltip title={values.join(', ')}>
+        <span className="wf-table-tag-list">
+          {visible.map((d) => (
+            <Tag key={d} color={color}>
+              {d}
+            </Tag>
+          ))}
+          {values.length > visible.length ? <Tag>+{values.length - visible.length}</Tag> : null}
+        </span>
+      </Tooltip>
+    );
+  };
+
+  const renderTooltipText = (value?: string | null) =>
+    value ? (
+      <Tooltip title={value}>
+        <span className="wf-table-ellipsis">{value}</span>
+      </Tooltip>
+    ) : (
+      <Typography.Text type="secondary" className="!tw-text-xs">
+        —
+      </Typography.Text>
+    );
+
   const columns = useMemo<ColumnsType<LeavePromotionNoResponse>>(
     () => [
       {
         title: '직원',
         dataIndex: 'memberId',
         key: 'memberId',
-        width: 220,
+        width: 180,
         render: (id: string) => {
           const m = memberMap.get(id);
           if (!m) {
@@ -195,9 +217,11 @@ export function AdminLeavePromotionNoResponsePage() {
           }
           return (
             <div className="tw-leading-tight">
-              <div className="tw-font-medium tw-text-slate-900">{m.name}</div>
+              <div className="wf-table-ellipsis tw-font-medium tw-text-slate-900">{m.name}</div>
               {m.department ? (
-                <div className="tw-text-xs tw-text-slate-500">{m.department}</div>
+                <Tooltip title={m.department}>
+                  <div className="wf-table-muted-line">{m.department}</div>
+                </Tooltip>
               ) : null}
             </div>
           );
@@ -214,7 +238,7 @@ export function AdminLeavePromotionNoResponsePage() {
         title: '잔여 연차',
         dataIndex: 'remainingDays',
         key: 'remainingDays',
-        width: 110,
+        width: 90,
         render: (n: number | null) => (typeof n === 'number' ? `${n}일` : '—'),
       },
       {
@@ -228,7 +252,7 @@ export function AdminLeavePromotionNoResponsePage() {
         title: '2차 통보 발송일',
         dataIndex: 'sentOn',
         key: 'sentOn',
-        width: 140,
+        width: 120,
         render: (d: string) => formatDate(d),
       },
       {
@@ -241,7 +265,7 @@ export function AdminLeavePromotionNoResponsePage() {
       {
         title: '처리',
         key: 'actions',
-        width: 130,
+        width: 120,
         align: 'center',
         render: (_, row) => (
           <Button type="primary" size="small" danger onClick={() => openDesignate(row)}>
@@ -275,8 +299,12 @@ export function AdminLeavePromotionNoResponsePage() {
     }
     return (
       <div className="tw-leading-tight">
-        <div className="tw-font-medium tw-text-slate-900">{m.name}</div>
-        {m.department ? <div className="tw-text-xs tw-text-slate-500">{m.department}</div> : null}
+        <div className="wf-table-ellipsis tw-font-medium tw-text-slate-900">{m.name}</div>
+        {m.department ? (
+          <Tooltip title={m.department}>
+            <div className="wf-table-muted-line">{m.department}</div>
+          </Tooltip>
+        ) : null}
       </div>
     );
   };
@@ -288,7 +316,7 @@ export function AdminLeavePromotionNoResponsePage() {
         title: '직원',
         dataIndex: 'memberId',
         key: 'memberId',
-        width: 200,
+        width: 170,
         render: renderEmployeeCell,
       },
       {
@@ -313,7 +341,7 @@ export function AdminLeavePromotionNoResponsePage() {
       {
         title: '잔여 / 만료',
         key: 'balance',
-        width: 160,
+        width: 130,
         render: (_, r) => (
           <div className="tw-text-xs">
             <div>{r.remainingDays != null ? `${r.remainingDays}일 남음` : '—'}</div>
@@ -325,48 +353,25 @@ export function AdminLeavePromotionNoResponsePage() {
         title: '회신 시점',
         dataIndex: 'acknowledgedAt',
         key: 'acknowledgedAt',
-        width: 150,
+        width: 130,
         render: (v?: string | null) => (v ? dayjs(v).format('YYYY-MM-DD HH:mm') : '—'),
       },
       {
-        title: '직원 계획 / 회사 자동 지정일',
+        title: '계획 / 지정일',
         key: 'dates',
-        width: 260,
+        width: 170,
         render: (_, r) => {
-          // 회신 완료면 직원 계획 / 자동 지정이면 designated_dates 노출
           const isDesignated = r.status === 'DESIGNATED';
           const dates = isDesignated ? (r.designatedDates ?? []) : (r.plannedDates ?? []);
-          if (dates.length === 0) {
-            return (
-              <Typography.Text type="secondary" className="!tw-text-xs">
-                계획 미입력
-              </Typography.Text>
-            );
-          }
-          return (
-            <Space size={4} wrap>
-              {dates.map((d) => (
-                <Tag key={d} color={isDesignated ? 'red' : 'green'}>
-                  {d}
-                </Tag>
-              ))}
-            </Space>
-          );
+          return renderDateTagSummary(dates, isDesignated ? 'red' : 'green');
         },
       },
       {
         title: '자동 지정 사유',
         dataIndex: 'designationReason',
         key: 'designationReason',
-        width: 240,
-        render: (v?: string | null) =>
-          v ? (
-            <Typography.Text className="!tw-text-xs">{v}</Typography.Text>
-          ) : (
-            <Typography.Text type="secondary" className="!tw-text-xs">
-              —
-            </Typography.Text>
-          ),
+        width: 150,
+        render: renderTooltipText,
       },
     ],
     // renderEmployeeCell 은 stable 가정 - memberMap 만 의존
@@ -399,7 +404,7 @@ export function AdminLeavePromotionNoResponsePage() {
         title: '직원',
         dataIndex: 'memberId',
         key: 'memberId',
-        width: 200,
+        width: 170,
         render: renderEmployeeCell,
       },
       {
@@ -430,10 +435,10 @@ export function AdminLeavePromotionNoResponsePage() {
         render: (n?: number | null) => (typeof n === 'number' ? `${n}일` : '—'),
       },
       {
-        title: '사용기한(만료일)',
+        title: '사용기한',
         dataIndex: 'balanceExpirationDate',
         key: 'balanceExpirationDate',
-        width: 180,
+        width: 160,
         render: (v?: string | null) => {
           if (!v) return '—';
           const d = dayjs(v);
@@ -448,33 +453,21 @@ export function AdminLeavePromotionNoResponsePage() {
         title: '알림 발송일',
         dataIndex: 'sentOn',
         key: 'sentOn',
-        width: 130,
+        width: 120,
         render: (v?: string) => formatDate(v),
       },
       {
         title: '회신 시점',
         dataIndex: 'acknowledgedAt',
         key: 'acknowledgedAt',
-        width: 150,
+        width: 130,
         render: (v?: string | null) => (v ? dayjs(v).format('YYYY-MM-DD HH:mm') : '—'),
       },
       {
         title: '사용 계획일',
         key: 'plannedDates',
-        render: (_, r) => (
-          <Space size={4} wrap>
-            {(r.plannedDates ?? []).map((d) => (
-              <Tag key={d} color="green">
-                {d}
-              </Tag>
-            ))}
-            {(!r.plannedDates || r.plannedDates.length === 0) && (
-              <Typography.Text type="secondary" className="!tw-text-xs">
-                —
-              </Typography.Text>
-            )}
-          </Space>
-        ),
+        width: 170,
+        render: (_, r) => renderDateTagSummary(r.plannedDates, 'green'),
       },
     ],
     [memberMap],
@@ -514,7 +507,7 @@ export function AdminLeavePromotionNoResponsePage() {
           items={[
             {
               key: 'no-response',
-              label: `자동 지정 예외 (${listQ.data?.length ?? 0})`,
+              label: <AppTabLabel count={listQ.data?.length ?? 0}>자동 지정 예외</AppTabLabel>,
               children: (
                 <div className="tw-space-y-3">
                   <Alert
@@ -524,85 +517,77 @@ export function AdminLeavePromotionNoResponsePage() {
                     message="자동 지정이 실패해 수동 처리가 필요한 2차 통보입니다."
                   />
                   {FilterBar}
-                  <AppTablePanel>
-                    <Table<LeavePromotionNoResponse>
+                  <AppDataTable<LeavePromotionNoResponse>
                       rowKey={(r) => r.promotionLogId}
                       loading={listQ.isLoading || membersQ.isLoading}
                       columns={columns}
                       dataSource={applyFilter(listQ.data ?? [])}
-                      scroll={{ x: 'max-content' }}
+                      tableLayout="auto"
                       pagination={{ pageSize: 20, showSizeChanger: true }}
                       locale={{
                         emptyText: <Empty description="자동 지정 예외 대상이 없습니다 (정상)" />,
                       }}
                     />
-                  </AppTablePanel>
                 </div>
               ),
             },
             {
               key: 'first-notice',
-              label: `1차 알림 현황 (${firstNoticeRows.length})`,
+              label: <AppTabLabel count={firstNoticeRows.length}>1차 알림 현황</AppTabLabel>,
               children: (
                 <div className="tw-space-y-3">
                   {FilterBar}
-                  <AppTablePanel>
-                    <Table<LeavePromotionHistory>
+                  <AppDataTable<LeavePromotionHistory>
                       rowKey={(r) => r.promotionLogId}
                       loading={historyQ.isLoading || membersQ.isLoading}
                       columns={noticeColumns}
                       dataSource={applyFilter(firstNoticeRows)}
-                      scroll={{ x: 'max-content' }}
+                      tableLayout="auto"
                       pagination={{ pageSize: 20, showSizeChanger: true }}
                       locale={{
                         emptyText: <Empty description="1차 알림 이력이 없습니다" />,
                       }}
                     />
-                  </AppTablePanel>
                 </div>
               ),
             },
             {
               key: 'second-notice',
-              label: `2차 알림 현황 (${secondNoticeRows.length})`,
+              label: <AppTabLabel count={secondNoticeRows.length}>2차 알림 현황</AppTabLabel>,
               children: (
                 <div className="tw-space-y-3">
                   {FilterBar}
-                  <AppTablePanel>
-                    <Table<LeavePromotionHistory>
+                  <AppDataTable<LeavePromotionHistory>
                       rowKey={(r) => r.promotionLogId}
                       loading={historyQ.isLoading || membersQ.isLoading}
                       columns={noticeColumns}
                       dataSource={applyFilter(secondNoticeRows)}
-                      scroll={{ x: 'max-content' }}
+                      tableLayout="auto"
                       pagination={{ pageSize: 20, showSizeChanger: true }}
                       locale={{
                         emptyText: <Empty description="2차 알림 이력이 없습니다" />,
                       }}
                     />
-                  </AppTablePanel>
                 </div>
               ),
             },
             {
               key: 'expiry-status',
-              label: `연차 사용기한 현황 (${expiryRows.length})`,
+              label: <AppTabLabel count={expiryRows.length}>연차 사용기한 현황</AppTabLabel>,
               children: (
                 <div className="tw-space-y-3">
                   {FilterBar}
-                  <AppTablePanel>
-                    <Table<LeavePromotionHistory & { status?: string }>
+                  <AppDataTable<LeavePromotionHistory & { status?: string }>
                       rowKey={(r) => r.promotionLogId}
                       loading={historyQ.isLoading || listQ.isLoading || membersQ.isLoading}
                       columns={expiryColumns}
                       dataSource={applyFilter(expiryRows)}
-                      scroll={{ x: 'max-content' }}
+                      tableLayout="auto"
                       pagination={{ pageSize: 20, showSizeChanger: true }}
                       locale={{
                         emptyText: <Empty description="연차 사용기한 현황이 없습니다" />,
                       }}
                     />
-                  </AppTablePanel>
                 </div>
               ),
             },

@@ -1,7 +1,12 @@
 /** /app/leave/policies — 연차 정책 CRUD (시스템 관리자) */
-import { Link } from '@tanstack/react-router';
-import { useMemo, useState, type ReactNode } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  Link } from '@tanstack/react-router';
+import { useMemo,
+  useState,
+  type ReactNode } from 'react';
+import { useMutation,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
 import {
   App,
   Alert,
@@ -9,12 +14,10 @@ import {
   Card,
   Divider,
   Form,
-  InputNumber,
   Popconfirm,
   Select,
   Space,
   Switch,
-  Table,
   Tag,
   Typography,
 } from 'antd';
@@ -23,14 +26,17 @@ import {
   CheckCircleTwoTone,
   CloseCircleTwoTone,
   DeleteOutlined,
-  EditOutlined,
+  EditOutlined, PlusOutlined,
   WarningOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
+import { AppUnitInputNumber } from '@/shared/ui/AppUnitInputNumber';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import type { AccrualBaseCode, LeavePolicy } from '@/features/salary-service/types';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 type FormValues = {
   accrualBase: AccrualBaseCode;
@@ -195,7 +201,7 @@ export function AdminLeavePoliciesPage({ embedded = false }: { embedded?: boolea
               title="수정"
               aria-label="연차 정책 수정"
               icon={<EditOutlined />}
-              className={`${TABLE_ACTION_BUTTON_CLASS} !tw-text-slate-500 hover:!tw-bg-slate-100 hover:!tw-text-slate-900`}
+              className={`${TABLE_ACTION_BUTTON_CLASS} !tw-text-blue-600 hover:!tw-bg-blue-50 hover:!tw-text-blue-700`}
               onClick={() => {
                 setEditing(r);
                 setOpen(true);
@@ -291,6 +297,7 @@ export function AdminLeavePoliciesPage({ embedded = false }: { embedded?: boolea
       <Button
         type="primary"
         className={NAVY_BUTTON_CLASS}
+        icon={<PlusOutlined />}
         onClick={() => {
           setEditing(null);
           form.resetFields();
@@ -346,7 +353,7 @@ export function AdminLeavePoliciesPage({ embedded = false }: { embedded?: boolea
 
       <Card>
         {/* TODO: 서버 페이지네이션 전환 필요 */}
-        <Table<LeavePolicy>
+        <AppDataTable<LeavePolicy>
           rowKey={(r, index) => (r.policyId ? r.policyId : `row-${index}`)}
           loading={listQ.isLoading || listQ.isFetching}
           dataSource={listQ.data ?? []}
@@ -457,7 +464,7 @@ function PolicyForm({ form }: PolicyFormProps) {
               style={{ width: 200 }}
               extra="법정 최소 15일 (1년 이상 근속자)"
             >
-              <InputNumber min={0} step={0.5} addonAfter="일" style={{ width: '100%' }} />
+              <AppUnitInputNumber min={0} step={0.5} unit="일" />
             </Form.Item>
           </Space>
 
@@ -473,12 +480,11 @@ function PolicyForm({ form }: PolicyFormProps) {
               style={{ width: 180 }}
               extra="근로기준법 = 2년"
             >
-              <InputNumber
+              <AppUnitInputNumber
                 min={1}
                 step={1}
-                addonBefore="매"
-                addonAfter="년마다"
-                style={{ width: '100%' }}
+                prefixUnit="매"
+                unit="년마다"
               />
             </Form.Item>
             <Form.Item
@@ -491,12 +497,11 @@ function PolicyForm({ form }: PolicyFormProps) {
               style={{ width: 180 }}
               extra="근로기준법 = 1일씩"
             >
-              <InputNumber
+              <AppUnitInputNumber
                 min={0}
                 step={0.5}
-                addonBefore="+"
-                addonAfter="일"
-                style={{ width: '100%' }}
+                prefixUnit="+"
+                unit="일"
               />
             </Form.Item>
             <Form.Item
@@ -509,7 +514,7 @@ function PolicyForm({ form }: PolicyFormProps) {
               style={{ width: 180 }}
               extra="근로기준법 = 25일"
             >
-              <InputNumber min={0} step={0.5} addonAfter="일" style={{ width: '100%' }} />
+              <AppUnitInputNumber min={0} step={0.5} unit="일" />
             </Form.Item>
           </Space>
 
@@ -581,10 +586,9 @@ function PolicyForm({ form }: PolicyFormProps) {
                     style={{ width: 220 }}
                     extra="예: 만료 180일 전 (6개월 전)"
                   >
-                    <InputNumber
+                    <AppUnitInputNumber
                       min={1}
-                      addonAfter="일 전"
-                      style={{ width: '100%' }}
+                      unit="일 전"
                       onChange={() =>
                         /** 1차 변경 시 2차의 검증도 다시 돌려야 함 */
                         form.validateFields(['promotion2ndBeforeDays']).catch(() => {})
@@ -627,10 +631,9 @@ function PolicyForm({ form }: PolicyFormProps) {
                     style={{ width: 220 }}
                     extra="예: 만료 60일 전 (2개월 전)"
                   >
-                    <InputNumber
+                    <AppUnitInputNumber
                       min={1}
-                      addonAfter="일 전"
-                      style={{ width: '100%' }}
+                      unit="일 전"
                       onChange={() =>
                         form.validateFields(['promotion1stBeforeDays']).catch(() => {})
                       }
@@ -690,7 +693,7 @@ function PolicyForm({ form }: PolicyFormProps) {
                     style={{ width: 220 }}
                     extra="이 일수까지만 다음 해로 넘김"
                   >
-                    <InputNumber min={1} addonAfter="일" style={{ width: '100%' }} />
+                    <AppUnitInputNumber min={1} unit="일" />
                   </Form.Item>
                   <Form.Item
                     label="이월 동의서 사용"

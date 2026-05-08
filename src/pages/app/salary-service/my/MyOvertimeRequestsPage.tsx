@@ -3,9 +3,16 @@
  *  기간/상태 필터 + 신청 이력 테이블 + 신청 모달 + 상세 모달
  *  신청은 전자결재 시스템과 연동 (모달 안에서 결재 자동 발의)
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useSearch } from '@tanstack/react-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState } from 'react';
+import { useNavigate,
+  useSearch } from '@tanstack/react-router';
+import { useMutation,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
   App,
@@ -23,7 +30,6 @@ import {
   Statistic,
   Space,
   Steps,
-  Table,
   Tag,
   TimePicker,
   Typography,
@@ -39,6 +45,8 @@ import type {
   OvertimeRequestCreatePayload,
 } from '@/features/salary-service/types';
 import { approvalRequestApi } from '@/features/approvals/api/approvalRequestApi';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 type FormValues = {
   targetDate: dayjs.Dayjs;
@@ -393,7 +401,7 @@ export function MyOvertimeRequestsPage() {
           </Button>
         </Space>
 
-        <Table<OvertimeRequest>
+        <AppDataTable<OvertimeRequest>
           rowKey={(r) => r.overtimeRequestId ?? `${r.targetDate}-${r.createdAt}`}
           dataSource={filteredRows}
           columns={columns}

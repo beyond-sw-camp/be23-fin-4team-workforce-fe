@@ -1,10 +1,23 @@
-import { DeleteOutlined, InboxOutlined } from '@ant-design/icons';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Card, Popconfirm, Space, Spin, Table, Upload } from 'antd';
+import {
+  DeleteOutlined,
+  InboxOutlined } from '@ant-design/icons';
+import { useMutation,
+  useQuery,
+  useQueryClient } from '@tanstack/react-query';
+import { App,
+  Card,
+  Popconfirm,
+  Space,
+  Spin,
+  Tooltip,
+  Upload,
+} from 'antd';
 import type { UploadProps } from 'antd';
 import dayjs from 'dayjs';
 import { aiApi } from '@/features/ai/api/aiApi';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
+
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const ACCEPT_EXT = /\.(pdf|docx|txt)$/i;
@@ -83,7 +96,7 @@ export function AiDocumentsAdminPage() {
 
       <Card className="tw-border-slate-200/80 tw-shadow-sm" title="업로드된 문서">
         <Spin spinning={isLoading}>
-          <Table
+          <AppDataTable
             size="small"
             rowKey="id"
             pagination={false}
@@ -117,13 +130,15 @@ export function AiDocumentsAdminPage() {
                     okButtonProps={{ danger: true, loading: deleteM.isPending }}
                     onConfirm={() => deleteM.mutate(row.id)}
                   >
-                    <button
-                      type="button"
-                      className="tw-inline-flex tw-items-center tw-gap-1 tw-border-0 tw-bg-transparent tw-text-red-600 hover:tw-underline"
-                    >
-                      <DeleteOutlined />
-                      삭제
-                    </button>
+                    <Tooltip title="삭제">
+                      <button
+                        type="button"
+                        aria-label="AI 문서 삭제"
+                        className="tw-inline-flex tw-h-7 tw-w-7 tw-items-center tw-justify-center tw-rounded-lg tw-border-0 tw-bg-transparent tw-text-red-600 hover:tw-bg-red-50"
+                      >
+                        <DeleteOutlined />
+                      </button>
+                    </Tooltip>
                   </Popconfirm>
                 ),
               },

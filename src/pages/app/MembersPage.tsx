@@ -1,4 +1,5 @@
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
+import { PlusOutlined } from '@ant-design/icons';
 import { App, Button, Card, Tooltip } from 'antd';
 import dayjs from 'dayjs';
 import { useMemo, useState } from 'react';
@@ -90,6 +91,7 @@ export function MembersPage() {
                   >
                     <Button
                       type="primary"
+                      icon={<PlusOutlined />}
                       className={membersCtaButtonClass}
                       onClick={handleClickCreate}
                       disabled={policiesQ.isLoading || !hasActivePolicy}

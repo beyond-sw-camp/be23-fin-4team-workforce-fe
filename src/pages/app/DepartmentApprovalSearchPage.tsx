@@ -49,6 +49,15 @@ export function DepartmentApprovalSearchPage() {
     select: (s) => ({ search: s.location.search as Record<string, unknown> }),
   });
   const filters = useMemo(() => parseSearch(routeLocation.search), [routeLocation.search]);
+  const isEmbedModal = filters.embed === 'compose-modal';
+  const embeddedModalGetContainer = useCallback(() => {
+    try {
+      return window.parent?.document?.body ?? document.body;
+    } catch {
+      return document.body;
+    }
+  }, []);
+  const nestedModalGetContainer = isEmbedModal ? embeddedModalGetContainer : undefined;
 
   const profileQuery = useQuery({
     queryKey: ['member', 'dashboard-profile'],
@@ -153,6 +162,8 @@ export function DepartmentApprovalSearchPage() {
         requestId={detailRequestId}
         onClose={() => setDetailRequestId(null)}
         title="부서 문서함 — 결재 상세"
+        getContainer={nestedModalGetContainer}
+        zIndex={2700}
       />
     </div>
   );

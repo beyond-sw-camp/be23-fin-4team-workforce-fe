@@ -1,15 +1,18 @@
+import { AppDataTable } from '@/shared/ui/AppDataTable';
 /**
  * /app/payroll/admin/$payrollId
  * DRAFT일 때 항목 CRUD, 확정·지급 완료 버튼.
  */
 import { useParams, useSearch, useRouter } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Button, Card, DatePicker, Descriptions, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Statistic, Table, Tag, Typography } from 'antd';
+import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
+import { Alert, App, Button, Card, DatePicker, Descriptions, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Statistic, Tag, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useMemo, useState } from 'react';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import { AppModal } from '@/shared/ui/AppModal';
+import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
 import type { RetroactiveMonthlyDiff, RetroactivePayrollResult, PayrollItem, SalaryItemTemplate } from '@/features/salary-service/types';
 import { memberApi } from '@/features/member/api/memberApi';
 
@@ -301,17 +304,18 @@ export function AdminPayrollManagePage() {
               {sign} {formatWon(row.amount)}
             </span>
             {isDraft && (
-              <Button
-                type="link"
-                size="small"
-                className="!tw-p-0"
-                onClick={() => {
-                  setEditingId(id);
-                  setEditAmount(row.amount ?? 0);
-                }}
-              >
-                수정
-              </Button>
+              <Tooltip title="수정">
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<EditOutlined />}
+                  aria-label={`${row.itemName ?? '급여 항목'} 금액 수정`}
+                  onClick={() => {
+                    setEditingId(id);
+                    setEditAmount(row.amount ?? 0);
+                  }}
+                />
+              </Tooltip>
             )}
           </Space>
         );
@@ -324,9 +328,16 @@ export function AdminPayrollManagePage() {
       render: (_, row) =>
         isDraft && row.payrollItemId ? (
           <Popconfirm title="이 항목을 삭제할까요?" onConfirm={() => deleteItemM.mutate(row.payrollItemId!)}>
-            <Button type="link" danger size="small" className="!tw-p-0">
-              삭제
-            </Button>
+            <Tooltip title="삭제">
+              <Button
+                type="text"
+                danger
+                size="small"
+                icon={<DeleteOutlined />}
+                className="!tw-h-7 !tw-w-7 !tw-p-0"
+                aria-label="급여 항목 삭제"
+              />
+            </Tooltip>
           </Popconfirm>
         ) : null,
     },
@@ -493,13 +504,14 @@ export function AdminPayrollManagePage() {
           <Space className="tw-mb-3" wrap>
             <Button
               type="primary"
+              icon={<PlusOutlined />}
               onClick={() => {
                 bonusForm.resetFields();
                 bonusForm.setFieldsValue({ bonusType: 'BONUS' });
                 setBonusModalOpen(true);
               }}
             >
-              + 상여/성과 추가
+              상여/성과 추가
             </Button>
             <Button
               onClick={() => {
@@ -589,7 +601,7 @@ export function AdminPayrollManagePage() {
               <Typography.Text strong className="!tw-text-blue-600">지급 항목</Typography.Text>
               <Tag color="blue">{earningsItems.length}건</Tag>
             </div>
-            <Table<PayrollItem>
+            <AppDataTable<PayrollItem>
               rowKey={(r) => r.payrollItemId ?? `e-${r.itemName}`}
               loading={itemsQ.isLoading}
               columns={earningsColumns}
@@ -598,17 +610,17 @@ export function AdminPayrollManagePage() {
               size="small"
               locale={{ emptyText: '지급 항목 없음' }}
               summary={() => (
-                <Table.Summary.Row className="tw-bg-blue-50">
-                  <Table.Summary.Cell index={0}>
+                <AppDataTable.Summary.Row className="tw-bg-blue-50">
+                  <AppDataTable.Summary.Cell index={0}>
                     <Typography.Text strong>지급 합계</Typography.Text>
-                  </Table.Summary.Cell>
-                  <Table.Summary.Cell index={1} align="right">
+                  </AppDataTable.Summary.Cell>
+                  <AppDataTable.Summary.Cell index={1} align="right">
                     <Typography.Text strong className="!tw-text-blue-600">
                       + {formatWon(earningsTotal)}
                     </Typography.Text>
-                  </Table.Summary.Cell>
-                  <Table.Summary.Cell index={2} />
-                </Table.Summary.Row>
+                  </AppDataTable.Summary.Cell>
+                  <AppDataTable.Summary.Cell index={2} />
+                </AppDataTable.Summary.Row>
               )}
             />
           </div>
@@ -617,7 +629,7 @@ export function AdminPayrollManagePage() {
               <Typography.Text strong className="!tw-text-red-600">공제 항목</Typography.Text>
               <Tag color="red">{deductionsItems.length}건</Tag>
             </div>
-            <Table<PayrollItem>
+            <AppDataTable<PayrollItem>
               rowKey={(r) => r.payrollItemId ?? `d-${r.itemName}`}
               loading={itemsQ.isLoading}
               columns={deductionsColumns}
@@ -626,17 +638,17 @@ export function AdminPayrollManagePage() {
               size="small"
               locale={{ emptyText: '공제 항목 없음' }}
               summary={() => (
-                <Table.Summary.Row className="tw-bg-red-50">
-                  <Table.Summary.Cell index={0}>
+                <AppDataTable.Summary.Row className="tw-bg-red-50">
+                  <AppDataTable.Summary.Cell index={0}>
                     <Typography.Text strong>공제 합계</Typography.Text>
-                  </Table.Summary.Cell>
-                  <Table.Summary.Cell index={1} align="right">
+                  </AppDataTable.Summary.Cell>
+                  <AppDataTable.Summary.Cell index={1} align="right">
                     <Typography.Text strong className="!tw-text-red-600">
                       - {formatWon(deductionsTotal)}
                     </Typography.Text>
-                  </Table.Summary.Cell>
-                  <Table.Summary.Cell index={2} />
-                </Table.Summary.Row>
+                  </AppDataTable.Summary.Cell>
+                  <AppDataTable.Summary.Cell index={2} />
+                </AppDataTable.Summary.Row>
               )}
             />
           </div>
@@ -734,16 +746,18 @@ function RetroactiveModal({
   const m = memberQ.data;
 
   return (
-    <AppModal
+    <AppSingleActionModal
       open={open}
       title="소급분 자동 재계산"
       width={720}
-      onCancel={() => {
+      onClose={() => {
         setPreview(null);
         form.resetFields();
         onClose();
       }}
-      footer={null}
+      onSubmit={() => undefined}
+      submitText="확인"
+      customFooter={null}
       destroyOnHidden
     >
       <div className="tw-px-5 tw-py-4">
@@ -836,7 +850,7 @@ function RetroactiveModal({
             />
           </div>
 
-          <Table<RetroactiveMonthlyDiff>
+          <AppDataTable<RetroactiveMonthlyDiff>
             rowKey={(r) => r.month}
             dataSource={preview.monthlyDiffs}
             pagination={false}
@@ -887,6 +901,6 @@ function RetroactiveModal({
         </div>
       )}
       </div>
-    </AppModal>
+    </AppSingleActionModal>
   );
 }

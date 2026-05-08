@@ -1084,6 +1084,7 @@ ${showSixthMonthRow ? '' : '.wf-cal-month.ant-picker-calendar .ant-picker-conten
             <Button
               type="primary"
               block
+              icon={<PlusOutlined />}
               onClick={() => openCreate()}
               className="!tw-h-10 !tw-w-full !tw-rounded-xl !tw-border-0 !tw-bg-[#1e3a5f] !tw-font-semibold hover:!tw-bg-[#152a45]"
             >
