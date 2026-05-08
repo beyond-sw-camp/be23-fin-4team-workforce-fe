@@ -31,6 +31,7 @@ import {
   Select,
   Space,
   Statistic,
+  Table,
   Tag,
   Tooltip,
   Typography,
@@ -231,19 +232,6 @@ export function AdminMemberAllowancePage() {
   const monthlyAllowanceQ = useQuery({
     queryKey: ['salary', 'allowance', 'admin', 'monthly', listMonthYm],
     queryFn: () => salaryApi.payroll.findMonthlyAllowance(listMonthYm),
-  });
-
-  // PayrollItem 라인 단위 삭제 - DRAFT/CONFIRMED 명세서만 가능 (PAID 차단은 BE도 검증)
-  const deletePayrollItemMut = useMutation({
-    mutationFn: (payrollItemId: string) => salaryApi.payroll.deleteItem(payrollItemId),
-    onSuccess: () => {
-      void message.success('수당 라인이 삭제되었습니다.');
-      void qc.invalidateQueries({ queryKey: ['salary', 'allowance', 'admin', 'monthly'] });
-    },
-    onError: (err: unknown) => {
-      const e = err as { response?: { data?: { message?: string } } };
-      void message.error(e?.response?.data?.message ?? '수당 라인 삭제 실패');
-    },
   });
 
   /* ── 3) 직원 이름 매핑 — 회사 직원 list 1회 조회로 N+1 회피 ──
@@ -825,9 +813,8 @@ export function AdminMemberAllowancePage() {
                   return (
                     <Space size={[6, 6]} wrap>
                       {e.items.map((it, i) => {
-                        const canRemoveOnce = !isPaid && !!it.payrollItemId;
                         const canCloseForever = !!it.memberAllowanceId;
-                        const closable = canRemoveOnce || canCloseForever;
+                        const closable = canCloseForever;
                         // 종료된 라인 색상 분기:
                         // PAID + 종료됨 = 주황 (마지막 지급 달)
                         // 그 외 종료됨 = 회색 (지급 전 종료)
@@ -852,58 +839,36 @@ export function AdminMemberAllowancePage() {
                             closable={closable && !isEnded}
                             onClose={(ev) => {
                               ev.preventDefault();
-                              const m = modal.confirm({
-                                title: `${labelFor(e.memberId)} - ${it.itemName}`,
+                              if (!canCloseForever) {
+                                modal.warning({
+                                  title: `${labelFor(e.memberId)} - ${it.itemName}`,
+                                  content:
+                                    '회사 공통 자동 항목은 [급여 정책 > 급여 항목]에서 회사 단위로 항목 자체를 끄세요.',
+                                });
+                                return;
+                              }
+                              modal.confirm({
+                                title: `${labelFor(e.memberId)} - ${it.itemName} 수당을 종료할까요?`,
                                 width: 520,
                                 content: (
-                                  <Space direction="vertical" size={12} className="tw-w-full">
-                                    <Typography.Text>이 수당을 어떻게 처리할까요?</Typography.Text>
-                                    <Space wrap>
-                                      <Button
-                                        danger
-                                        disabled={!canRemoveOnce}
-                                        onClick={() => {
-                                          if (!it.payrollItemId) return;
-                                          deletePayrollItemMut.mutate(it.payrollItemId);
-                                          m.destroy();
-                                        }}
-                                      >
-                                        이번 달만 빼기
-                                      </Button>
-                                      <Button
-                                        danger
-                                        type="primary"
-                                        disabled={!canCloseForever}
-                                        onClick={() => {
-                                          if (!it.memberAllowanceId) return;
-                                          closeOneMut.mutate(it.memberAllowanceId);
-                                          m.destroy();
-                                        }}
-                                      >
-                                        이 수당 영구 종료
-                                      </Button>
-                                    </Space>
-                                    <Typography.Text type="secondary" className="!tw-text-xs">
-                                      ① 이번 달 명세서에서만 라인 제거 (다음 달부턴 다시 자동 적용)
-                                      <br />
-                                      ② 오늘부로 수당 부여 종료 (이번 달 명세서는 유지, 다음 정산부터 미반영)
+                                  <Space direction="vertical" size={8} className="tw-w-full">
+                                    <Typography.Text>
+                                      오늘부로 수당 부여를 종료합니다.
                                     </Typography.Text>
-                                    {!canRemoveOnce && (
-                                      <Typography.Text type="warning" className="!tw-text-xs">
-                                        {isPaid
-                                          ? '* 지급 완료된 명세서라 ①(이번 달 빼기) 불가'
-                                          : '* 이번 달 정산 명세서가 아직 만들어지지 않아 ①(이번 달 빼기) 불가 - ②(영구 종료) 또는 [수당 부여]에서 효력 시작일 조정으로 처리'}
-                                      </Typography.Text>
-                                    )}
-                                    {!canCloseForever && (
-                                      <Typography.Text type="warning" className="!tw-text-xs">
-                                        * 회사 공통 자동 항목은 ②(영구 종료) 불가 — [급여 정책 &gt; 급여 항목]에서 회사 단위로 항목 자체를 끄세요
-                                      </Typography.Text>
-                                    )}
+                                    <Typography.Text type="secondary" className="!tw-text-xs">
+                                      · 미지급(정산 전·DRAFT) 명세서 라인은 함께 제거됩니다.<br />
+                                      · 이미 지급된(CONFIRMED·PAID) 명세서는 보존됩니다.<br />
+                                      · 다음 정산부터 자동 적용되지 않습니다.
+                                    </Typography.Text>
                                   </Space>
                                 ),
-                                okButtonProps: { style: { display: 'none' } },
-                                cancelText: '닫기',
+                                okText: '영구 종료',
+                                okButtonProps: { danger: true },
+                                cancelText: '취소',
+                                onOk: () => {
+                                  if (!it.memberAllowanceId) return;
+                                  closeOneMut.mutate(it.memberAllowanceId);
+                                },
                               });
                             }}
                           >

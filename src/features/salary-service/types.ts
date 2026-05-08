@@ -1450,6 +1450,7 @@ export type BonusPolicy = {
   // 공통
   eligibilityScope?: BonusEligibilityScopeCode;
   minTenureMonths?: number | null;
+  excludeOnLeaveYn?: string | null;
   effectiveFrom?: string;
   effectiveTo?: string | null;
   memo?: string | null;
@@ -1471,6 +1472,8 @@ export type BonusPolicyCreatePayload = {
   holidayBonusType?: HolidayBonusTypeCode | null;
   holidayBonusValue?: number | null;
   eligibilityScope: BonusEligibilityScopeCode;
+  minTenureMonths?: number | null;
+  excludeOnLeaveYn?: string | null;
   effectiveFrom: string;
   effectiveTo?: string | null;
   memo?: string | null;
