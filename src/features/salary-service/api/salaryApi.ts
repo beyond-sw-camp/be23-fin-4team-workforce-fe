@@ -18,6 +18,7 @@ import type {
   PayrollItemCreatePayload,
   PayrollItemUpdatePayload,
   PayrollAdminListItem,
+  AllowanceMonthlyEntry,
   PayrollRecalculatePayload,
   PayrollRecalculateResult,
   RetroactivePayrollPayload,
@@ -232,12 +233,29 @@ export const salaryApi = {
       return data as Blob;
     },
 
-    /** 회사 월 단위 급여대장 전체 조회 (관리자) */
+    /** 회사 월 단위 급여대장 전체 조회 (관리자) - 지급 이력 탭에서 사용 */
     async listByCompanyMonth(yearMonth?: string): Promise<PayrollAdminListItem[]> {
       const { data } = await httpClient.get(`${BASE}/salary/payroll/admin/list`, {
         params: yearMonth ? { yearMonth } : undefined,
       });
       const unwrapped = unwrapApiResponse<PayrollAdminListItem[] | null>(data);
+      return Array.isArray(unwrapped) ? unwrapped : [];
+    },
+
+    // 처리 필요 (DRAFT or CONFIRMED) 급여대장 시간 무관 조회 - 정산 처리 탭 메인
+    async listPendingByCompany(): Promise<PayrollAdminListItem[]> {
+      const { data } = await httpClient.get(`${BASE}/salary/payroll/admin/pending`);
+      const unwrapped = unwrapApiResponse<PayrollAdminListItem[] | null>(data);
+      return Array.isArray(unwrapped) ? unwrapped : [];
+    },
+
+    // 회사 그 월 직원별 수당 집계 - 회사 공통 + 개인 차등 모두 PayrollItem 기반
+    async findMonthlyAllowance(yearMonth: string): Promise<AllowanceMonthlyEntry[]> {
+      const { data } = await httpClient.get(
+        `${BASE}/salary/payroll/admin/allowance-monthly`,
+        { params: { yearMonth } },
+      );
+      const unwrapped = unwrapApiResponse<AllowanceMonthlyEntry[] | null>(data);
       return Array.isArray(unwrapped) ? unwrapped : [];
     },
 

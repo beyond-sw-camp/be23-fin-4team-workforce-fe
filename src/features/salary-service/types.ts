@@ -348,6 +348,25 @@ export type PayrollAdminListItem = {
   createdAt?: string | null;
 };
 
+// 월별 직원 수당 집계 - 회사 그 월 정기급여 PayrollItem 중 수당 라인만
+export type AllowanceMonthlyEntry = {
+  memberId: string;
+  payrollStatus: PayrollStatusCode;
+  items: AllowanceMonthlyLine[];
+  totalAmount: number;
+};
+
+export type AllowanceMonthlyLine = {
+  payrollItemId?: string;
+  memberAllowanceId?: string;
+  /** YYYY-MM-DD - 종료일. null이면 무기한 active */
+  effectiveTo?: string | null;
+  itemName: string;
+  amount: number;
+  isCommon: boolean;
+  isTaxFree: boolean;
+};
+
 // 일괄 확정 / 일괄 지급 처리 결과
 export type BulkPayrollActionResult = {
   success: number;
@@ -471,10 +490,11 @@ export type SalaryItemTemplate = {
   /** 회사 기본 지급 금액 (수당 산식 v1) — 부가 수당 부여 시 자동 채워짐.
    *  null 이면 부여 시 admin 이 직접 입력. 향후 v2 에서 식("BASE * 0.05") 으로 확장. */
   defaultAmount?: number | null;
-  /** 회사 공통 적용 여부 Y/N.
-   *  Y면 모든 직원 PayrollItem 에 defaultAmount 가 자동 합산됨 (식대 등).
-   *  N면 MemberAllowance 가 명시된 직원만 적용 (직책수당, 자녀수당 등). */
-  applyToAllYn?: string | null;
+  /** 기본 금액 고정 여부 Y/N.
+   *  Y면 defaultAmount 그대로만 사용 (직원별 차등 불가, 식대 200,000원 같이 일률).
+   *  N면 직원별 amount 자유 입력 가능 (직책수당 10만/30만 차등 등).
+   *  적용 자체는 자동 X - 모든 적용은 MemberAllowance 명시 부여로만. */
+  fixedAmountYn?: string | null;
   /** 시스템 기본 항목 여부. true 면 삭제 불가, 일부 필드 수정 제한 */
   isSystemDefault?: boolean | null;
   delYn?: string | null;
@@ -1087,8 +1107,8 @@ export type SalaryItemTemplateCreatePayload = {
   isOrdinaryWageYn?: string | null;
   /** 회사 기본 지급 금액 (수당 산식 v1) */
   defaultAmount?: number | null;
-  /** 회사 공통 적용 여부 Y/N. Y면 모든 직원에게 defaultAmount 자동 합산 */
-  applyToAllYn?: string | null;
+  /** 기본 금액 고정 여부 Y/N. Y면 defaultAmount 고정, 직원별 차등 불가 */
+  fixedAmountYn?: string | null;
 };
 
 export type SalaryItemTemplateUpdatePayload = SalaryItemTemplateCreatePayload;

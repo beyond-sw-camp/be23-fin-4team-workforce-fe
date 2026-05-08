@@ -247,18 +247,35 @@ export function SalaryTab({
     queryKey: ['salary', 'salary-item-templates', 'allowance-options'],
     queryFn: () => salaryApi.salaryItemTemplate.list(),
   });
-  /** 부가 수당 부여 가능 템플릿 — 기본급만 제외한 모든 EARNING 항목.
-   *  회사 공통(Y) 도 노출 — 직원별 다른 금액이 필요할 때 override 용으로 부여 가능.
-   *  defaultAmount 가 미지정인 항목은 dropdown 에서 disabled (먼저 지급 항목(수당) 에서 금액 셋업 필요). */
+  /** 부가 수당 부여 가능 템플릿 — 진짜 수당 성격만 노출.
+   *  기본급/퇴직성/상여류는 부가 수당 의미와 다르므로 제외.
+   *  회사 공통(Y) 도 노출 - 직원별 다른 금액 override 용 부여 가능.
+   *  defaultAmount 미지정은 dropdown disabled (지급 항목 메뉴에서 먼저 금액 셋업 필요). */
+  const NON_ALLOWANCE_ITEMS = useMemo(
+    () =>
+      new Set([
+        '기본급',
+        '퇴직금',
+        '퇴직월 일할 급여',
+        '미사용 연차 수당',
+        '정기상여',
+        '성과급',
+        '명절상여',
+      ]),
+    [],
+  );
   const allowanceTemplates = useMemo(
-    () => (tplQ.data ?? []).filter((t) => t.itemType === 'EARNING' && t.itemName !== '기본급'),
-    [tplQ.data],
+    () =>
+      (tplQ.data ?? []).filter(
+        (t) => t.itemType === 'EARNING' && !NON_ALLOWANCE_ITEMS.has(t.itemName ?? ''),
+      ),
+    [tplQ.data, NON_ALLOWANCE_ITEMS],
   );
   const allowanceTemplateOptions = useMemo(
     () =>
       allowanceTemplates.map((t) => {
         const hasAmount = t.defaultAmount != null;
-        const scope = t.applyToAllYn === 'Y' ? '회사 공통' : '개인 차등';
+        const scope = t.fixedAmountYn === 'Y' ? '고정 금액' : '자유 금액';
         return {
           value: t.salaryItemTemplateId!,
           label: hasAmount
@@ -400,7 +417,8 @@ export function SalaryTab({
       form.resetFields();
       onModalClose?.();
       void qc.invalidateQueries({ queryKey: ['salary', 'salaries'] });
-      void qc.invalidateQueries({ queryKey: ['salary', 'allowance', 'admin', 'list'] });
+      // 수당 관리 탭(monthly + list) 모두 갱신 - 신규 직원/부가 수당 즉시 반영
+      void qc.invalidateQueries({ queryKey: ['salary', 'allowance', 'admin'] });
     },
     onError: (e: Error) => message.error(e.message || '실패'),
   });
@@ -688,8 +706,8 @@ export function SalaryTab({
               style={{ width: 130 }}
               options={[
                 { value: 'ALL', label: '상태 전체' },
-                { value: 'ACTIVE', label: '진행중' },
-                { value: 'ENDED', label: '종료' },
+                { value: 'ACTIVE', label: '현재 적용' },
+                { value: 'ENDED', label: '과거 이력' },
               ]}
             />
             <Select
@@ -1751,7 +1769,7 @@ type TemplateFormValues = {
   // 회사 기본 지급 금액 (수당 산식 v1) — applyToAll=Y 면 전 직원 자동 합산
   defaultAmount?: number | null;
   // 회사 공통(Y) / 개인 차등(N)
-  applyToAllYn: 'Y' | 'N';
+  fixedAmountYn: 'Y' | 'N';
 };
 
 function SalaryItemTemplateTab() {
@@ -1847,8 +1865,8 @@ function SalaryItemTemplateTab() {
         // 적용 범위 — 회사 공통(Y) / 개인 차등(N).
         // 회사 공통이면 PayrollService 가 default_amount 를 모든 직원에게 자동 합산.
         title: '적용 범위',
-        dataIndex: 'applyToAllYn',
-        key: 'applyToAllYn',
+        dataIndex: 'fixedAmountYn',
+        key: 'fixedAmountYn',
         width: 120,
         render: (v: string | null | undefined) =>
           v === 'Y' ? <Tag color="cyan">회사 공통</Tag> : <Tag>개인 차등</Tag>,
@@ -1914,7 +1932,7 @@ function SalaryItemTemplateTab() {
                     isTaxableYn: (r.isTaxableYn as 'Y' | 'N') ?? 'Y',
                     isOrdinaryWageYn: (r.isOrdinaryWageYn as 'Y' | 'N') ?? 'N',
                     defaultAmount: r.defaultAmount ?? null,
-                    applyToAllYn: (r.applyToAllYn as 'Y' | 'N') ?? 'N',
+                    fixedAmountYn: (r.fixedAmountYn as 'Y' | 'N') ?? 'N',
                   });
                 }}
               />
@@ -1972,12 +1990,17 @@ function SalaryItemTemplateTab() {
             onClick={() => {
               setEditing(null);
               form.resetFields();
+              // 표시 순서는 자동 - 기존 항목 max + 10 으로 마지막에 붙임
+              const maxOrder = (sortedItems ?? []).reduce(
+                (max, r) => Math.max(max, r.displayOrder ?? 0),
+                0,
+              );
               form.setFieldsValue({
                 itemType: 'EARNING',
-                displayOrder: 0,
+                displayOrder: maxOrder + 10,
                 isTaxableYn: 'Y',
                 isOrdinaryWageYn: 'N',
-                applyToAllYn: 'N',
+                fixedAmountYn: 'N',
               });
               setOpen(true);
             }}
@@ -2032,18 +2055,14 @@ function SalaryItemTemplateTab() {
               <Input />
             </Form.Item>
 
-            <Row gutter={12}>
-              <Col span={16}>
-                <Form.Item label="수당명" name="itemName" rules={[{ required: true }]}>
-                  <Input maxLength={40} placeholder="예: 직책수당, 식대" />
-                </Form.Item>
-              </Col>
-              <Col span={8}>
-                <Form.Item label="표시 순서" name="displayOrder" rules={[{ required: true }]}>
-                  <InputNumber min={0} style={{ width: '100%' }} />
-                </Form.Item>
-              </Col>
-            </Row>
+            {/* 표시 순서는 자동 - 등록 시 (max + 10), 수정 시 기존값 유지 */}
+            <Form.Item name="displayOrder" hidden>
+              <InputNumber />
+            </Form.Item>
+
+            <Form.Item label="수당명" name="itemName" rules={[{ required: true }]}>
+              <Input maxLength={40} placeholder="예: 직책수당, 식대" />
+            </Form.Item>
 
             <Row gutter={12}>
               <Col span={12}>
@@ -2075,7 +2094,7 @@ function SalaryItemTemplateTab() {
 
             <Row gutter={12}>
               <Col span={12}>
-                <Form.Item label="적용 범위" name="applyToAllYn" rules={[{ required: true }]}>
+                <Form.Item label="적용 범위" name="fixedAmountYn" rules={[{ required: true }]}>
                   <Select
                     options={[
                       { value: 'N', label: '개인 차등 (직원별 부여)' },
@@ -2085,23 +2104,35 @@ function SalaryItemTemplateTab() {
                 </Form.Item>
               </Col>
               <Col span={12}>
-                <Form.Item label="수당 금액 (월, 원)" name="defaultAmount">
-                  <InputNumber<number>
-                    min={0}
-                    step={10000}
-                    style={{ width: '100%' }}
-                    placeholder="예: 200000"
-                    formatter={(v) => (v ? `${Number(v).toLocaleString('ko-KR')}` : '')}
-                    parser={(v) => Number(String(v ?? '').replace(/[^\d]/g, ''))}
-                  />
+                {/* 회사 공통일 때만 디폴트 금액 의미 - 개인 차등이면 [수당 관리]에서 직원별 부여 */}
+                <Form.Item shouldUpdate={(prev, cur) => prev.fixedAmountYn !== cur.fixedAmountYn} noStyle>
+                  {({ getFieldValue }) => {
+                    const applyAll = getFieldValue('fixedAmountYn') === 'Y';
+                    return (
+                      <Form.Item
+                        label="수당 금액 (월, 원)"
+                        name="defaultAmount"
+                        extra={applyAll ? '전 직원에게 매월 자동 합산' : '개인 차등 - [수당 관리]에서 직원별 금액 부여'}
+                      >
+                        <InputNumber<number>
+                          min={0}
+                          step={10000}
+                          style={{ width: '100%' }}
+                          placeholder={applyAll ? '예: 200000' : '개인 차등은 [수당 관리]에서'}
+                          disabled={!applyAll}
+                          formatter={(v) => (v ? `${Number(v).toLocaleString('ko-KR')}` : '')}
+                          parser={(v) => Number(String(v ?? '').replace(/[^\d]/g, ''))}
+                        />
+                      </Form.Item>
+                    );
+                  }}
                 </Form.Item>
               </Col>
             </Row>
 
             <Typography.Paragraph type="secondary" className="!tw-mb-0 tw-text-xs">
-              과세: 소득세·4대보험 계산에 포함 / 통상임금 포함: 연장·야간·휴일수당 환산 기준에 합산
-              / 회사 공통: 전 직원 자동 합산 (개인 차등은 [수당 관리]에서 부여)
-              {editing?.isSystemDefault && ' · 시스템 기본 항목은 이름·표시 순서만 수정 가능'}
+              과세: 소득세·4대보험 계산에 포함 / 통상임금 포함: 연장·야간·휴일수당 환산 기준에 합산.
+              {editing?.isSystemDefault && ' 시스템 기본 항목은 수당명만 수정 가능합니다.'}
             </Typography.Paragraph>
           </Form>
         </div>

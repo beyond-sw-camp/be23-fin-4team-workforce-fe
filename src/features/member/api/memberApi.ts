@@ -71,6 +71,7 @@ export type MemberListItemForApproval = {
   organizationName: string;
   jobTitleName: string;
   email?: string;
+  sabun?: string;
 };
 
 function asTextMemberField(value: unknown): string {
@@ -98,6 +99,7 @@ function normalizeMemberListItemForApproval(raw: unknown): MemberListItemForAppr
   const name = asTextMemberField(o.name);
   if (!memberId || !memberPositionId || !name) return null;
   const email = asTextMemberField(o.email);
+  const sabun = asTextMemberField(o.sabun);
   return {
     memberId,
     memberPositionId,
@@ -105,6 +107,7 @@ function normalizeMemberListItemForApproval(raw: unknown): MemberListItemForAppr
     organizationName: asTextMemberField(o.organizationName ?? o.organization_name),
     jobTitleName: asTextMemberField(o.jobTitleName ?? o.job_title_name),
     ...(email ? { email } : {}),
+    ...(sabun ? { sabun } : {}),
   };
 }
 

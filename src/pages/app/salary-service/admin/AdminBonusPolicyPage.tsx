@@ -72,6 +72,10 @@ type FormValues = {
 
   // 공통
   eligibilityScope: BonusEligibilityScopeCode;
+  // 최소 근속 개월수 - 입사 후 N개월 미만 직원은 상여 대상에서 제외
+  minTenureMonths?: number;
+  // 휴직자 제외 여부
+  excludeOnLeaveYn: boolean;
   effectiveRange: [Dayjs, Dayjs | null];
   memo?: string;
 };
@@ -79,7 +83,7 @@ type FormValues = {
 const QK_LIST = ['salary', 'bonus-policy', 'list'] as const;
 const QK_ACTIVE = ['salary', 'bonus-policy', 'active'] as const;
 
-export function AdminBonusPolicyPage() {
+export function AdminBonusPolicyPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { message } = App.useApp();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -125,6 +129,8 @@ export function AdminBonusPolicyPage() {
     holidayBonusType: v.useHolidayBonusYn ? (v.holidayBonusType ?? null) : null,
     holidayBonusValue: v.useHolidayBonusYn ? (v.holidayBonusValue ?? null) : null,
     eligibilityScope: v.eligibilityScope,
+    minTenureMonths: v.minTenureMonths ?? 0,
+    excludeOnLeaveYn: v.excludeOnLeaveYn ? 'Y' : 'N',
     effectiveFrom: v.effectiveRange[0].format('YYYY-MM-DD'),
     effectiveTo: v.effectiveRange[1]?.format('YYYY-MM-DD') ?? null,
     memo: v.memo?.trim() || null,
@@ -278,6 +284,8 @@ export function AdminBonusPolicyPage() {
                     holidayBonusType: (r.holidayBonusType as HolidayBonusTypeCode) ?? undefined,
                     holidayBonusValue: r.holidayBonusValue ?? undefined,
                     eligibilityScope: (r.eligibilityScope as BonusEligibilityScopeCode) ?? 'ALL',
+                    minTenureMonths: r.minTenureMonths ?? 0,
+                    excludeOnLeaveYn: r.excludeOnLeaveYn !== 'N',
                     effectiveRange: [
                       r.effectiveFrom ? dayjs(r.effectiveFrom) : dayjs(),
                       r.effectiveTo ? dayjs(r.effectiveTo) : null,
@@ -308,13 +316,15 @@ export function AdminBonusPolicyPage() {
 
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
-      <AppWorkspacePageTitle
-        eyebrow="PAYROLL"
-        title="상여/성과금 정책"
-        subtitle="정기상여 · 성과급 · 명절상여 회사 표준 룰을 관리합니다. 실제 지급은 급여 정산 관리에서 처리합니다."
-      />
+      {!embedded && (
+        <AppWorkspacePageTitle
+          eyebrow="PAYROLL"
+          title="상여/성과금 정책"
+          subtitle="정기상여 · 성과급 · 명절상여 회사 표준 룰을 관리합니다. 실제 지급은 급여 정산 관리에서 처리합니다."
+        />
+      )}
 
-      {activeQ.data && (
+      {!embedded && activeQ.data && (
         <Alert
           type="info"
           showIcon
@@ -370,6 +380,8 @@ export function AdminBonusPolicyPage() {
                 useHolidayBonusYn: false,
                 holidayBonusType: 'RATE',
                 eligibilityScope: 'ALL',
+                minTenureMonths: 0,
+                excludeOnLeaveYn: true,
                 effectiveRange: [dayjs(), null],
                 gradeRows: parseGradeRows(null),
               });
@@ -730,6 +742,23 @@ export function AdminBonusPolicyPage() {
                   className="tw-w-full"
                   disabled={editing ? [true, false] : false}
                 />
+              </Form.Item>
+              <Form.Item
+                label="최소 근속 개월수"
+                name="minTenureMonths"
+                className="!tw-mb-0 !tw-mt-3"
+                extra="입사 후 N개월 미만 직원은 자동 제외 (예: 3 = 3개월 미만 미지급, 0 = 근속 무관)"
+              >
+                <InputNumber min={0} max={120} step={1} addonAfter="개월" className="tw-w-full" />
+              </Form.Item>
+              <Form.Item
+                label="휴직자 제외"
+                name="excludeOnLeaveYn"
+                valuePropName="checked"
+                className="!tw-mb-0 !tw-mt-3"
+                extra="휴직 중인 직원을 상여 대상에서 자동 제외"
+              >
+                <Switch checkedChildren="제외" unCheckedChildren="포함" />
               </Form.Item>
             </div>
             <Form.Item label="비고 (선택)" name="memo" className="!tw-mb-0 !tw-mt-3">

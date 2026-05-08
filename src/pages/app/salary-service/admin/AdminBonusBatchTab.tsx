@@ -30,6 +30,7 @@ import {
   Select,
   Space,
   Statistic,
+  Switch,
   Tag,
   Typography,
 } from 'antd';
@@ -107,9 +108,10 @@ export function AdminBonusBatchTab() {
   const applyM = useMutation({
     mutationFn: (v: FormValues) => {
       // HOLIDAY는 정책값 그대로 -> 일괄, REGULAR/PERFORMANCE는 행별 비율로 차등 발행
+      // 토글 OFF (paidFlags=false) 행은 items 에서 제외 -> BE 단에서 발행 안 함
       const items = v.bonusKind !== 'HOLIDAY' && preview
         ? preview.targets
-            .filter((t) => !t.skipReason)
+            .filter((t) => !t.skipReason && paidFlags[t.memberId])
             .map((t) => ({
               memberId: t.memberId,
               ratePercent: editedRates[t.memberId] ?? 0,
@@ -154,14 +156,23 @@ export function AdminBonusBatchTab() {
   // 행별 비율 - 시뮬 직후 form.ratePercent 로 초기화, 사용자가 행별 직접 수정 가능
   // HOLIDAY는 정책값 그대로라 차등 X (입력 비활성)
   const [editedRates, setEditedRates] = useState<Record<string, number>>({});
+  // 행별 지급/미지급 토글 - 자격 미달자는 자동 OFF 잠금, 그 외는 ON 디폴트
+  const [paidFlags, setPaidFlags] = useState<Record<string, boolean>>({});
   useEffect(() => {
     if (!preview) return;
     const baseRate = Number(form.getFieldValue('ratePercent') ?? 0);
-    const init: Record<string, number> = {};
+    const initRates: Record<string, number> = {};
+    const initPaid: Record<string, boolean> = {};
     for (const t of preview.targets) {
-      if (!t.skipReason) init[t.memberId] = baseRate;
+      if (!t.skipReason) {
+        initRates[t.memberId] = baseRate;
+        initPaid[t.memberId] = true;
+      } else {
+        initPaid[t.memberId] = false;
+      }
     }
-    setEditedRates(init);
+    setEditedRates(initRates);
+    setPaidFlags(initPaid);
   }, [preview, form]);
 
   // 보너스 유형/지급일 바뀌면 시뮬 결과 초기화 - 종류 다르면 대상자/충돌도 다름
@@ -240,7 +251,7 @@ export function AdminBonusBatchTab() {
     return rate > Number(max);
   };
 
-  // 발행 직전 합계 - 행별 비율 기준
+  // 발행 직전 합계 - 행별 비율 + 지급 토글 기준
   const editedSummary = useMemo(() => {
     if (!preview) return { total: 0, count: 0, eligible: 0, paying: 0 };
     let total = 0;
@@ -249,6 +260,8 @@ export function AdminBonusBatchTab() {
     for (const t of preview.targets) {
       if (t.skipReason) continue;
       eligible++;
+      // 토글 OFF 면 미지급 - 비율/산출 무시
+      if (!paidFlags[t.memberId]) continue;
       const r = editedRates[t.memberId] ?? 0;
       const amt = computeRowAmount(t, watchKind, r);
       if (amt > 0) {
@@ -258,7 +271,7 @@ export function AdminBonusBatchTab() {
     }
     return { total, count: preview.targets.length, eligible, paying };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [preview, editedRates, watchKind]);
+  }, [preview, editedRates, paidFlags, watchKind]);
 
   // form.ratePercent 변경 시 편집 안 한 행은 따라 변경. 이미 사용자가 손댄 행은 유지하기 어려우니 단순화 - 모두 동기화
   useEffect(() => {
@@ -274,6 +287,25 @@ export function AdminBonusBatchTab() {
   }, [watchRate, preview]);
 
   const targetCols: ColumnsType<TargetEntry> = [
+    {
+      title: '지급',
+      key: 'paid',
+      width: 70,
+      align: 'center',
+      render: (_, r) => {
+        // 자격 미달자는 정책상 강제 OFF 잠금
+        const disabled = !!r.skipReason;
+        const checked = !!paidFlags[r.memberId];
+        return (
+          <Switch
+            size="small"
+            disabled={disabled}
+            checked={checked}
+            onChange={(v) => setPaidFlags((prev) => ({ ...prev, [r.memberId]: v }))}
+          />
+        );
+      },
+    },
     { title: '사번', dataIndex: 'sabun', width: 90, render: (v) => v ?? '—' },
     { title: '이름', dataIndex: 'name', width: 110, render: (v) => v ?? '—' },
     { title: '부서', dataIndex: 'organizationName', width: 130, render: (v) => v ?? '—' },
@@ -292,6 +324,7 @@ export function AdminBonusBatchTab() {
       render: (_, r) => {
         if (r.skipReason) return <Typography.Text type="secondary">—</Typography.Text>;
         if (watchKind === 'HOLIDAY') return <Typography.Text type="secondary">정책값</Typography.Text>;
+        const paid = !!paidFlags[r.memberId];
         const rate = editedRates[r.memberId] ?? 0;
         return (
           <InputNumber
@@ -300,6 +333,7 @@ export function AdminBonusBatchTab() {
             step={5}
             value={rate}
             size="small"
+            disabled={!paid}
             style={{ width: 90 }}
             onChange={(v) =>
               setEditedRates((prev) => ({ ...prev, [r.memberId]: Number(v ?? 0) }))
@@ -315,6 +349,8 @@ export function AdminBonusBatchTab() {
       width: 140,
       render: (_, r) => {
         if (r.skipReason) return <Typography.Text type="secondary">—</Typography.Text>;
+        const paid = !!paidFlags[r.memberId];
+        if (!paid) return <Typography.Text type="secondary">미지급</Typography.Text>;
         const rate = editedRates[r.memberId] ?? 0;
         const amt = computeRowAmount(r, watchKind, rate);
         if (amt <= 0) return <Typography.Text type="secondary">미지급</Typography.Text>;
@@ -332,6 +368,8 @@ export function AdminBonusBatchTab() {
       width: 160,
       render: (_, r) => {
         if (r.skipReason) return <Tag color="default">{r.skipReason}</Tag>;
+        const paid = !!paidFlags[r.memberId];
+        if (!paid) return <Tag color="default">미지급</Tag>;
         const rate = editedRates[r.memberId] ?? 0;
         const amt = computeRowAmount(r, watchKind, rate);
         if (amt <= 0) return <Tag color="default">미지급</Tag>;
@@ -407,9 +445,9 @@ export function AdminBonusBatchTab() {
               name="ratePercent"
               extra={
                 watchKind === 'PERFORMANCE' && policy?.performanceBonusMaxRate
-                  ? `정책 최대 ${policy.performanceBonusMaxRate}% 초과 시 한도 초과 표시`
+                  ? `정책 최대 ${policy.performanceBonusMaxRate}% (초과 입력 차단)`
                   : watchKind === 'REGULAR' && policy?.regularBonusAnnualRate && policy?.regularBonusPaymentCount
-                    ? `정책 1회당 권장 ${(Number(policy.regularBonusAnnualRate) / Number(policy.regularBonusPaymentCount)).toFixed(0)}% (연 누계 ${policy.regularBonusAnnualRate}% / ${policy.regularBonusPaymentCount}회)`
+                    ? `정책 1회당 권장 ${(Number(policy.regularBonusAnnualRate) / Number(policy.regularBonusPaymentCount)).toFixed(0)}% / 1회 최대 ${policy.regularBonusAnnualRate}% (연 누계 한도)`
                     : watchKind === 'HOLIDAY' && policy?.holidayBonusType === 'RATE'
                       ? `정책 ${policy.holidayBonusValue}% 자동 적용`
                       : undefined
@@ -417,12 +455,37 @@ export function AdminBonusBatchTab() {
               rules={
                 watchKind === 'HOLIDAY'
                   ? []
-                  : [{ required: true, message: '지급 비율을 입력하세요.' }]
+                  : [
+                      { required: true, message: '지급 비율을 입력하세요.' },
+                      {
+                        type: 'number',
+                        min: 0,
+                        max: (() => {
+                          if (watchKind === 'PERFORMANCE') {
+                            return Number(policy?.performanceBonusMaxRate ?? 200);
+                          }
+                          if (watchKind === 'REGULAR') {
+                            return Number(policy?.regularBonusAnnualRate ?? 400);
+                          }
+                          return 1000;
+                        })(),
+                        message: '정책 한도를 초과할 수 없습니다.',
+                      },
+                    ]
               }
             >
               <AppUnitInputNumber
                 min={0}
-                max={1000}
+                max={(() => {
+                  if (isHolidayAmount) return 1000;
+                  if (watchKind === 'PERFORMANCE') {
+                    return Number(policy?.performanceBonusMaxRate ?? 200);
+                  }
+                  if (watchKind === 'REGULAR') {
+                    return Number(policy?.regularBonusAnnualRate ?? 400);
+                  }
+                  return 1000;
+                })()}
                 step={5}
                 disabled={isHolidayAmount}
                 unit="%"

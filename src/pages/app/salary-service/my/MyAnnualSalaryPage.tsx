@@ -7,8 +7,8 @@ import { AppDataTable } from '@/shared/ui/AppDataTable';
  *  + 월별 실수령 차트 / 세전·세후 도넛 / PayrollType별 누적 (시각화 3종)
  */
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Alert, Card, DatePicker, Empty, Space, Statistic, Tag, Typography } from 'antd';
+import { useQueries, useQuery } from '@tanstack/react-query';
+import { Alert, Card, DatePicker, Empty, Space, Statistic, Table, Tabs, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs, { type Dayjs } from 'dayjs';
 import {
@@ -204,27 +204,35 @@ export function MyAnnualSalaryPage() {
       <AppWorkspacePageTitle
         eyebrow="PAYROLL"
         title="연봉 조회"
-        subtitle="연도별 지급, 공제, 실수령 합계와 월별 정산 내역을 확인합니다."
-        extra={
-          <DatePicker
-            picker="year"
-            value={yearPicker}
-            onChange={(d) => d && setYearPicker(d)}
-            allowClear={false}
-          />
-        }
+        subtitle="연도별 지급·공제·실수령과 연봉 이력을 확인합니다."
       />
 
-      {summaryQ.isError ? (
-        <Alert
-          type="error"
-          showIcon
-          message="연봉 조회에 실패했습니다"
-          description="잠시 후 다시 시도해 주세요"
-        />
-      ) : null}
+      <Tabs
+        items={[
+          {
+            key: 'current',
+            label: '올해 상세',
+            children: (
+              <Space direction="vertical" className="tw-w-full" size={16}>
+                <div className="tw-flex tw-justify-end">
+                  <DatePicker
+                    picker="year"
+                    value={yearPicker}
+                    onChange={(d) => d && setYearPicker(d)}
+                    allowClear={false}
+                  />
+                </div>
 
-      <div className="tw-grid tw-grid-cols-2 md:tw-grid-cols-4 tw-gap-3">
+                {summaryQ.isError ? (
+                  <Alert
+                    type="error"
+                    showIcon
+                    message="연봉 조회에 실패했습니다"
+                    description="잠시 후 다시 시도해 주세요"
+                  />
+                ) : null}
+
+                <div className="tw-grid tw-grid-cols-2 md:tw-grid-cols-4 tw-gap-3">
         <Card
           size="small"
           loading={summaryQ.isLoading}
@@ -484,6 +492,221 @@ export function MyAnnualSalaryPage() {
           })()}
         </Card>
       </div>
+              </Space>
+            ),
+          },
+          {
+            key: 'history',
+            label: '연봉 이력',
+            children: <SalaryHistoryTab />,
+          },
+        ]}
+      />
+    </Space>
+  );
+}
+
+/**
+ * 연봉 이력 탭 - 최근 5년 연봉 비교 + 가로 막대 + 전년 대비 증감률
+ * 데이터 소스: salaryApi.payroll.myAnnual(year) 를 5년 병렬 호출
+ */
+function SalaryHistoryTab() {
+  const thisYear = dayjs().year();
+  const years = useMemo(() => {
+    const arr: number[] = [];
+    for (let i = 4; i >= 0; i--) arr.push(thisYear - i);
+    return arr;
+  }, [thisYear]);
+
+  const queries = useQueries({
+    queries: years.map((y) => ({
+      queryKey: ['salary', 'payroll', 'my-annual', y] as const,
+      queryFn: () => salaryApi.payroll.myAnnual(y),
+      staleTime: 60_000,
+    })),
+  });
+
+  const isLoading = queries.some((q) => q.isLoading);
+
+  // 연도별 집계 - { year, totalPayment, netPay, growthRate(전년 대비 실수령 % 변화) }
+  const rows = useMemo(() => {
+    const list = years.map((y, i) => ({
+      year: y,
+      totalPayment: queries[i].data?.totalPayment ?? 0,
+      netPay: queries[i].data?.netPay ?? 0,
+      payrollCount: queries[i].data?.payrollCount ?? 0,
+    }));
+    return list.map((r, i) => {
+      const prev = i > 0 ? list[i - 1].netPay : 0;
+      const growthRate = prev > 0 ? Math.round(((r.netPay - prev) / prev) * 1000) / 10 : null;
+      const growthAmount = i > 0 ? r.netPay - prev : null;
+      return { ...r, growthRate, growthAmount };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queries.map((q) => q.dataUpdatedAt).join(','), years]);
+
+  // 데이터 있는 행만 차트에 사용
+  const chartRows = rows.filter((r) => r.netPay > 0);
+
+  // 가로 막대 데이터 - indexAxis: 'y'
+  const horizontalChartData = useMemo(
+    () => ({
+      labels: chartRows.map((r) => `${r.year}년`),
+      datasets: [
+        {
+          label: '연 실수령',
+          data: chartRows.map((r) => r.netPay),
+          backgroundColor: '#2563EB',
+          borderRadius: 4,
+        },
+      ],
+    }),
+    [chartRows],
+  );
+
+  const historyColumns: ColumnsType<(typeof rows)[number]> = [
+    {
+      title: '연도',
+      dataIndex: 'year',
+      key: 'year',
+      width: 100,
+      render: (y: number) => <Tag color="geekblue">{y}년</Tag>,
+    },
+    {
+      title: '연 총지급',
+      dataIndex: 'totalPayment',
+      key: 'totalPayment',
+      align: 'right',
+      render: (v: number) => `${formatWon(v)} 원`,
+    },
+    {
+      title: '연 실수령',
+      dataIndex: 'netPay',
+      key: 'netPay',
+      align: 'right',
+      render: (v: number) => <strong>{formatWon(v)} 원</strong>,
+    },
+    {
+      title: '정산 건수',
+      dataIndex: 'payrollCount',
+      key: 'payrollCount',
+      align: 'right',
+      render: (v: number) => `${v}건`,
+    },
+    {
+      title: '전년 대비',
+      key: 'growth',
+      align: 'right',
+      render: (_, r) => {
+        if (r.growthRate == null || r.growthAmount == null) {
+          return <Typography.Text type="secondary">—</Typography.Text>;
+        }
+        const isUp = r.growthRate >= 0;
+        const color = isUp ? '#16a34a' : '#dc2626';
+        const arrow = isUp ? '▲' : '▼';
+        return (
+          <span style={{ color }}>
+            {arrow} {Math.abs(r.growthRate)}%{' '}
+            <Typography.Text type="secondary" className="!tw-text-xs">
+              ({isUp ? '+' : ''}
+              {formatWon(r.growthAmount)} 원)
+            </Typography.Text>
+          </span>
+        );
+      },
+    },
+  ];
+
+  return (
+    <Space direction="vertical" className="tw-w-full" size={16}>
+      <Card
+        size="small"
+        title="최근 5년 연 실수령 추이"
+        className="tw-border-slate-200/80 tw-shadow-sm"
+        loading={isLoading}
+      >
+        {chartRows.length === 0 ? (
+          <Empty description="연봉 이력이 없습니다" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        ) : (
+          // 좌 차트 2/3 + 우 연도별 금액·증감률 1/3 - 시각 비교 + 수치 동시 노출
+          <div className="tw-grid tw-grid-cols-1 lg:tw-grid-cols-3 tw-gap-4">
+            <div className="lg:tw-col-span-2" style={{ height: Math.max(220, chartRows.length * 48) }}>
+              <Bar
+                data={horizontalChartData}
+                options={{
+                  indexAxis: 'y',
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                      callbacks: {
+                        label: (ctx) => `${formatWon(Number(ctx.parsed.x))} 원`,
+                      },
+                    },
+                  },
+                  scales: {
+                    x: {
+                      beginAtZero: true,
+                      ticks: {
+                        callback: (v) => `${(Number(v) / 10000).toLocaleString()}만`,
+                      },
+                    },
+                  },
+                }}
+              />
+            </div>
+            {/* 차트 옆 - 연도별 금액 + 전년 대비 증감률 카드 리스트 (최신년도 위) */}
+            <div className="tw-flex tw-flex-col tw-gap-2">
+              {[...rows].reverse().map((r) => {
+                const hasGrowth = r.growthRate != null && r.growthAmount != null;
+                const isUp = (r.growthRate ?? 0) >= 0;
+                const color = isUp ? '#16a34a' : '#dc2626';
+                const arrow = isUp ? '▲' : '▼';
+                return (
+                  <div
+                    key={r.year}
+                    className="tw-rounded-lg tw-border tw-border-slate-200/80 tw-bg-slate-50/40 tw-px-3 tw-py-2"
+                  >
+                    <Typography.Text type="secondary" className="!tw-text-xs">
+                      {r.year}년
+                    </Typography.Text>
+                    <div className="tw-text-base tw-font-bold tw-text-slate-800">
+                      {formatWon(r.netPay)} 원
+                    </div>
+                    {hasGrowth ? (
+                      <div className="tw-text-xs" style={{ color }}>
+                        {arrow} {Math.abs(r.growthRate as number)}%{' '}
+                        <span className="tw-text-slate-500">
+                          ({isUp ? '+' : ''}
+                          {formatWon(r.growthAmount as number)} 원)
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="tw-text-xs tw-text-slate-400">전년 데이터 없음</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </Card>
+
+      <Card
+        size="small"
+        title="연도별 연봉 + 전년 대비 증감률"
+        className="tw-border-slate-200/80 tw-shadow-sm"
+      >
+        <Table
+          rowKey="year"
+          loading={isLoading}
+          dataSource={rows}
+          columns={historyColumns}
+          pagination={false}
+          size="small"
+        />
+      </Card>
     </Space>
   );
 }

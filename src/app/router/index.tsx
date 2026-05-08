@@ -107,7 +107,6 @@ import { MyLeavePromotionPage } from '@/pages/app/salary-service/my/MyLeavePromo
 import { MyOvertimeRequestsPage } from '@/pages/app/salary-service/my/MyOvertimeRequestsPage';
 import { MyAnnualSalaryPage } from '@/pages/app/salary-service/my/MyAnnualSalaryPage';
 import { MyNegotiationHistoryPage } from '@/pages/app/salary-service/my/MyNegotiationHistoryPage';
-import { MyIncomeManagementPage } from '@/pages/app/salary-service/my/MyIncomeManagementPage';
 import { MyPayrollPage } from '@/pages/app/salary-service/my/MyPayrollPage';
 import { MyRetirementInquiryPage } from '@/pages/app/salary-service/my/MyRetirementInquiryPage';
 import { MyScheduleSelectionsPage } from '@/pages/app/salary-service/my/MyScheduleSelectionsPage';
@@ -881,13 +880,6 @@ const myAnnualSalaryRoute = createRoute({
   component: MyAnnualSalaryPage,
 });
 
-// 직원 본인 소득관리 (은행 계좌 + 원천징수 세액 조정)
-const myIncomeManagementRoute = createRoute({
-  getParentRoute: () => appBaseRoute,
-  path: '/income',
-  component: MyIncomeManagementPage,
-});
-
 const myRetirementInquiryRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/payroll/retirement',
@@ -1119,7 +1111,6 @@ const routeTree = rootRoute.addChildren([
       payrollDetailRoute,
       myPayrollRoute,
       myAnnualSalaryRoute,
-      myIncomeManagementRoute,
       myAllowancesRoute,
       myRetirementInquiryRoute,
       myNegotiationHistoryRoute,
