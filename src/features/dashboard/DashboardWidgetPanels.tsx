@@ -12,6 +12,13 @@ import 'dayjs/locale/ko';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
 import type { Me } from '@/features/auth/types';
+import { useAuth } from '@/features/auth/useAuth';
+import {
+  approvalRequestApi,
+  findMyInboxApprovalLine,
+  type ApprovalRequestDetail,
+} from '@/features/approvals/api/approvalRequestApi';
+import { approvalRequestTypeLabelKo } from '@/features/approvals/lib/approvalRequestTypeKo';
 import { calendarApi } from '@/features/calendar/api/calendarApi';
 import { DASHBOARD_WIDGET_LABELS, type DashboardWidgetId } from '@/features/dashboard/dashboardWidgetsModel';
 import { evaluationRedesignApi } from '@/features/evaluation/api/evaluationRedesignApi';
@@ -78,13 +85,6 @@ const TXT = {
   noNotificationContent: '\uC54C\uB9BC \uB0B4\uC6A9\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.',
 };
 
-const DUMMY_APPROVALS = [
-  { id: '1', title: '[\uC804\uC0AC] 2026\uB144 \uC0C1\uBC18\uAE30 \uC778\uC0AC\uC6B4\uC601 \uBCF4\uACE0', type: '\uACB0\uC7AC\uC694\uCCAD', author: '\uC774\uC778\uC0AC', date: '2026-04-08', tab: 'wait' },
-  { id: '2', title: '\uC5F0\uCC28 \uC2E0\uCCAD (4/10)', type: '\uD569\uC758', author: '\uAE40\uD55C\uBCC4', date: '2026-04-07', tab: 'wait' },
-  { id: '3', title: '\uBC95\uC778 \uCE74\uB4DC \uC0AC\uC6A9 \uBCF4\uACE0', type: '\uAE30\uC548', author: '\uBC15\uC7AC\uBB38', date: '2026-04-05', tab: 'draft' },
-  { id: '4', title: '\uCD9C\uC7A5 \uBE44\uC6A9 \uC815\uC0B0', type: '\uC218\uC2E0', author: '\uCD5C\uC7AC\uBB38', date: '2026-04-04', tab: 'inbox' },
-];
-
 const DUMMY_NOTIFICATIONS: { id: string; day: string; name: string; action: string; text: string; time: string }[] = [
   {
     id: 'n1',
@@ -115,6 +115,29 @@ const DUMMY_NOTIFICATIONS: { id: string; day: string; name: string; action: stri
 function buildMiniCalendarDays(base: dayjs.Dayjs) {
   const start = base.startOf('month').startOf('week');
   return Array.from({ length: 42 }, (_, index) => start.add(index, 'day'));
+}
+
+/** Approvals 허브 `rowIsUpcomingForApprover`와 동일 — 대시보드 전자결재함 배지용 */
+function rowIsUpcomingForApproverDashboard(row: ApprovalRequestDetail, myMemberId?: string): boolean {
+  const mid = myMemberId?.trim();
+  if (!mid) return false;
+  const pendingLine = row.approvalLines.find(
+    (l) => String(l.approvalStatus).toUpperCase() === 'PENDING',
+  );
+  if (!pendingLine) return false;
+  return String(pendingLine.approverMemberId ?? '').trim().toLowerCase() !== mid.toLowerCase();
+}
+
+function dashboardInboxRowKind(
+  row: ApprovalRequestDetail,
+  opts: { myMemberId?: string; myMemberPositionId?: string },
+): 'pending' | 'waiting' {
+  const myLine = findMyInboxApprovalLine(row, opts);
+  const inboxSt = String(myLine?.approvalStatus ?? '').toUpperCase();
+  if (inboxSt === 'WAITING' || rowIsUpcomingForApproverDashboard(row, opts.myMemberId)) {
+    return 'waiting';
+  }
+  return 'pending';
 }
 
 function cardShell(title: string, extra: ReactNode | undefined, children: ReactNode) {
@@ -420,48 +443,166 @@ export function DashboardPerformanceGoalsBlock() {
 }
 
 export function DashboardApprovalInboxBlock() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const authMemberId = user?.id?.trim() || undefined;
+  const memberPositionId = user?.memberPositionId?.trim() || undefined;
+  const inboxLineOpts = useMemo(
+    () => ({ myMemberId: authMemberId, myMemberPositionId: memberPositionId }),
+    [authMemberId, memberPositionId],
+  );
+
+  const [activeKey, setActiveKey] = useState<'wait' | 'all'>('wait');
+
+  const pendingQ = useQuery({
+    queryKey: ['dashboard', 'approvals', 'pending'],
+    queryFn: () => approvalRequestApi.listPendingApprovals(),
+    enabled: Boolean(authMemberId) && activeKey === 'wait',
+    staleTime: 30_000,
+  });
+
+  const inboxQ = useQuery({
+    queryKey: ['dashboard', 'approvals', 'inbox'],
+    queryFn: () => approvalRequestApi.listApprovalInbox(),
+    enabled: Boolean(authMemberId) && activeKey === 'all',
+    staleTime: 30_000,
+  });
+
+  const pendingRows = useMemo(
+    () =>
+      [...(pendingQ.data ?? [])]
+        .sort((a, b) => dayjs(b.createdAt).valueOf() - dayjs(a.createdAt).valueOf())
+        .slice(0, 8),
+    [pendingQ.data],
+  );
+
+  const inboxRows = useMemo(
+    () =>
+      [...(inboxQ.data ?? [])]
+        .sort((a, b) => dayjs(b.createdAt).valueOf() - dayjs(a.createdAt).valueOf())
+        .slice(0, 8),
+    [inboxQ.data],
+  );
+
+  const openApprovalDetail = (requestId: string) => {
+    const id = requestId?.trim();
+    if (!id) return;
+    void navigate({
+      to: '/app/approvals',
+      search: {
+        tab: 'compose',
+        approvalModal: 'pending',
+        approvalRequestId: id,
+        approvalOpenAt: String(Date.now()),
+      },
+    });
+  };
+
+  const renderStatusTag = (row: ApprovalRequestDetail, mode: 'pendingOnly' | 'inbox') => {
+    const tagClass = '!tw-m-0 tw-shrink-0';
+    if (mode === 'pendingOnly') {
+      return (
+        <Tag color="gold" className={tagClass}>
+          결재 대기
+        </Tag>
+      );
+    }
+    const kind = dashboardInboxRowKind(row, inboxLineOpts);
+    if (kind === 'waiting') {
+      return (
+        <Tag color="processing" className={tagClass}>
+          결재 예정
+        </Tag>
+      );
+    }
+    return (
+      <Tag color="gold" className={tagClass}>
+        결재 대기
+      </Tag>
+    );
+  };
+
+  const renderRows = (
+    rows: ApprovalRequestDetail[],
+    opts: { loading: boolean; error: boolean; emptyText: string; tagMode: 'pendingOnly' | 'inbox' },
+  ) => {
+    if (opts.error) {
+      return (
+        <Typography.Text type="danger" className="tw-text-xs">
+          목록을 불러오지 못했습니다.
+        </Typography.Text>
+      );
+    }
+    if (!opts.loading && rows.length === 0) {
+      return (
+        <Typography.Text type="secondary" className="tw-text-xs">
+          {opts.emptyText}
+        </Typography.Text>
+      );
+    }
+    return (
+      <List
+        size="small"
+        dataSource={rows}
+        renderItem={(row) => (
+          <List.Item className="!tw-px-0">
+            <button
+              type="button"
+              className="tw-flex tw-min-w-0 tw-w-full tw-appearance-none tw-items-start tw-gap-2 tw-border-0 tw-bg-transparent tw-p-0 tw-text-left tw-outline-none hover:tw-opacity-90 focus-visible:tw-ring-2 focus-visible:tw-ring-blue-400 focus-visible:tw-ring-offset-1"
+              onClick={() => openApprovalDetail(row.requestId)}
+            >
+              <div className="tw-min-w-0 tw-flex-1">
+                <div className="tw-truncate tw-text-sm tw-font-medium tw-text-slate-800">
+                  {row.documentName?.trim() || '—'}
+                </div>
+                <div className="tw-mt-0.5 tw-truncate tw-text-xs tw-text-slate-500">
+                  {row.requesterName?.trim() || '—'} · {row.createdAt ? dayjs(row.createdAt).format('YYYY-MM-DD') : '—'} ·{' '}
+                  {approvalRequestTypeLabelKo(String(row.requestType))}
+                </div>
+              </div>
+              {renderStatusTag(row, opts.tagMode)}
+            </button>
+          </List.Item>
+        )}
+      />
+    );
+  };
+
   return cardShell(
     DASHBOARD_WIDGET_LABELS.approvalInbox,
     <Link to="/app/approvals" className="tw-text-xs tw-font-medium tw-text-blue-600">{TXT.more}</Link>,
     <Tabs
       size="small"
-      defaultActiveKey="month"
+      activeKey={activeKey}
+      onChange={(k) => setActiveKey(k === 'all' ? 'all' : 'wait')}
+      destroyInactiveTabPane
       items={[
         {
           key: 'wait',
           label: TXT.approvalWait,
           children: (
-            <List
-              size="small"
-              dataSource={DUMMY_APPROVALS.filter((x) => x.tab === 'wait')}
-              renderItem={(item) => (
-                <List.Item className="!tw-px-0">
-                  <div className="tw-min-w-0 tw-flex-1">
-                    <div className="tw-truncate tw-text-sm tw-font-medium tw-text-slate-800">{item.title}</div>
-                    <div className="tw-mt-0.5 tw-text-xs tw-text-slate-500">{item.author} · {item.date}</div>
-                  </div>
-                  <Tag className="tw-shrink-0 !tw-m-0">{item.type}</Tag>
-                </List.Item>
-              )}
-            />
+            <Spin spinning={pendingQ.isLoading}>
+              {renderRows(pendingRows, {
+                loading: pendingQ.isLoading,
+                error: pendingQ.isError,
+                emptyText: '결재 대기 문서가 없습니다.',
+                tagMode: 'pendingOnly',
+              })}
+            </Spin>
           ),
         },
         {
           key: 'all',
           label: TXT.all,
           children: (
-            <List
-              size="small"
-              dataSource={DUMMY_APPROVALS}
-              renderItem={(item) => (
-                <List.Item className="!tw-px-0">
-                  <div className="tw-min-w-0 tw-flex-1">
-                    <div className="tw-truncate tw-text-sm tw-text-slate-800">{item.title}</div>
-                    <div className="tw-text-xs tw-text-slate-500">{item.author} · {item.date}</div>
-                  </div>
-                </List.Item>
-              )}
-            />
+            <Spin spinning={inboxQ.isLoading}>
+              {renderRows(inboxRows, {
+                loading: inboxQ.isLoading,
+                error: inboxQ.isError,
+                emptyText: '표시할 문서가 없습니다.',
+                tagMode: 'inbox',
+              })}
+            </Spin>
           ),
         },
       ]}

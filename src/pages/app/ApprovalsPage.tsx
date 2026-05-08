@@ -121,6 +121,8 @@ import { ApprovalFormSelectModal } from '@/features/approvals/ui/ApprovalFormSel
 import { ApprovalLineMiniStrip } from '@/features/approvals/ui/ApprovalLineMiniStrip';
 import { ApprovalRequestReadOnlyModal } from '@/features/approvals/ui/ApprovalRequestReadOnlyModal';
 import { PendingApprovalInboxModalContent } from '@/features/approvals/ui/PendingApprovalInboxModal';
+import { contractTemplateApi } from '@/features/contracts/api/contractTemplateApi';
+import { MyContractsPanel } from '@/features/contracts/ui/MyContractsPanel';
 import { getRefreshIdentityHeaders } from '@/shared/stores/authRefreshIdentityStore';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppModal } from '@/shared/ui/AppModal';
@@ -623,7 +625,14 @@ function buildApprovalEmbedUrl(
 }
 
 /** 작성 허브「전체」모달 iframe — 카드별로 열리는 문서함 구역 */
-type ComposeHomeEmbedPanel = 'my-all' | 'viewers' | 'department' | 'official' | 'draft' | 'absence';
+type ComposeHomeEmbedPanel =
+  | 'my-all'
+  | 'viewers'
+  | 'department'
+  | /** 알림·딥링크 전용 — 허브 카드에서는 사용하지 않음 */
+    'official'
+  | 'draft'
+  | 'absence';
 type ApprovalNotificationModal = 'pending' | 'my-all' | 'viewers' | 'official' | 'draft';
 
 /** 허브 문서함 모달 헤더 — 결재 대기 전체 모달과 동일한 겉 형식용 제목 */
@@ -684,6 +693,16 @@ function composeHomeEmbedPanelUrl(
     default:
       return buildApprovalEmbedUrl('/app/approvals', { tab: 'my', box: 'per-all' });
   }
+}
+
+function homeContractPreviewStatusTag(status: string) {
+  const s = String(status).toUpperCase();
+  if (s === 'SENT') return <Tag color="processing">서명 대기</Tag>;
+  if (s === 'SIGNED') return <Tag color="success">완료</Tag>;
+  if (s === 'REJECTED') return <Tag color="error">거절</Tag>;
+  if (s === 'CANCELED') return <Tag color="default">회수</Tag>;
+  if (s === 'CREATED') return <Tag>생성됨</Tag>;
+  return <Tag>{status}</Tag>;
 }
 
 function pendingHomeLineStatusLabel(status: string): string {
@@ -1742,6 +1761,7 @@ export function ApprovalsPage() {
         prefillDocumentId?: string;
       }
     | { kind: 'pending-inbox'; title: string }
+    | { kind: 'my-contracts'; openContractId?: string }
     | null
   >(null);
   const [quickHomeForms, setQuickHomeForms] = useState<string[]>(() => loadQuickHomeForms());
@@ -2365,12 +2385,21 @@ export function ApprovalsPage() {
     });
     return map;
   }, [absenceHubMemberIds, homeAbsenceMemberDetailQueries]);
-  const { data: officialReceivedRequests = [] } = useQuery({
-    queryKey: ['approval-user', 'official-received'],
-    queryFn: () => approvalRequestApi.listOfficialReceivedRequests(),
+  const { data: composeHubMyContracts = [], isLoading: composeHubMyContractsLoading } = useQuery({
+    queryKey: ['contract', 'my', 'compose-hub-preview'],
+    queryFn: () => contractTemplateApi.listMyContracts(),
     enabled: onComposeHub,
     staleTime: 60_000,
   });
+  const composeHubMyContractsPreview = useMemo(() => {
+    return [...composeHubMyContracts]
+      .sort((a, b) => {
+        const ta = dayjs(a.updatedAt || a.createdAt).valueOf();
+        const tb = dayjs(b.updatedAt || b.createdAt).valueOf();
+        return tb - ta;
+      })
+      .slice(0, 8);
+  }, [composeHubMyContracts]);
   const myOrganizationIdForDept = useMemo(() => {
     const fromDetail = (
       drafterProfile as { organizationId?: string } | undefined
@@ -5254,6 +5283,82 @@ export function ApprovalsPage() {
     );
   };
 
+  const renderHomeMyContractsCard = () => {
+    const accentClass = 'tw-bg-slate-50/80 tw-border-slate-200';
+    return (
+      <Card className={APPROVAL_HOME_GRID_DOC_CARD_CLASS}>
+        <div className="tw-mb-3 tw-flex tw-items-center tw-justify-between">
+          <Typography.Text strong>내 계약</Typography.Text>
+          <Button type="link" size="small" onClick={() => setComposeHomeMoreModal({ kind: 'my-contracts' })}>
+            전체
+          </Button>
+        </div>
+        {composeHubMyContractsLoading && composeHubMyContractsPreview.length === 0 ? (
+          <div className="tw-flex tw-min-h-[3.5rem] tw-items-center tw-justify-center">
+            <Spin size="small" />
+          </div>
+        ) : composeHubMyContractsPreview.length === 0 ? (
+          <div className="tw-flex tw-min-h-[3.5rem] tw-items-center tw-rounded-xl tw-bg-slate-50/80 tw-px-3">
+            <Typography.Text type="secondary" className="!tw-text-sm">
+              계약이 없습니다.
+            </Typography.Text>
+          </div>
+        ) : (
+          <div className={APPROVAL_HOME_DOC_LIST_SCROLL}>
+            <Space direction="vertical" size={8} className="tw-w-full">
+              {composeHubMyContractsPreview.map((row) => (
+                <div
+                  key={row.contractId}
+                  role="button"
+                  tabIndex={0}
+                  className={`tw-group tw-flex tw-items-start tw-justify-between tw-gap-3 tw-rounded-xl tw-border tw-px-3 tw-py-2.5 ${accentClass} tw-cursor-pointer tw-transition-colors hover:tw-border-blue-200 hover:tw-bg-blue-50/70 focus-visible:tw-ring-2 focus-visible:tw-ring-blue-400 focus-visible:tw-ring-offset-1`}
+                  onClick={() =>
+                    setComposeHomeMoreModal({
+                      kind: 'my-contracts',
+                      openContractId: row.contractId,
+                    })
+                  }
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setComposeHomeMoreModal({
+                        kind: 'my-contracts',
+                        openContractId: row.contractId,
+                      });
+                    }
+                  }}
+                >
+                  <span className="tw-mt-0.5 tw-inline-flex tw-size-8 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-lg tw-bg-white tw-text-[#1b365d] tw-shadow-sm tw-shadow-slate-900/5">
+                    <FileTextOutlined aria-hidden />
+                  </span>
+                  <div className="tw-min-w-0 tw-flex-1">
+                    <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
+                      <Typography.Text
+                        strong
+                        className="!tw-block tw-min-w-0 tw-flex-1 tw-truncate !tw-text-[13px] !tw-leading-5 !tw-text-slate-900"
+                      >
+                        {row.templateName?.trim() || '—'}
+                      </Typography.Text>
+                      <span className="tw-shrink-0 [&_.ant-tag]:!tw-m-0 [&_.ant-tag]:!tw-text-[11px]">
+                        {homeContractPreviewStatusTag(row.contractStatus)}
+                      </span>
+                    </div>
+                    <Typography.Text
+                      type="secondary"
+                      className="!tw-mt-0.5 !tw-block !tw-text-[11px] !tw-leading-4"
+                    >
+                      {(row.contractNumber?.trim() || '문서번호 없음')} · {formatDateTime(row.createdAt)}
+                    </Typography.Text>
+                  </div>
+                </div>
+              ))}
+            </Space>
+          </div>
+        )}
+      </Card>
+    );
+  };
+
   const renderHomeApprovalFormsCard = () => {
     return (
       <Card
@@ -5671,14 +5776,7 @@ export function ApprovalsPage() {
                 fullListEmbed: { panel: 'department' },
               },
             )}
-            {renderHomeDocListCard(
-              '공문 수신함',
-              officialReceivedRequests,
-              '수신한 공문이 없습니다.',
-              {
-                fullListEmbed: { panel: 'official' },
-              },
-            )}
+            {renderHomeMyContractsCard()}
             {renderHomeDocListCard(
               '임시 저장 문서',
               myDraftRequests,
@@ -5820,7 +5918,9 @@ export function ApprovalsPage() {
               ? undefined
               : composeHomeMoreModal.kind === 'pending-inbox'
                 ? composeHomeMoreModal.title
-                : composeHomeEmbedPanelModalTitle(composeHomeMoreModal)
+                : composeHomeMoreModal.kind === 'my-contracts'
+                  ? '내 계약 전체'
+                  : composeHomeEmbedPanelModalTitle(composeHomeMoreModal)
           }
           open={composeHomeMoreModal != null}
           onClose={() => setComposeHomeMoreModal(null)}
@@ -5846,6 +5946,13 @@ export function ApprovalsPage() {
                 }
                 onStartReject={(approvalId) => setApprovalAction({ approvalId, mode: 'reject' })}
               />
+            ) : composeHomeMoreModal?.kind === 'my-contracts' ? (
+              <div className="wf-scrollbar-modal tw-h-full tw-min-h-0 tw-w-full tw-flex-1 tw-overflow-y-auto tw-overflow-x-hidden tw-overscroll-y-contain tw-bg-slate-50 tw-p-4">
+                <MyContractsPanel
+                  embedded
+                  initialDetailContractId={composeHomeMoreModal.openContractId ?? null}
+                />
+              </div>
             ) : composeHomeMoreModal?.kind === 'iframe' ? (
               <iframe
                 key={`${composeHomeMoreModal.panel}-${composeHomeMoreModal.composeDraftId ?? ''}`}
@@ -6006,7 +6113,9 @@ export function ApprovalsPage() {
               ? undefined
               : composeHomeMoreModal.kind === 'pending-inbox'
                 ? composeHomeMoreModal.title
-                : composeHomeEmbedPanelModalTitle(composeHomeMoreModal)
+                : composeHomeMoreModal.kind === 'my-contracts'
+                  ? '내 계약 전체'
+                  : composeHomeEmbedPanelModalTitle(composeHomeMoreModal)
           }
           open={composeHomeMoreModal != null}
           onClose={() => setComposeHomeMoreModal(null)}
@@ -6032,6 +6141,13 @@ export function ApprovalsPage() {
                 }
                 onStartReject={(approvalId) => setApprovalAction({ approvalId, mode: 'reject' })}
               />
+            ) : composeHomeMoreModal?.kind === 'my-contracts' ? (
+              <div className="wf-scrollbar-modal tw-h-full tw-min-h-0 tw-w-full tw-flex-1 tw-overflow-y-auto tw-overflow-x-hidden tw-overscroll-y-contain tw-bg-slate-50 tw-p-4">
+                <MyContractsPanel
+                  embedded
+                  initialDetailContractId={composeHomeMoreModal.openContractId ?? null}
+                />
+              </div>
             ) : composeHomeMoreModal?.kind === 'iframe' ? (
               <iframe
                 key={`${composeHomeMoreModal.panel}-${composeHomeMoreModal.composeDraftId ?? ''}-${composeHomeMoreModal.prefillDocumentId ?? ''}`}

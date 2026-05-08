@@ -470,6 +470,9 @@ const electronicContractsRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/contracts',
   validateSearch: contractsSearchSchema,
+  beforeLoad: () => {
+    throw redirect({ to: '/app/approvals', search: { tab: 'compose' } });
+  },
   component: ContractsPage,
 });
 
