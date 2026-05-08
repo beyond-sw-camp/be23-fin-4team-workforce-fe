@@ -54,7 +54,7 @@ type PolicyFormValues = {
   allowEarlySettlementYn?: 'Y' | 'N';
 };
 
-export function AdminRetirementPolicyPage() {
+export function AdminRetirementPolicyPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { message } = App.useApp();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -209,13 +209,15 @@ export function AdminRetirementPolicyPage() {
 
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
-      <AppWorkspacePageTitle
-        eyebrow="PAYROLL"
-        title="퇴직급여 정책"
-        subtitle="회사가 운영하는 퇴직급여 제도(법정 / DB형 / DC형)를 관리합니다. 정책 변경 시 이전 활성 정책은 자동으로 마감됩니다."
-      />
+      {!embedded && (
+        <AppWorkspacePageTitle
+          eyebrow="PAYROLL"
+          title="퇴직급여 정책"
+          subtitle="회사가 운영하는 퇴직급여 제도(법정 / DB형 / DC형)를 관리합니다. 정책 변경 시 이전 활성 정책은 자동으로 마감됩니다."
+        />
+      )}
 
-      {activeQ.data ? (
+      {!embedded && activeQ.data ? (
         <Alert
           type="info"
           showIcon
@@ -243,7 +245,7 @@ export function AdminRetirementPolicyPage() {
             </span>
           }
         />
-      ) : !activeQ.isLoading ? (
+      ) : !embedded && !activeQ.isLoading ? (
         <Alert
           type="warning"
           showIcon
@@ -380,10 +382,19 @@ export function AdminRetirementPolicyPage() {
                     <Form.Item
                       label="월 부담금 비율 (%)"
                       name="dcContributionRate"
-                      extra="법정 기본 8.33% (1/12). 회사가 추가 적립 시 더 높게 설정"
+                      initialValue={8.33}
+                      extra="법정 최저 8.33% (= 연봉의 1/12). 추가 적립 시에만 더 높게 설정 가능"
+                      rules={[
+                        { required: true, message: '월 부담금 비율을 입력하세요.' },
+                        {
+                          type: 'number',
+                          min: 8.33,
+                          message: '법정 최저 8.33% 미만으로 설정할 수 없습니다.',
+                        },
+                      ]}
                     >
                       <InputNumber
-                        min={0}
+                        min={8.33}
                         max={100}
                         step={0.01}
                         style={{ width: '100%' }}

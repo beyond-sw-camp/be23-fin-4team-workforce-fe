@@ -81,6 +81,8 @@ import { AdminSalarySettingsPage } from '@/pages/app/salary-service/admin/AdminS
 import { AdminWorkSchedulesPage } from '@/pages/app/salary-service/admin/AdminWorkSchedulesPage';
 import { AdminOvertimePoliciesPage } from '@/pages/app/salary-service/admin/AdminOvertimePoliciesPage';
 import { AdminLeavePoliciesPage } from '@/pages/app/salary-service/admin/AdminLeavePoliciesPage';
+import { AdminRetirementPolicyPage } from '@/pages/app/salary-service/admin/AdminRetirementPolicyPage';
+import { AdminBonusPolicyPage } from '@/pages/app/salary-service/admin/AdminBonusPolicyPage';
 
 type StepStatus = 'pending' | 'completed' | 'skipped';
 type JobSettingModalState =
@@ -135,6 +137,8 @@ const ONBOARDING_STEPS: OnboardingStep[] = [
       'POST /work-schedules',
       'POST /attendance/overtime-policies',
       'POST /leave-policies',
+      'POST /salary/retirement-policy',
+      'POST /salary/bonus-policy',
     ],
   },
   {
@@ -1380,6 +1384,8 @@ export default function OnboardingStepperPage() {
           <AdminWorkSchedulesPage embedded />
           <AdminOvertimePoliciesPage embedded />
           <AdminLeavePoliciesPage embedded />
+          <AdminRetirementPolicyPage embedded />
+          <AdminBonusPolicyPage embedded />
         </Space>
       );
     }

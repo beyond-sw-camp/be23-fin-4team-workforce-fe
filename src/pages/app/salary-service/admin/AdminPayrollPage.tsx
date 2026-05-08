@@ -22,6 +22,7 @@ import {
   Table,
   Tabs,
   Tag,
+  Tooltip,
   Typography,
 } from 'antd';
 import { DownloadOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
@@ -59,9 +60,18 @@ const STATUS_COLOR: Record<string, string> = {
 const PAYROLL_TYPE_KO: Record<string, string> = {
   REGULAR_MONTHLY: '정기급여',
   PERFORMANCE_BONUS: '성과급',
-  SPECIAL_BONUS: '특별상여',
+  SPECIAL_BONUS: '정기·명절상여',
   RETROACTIVE: '소급분',
   RETIREMENT_SETTLEMENT: '퇴직정산',
+};
+
+// 급여 종류별 시각 구분 색깔 - 행/필터 태그 공통 사용
+const PAYROLL_TYPE_COLOR: Record<string, string> = {
+  REGULAR_MONTHLY: 'blue',
+  PERFORMANCE_BONUS: 'green',
+  SPECIAL_BONUS: 'gold',
+  RETROACTIVE: 'purple',
+  RETIREMENT_SETTLEMENT: 'volcano',
 };
 
 const PAYROLL_PANEL_CARD_CLASS =
@@ -188,10 +198,10 @@ export function AdminPayrollPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search?.month]);
 
-  /* ── 회사 전체 그 달 목록 (메인) ── */
+  /* ── 정산 처리 탭 메인 - 시간 무관 + 처리 필요(DRAFT/CONFIRMED) 행 ── */
   const listQ = useQuery({
-    queryKey: ['salary', 'payroll', 'admin-list', ym],
-    queryFn: () => salaryApi.payroll.listByCompanyMonth(ym),
+    queryKey: ['salary', 'payroll', 'pending'],
+    queryFn: () => salaryApi.payroll.listPendingByCompany(),
   });
 
   /* ── 활성 직원 목록 - 누락자 검증용 ── */
@@ -238,12 +248,15 @@ export function AdminPayrollPage() {
     return { total, draft, confirmed, paid };
   }, [rows]);
 
-  /* ── 누락자 자동 검증 ──
-   * 회사 활성 직원 - 그 정산월 REGULAR_MONTHLY Payroll 보유자 = 누락자
-   * 정기급여만 비교 - 보너스/퇴직정산은 매월 발생 X */
+  /* ── 이번 달 누락자 자동 검증 ──
+   * 회사 활성 직원 - 이번 달 REGULAR_MONTHLY Payroll 보유자 = 누락자
+   * 정산 처리 탭은 시간 무관(DRAFT/CONFIRMED) 데이터지만 누락 검증은 이번 달 기준 */
   const missingMembers = useMemo(() => {
     const allMembers = activeMembersQ.data ?? [];
-    const regularRows = rows.filter((r) => r.payrollType === 'REGULAR_MONTHLY');
+    const thisMonth = dayjs().format('YYYY-MM');
+    const regularRows = rows.filter(
+      (r) => r.payrollType === 'REGULAR_MONTHLY' && r.targetYearMonth === thisMonth,
+    );
     const memberIdsWithPayroll = new Set(regularRows.map((r) => r.memberId));
     return allMembers
       .filter((m) => !memberIdsWithPayroll.has(m.memberId))
@@ -333,6 +346,15 @@ export function AdminPayrollPage() {
     [filtered, selectedKeys],
   );
 
+  // 삭제 가능 - PAID 제외 (지급 완료된 명세서는 삭제 차단)
+  const selectedDeletableIds = useMemo(
+    () =>
+      filtered
+        .filter((r) => selectedKeys.includes(r.payrollId) && r.payrollStatus !== 'PAID')
+        .map((r) => r.payrollId),
+    [filtered, selectedKeys],
+  );
+
   /* ── 액션 mutations ── */
   const recalculateM = useMutation({
     mutationFn: (settlementDate?: string) =>
@@ -385,6 +407,24 @@ export function AdminPayrollPage() {
       void qc.invalidateQueries({ queryKey: ['salary', 'payroll'] });
     },
     onError: (e: Error) => message.error(e.message || '삭제 실패'),
+  });
+
+  // 일괄 삭제 - 선택된 N건 순차 delete - 부분 실패 허용
+  const bulkDeleteM = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const results = await Promise.allSettled(
+        ids.map((id) => salaryApi.payroll.delete(id)),
+      );
+      const success = results.filter((r) => r.status === 'fulfilled').length;
+      const fail = results.length - success;
+      return { success, fail };
+    },
+    onSuccess: (r) => {
+      message.success(`일괄 삭제 - 성공 ${r.success}, 실패 ${r.fail}`);
+      setSelectedKeys([]);
+      void qc.invalidateQueries({ queryKey: ['salary', 'payroll'] });
+    },
+    onError: (e: Error) => message.error(e.message || '일괄 삭제 실패'),
   });
 
   /* ── 신규 생성 모달 ── */
@@ -461,28 +501,28 @@ export function AdminPayrollPage() {
     }
   };
 
-  /* ── 재계산 모달 ── */
+  /* ── 명세서 생성·재산출 모달 ── */
+  // 정산일 입력 받지 않고 회사 급여 정책의 정산일 기반 자동 산정
+  // 시나리오 - 자동 배치 미실행, 신규 입사자 누락, 급여 정책 변경 후 재반영 등
   const onRecalculateClick = () => {
-    let chosen: dayjs.Dayjs | null = null;
     modal.confirm({
-      title: '회사 급여대장을 재계산할까요?',
+      title: '이번 회차 급여 명세서를 생성/재산출할까요?',
       content: (
         <Space direction="vertical" size="small" className="tw-w-full">
-          <Typography.Text type="secondary" className="!tw-text-xs">
-            정산 연월일을 지정하거나 비워두면 정책 기준으로 자동 산정됩니다.
+          <Typography.Text className="!tw-text-xs">
+            회사의 급여 정책에 따라 정산일을 자동 산출하고, 누락된 직원의 명세서를 일괄 생성합니다.
           </Typography.Text>
-          <DatePicker
-            className="tw-w-full"
-            placeholder="정산일 (선택)"
-            onChange={(d) => {
-              chosen = d;
-            }}
-          />
+          <Typography.Text type="secondary" className="!tw-text-xs">
+            • 이번 달 자동 배치 전이거나 명세서가 아직 안 만들어진 경우<br />
+            • 신규 입사자나 누락 직원이 있는 경우<br />
+            • 급여 정책/수당이 변경되어 다시 반영해야 하는 경우<br />
+            (이미 만들어진 명세서는 중복 생성하지 않고 건너뜁니다)
+          </Typography.Text>
         </Space>
       ),
-      okText: '재계산',
+      okText: '명세서 생성',
       okButtonProps: { type: 'primary' },
-      onOk: () => recalculateM.mutateAsync(chosen ? chosen.format('YYYY-MM-DD') : undefined),
+      onOk: () => recalculateM.mutateAsync(undefined),
     });
   };
 
@@ -497,6 +537,17 @@ export function AdminPayrollPage() {
         key: 'organizationName',
         width: 130,
         render: (v) => v ?? '—',
+      },
+      {
+        // 급여 종류 - 정기급여/정기상여/명절상여/성과급/퇴직정산/소급분 시각 구분
+        title: '급여 종류',
+        dataIndex: 'payrollType',
+        key: 'payrollType',
+        width: 110,
+        render: (t: string) => {
+          const color = PAYROLL_TYPE_COLOR[t] ?? 'default';
+          return <Tag color={color}>{PAYROLL_TYPE_KO[t] ?? t}</Tag>;
+        },
       },
       {
         title: '정산 대상',
@@ -588,22 +639,18 @@ export function AdminPayrollPage() {
         subtitle="급여 검증과 지급처리를 하고, 등록, 정산 이력 확인을 합니다."
         extra={
           <Space wrap size="middle">
-            <DatePicker.MonthPicker
-              value={yearMonth}
-              onChange={(d) => d && setYearMonth(d)}
-              format="YYYY-MM"
-              allowClear={false}
-            />
             <Button icon={<DownloadOutlined />} onClick={handleExport} loading={exporting}>
               엑셀 다운로드
             </Button>
-            <Button
-              icon={<ReloadOutlined />}
-              onClick={onRecalculateClick}
-              loading={recalculateM.isPending}
-            >
-              재계산
-            </Button>
+            <Tooltip title="이번 달 명세서를 일괄 생성하거나, 정책/수당 변경 사항을 반영해 다시 산출합니다.">
+              <Button
+                icon={<ReloadOutlined />}
+                onClick={onRecalculateClick}
+                loading={recalculateM.isPending}
+              >
+                명세서 생성
+              </Button>
+            </Tooltip>
           </Space>
         }
       />
@@ -619,17 +666,27 @@ export function AdminPayrollPage() {
               label: '정산 처리',
               children: (
                 <Space direction="vertical" className="tw-w-full" size={14}>
-                  {/* 정산 상태 배너 - 0건이면 미시작, 1건+ 누락 N명, 누락 0이면 완전 정산 */}
+                  {/* 이번 달 정기급여 누락자 검증 - 시간 무관 데이터 + 이번 달 기준 별도 검증 */}
                   {(() => {
-                    const regularRows = rows.filter((r) => r.payrollType === 'REGULAR_MONTHLY');
-                    // 정산 미시작 - 그 달에 정기급여가 한 건도 없음
-                    if (regularRows.length === 0) {
+                    const thisMonth = dayjs().format('YYYY-MM');
+                    const thisMonthRegularRows = rows.filter(
+                      (r) => r.payrollType === 'REGULAR_MONTHLY' && r.targetYearMonth === thisMonth,
+                    );
+                    // 이번 달 정기급여 명세서가 한 건도 없음 - 자동 배치 전 또는 미생성 상태
+                    if (thisMonthRegularRows.length === 0) {
+                      const payDateStr = activePayDay
+                        ? `${thisMonth}-${String(activePayDay).padStart(2, '0')}`
+                        : null;
                       return (
                         <Alert
                           type="info"
                           showIcon
-                          message={`${ym} 정산 미시작`}
-                          description="자동 배치 도래 전이거나 정산이 시작되지 않았습니다. [재계산] 버튼으로 일괄 생성하세요."
+                          message={
+                            payDateStr
+                              ? `이번 달 정기급여 명세서가 아직 만들어지지 않았어요 (정산일 ${payDateStr})`
+                              : `이번 달(${thisMonth}) 정기급여 명세서가 아직 만들어지지 않았어요`
+                          }
+                          description="우측 상단 [명세서 생성] 버튼을 누르면 회사 정책 기준 정산일로 한꺼번에 만들어집니다."
                         />
                       );
                     }
@@ -641,7 +698,7 @@ export function AdminPayrollPage() {
                           showIcon
                           message={
                             <span>
-                              <b>월급 누락자 {missingMembers.length}명</b> —{' '}
+                              <b>이번 달({thisMonth}) 정기급여 누락 {missingMembers.length}명</b> —{' '}
                               {missingMembers
                                 .slice(0, 3)
                                 .map((m) => m.name)
@@ -668,26 +725,25 @@ export function AdminPayrollPage() {
                         />
                       );
                     }
-                    // 누락 0 - 완전 정산
                     return (
                       <Alert
                         type="success"
                         showIcon
-                        message={`정기급여 ${regularRows.length}명 정산 — 누락 없음`}
+                        message={`이번 달(${thisMonth}) 정기급여 대상 ${thisMonthRegularRows.length}명 — 누락 없음`}
                       />
                     );
                   })()}
 
-                  {/* KPI 상태 4장 */}
-                  <div className="tw-grid tw-grid-cols-2 md:tw-grid-cols-4 tw-gap-3">
+                  {/* KPI 상태 3장 - 처리 필요 행만 표시하므로 지급 완료는 [지급 이력] 탭으로 분리 */}
+                  <div className="tw-grid tw-grid-cols-1 md:tw-grid-cols-3 tw-gap-3">
                     <div className="tw-rounded-xl tw-border tw-border-slate-200/80 tw-bg-slate-50/60 tw-p-4">
-                      <Statistic title="대상 직원" value={kpi.total} suffix="명" />
+                      <Statistic title="처리 대상" value={kpi.total} suffix="건" />
                     </div>
                     <div className="tw-rounded-xl tw-border tw-border-slate-200/80 tw-bg-slate-50/60 tw-p-4">
                       <Statistic
                         title="검토 전"
                         value={kpi.draft}
-                        suffix="명"
+                        suffix="건"
                         valueStyle={{ color: '#64748b' }}
                       />
                     </div>
@@ -695,16 +751,8 @@ export function AdminPayrollPage() {
                       <Statistic
                         title="지급 대기"
                         value={kpi.confirmed}
-                        suffix="명"
+                        suffix="건"
                         valueStyle={{ color: '#2563eb' }}
-                      />
-                    </div>
-                    <div className="tw-rounded-xl tw-border tw-border-slate-200/80 tw-bg-slate-50/60 tw-p-4">
-                      <Statistic
-                        title="지급 완료"
-                        value={kpi.paid}
-                        suffix="명"
-                        valueStyle={{ color: '#16a34a' }}
                       />
                     </div>
                   </div>
@@ -822,7 +870,7 @@ export function AdminPayrollPage() {
                             { value: 'REGULAR_MONTHLY', label: '정기급여' },
                             { value: 'RETIREMENT_SETTLEMENT', label: '퇴직정산' },
                             { value: 'PERFORMANCE_BONUS', label: '성과급' },
-                            { value: 'SPECIAL_BONUS', label: '특별상여' },
+                            { value: 'SPECIAL_BONUS', label: '정기·명절상여' },
                             { value: 'RETROACTIVE', label: '소급분' },
                           ]}
                         />
@@ -863,6 +911,22 @@ export function AdminPayrollPage() {
                             일괄 지급 ({selectedConfirmedIds.length})
                           </Button>
                         </Popconfirm>
+                        <Popconfirm
+                          title={`선택 ${selectedDeletableIds.length}건을 일괄 삭제할까요? (지급 완료 건은 제외)`}
+                          okText="삭제"
+                          okButtonProps={{ danger: true }}
+                          cancelText="취소"
+                          disabled={selectedDeletableIds.length === 0}
+                          onConfirm={() => bulkDeleteM.mutate(selectedDeletableIds)}
+                        >
+                          <Button
+                            danger
+                            disabled={selectedDeletableIds.length === 0}
+                            loading={bulkDeleteM.isPending}
+                          >
+                            일괄 삭제 ({selectedDeletableIds.length})
+                          </Button>
+                        </Popconfirm>
                       </Space>
                     </Space>
 
@@ -898,7 +962,7 @@ export function AdminPayrollPage() {
             },
             {
               key: 'bonus',
-              label: '상여 발행',
+              label: '상여·성과급 지급',
               children: <AdminBonusBatchTab />,
             },
             {
@@ -1129,10 +1193,13 @@ function CompanyHistoryTab() {
         title: '급여구분',
         dataIndex: 'payrollType',
         key: 'payrollType',
-        width: 110,
-        render: (v?: string) => PAYROLL_TYPE_KO[v ?? ''] ?? v ?? '—',
+        width: 130,
+        render: (v?: string) => {
+          const color = PAYROLL_TYPE_COLOR[v ?? ''] ?? 'default';
+          return <Tag color={color}>{PAYROLL_TYPE_KO[v ?? ''] ?? v ?? '—'}</Tag>;
+        },
       },
-      // 월별 정산 결과는 PAID 만 노출하므로 상태 컬럼 제거 (모두 지급완료)
+      // 지급 이력은 PAID 만 노출하므로 상태 컬럼 제거 (모두 지급 완료)
       {
         title: '총지급',
         dataIndex: 'totalPayment',
@@ -1308,7 +1375,7 @@ function CompanyHistoryTab() {
             { value: 'REGULAR_MONTHLY', label: '정기급여' },
             { value: 'RETIREMENT_SETTLEMENT', label: '퇴직정산' },
             { value: 'PERFORMANCE_BONUS', label: '성과급' },
-            { value: 'SPECIAL_BONUS', label: '특별상여' },
+            { value: 'SPECIAL_BONUS', label: '정기·명절상여' },
             { value: 'RETROACTIVE', label: '소급분' },
           ]}
         />

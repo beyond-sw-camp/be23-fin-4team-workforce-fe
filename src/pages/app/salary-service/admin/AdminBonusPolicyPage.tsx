@@ -76,7 +76,7 @@ type FormValues = {
 const QK_LIST = ['salary', 'bonus-policy', 'list'] as const;
 const QK_ACTIVE = ['salary', 'bonus-policy', 'active'] as const;
 
-export function AdminBonusPolicyPage() {
+export function AdminBonusPolicyPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { message } = App.useApp();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -305,13 +305,15 @@ export function AdminBonusPolicyPage() {
 
   return (
     <Space direction="vertical" className="tw-w-full" size={16}>
-      <AppWorkspacePageTitle
-        eyebrow="PAYROLL"
-        title="상여/성과금 정책"
-        subtitle="정기상여 · 성과급 · 명절상여 회사 표준 룰을 관리합니다. 실제 지급은 급여 정산 관리에서 처리합니다."
-      />
+      {!embedded && (
+        <AppWorkspacePageTitle
+          eyebrow="PAYROLL"
+          title="상여/성과금 정책"
+          subtitle="정기상여 · 성과급 · 명절상여 회사 표준 룰을 관리합니다. 실제 지급은 급여 정산 관리에서 처리합니다."
+        />
+      )}
 
-      {activeQ.data && (
+      {!embedded && activeQ.data && (
         <Alert
           type="info"
           showIcon

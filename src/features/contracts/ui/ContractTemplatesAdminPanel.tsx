@@ -44,6 +44,7 @@ import {
 } from '@/features/approvals/ui/ApprovalFormSchemaBuilder';
 import type { FormFieldSchema } from '@/features/approvals/lib/approvalFormSchema';
 import { memberApi } from '@/features/member/api/memberApi';
+import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import {
   collectContractAdminInputFromForm,
   CONTRACT_FIELD_DEFAULT_SOURCE,
@@ -337,6 +338,24 @@ export function ContractTemplatesAdminPanel({
   const singleTemplateId = Form.useWatch('templateId', singleSendForm);
   const batchTemplateId = Form.useWatch('templateId', batchSendForm);
   const watchedBatchName = Form.useWatch('batchName', batchSendForm);
+  const watchedSingleEmployeeId = Form.useWatch('employeeMemberId', singleSendForm);
+
+  // 회사 전체 활성 Salary 조회 - 직원 선택 시 현재 연봉 표시용
+  const companySalariesQ = useQuery({
+    queryKey: ['salary', 'listByCompany', 'contracts-send'],
+    queryFn: () => salaryApi.salary.listByCompany(),
+    staleTime: 5 * 60_000,
+  });
+  const baseSalaryByMember = useMemo(() => {
+    const map = new Map<string, number>();
+    (companySalariesQ.data ?? []).forEach((s: { memberId?: string; baseSalary?: number }) => {
+      if (s.memberId && s.baseSalary != null) map.set(s.memberId, s.baseSalary);
+    });
+    return map;
+  }, [companySalariesQ.data]);
+  const selectedSingleBaseSalary = watchedSingleEmployeeId
+    ? baseSalaryByMember.get(watchedSingleEmployeeId)
+    : undefined;
   const selectedSingleTemplate = useMemo(
     () => activeTemplates.find((t) => t.templateId === singleTemplateId),
     [activeTemplates, singleTemplateId],
@@ -895,6 +914,24 @@ export function ContractTemplatesAdminPanel({
                       조직도에서 선택
                     </Button>
                   </div>
+                  {watchedSingleEmployeeId ? (
+                    <div className="tw-mb-3 tw-rounded-md tw-bg-slate-50 tw-px-3 tw-py-2 tw-text-xs tw-text-slate-600">
+                      현재 월 기본급:{' '}
+                      <span className="tw-font-semibold tw-text-slate-900">
+                        {selectedSingleBaseSalary != null
+                          ? `${selectedSingleBaseSalary.toLocaleString()}원`
+                          : '정보 없음'}
+                      </span>
+                      {selectedSingleBaseSalary != null ? (
+                        <>
+                          {' '}· 연봉 환산:{' '}
+                          <span className="tw-font-semibold tw-text-slate-900">
+                            {(selectedSingleBaseSalary * 12).toLocaleString()}원
+                          </span>
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {singleAdminInputFields.map((field) => (
                     <Form.Item
                       key={field.name}
@@ -1120,6 +1157,24 @@ export function ContractTemplatesAdminPanel({
                       조직도에서 선택
                     </Button>
                   </div>
+                  {watchedSingleEmployeeId ? (
+                    <div className="tw-mb-3 tw-rounded-md tw-bg-slate-50 tw-px-3 tw-py-2 tw-text-xs tw-text-slate-600">
+                      현재 월 기본급:{' '}
+                      <span className="tw-font-semibold tw-text-slate-900">
+                        {selectedSingleBaseSalary != null
+                          ? `${selectedSingleBaseSalary.toLocaleString()}원`
+                          : '정보 없음'}
+                      </span>
+                      {selectedSingleBaseSalary != null ? (
+                        <>
+                          {' '}· 연봉 환산:{' '}
+                          <span className="tw-font-semibold tw-text-slate-900">
+                            {(selectedSingleBaseSalary * 12).toLocaleString()}원
+                          </span>
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {singleAdminInputFields.map((field) => (
                     <Form.Item
                       key={field.name}

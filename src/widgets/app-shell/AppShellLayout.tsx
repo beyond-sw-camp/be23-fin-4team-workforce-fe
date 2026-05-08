@@ -357,12 +357,6 @@ function buildAppShellMenuItems(
               title: APP_MENU_LABEL['/app/attendance/company'],
             },
             {
-              key: '/app/attendance/corrections',
-              icon: <ClockCircleOutlined className="tw-text-lg" />,
-              label: APP_MENU_LABEL['/app/attendance/corrections'],
-              title: APP_MENU_LABEL['/app/attendance/corrections'],
-            },
-            {
               key: '/app/attendance/schedules',
               icon: <ScheduleOutlined className="tw-text-lg" />,
               label: APP_MENU_LABEL['/app/attendance/schedules'],
@@ -491,37 +485,12 @@ function buildAppShellMenuItems(
           label: '급여 관리',
           title: '급여 관리',
           children: [
-            ...(showSalaryNegotiationSubmenu
-              ? [
-                  {
-                    key: PAYROLL_SETTLEMENT_MENU_KEY,
-                    icon: <DollarOutlined className="tw-text-lg" />,
-                    label: APP_MENU_LABEL['/app/payroll/admin'] ?? '급여 정산 관리',
-                    title: APP_MENU_LABEL['/app/payroll/admin'] ?? '급여 정산 관리',
-                    children: [
-                      {
-                        key: '/app/payroll/admin',
-                        icon: <DollarOutlined className="tw-text-lg" />,
-                        label: '급여 정산',
-                        title: '급여 정산',
-                      },
-                      {
-                        key: '/app/salary/negotiations',
-                        icon: <LineChartOutlined className="tw-text-lg" />,
-                        label: APP_MENU_LABEL['/app/salary/negotiations'] ?? '연봉 협상 관리',
-                        title: APP_MENU_LABEL['/app/salary/negotiations'] ?? '연봉 협상 관리',
-                      },
-                    ],
-                  },
-                ]
-              : [
-                  {
-                    key: '/app/payroll/admin',
-                    icon: <DollarOutlined className="tw-text-lg" />,
-                    label: APP_MENU_LABEL['/app/payroll/admin'],
-                    title: APP_MENU_LABEL['/app/payroll/admin'],
-                  },
-                ]),
+            {
+              key: '/app/payroll/admin',
+              icon: <DollarOutlined className="tw-text-lg" />,
+              label: APP_MENU_LABEL['/app/payroll/admin'],
+              title: APP_MENU_LABEL['/app/payroll/admin'],
+            },
             {
               key: '/app/payroll/tax-summary',
               icon: <AuditOutlined className="tw-text-lg" />,
@@ -568,22 +537,10 @@ function buildAppShellMenuItems(
               title: APP_MENU_LABEL['/app/payroll/annual'],
             },
             {
-              key: '/app/income',
-              icon: APP_MENU_ICONS['/app/income'],
-              label: APP_MENU_LABEL['/app/income'],
-              title: APP_MENU_LABEL['/app/income'],
-            },
-            {
               key: '/app/payroll/retirement',
               icon: <BankOutlined className="tw-text-lg" />,
               label: APP_MENU_LABEL['/app/payroll/retirement'],
               title: APP_MENU_LABEL['/app/payroll/retirement'],
-            },
-            {
-              key: '/app/payroll/negotiations',
-              icon: <DollarOutlined className="tw-text-lg" />,
-              label: APP_MENU_LABEL['/app/payroll/negotiations'],
-              title: APP_MENU_LABEL['/app/payroll/negotiations'],
             },
           ],
         });

@@ -444,9 +444,9 @@ export function AdminBonusBatchTab() {
               name="ratePercent"
               extra={
                 watchKind === 'PERFORMANCE' && policy?.performanceBonusMaxRate
-                  ? `정책 최대 ${policy.performanceBonusMaxRate}% 초과 시 한도 초과 표시`
+                  ? `정책 최대 ${policy.performanceBonusMaxRate}% (초과 입력 차단)`
                   : watchKind === 'REGULAR' && policy?.regularBonusAnnualRate && policy?.regularBonusPaymentCount
-                    ? `정책 1회당 권장 ${(Number(policy.regularBonusAnnualRate) / Number(policy.regularBonusPaymentCount)).toFixed(0)}% (연 누계 ${policy.regularBonusAnnualRate}% / ${policy.regularBonusPaymentCount}회)`
+                    ? `정책 1회당 권장 ${(Number(policy.regularBonusAnnualRate) / Number(policy.regularBonusPaymentCount)).toFixed(0)}% / 1회 최대 ${policy.regularBonusAnnualRate}% (연 누계 한도)`
                     : watchKind === 'HOLIDAY' && policy?.holidayBonusType === 'RATE'
                       ? `정책 ${policy.holidayBonusValue}% 자동 적용`
                       : undefined
@@ -454,12 +454,37 @@ export function AdminBonusBatchTab() {
               rules={
                 watchKind === 'HOLIDAY'
                   ? []
-                  : [{ required: true, message: '지급 비율을 입력하세요.' }]
+                  : [
+                      { required: true, message: '지급 비율을 입력하세요.' },
+                      {
+                        type: 'number',
+                        min: 0,
+                        max: (() => {
+                          if (watchKind === 'PERFORMANCE') {
+                            return Number(policy?.performanceBonusMaxRate ?? 200);
+                          }
+                          if (watchKind === 'REGULAR') {
+                            return Number(policy?.regularBonusAnnualRate ?? 400);
+                          }
+                          return 1000;
+                        })(),
+                        message: '정책 한도를 초과할 수 없습니다.',
+                      },
+                    ]
               }
             >
               <InputNumber
                 min={0}
-                max={1000}
+                max={(() => {
+                  if (isHolidayAmount) return 1000;
+                  if (watchKind === 'PERFORMANCE') {
+                    return Number(policy?.performanceBonusMaxRate ?? 200);
+                  }
+                  if (watchKind === 'REGULAR') {
+                    return Number(policy?.regularBonusAnnualRate ?? 400);
+                  }
+                  return 1000;
+                })()}
                 step={5}
                 style={{ width: '100%' }}
                 disabled={isHolidayAmount}
