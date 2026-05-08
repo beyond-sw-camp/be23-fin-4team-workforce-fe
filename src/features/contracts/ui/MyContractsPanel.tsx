@@ -105,12 +105,19 @@ function formatPercent(value: number | null | undefined): string {
   return `${sign}${value.toFixed(1)}%`;
 }
 
-export function MyContractsPanel() {
+export type MyContractsPanelProps = {
+  /** 전자결재 허브 모달 등 — URL(`/app/contracts`)과 동기화하지 않음 */
+  embedded?: boolean;
+  /** embedded 시 모달 진입 직후 열 상세 계약 ID */
+  initialDetailContractId?: string | null;
+};
+
+export function MyContractsPanel({ embedded = false, initialDetailContractId = null }: MyContractsPanelProps = {}) {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as { contractId?: string };
-  const contractIdFromSearch = search.contractId?.trim() || undefined;
+  const contractIdFromSearch = embedded ? undefined : search.contractId?.trim() || undefined;
   const { user } = useAuth();
   const { hasPermission } = usePermissions();
   const canReadAdminContract = user?.isSystemAdmin === true || hasPermission(PERM.CONTRACT_READ);
@@ -122,16 +129,27 @@ export function MyContractsPanel() {
     setSelectedContractId(contractIdFromSearch);
   }, [contractIdFromSearch]);
 
+  useEffect(() => {
+    if (!embedded) return;
+    const id = initialDetailContractId?.trim();
+    if (!id) return;
+    setSelectedContractId(id);
+  }, [embedded, initialDetailContractId]);
+
   const closeDetail = () => {
     setSelectedContractId(null);
-    void navigate({ to: '/app/contracts', search: { contractId: undefined }, replace: true });
+    if (!embedded) {
+      void navigate({ to: '/app/contracts', search: { contractId: undefined }, replace: true });
+    }
   };
 
   const openDetail = (contractId: string) => {
     const id = contractId.trim();
     if (!id) return;
     setSelectedContractId(id);
-    void navigate({ to: '/app/contracts', search: { contractId: id }, replace: true });
+    if (!embedded) {
+      void navigate({ to: '/app/contracts', search: { contractId: id }, replace: true });
+    }
   };
   const [signModalContractId, setSignModalContractId] = useState<string | null>(null);
   const [signSubmitting, setSignSubmitting] = useState(false);
