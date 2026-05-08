@@ -1,4 +1,4 @@
-import {
+﻿import {
   ApartmentOutlined,
   AuditOutlined,
   BankOutlined,
@@ -446,12 +446,6 @@ function buildAppShellMenuItems(
                 icon: <FormOutlined className="tw-text-lg" />,
                 label: composeEntry.label,
                 title: composeEntry.label,
-              },
-              {
-                key: '/app/contracts',
-                icon: <SafetyCertificateOutlined className="tw-text-lg" />,
-                label: '전자계약',
-                title: '전자계약',
               },
               ...APPROVAL_GUIDE_SECTION_ORDER.map((section) => ({
                 key: `ap-section-${section}`,
