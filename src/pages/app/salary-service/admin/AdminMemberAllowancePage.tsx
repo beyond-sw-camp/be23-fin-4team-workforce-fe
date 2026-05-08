@@ -40,6 +40,7 @@ import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { memberApi } from '@/features/member/api/memberApi';
+import { membersApi } from '@/features/members/api/membersApi';
 import { useMemberDisplayNames } from '@/features/members/hooks/useMemberDisplayNames';
 import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import { AppSearchBar } from '@/shared/ui';
@@ -242,28 +243,21 @@ export function AdminMemberAllowancePage() {
   );
   const { labelFor } = useMemberDisplayNames(memberIdList);
 
-  // 직급/부서 매핑 - 정렬·필터·표시용 (membersApi.list 결과 캐싱)
+  // 직급/부서 매핑 - 정렬·필터·표시용 (membersApi.list 결과 5분 캐시)
   const memberInfoQ = useQuery({
     queryKey: ['members', 'allowance-info-map'],
-    queryFn: async () => {
-      const res = await memberApi.searchMembersLookup({ keyword: '', page: 0, size: 2000 });
-      return res;
-    },
+    queryFn: () => membersApi.list({ page: 1, pageSize: 2000 }),
     staleTime: 5 * 60_000,
   });
   const memberInfoMap = useMemo(() => {
     const map = new Map<string, { name: string; department: string; grade: string }>();
-    const items = (memberInfoQ.data as { items?: { id?: string; memberId?: string; name?: string;
-      department?: string; jobGradeName?: string }[] } | undefined)?.items ?? [];
-    items.forEach((m) => {
-      const id = m.id ?? m.memberId;
-      if (id) {
-        map.set(id, {
-          name: m.name ?? '',
-          department: m.department ?? '',
-          grade: m.jobGradeName ?? '',
-        });
-      }
+    (memberInfoQ.data?.items ?? []).forEach((m) => {
+      if (!m.id) return;
+      map.set(m.id, {
+        name: m.name ?? '',
+        department: m.department ?? '',
+        grade: m.jobGradeName ?? '',
+      });
     });
     return map;
   }, [memberInfoQ.data]);
@@ -396,20 +390,23 @@ export function AdminMemberAllowancePage() {
     });
   }, [listQ.data, templateFilter, debouncedMemberKeyword, labelFor, isFutureMonth]);
 
-  /* ── 6.5) 보기 모드 - flat 행 형태로 복원 (직원당 한 줄 + 활성 수당 태그) ── */
-  const [viewMode] = useState<'flat' | 'byMember'>('flat');
+  /* ── 6.5) 보기 모드 - current: 현재 부여 현황(활성만) / monthly: 지급 이력(월별) ── */
+  const [viewMode, setViewMode] = useState<'current' | 'monthly'>('current');
 
   /* 전체 이력 query - 상세 모드 진입 시에만 fetch */
   const historyQ = useQuery({
     queryKey: ['salary', 'allowance', 'admin', 'history'],
     queryFn: () => salaryApi.memberAllowanceAdmin.listAllHistory(),
-    enabled: viewMode === 'byMember',
+    enabled: viewMode === 'current',
     staleTime: 30_000,
   });
 
   /** 상세 모드용 - 활성 + 종료 모두 직원별 그룹 (효력일 역순) */
   const groupedHistoryByMember = useMemo(() => {
-    const rows = historyQ.data ?? [];
+    // current 모드 - 활성 부여 행만 직원별 그룹
+    const rows = (historyQ.data ?? []).filter(
+      (a) => evalLifecycle(a.effectiveTo) !== 'expired',
+    );
     const map = new Map<string, MemberAllowance[]>();
     for (const a of rows) {
       const key = a.memberId ?? '__none__';
@@ -421,15 +418,13 @@ export function AdminMemberAllowancePage() {
         const sorted = items.sort((a, b) =>
           (b.effectiveFrom ?? '').localeCompare(a.effectiveFrom ?? ''),
         );
-        const activeSum = sorted
-          .filter((i) => evalLifecycle(i.effectiveTo) !== 'expired')
-          .reduce((s, i) => s + (i.amount ?? 0), 0);
+        const activeSum = sorted.reduce((s, i) => s + (i.amount ?? 0), 0);
         return {
           memberId,
           label: memberId === '__none__' ? '직원 미상' : labelFor(memberId),
           items: sorted,
-          activeCount: sorted.filter((i) => evalLifecycle(i.effectiveTo) !== 'expired').length,
-          historyCount: sorted.filter((i) => evalLifecycle(i.effectiveTo) === 'expired').length,
+          activeCount: sorted.length,
+          historyCount: 0,
           activeSum,
         };
       })
@@ -701,24 +696,45 @@ export function AdminMemberAllowancePage() {
       {/* 직원별 그 달 수당 (정산 기준) - 회사 공통 + 개인 차등 모두 PayrollItem 기반 */}
       <Card
         title={
-          <Space size={8}>
-            <Typography.Text strong>직원별 {listMonthYm} 수당 지급 현황</Typography.Text>
+          <Space size={8} wrap>
+            <Typography.Text strong>
+              {viewMode === 'monthly'
+                ? `직원별 ${listMonthYm} 수당 지급 현황`
+                : '직원별 현재 부여 현황 (활성)'}
+            </Typography.Text>
             <Typography.Text type="secondary" className="!tw-text-xs">
-              정산 명세서 기준 - 회사 공통 + 개인 차등 모두 포함
+              {viewMode === 'monthly'
+                ? '정산 명세서 기준 - 회사 공통 + 개인 차등 모두 포함'
+                : '지금 적용 중인 수당만 표시. 종료된 라인은 [지급 이력 (월별)] 에서 확인'}
             </Typography.Text>
           </Space>
         }
-        loading={monthlyAllowanceQ.isLoading}
-      >
-        {/* 필터 - 조회월 / 항목 / 직원 검색 */}
-        <Space wrap className="tw-mb-3">
-          <Typography.Text type="secondary">조회 월:</Typography.Text>
-          <DatePicker.MonthPicker
-            value={listMonth}
-            onChange={(d) => d && setListMonth(d)}
-            format="YYYY-MM"
-            allowClear={false}
+        extra={
+          <Segmented
+            value={viewMode}
+            onChange={(v) => setViewMode(v as 'current' | 'monthly')}
+            options={[
+              { label: '현재 부여 현황', value: 'current' },
+              { label: '지급 이력 (월별)', value: 'monthly' },
+            ]}
           />
+        }
+        loading={monthlyAllowanceQ.isLoading || (viewMode === 'current' && historyQ.isLoading)}
+      >
+        {/* 필터 - 조회월(monthly 모드만) / 항목 / 직원 검색 */}
+        <Space wrap className="tw-mb-3">
+          {viewMode === 'monthly' && (
+            <>
+              <Typography.Text type="secondary">조회 월:</Typography.Text>
+              <DatePicker.MonthPicker
+                value={listMonth}
+                onChange={(d) => d && setListMonth(d)}
+                format="YYYY-MM"
+                allowClear={false}
+                disabledDate={(current) => current && current.isAfter(dayjs(), 'month')}
+              />
+            </>
+          )}
           <Typography.Text type="secondary">항목:</Typography.Text>
           <Select
             style={{ width: 220 }}
@@ -971,7 +987,7 @@ export function AdminMemberAllowancePage() {
             {filteredAllowances.length}건 / 전체 {(listQ.data ?? []).length}건
           </Typography.Text>
         </Space>
-        {isFutureMonth && viewMode === 'flat' ? (
+        {isFutureMonth && viewMode === 'monthly' ? (
           <div className="tw-mb-2 tw-rounded-md tw-bg-amber-50 tw-px-3 tw-py-2 tw-text-xs tw-text-amber-800">
             선택한 월({listMonthYm})은 아직 정산 전이라 지급 내역이 없습니다. [전체 이력] 모드로 전환하면 부여된 수당의 적용 기간을 확인할 수 있습니다.
           </div>
@@ -1003,7 +1019,7 @@ export function AdminMemberAllowancePage() {
           </Space>
         </div>
 
-        {viewMode === 'flat' ? (
+        {viewMode === 'monthly' ? (
           groupedByMember.length === 0 ? (
             <Empty description="조건에 맞는 수당이 없습니다." />
           ) : (
@@ -1088,13 +1104,13 @@ export function AdminMemberAllowancePage() {
             />
           )
         ) : historyQ.isLoading ? (
-          <Empty description="이력 불러오는 중..." />
+          <Empty description="현재 부여 현황 불러오는 중..." />
         ) : groupedHistoryByMember.length === 0 ? (
-          <Empty description="이력이 없습니다." />
+          <Empty description="현재 부여 중인 수당이 없습니다." />
         ) : (
           <Space direction="vertical" className="tw-w-full" size={12}>
             <Typography.Text type="secondary" className="!tw-text-xs">
-              직원별 수당 이력 (활성 + 종료 모두, 효력일 역순). 종료된 수당은 회색으로 표시됩니다.
+              직원별 현재 부여 중인 수당 (활성 라인만, 효력일 역순)
             </Typography.Text>
             {groupedHistoryByMember.map((g) => (
               <section
@@ -1105,10 +1121,9 @@ export function AdminMemberAllowancePage() {
                   <Space>
                     <Typography.Text strong>{g.label}</Typography.Text>
                     <Tag color="blue">활성 {g.activeCount}건</Tag>
-                    {g.historyCount > 0 && <Tag>이력 {g.historyCount}건</Tag>}
                   </Space>
                   <Typography.Text strong className="!tw-text-blue-600">
-                    현재 월 합계 {formatWon(g.activeSum)}
+                    합계 {formatWon(g.activeSum)}
                   </Typography.Text>
                 </div>
                 <AppDataTable<MemberAllowance>
@@ -1230,37 +1245,94 @@ export function AdminMemberAllowancePage() {
                     </Form.Item>
 
                     <Form.Item
-                      name={[field.name, 'salaryItemTemplateId']}
-                      rules={[{ required: true, message: '항목 선택' }]}
-                      className="!tw-mb-0"
+                      shouldUpdate={(prev, cur) =>
+                        prev?.rows?.[field.name]?.memberId !==
+                        cur?.rows?.[field.name]?.memberId
+                      }
+                      noStyle
                     >
-                      <Select
-                        loading={tplQ.isLoading}
-                        placeholder="항목 선택"
-                        options={allowanceTemplates.map((t) => {
-                          const isCommon = t.fixedAmountYn === 'Y';
-                          const isRetirement = RETIREMENT_AUTO_ITEMS.has(t.itemName ?? '');
-                          const tags: string[] = [];
-                          if (isCommon) tags.push('회사공통');
-                          if (isRetirement) tags.push('사직서 승인 후');
-                          const suffix = tags.length ? ` (${tags.join(' / ')})` : '';
-                          return {
-                            value: t.salaryItemTemplateId!,
-                            label: `${t.itemName ?? ''}${suffix}`,
-                          };
-                        })}
-                        onChange={(val: string) => {
-                          // 템플릿 선택 시 default 금액 자동 채움
-                          const tpl = allowanceTemplates.find(
-                            (t) => t.salaryItemTemplateId === val,
-                          );
-                          if (tpl?.defaultAmount != null) {
-                            const rows = (grantForm.getFieldValue('rows') ?? []) as GrantRow[];
-                            rows[field.name] = { ...rows[field.name], amount: tpl.defaultAmount };
-                            grantForm.setFieldValue('rows', [...rows]);
+                      {({ getFieldValue }) => {
+                        const memberId = getFieldValue([
+                          'rows',
+                          field.name,
+                          'memberId',
+                        ]) as string | undefined;
+
+                        // 그 직원의 활성 부여 항목 + 현재 금액 매핑
+                        const memberFixedGrantedIds = new Set<string>();
+                        const memberAmountByTpl = new Map<string, number>();
+                        if (memberId) {
+                          for (const a of (listQ.data ?? [])) {
+                            if (a.memberId !== memberId) continue;
+                            if (evalLifecycle(a.effectiveTo) === 'expired') continue;
+                            if (!a.salaryItemTemplateId) continue;
+                            memberAmountByTpl.set(a.salaryItemTemplateId, a.amount ?? 0);
+                            const tpl = allowanceTemplates.find(
+                              (t) => t.salaryItemTemplateId === a.salaryItemTemplateId,
+                            );
+                            // 고정 수당이면 미부여만 노출하기 위해 마킹
+                            if (tpl?.fixedAmountYn === 'Y') {
+                              memberFixedGrantedIds.add(a.salaryItemTemplateId);
+                            }
                           }
-                        }}
-                      />
+                        }
+
+                        // 옵션 필터 - 직원 미선택이면 전체, 선택이면 (미부여 고정 OR 차등 수당)
+                        const filteredTpls = memberId
+                          ? allowanceTemplates.filter((t) => {
+                              if (!t.salaryItemTemplateId) return false;
+                              const isFixed = t.fixedAmountYn === 'Y';
+                              if (isFixed && memberFixedGrantedIds.has(t.salaryItemTemplateId)) {
+                                return false;
+                              }
+                              return true;
+                            })
+                          : allowanceTemplates;
+
+                        return (
+                          <Form.Item
+                            name={[field.name, 'salaryItemTemplateId']}
+                            rules={[{ required: true, message: '항목 선택' }]}
+                            className="!tw-mb-0"
+                          >
+                            <Select
+                              loading={tplQ.isLoading}
+                              placeholder={memberId ? '항목 선택' : '직원 먼저 선택'}
+                              disabled={!memberId}
+                              options={filteredTpls.map((t) => {
+                                const isCommon = t.fixedAmountYn === 'Y';
+                                const isRetirement = RETIREMENT_AUTO_ITEMS.has(t.itemName ?? '');
+                                const tags: string[] = [];
+                                if (isCommon) tags.push('회사공통');
+                                if (isRetirement) tags.push('사직서 승인 후');
+                                const suffix = tags.length ? ` (${tags.join(' / ')})` : '';
+                                return {
+                                  value: t.salaryItemTemplateId!,
+                                  label: `${t.itemName ?? ''}${suffix}`,
+                                };
+                              })}
+                              onChange={(val: string) => {
+                                const tpl = allowanceTemplates.find(
+                                  (t) => t.salaryItemTemplateId === val,
+                                );
+                                let nextAmount: number | undefined;
+                                if (tpl?.fixedAmountYn === 'Y') {
+                                  // 고정 수당 - 템플릿 기본 금액
+                                  nextAmount = tpl.defaultAmount ?? undefined;
+                                } else {
+                                  // 차등 수당 - 그 직원이 받고 있는 금액 (있으면)
+                                  nextAmount = memberAmountByTpl.get(val);
+                                }
+                                if (nextAmount != null) {
+                                  const rows = (grantForm.getFieldValue('rows') ?? []) as GrantRow[];
+                                  rows[field.name] = { ...rows[field.name], amount: nextAmount };
+                                  grantForm.setFieldValue('rows', [...rows]);
+                                }
+                              }}
+                            />
+                          </Form.Item>
+                        );
+                      }}
                     </Form.Item>
 
                     <Form.Item

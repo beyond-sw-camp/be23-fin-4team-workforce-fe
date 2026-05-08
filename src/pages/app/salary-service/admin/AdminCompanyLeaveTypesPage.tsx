@@ -579,24 +579,57 @@ export function AdminCompanyLeaveTypesPage() {
       {
         title: '작업',
         key: 'actions',
-        width: listEditing ? 90 : 64,
+        width: 110,
         align: 'center',
         render: (_, record) => {
           const deletable = canDelete(record);
           if (!listEditing) {
             return (
-              <Tooltip title="수정">
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<EditOutlined />}
-                  className="!tw-inline-flex !tw-h-8 !tw-w-8 !tw-items-center !tw-justify-center !tw-rounded-lg !tw-text-slate-500 hover:!tw-bg-slate-100 hover:!tw-text-slate-800"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    openEdit(record);
-                  }}
-                />
-              </Tooltip>
+              <Space size={4} onClick={(e) => e.stopPropagation()}>
+                <Tooltip title="수정">
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<EditOutlined />}
+                    className="!tw-inline-flex !tw-h-8 !tw-w-8 !tw-items-center !tw-justify-center !tw-rounded-lg !tw-text-slate-500 hover:!tw-bg-slate-100 hover:!tw-text-slate-800"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      openEdit(record);
+                    }}
+                  />
+                </Tooltip>
+                {deletable ? (
+                  <Popconfirm
+                    title="정말 삭제하시겠어요?"
+                    description="이 휴가 종류를 선택해 사용 중인 기존 신청은 유지됩니다."
+                    okText="삭제"
+                    cancelText="취소"
+                    onConfirm={() =>
+                      record.companyLeaveTypeId && deleteM.mutate(record.companyLeaveTypeId)
+                    }
+                  >
+                    <Tooltip title="삭제">
+                      <Button
+                        danger
+                        type="text"
+                        size="small"
+                        icon={<DeleteOutlined />}
+                        className="!tw-inline-flex !tw-h-8 !tw-w-8 !tw-items-center !tw-justify-center !tw-rounded-lg !tw-text-red-500 hover:!tw-bg-red-50"
+                      />
+                    </Tooltip>
+                  </Popconfirm>
+                ) : (
+                  <Tooltip title="기본 휴가는 삭제 불가">
+                    <Button
+                      type="text"
+                      size="small"
+                      icon={<DeleteOutlined />}
+                      disabled
+                      className="!tw-inline-flex !tw-h-8 !tw-w-8 !tw-items-center !tw-justify-center !tw-rounded-lg"
+                    />
+                  </Tooltip>
+                )}
+              </Space>
             );
           }
           return (

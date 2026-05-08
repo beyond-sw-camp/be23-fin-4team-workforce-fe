@@ -14,13 +14,14 @@ import {
   DatePicker,
   Form,
   InputNumber,
+  Popconfirm,
   Row,
   Select,
   Space,
   Tooltip,
   Typography,
 } from 'antd';
-import { EditOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EditOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
@@ -171,6 +172,15 @@ export function AdminOvertimePoliciesPage({ embedded = false }: { embedded?: boo
     onError: (e: Error) => message.error(e.message || '수정에 실패했습니다.'),
   });
 
+  const deleteM = useMutation({
+    mutationFn: (id: string) => attendanceApi.overtimePolicy.delete(id),
+    onSuccess: () => {
+      message.success('정책이 삭제되었습니다.');
+      void qc.invalidateQueries({ queryKey: ['salary', 'attendance', 'overtime-policies'] });
+    },
+    onError: (e: Error) => message.error(e.message || '삭제에 실패했습니다.'),
+  });
+
   const rows = useMemo(
     () =>
       [...(listQ.data ?? [])].sort((a, b) =>
@@ -220,36 +230,64 @@ export function AdminOvertimePoliciesPage({ embedded = false }: { embedded?: boo
       {
         title: '액션',
         key: 'action',
-        width: 90,
-        render: (_, r) =>
-          r.overtimePolicyId ? (
-            <Tooltip title="수정">
-              <Button
-                size="small"
-                icon={<EditOutlined />}
-                aria-label="연장근로 정책 수정"
-                onClick={() => {
-                  setEditing(r);
-                  setOpen(true);
-                  form.setFieldsValue({
-                    overtimeFloorMinutes: r.overtimeFloorMinutes ?? 15,
-                    postApprovalDeadlineHours: r.postApprovalDeadlineHours ?? undefined,
-                    weeklyOvertimeLimitMinutes: r.weeklyOvertimeLimitMinutes ?? undefined,
-                    weeklyTotalLimitMinutes: r.weeklyTotalLimitMinutes ?? undefined,
-                    dailyOvertimeLimitMinutes: r.dailyOvertimeLimitMinutes ?? undefined,
-                    monthlyOvertimeLimitMinutes: r.monthlyOvertimeLimitMinutes ?? undefined,
-                    effectiveFrom: r.effectiveFrom ? dayjs(r.effectiveFrom) : dayjs(),
-                    effectiveTo: r.effectiveTo ? dayjs(r.effectiveTo) : null,
-                  });
-                }}
-              />
-            </Tooltip>
-          ) : (
-            '-'
-          ),
+        width: 130,
+        render: (_, r) => {
+          if (!r.overtimePolicyId) return '-';
+          // 활성 정책 (effectiveTo 없음) 은 삭제 차단, 신규 등록 시 자동 종료 흐름 유도
+          const isActive = !r.effectiveTo;
+          return (
+            <Space size={4}>
+              <Tooltip title="수정">
+                <Button
+                  size="small"
+                  icon={<EditOutlined />}
+                  aria-label="연장근로 정책 수정"
+                  onClick={() => {
+                    setEditing(r);
+                    setOpen(true);
+                    form.setFieldsValue({
+                      overtimeFloorMinutes: r.overtimeFloorMinutes ?? 15,
+                      postApprovalDeadlineHours: r.postApprovalDeadlineHours ?? undefined,
+                      weeklyOvertimeLimitMinutes: r.weeklyOvertimeLimitMinutes ?? undefined,
+                      weeklyTotalLimitMinutes: r.weeklyTotalLimitMinutes ?? undefined,
+                      dailyOvertimeLimitMinutes: r.dailyOvertimeLimitMinutes ?? undefined,
+                      monthlyOvertimeLimitMinutes: r.monthlyOvertimeLimitMinutes ?? undefined,
+                      effectiveFrom: r.effectiveFrom ? dayjs(r.effectiveFrom) : dayjs(),
+                      effectiveTo: r.effectiveTo ? dayjs(r.effectiveTo) : null,
+                    });
+                  }}
+                />
+              </Tooltip>
+              <Popconfirm
+                title="정책을 삭제할까요?"
+                description="이력은 보존되고 조회 목록에서만 제외됩니다."
+                okText="삭제"
+                cancelText="취소"
+                disabled={isActive}
+                onConfirm={() => deleteM.mutate(r.overtimePolicyId!)}
+              >
+                <Tooltip
+                  title={
+                    isActive
+                      ? '활성 정책은 삭제 불가. 신규 등록 시 자동 종료됩니다.'
+                      : '삭제'
+                  }
+                >
+                  <Button
+                    size="small"
+                    danger
+                    icon={<DeleteOutlined />}
+                    aria-label="연장근로 정책 삭제"
+                    disabled={isActive}
+                  />
+                </Tooltip>
+              </Popconfirm>
+            </Space>
+          );
+        },
       },
     ],
-    [form],
+    [form, deleteM],
   );
 
   const pageActions = (
