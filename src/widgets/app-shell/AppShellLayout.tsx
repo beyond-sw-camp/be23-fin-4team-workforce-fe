@@ -779,18 +779,21 @@ function useAppShellSiderMenuItems(currentPathname: string): {
       label: 'HR 정책 문서',
       title: 'HR 정책 문서',
     };
-    // 자동 작업 관리 - HR 정책 문서 다음 (시스템 설정 영역)
-    const batchSchedule = {
-      key: '/app/admin/batch-schedule',
-      icon: <ScheduleOutlined className="tw-text-lg" />,
-      label: APP_MENU_LABEL['/app/admin/batch-schedule'],
-      title: APP_MENU_LABEL['/app/admin/batch-schedule'],
-    };
+    // 자동 작업 관리 - 회사 관리자(시스템 관리자) 전용
+    const batchSchedule = isAdmin
+      ? {
+          key: '/app/admin/batch-schedule',
+          icon: <ScheduleOutlined className="tw-text-lg" />,
+          label: APP_MENU_LABEL['/app/admin/batch-schedule'],
+          title: APP_MENU_LABEL['/app/admin/batch-schedule'],
+        }
+      : null;
 
+    const tail = batchSchedule ? [doc, batchSchedule] : [doc];
     if (esgMenuItem) {
-      return { items: [...items, esgMenuItem, doc, batchSchedule], showSalaryNegotiationSubmenu };
+      return { items: [...items, esgMenuItem, ...tail], showSalaryNegotiationSubmenu };
     }
-    return { items: [...items, doc, batchSchedule], showSalaryNegotiationSubmenu };
+    return { items: [...items, ...tail], showSalaryNegotiationSubmenu };
   }, [
     esgConfig,
     isAdmin,

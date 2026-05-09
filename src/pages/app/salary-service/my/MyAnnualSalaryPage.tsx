@@ -528,14 +528,17 @@ function SalaryHistoryTab() {
 
   const isLoading = queries.some((q) => q.isLoading);
 
-  // 연도별 집계 - { year, totalPayment, netPay, growthRate(전년 대비 실수령 % 변화) }
-  const rows = useMemo(() => {
-    const list = years.map((y, i) => ({
-      year: y,
-      totalPayment: queries[i].data?.totalPayment ?? 0,
-      netPay: queries[i].data?.netPay ?? 0,
-      payrollCount: queries[i].data?.payrollCount ?? 0,
-    }));
+  // 데이터 있는 연도만 골라 전년 대비를 직전 데이터 연도 기준으로 계산
+  // (0원 연도가 사이에 끼어 비교가 깨지지 않도록 chartRows 안에서 i-1 비교)
+  const chartRows = useMemo(() => {
+    const list = years
+      .map((y, i) => ({
+        year: y,
+        totalPayment: queries[i].data?.totalPayment ?? 0,
+        netPay: queries[i].data?.netPay ?? 0,
+        payrollCount: queries[i].data?.payrollCount ?? 0,
+      }))
+      .filter((r) => r.netPay > 0);
     return list.map((r, i) => {
       const prev = i > 0 ? list[i - 1].netPay : 0;
       const growthRate = prev > 0 ? Math.round(((r.netPay - prev) / prev) * 1000) / 10 : null;
@@ -544,9 +547,7 @@ function SalaryHistoryTab() {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queries.map((q) => q.dataUpdatedAt).join(','), years]);
-
-  // 데이터 있는 행만 차트에 사용
-  const chartRows = rows.filter((r) => r.netPay > 0);
+  const rows = chartRows;
 
   // 가로 막대 데이터 - indexAxis: 'y'
   const horizontalChartData = useMemo(
@@ -630,13 +631,38 @@ function SalaryHistoryTab() {
         ) : (
           // 좌 차트 2/3 + 우 연도별 금액·증감률 1/3 - 시각 비교 + 수치 동시 노출
           <div className="tw-grid tw-grid-cols-1 lg:tw-grid-cols-3 tw-gap-4">
-            <div className="lg:tw-col-span-2" style={{ height: Math.max(220, chartRows.length * 48) }}>
+            <div className="lg:tw-col-span-2" style={{ height: Math.max(220, chartRows.length * 56) }}>
               <Bar
                 data={horizontalChartData}
+                plugins={[
+                  {
+                    // 가로 막대 끝에 전년 대비 ▲/▼ % 라벨 그리기
+                    id: 'growth-rate-label',
+                    afterDatasetsDraw(chart) {
+                      const { ctx } = chart;
+                      const ds = chart.getDatasetMeta(0);
+                      ctx.save();
+                      ctx.font = '600 12px sans-serif';
+                      ctx.textBaseline = 'middle';
+                      ds.data.forEach((bar, idx) => {
+                        const r = chartRows[idx];
+                        if (!r || r.growthRate == null) return;
+                        const isUp = r.growthRate >= 0;
+                        ctx.fillStyle = isUp ? '#16a34a' : '#dc2626';
+                        const arrow = isUp ? '▲' : '▼';
+                        const text = `${arrow} ${Math.abs(r.growthRate)}%`;
+                        const { x, y } = bar.tooltipPosition(true);
+                        ctx.fillText(text, x + 8, y);
+                      });
+                      ctx.restore();
+                    },
+                  },
+                ]}
                 options={{
                   indexAxis: 'y',
                   responsive: true,
                   maintainAspectRatio: false,
+                  layout: { padding: { right: 64 } },
                   plugins: {
                     legend: { display: false },
                     tooltip: {

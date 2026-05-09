@@ -38,6 +38,8 @@ import {
 } from '@/features/contracts/api/contractTemplateApi';
 import { uploadSignaturePngForContract } from '@/features/contracts/lib/uploadSignaturePng';
 import { parseContractFormSchema } from '@/features/contracts/lib/parseContractFormSchema';
+import { isContractMoneyLikeNumberField } from '@/features/contracts/lib/contractMoneyLikeField';
+import type { FormFieldSchema } from '@/features/approvals/lib/approvalFormSchema';
 import { ContractPartySignaturesCard } from '@/features/contracts/ui/ContractPartySignaturesCard';
 import { ContractSignaturePad, type ContractSignaturePadHandle } from '@/features/contracts/ui/ContractSignaturePad';
 import { AppDataTable } from '@/shared/ui/AppDataTable';
@@ -68,10 +70,25 @@ function parseContent(raw: string): Record<string, unknown> {
   }
 }
 
-function formatValue(value: unknown): string {
+function formatValue(value: unknown, field?: FormFieldSchema): string {
   if (value == null) return '—';
-  if (typeof value === 'string') return value.trim() || '—';
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return '—';
+    // 양식이 number 인데 contentJson 에 string 으로 저장된 케이스 보정
+    if (field && isContractMoneyLikeNumberField(field)) {
+      const n = Number(trimmed.replace(/,/g, ''));
+      if (!Number.isNaN(n)) return `${n.toLocaleString('ko-KR')} 원`;
+    }
+    return trimmed;
+  }
+  if (typeof value === 'number') {
+    if (field && isContractMoneyLikeNumberField(field)) {
+      return `${value.toLocaleString('ko-KR')} 원`;
+    }
+    return value.toLocaleString('ko-KR');
+  }
+  if (typeof value === 'boolean') return value ? '예' : '아니오';
   try {
     return JSON.stringify(value);
   } catch {
@@ -743,6 +760,7 @@ export function MyContractsPanel({ embedded = false, initialDetailContractId = n
                                 const src = meta?.sourceField?.trim();
                                 return detailContent[field.name] ?? (src ? detailContent[src] : undefined);
                               })(),
+                              field,
                             )}
                           </Typography.Text>
                         </ApprovalFormPaperFieldRow>

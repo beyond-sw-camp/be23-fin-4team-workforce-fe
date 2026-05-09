@@ -472,6 +472,38 @@ export const salaryApi = {
       });
       return unwrapApiResponse<{ year: number; count: number }>(data);
     },
+
+    // 연도별 전체 행 조회 - 화면 테이블 표시용
+    async listByYear(year: number): Promise<Array<{
+      simplifiedTaxTableId?: string;
+      effectiveYear: number;
+      salaryLowerBound: number;
+      salaryUpperBound: number;
+      dependentCount: number;
+      monthlyTaxAmount: number;
+    }>> {
+      const { data } = await httpClient.get(`${BASE}/salary/simplified-tax-table/list`, {
+        params: { year },
+      });
+      const unwrapped = unwrapApiResponse<Array<{
+        simplifiedTaxTableId?: string;
+        effectiveYear: number;
+        salaryLowerBound: number;
+        salaryUpperBound: number;
+        dependentCount: number;
+        monthlyTaxAmount: number;
+      }> | null>(data);
+      return Array.isArray(unwrapped) ? unwrapped : [];
+    },
+
+    // 연도별 엑셀 다운로드 - DB 기반 동적 생성
+    async downloadExcel(year: number): Promise<Blob> {
+      const { data } = await httpClient.get(`${BASE}/salary/simplified-tax-table/download`, {
+        params: { year },
+        responseType: 'blob',
+      });
+      return data as Blob;
+    },
   },
 
   /** /salary/retirement — 퇴직금 시뮬레이션 */

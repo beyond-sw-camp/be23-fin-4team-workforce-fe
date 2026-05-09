@@ -207,7 +207,7 @@ export function AdminBonusBatchTab() {
         return;
       }
       if (Object.keys(mapping).length === 0) {
-        message.warning('[상여/성과금 정책 → 성과급 탭]에서 평가 등급별 비율을 먼저 설정해주세요.');
+        message.warning('[상여금 정책]에서 비율을 먼저 설정해주세요.');
         return;
       }
       // memberId -> finalGrade 매핑
@@ -386,7 +386,7 @@ export function AdminBonusBatchTab() {
         <Alert
           type="info"
           showIcon
-          message="현재 활성 보너스 정책"
+          message="현재 활성 상여금 정책"
           description={
             <Space wrap size={8}>
               {policy.useRegularBonusYn === 'Y' && (
@@ -409,12 +409,12 @@ export function AdminBonusBatchTab() {
         <Alert
           type="warning"
           showIcon
-          message="활성 보너스 정책이 없습니다."
-          description="좌측 [상여/성과금 정책] 메뉴에서 정책을 먼저 등록하세요."
+          message="상여금 정책이 없습니다."
+          description="좌측 [상여금 정책] 메뉴에서 정책을 먼저 등록하세요."
         />
       )}
 
-      <Card title="발행 입력">
+      <Card title="지급 대상 등록">
         <Form<FormValues>
           form={form}
           layout="vertical"
@@ -425,7 +425,7 @@ export function AdminBonusBatchTab() {
           onFinish={(v) => previewM.mutate(v)}
         >
           <div className="tw-grid tw-grid-cols-1 md:tw-grid-cols-2 lg:tw-grid-cols-4 tw-gap-3">
-            <Form.Item label="보너스 유형" name="bonusKind" rules={[{ required: true }]}>
+            <Form.Item label="상여금 유형" name="bonusKind" rules={[{ required: true }]}>
               <Select
                 options={[
                   { value: 'REGULAR', label: '정기상여' },
@@ -508,14 +508,14 @@ export function AdminBonusBatchTab() {
             </Button>
             {preview && editedSummary.paying > 0 && (
               <Popconfirm
-                title={`${editedSummary.paying}명에게 ${formatWon(editedSummary.total)} 발행할까요?`}
-                description="발행 후 [정산 처리] 탭에서 검토·지급하세요."
-                okText="발행"
+                title={`${editedSummary.paying}명에게 ${formatWon(editedSummary.total)} 지급 등록할까요?`}
+                description="등록 후 [정산 처리] 탭에서 검토·지급하세요."
+                okText="지급 대상 등록"
                 cancelText="취소"
                 onConfirm={() => applyM.mutate(form.getFieldsValue())}
               >
                 <Button type="primary" danger loading={applyM.isPending}>
-                  발행 ({editedSummary.paying}명)
+                  지급 대상 등록 ({editedSummary.paying}명)
                 </Button>
               </Popconfirm>
             )}
@@ -636,8 +636,8 @@ export function AdminBonusBatchTab() {
               <Alert
                 type="warning"
                 showIcon
-                message="등급별 비율 미설정"
-                description="[상여/성과금 정책 → 성과급 탭]에서 평가 등급별 지급 비율을 먼저 설정해주세요."
+                message="비율 미설정"
+                description="[상여금 정책 탭]에서 확인해주세요."
               />
             );
           })()}

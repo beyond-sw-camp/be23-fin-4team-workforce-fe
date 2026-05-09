@@ -51,7 +51,7 @@ export const APP_MENU_LABEL: Record<string, string> = {
   '/app/admin/batch-schedule': '자동 작업 관리',
   '/app/salary/pay-grade-table': '호봉표 관리',
   '/app/salary/retirement-policy': '퇴직급여 정책',
-  '/app/salary/bonus-policy': '상여/성과금 정책',
+  '/app/salary/bonus-policy': '상여금 정책',
 };
 
 /** 사이드 메뉴 표시 순서 */
