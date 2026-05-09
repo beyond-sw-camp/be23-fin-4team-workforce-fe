@@ -595,12 +595,14 @@ export function AbsenceProxyPage() {
           <div>
             <Typography.Text className="tw-mb-1 tw-block tw-text-sm tw-font-medium">위임 기간</Typography.Text>
             <DatePicker.RangePicker
+              needConfirm={false}
               showTime={{ format: 'HH:mm' }}
               format="YYYY-MM-DD HH:mm"
               className="tw-w-full"
               value={pickerRange}
               onChange={(v) => setPickerRange(v as [Dayjs | null, Dayjs | null] | null)}
               disabledDate={(current) => Boolean(current && current.isBefore(dayjs(), 'day'))}
+              getPopupContainer={(trigger) => trigger.closest('.ant-modal-wrap') ?? document.body}
             />
             <Typography.Paragraph type="secondary" className="!tw-mt-1 !tw-mb-0 !tw-text-xs">
               오늘 포함 이후 날짜만 선택할 수 있습니다(과거 일자는 불가). 종료는 시작보다 뒤여야 합니다. 기존 위임과 기간이 겹치면 등록할 수 없습니다.
