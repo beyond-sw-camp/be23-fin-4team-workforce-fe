@@ -40,7 +40,41 @@ jobs:
           aws-region: "ap-northeast-2"
 
       - name: deploy to s3
-        run: aws s3 cp ./dist s3://www.workforcehr.shop/ --recursive
+        run: aws s3 sync ./dist s3://www.workforcehr.shop/ --delete
+
+      - name: configure s3 spa fallback
+        run: aws s3 website s3://www.workforcehr.shop/ --index-document index.html --error-document index.html
+
+      - name: configure cloudfront spa fallback
+        env:
+          DISTRIBUTION_ID: E1BIET0ZMCE9IC
+        run: |
+          aws cloudfront get-distribution-config --id "$DISTRIBUTION_ID" > cloudfront-config.json
+          ETAG=$(jq -r '.ETag' cloudfront-config.json)
+          jq '
+            .DistributionConfig
+            | .CustomErrorResponses = {
+                Quantity: 2,
+                Items: [
+                  {
+                    ErrorCode: 403,
+                    ResponsePagePath: "/index.html",
+                    ResponseCode: "200",
+                    ErrorCachingMinTTL: 0
+                  },
+                  {
+                    ErrorCode: 404,
+                    ResponsePagePath: "/index.html",
+                    ResponseCode: "200",
+                    ErrorCachingMinTTL: 0
+                  }
+                ]
+              }
+          ' cloudfront-config.json > distribution-config.json
+          aws cloudfront update-distribution \
+            --id "$DISTRIBUTION_ID" \
+            --if-match "$ETAG" \
+            --distribution-config file://distribution-config.json
 
       - name: invalidate cloudfront
         run: aws cloudfront create-invalidation --distribution-id E1BIET0ZMCE9IC --paths "/*"
