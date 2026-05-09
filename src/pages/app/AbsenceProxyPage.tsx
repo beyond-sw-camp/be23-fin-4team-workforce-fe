@@ -595,6 +595,7 @@ export function AbsenceProxyPage() {
           <div>
             <Typography.Text className="tw-mb-1 tw-block tw-text-sm tw-font-medium">위임 기간</Typography.Text>
             <DatePicker.RangePicker
+              needConfirm={false}
               showTime={{ format: 'HH:mm' }}
               format="YYYY-MM-DD HH:mm"
               className="tw-w-full"
