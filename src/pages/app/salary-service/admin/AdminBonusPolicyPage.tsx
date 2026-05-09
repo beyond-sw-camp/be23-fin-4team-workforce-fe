@@ -221,17 +221,6 @@ export function AdminBonusPolicyPage({ embedded = false }: { embedded?: boolean 
           ),
       },
       {
-        title: '성과급',
-        key: 'perf',
-        width: 130,
-        render: (_, r) =>
-          r.usePerformanceBonusYn === 'Y' ? (
-            <span>최대 {r.performanceBonusMaxRate ?? '—'}%</span>
-          ) : (
-            <Typography.Text type="secondary">미사용</Typography.Text>
-          ),
-      },
-      {
         title: '명절상여',
         key: 'holiday',
         width: 160,
@@ -320,7 +309,7 @@ export function AdminBonusPolicyPage({ embedded = false }: { embedded?: boolean 
         <AppWorkspacePageTitle
           eyebrow="PAYROLL"
           title="상여/성과금 정책"
-          subtitle="정기상여 · 성과급 · 명절상여 회사 표준 룰을 관리합니다. 실제 지급은 급여 정산 관리에서 처리합니다."
+          subtitle="정기상여 · 명절상여 회사 표준 룰을 관리합니다. 실제 지급은 급여 정산 관리에서 처리합니다."
         />
       )}
 
@@ -337,11 +326,6 @@ export function AdminBonusPolicyPage({ embedded = false }: { embedded?: boolean 
                   ({activeQ.data.regularBonusPaymentCount ?? '—'}회)
                 </Tag>
               )}
-              {activeQ.data.usePerformanceBonusYn === 'Y' && (
-                <Tag color="green">
-                  성과급 최대 {activeQ.data.performanceBonusMaxRate ?? '—'}%
-                </Tag>
-              )}
               {activeQ.data.useHolidayBonusYn === 'Y' && (
                 <Tag color="gold">
                   명절상여{' '}
@@ -351,7 +335,6 @@ export function AdminBonusPolicyPage({ embedded = false }: { embedded?: boolean 
                 </Tag>
               )}
               {activeQ.data.useRegularBonusYn !== 'Y' &&
-                activeQ.data.usePerformanceBonusYn !== 'Y' &&
                 activeQ.data.useHolidayBonusYn !== 'Y' && (
                   <Tag>모든 항목 비활성</Tag>
                 )}
@@ -507,128 +490,6 @@ export function AdminBonusPolicyPage({ embedded = false }: { embedded?: boolean 
                         placeholder="예: 4"
                       />
                     </Form.Item>
-                  </div>
-                ),
-              },
-              {
-                key: 'performance',
-                label: (
-                  <span className="tw-inline-flex tw-items-center tw-gap-2">
-                    <span
-                      className={`tw-inline-block tw-h-2 tw-w-2 tw-rounded-full ${
-                        usePerf ? 'tw-bg-emerald-500' : 'tw-bg-slate-300'
-                      }`}
-                    />
-                    성과급
-                    <Tag color="orange" className="!tw-mr-0">수동</Tag>
-                  </span>
-                ),
-                children: (
-                  <div className="tw-flex tw-flex-col tw-gap-3">
-                    <div className="tw-flex tw-items-center tw-justify-between tw-rounded tw-bg-emerald-50/40 tw-border tw-border-emerald-100 tw-px-3 tw-py-2">
-                      <Typography.Text type="secondary" className="!tw-text-xs">
-                        평가/실적 후 [상여 발행] 화면에서 관리자가 수동 지급 트리거
-                      </Typography.Text>
-                      <Form.Item name="usePerformanceBonusYn" valuePropName="checked" className="!tw-mb-0">
-                        <Switch checkedChildren="사용" unCheckedChildren="끔" size="small" />
-                      </Form.Item>
-                    </div>
-                    <Typography.Paragraph type="secondary" className="!tw-mb-0 !tw-mt-0 !tw-text-xs tw-leading-snug">
-                      비정기 지급. 정책에는 최대 한도만 저장하고 실제 금액은 발행 시점에 결정.
-                    </Typography.Paragraph>
-                    <Form.Item
-                      label="1회 최대 지급 비율 (%)"
-                      name="performanceBonusMaxRate"
-                      className="!tw-mb-2"
-                      rules={
-                        usePerf ? [{ required: true, message: '최대 지급 비율을 입력하세요.' }] : []
-                      }
-                      extra="기본급 기준 (예: 200% = 최대 2배)"
-                    >
-                      <InputNumber
-                        disabled={!usePerf}
-                        min={0}
-                        max={1000}
-                        step={10}
-                        className="tw-w-full"
-                        placeholder="예: 200"
-                      />
-                    </Form.Item>
-                    <Form.Item label="산정 기준 (메모)" name="performanceBonusBasis" className="!tw-mb-2">
-                      <Input.TextArea
-                        disabled={!usePerf}
-                        rows={2}
-                        maxLength={500}
-                        className="tw-text-sm"
-                        placeholder="예: 등급별 차등, EBIT 5% 풀 등"
-                      />
-                    </Form.Item>
-
-                    <Divider className="!tw-my-2" />
-                    <Typography.Text strong className="!tw-text-sm">
-                      평가 등급별 지급 비율
-                    </Typography.Text>
-                    <Typography.Paragraph type="secondary" className="!tw-mb-2 !tw-mt-1 !tw-text-xs tw-leading-snug">
-                      평가 결과 불러오기 시 등급에 매핑된 비율이 자동 적용됩니다. 회차별로 다르게 주려면 발행 시점에 행별 수정 가능.
-                    </Typography.Paragraph>
-                    <Form.List name="gradeRows">
-                      {(fields, { add, remove }) => (
-                        <div className="tw-flex tw-flex-col tw-gap-2">
-                          {fields.map((field) => (
-                            <div key={field.key} className="tw-flex tw-items-center tw-gap-2">
-                              <Form.Item
-                                {...field}
-                                name={[field.name, 'grade']}
-                                className="!tw-mb-0 tw-flex-1"
-                                rules={
-                                  usePerf ? [{ required: true, message: '등급 라벨' }] : []
-                                }
-                              >
-                                <Input
-                                  disabled={!usePerf}
-                                  placeholder="등급 (예: S)"
-                                  size="small"
-                                  maxLength={20}
-                                />
-                              </Form.Item>
-                              <Form.Item
-                                {...field}
-                                name={[field.name, 'rate']}
-                                className="!tw-mb-0"
-                              >
-                                <AppUnitInputNumber
-                                  disabled={!usePerf}
-                                  min={0}
-                                  max={1000}
-                                  step={5}
-                                  size="small"
-                                  placeholder="비율"
-                                  style={{ width: 140 }}
-                                  unit="%"
-                                />
-                              </Form.Item>
-                              <Button
-                                type="text"
-                                danger
-                                size="small"
-                                disabled={!usePerf}
-                                icon={<DeleteOutlined />}
-                                onClick={() => remove(field.name)}
-                              />
-                            </div>
-                          ))}
-                          <Button
-                            type="dashed"
-                            size="small"
-                            disabled={!usePerf}
-                            icon={<PlusOutlined />}
-                            onClick={() => add({ grade: '', rate: null })}
-                          >
-                            등급 추가
-                          </Button>
-                        </div>
-                      )}
-                    </Form.List>
                   </div>
                 ),
               },

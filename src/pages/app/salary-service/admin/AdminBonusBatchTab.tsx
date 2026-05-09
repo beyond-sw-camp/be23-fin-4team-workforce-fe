@@ -392,9 +392,6 @@ export function AdminBonusBatchTab() {
               {policy.useRegularBonusYn === 'Y' && (
                 <Tag color="blue">정기상여 연 {policy.regularBonusAnnualRate}% / {policy.regularBonusPaymentCount}회</Tag>
               )}
-              {policy.usePerformanceBonusYn === 'Y' && (
-                <Tag color="geekblue">성과급 최대 {policy.performanceBonusMaxRate}%</Tag>
-              )}
               {policy.useHolidayBonusYn === 'Y' && (
                 <Tag color="gold">
                   명절상여{' '}
@@ -432,7 +429,6 @@ export function AdminBonusBatchTab() {
               <Select
                 options={[
                   { value: 'REGULAR', label: '정기상여' },
-                  { value: 'PERFORMANCE', label: '성과급' },
                   { value: 'HOLIDAY', label: '명절상여' },
                 ]}
               />
