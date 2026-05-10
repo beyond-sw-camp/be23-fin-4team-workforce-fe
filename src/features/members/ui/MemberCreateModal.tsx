@@ -167,19 +167,21 @@ export function MemberCreateModal({ open, onClose }: Props) {
     }
   };
 
-  const orgOptions = useMemo(() => buildOrgOptions(orgList), [orgList]);
+  const orgOptions = useMemo(() => buildOrgOptions(orgList, { excludeRoot: true }), [orgList]);
 
   const gradeOptions = grades.map((row) => {
     const r = row as Record<string, unknown>;
     const id = pickRowId(r);
     return id ? { value: id, label: pickRowName(r) || id } : null;
-  }).filter((x): x is { value: string; label: string } => x !== null);
+  }).filter((x): x is { value: string; label: string } => x !== null)
+    .filter((opt) => opt.label !== '관리자');
 
   const titleOptions = titles.map((row) => {
     const r = row as Record<string, unknown>;
     const id = pickRowId(r);
     return id ? { value: id, label: pickRowName(r) || id } : null;
-  }).filter((x): x is { value: string; label: string } => x !== null);
+  }).filter((x): x is { value: string; label: string } => x !== null)
+    .filter((opt) => opt.label !== '관리자');
 
   const roleOptions = roles
     .filter((r) => r.id)
