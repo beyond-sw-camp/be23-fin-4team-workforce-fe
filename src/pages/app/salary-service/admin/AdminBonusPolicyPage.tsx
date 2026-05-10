@@ -566,7 +566,7 @@ export function AdminBonusPolicyPage({ embedded = false }: { embedded?: boolean 
                   className="tw-w-full"
                   disabled={editing ? [true, false] : false}
                   disabledDate={(d, info) => {
-                    if (info?.from && info?.range === 'end') {
+                    if (info?.from) {
                       if (!d) return false;
                       const today = dayjs().startOf('day');
                       if (d.isBefore(today)) return true;

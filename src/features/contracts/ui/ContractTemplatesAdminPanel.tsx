@@ -352,7 +352,7 @@ export function ContractTemplatesAdminPanel({
   });
   const baseSalaryByMember = useMemo(() => {
     const map = new Map<string, number>();
-    (companySalariesQ.data ?? []).forEach((s: { memberId?: string; baseSalary?: number }) => {
+    (companySalariesQ.data ?? []).forEach((s) => {
       if (s.memberId && s.baseSalary != null) map.set(s.memberId, s.baseSalary);
     });
     return map;

@@ -200,6 +200,30 @@ export function LandingHomePage() {
             />
           </div>
         </ScrollReveal>
+
+        <ScrollReveal className="tw-mx-auto tw-grid tw-max-w-6xl tw-items-stretch tw-gap-10 tw-px-5 tw-py-12 md:tw-grid-cols-2 md:tw-gap-16">
+          <div>
+            <h2 className="tw-mb-4 tw-text-2xl tw-font-bold tw-text-slate-900 md:tw-text-3xl">명확한 성과평가 관리</h2>
+            <p className="tw-mb-8 tw-text-base tw-leading-relaxed tw-text-slate-600">
+              목표 설정부터 자기평가, 평가 결과 확인까지 한 흐름으로 관리합니다. 구성원의 성장과 보상 의사결정을 더 투명하게 연결하세요.
+            </p>
+            <ul className="tw-space-y-3 tw-pl-0">
+              {['평가 시즌 및 대상자 관리', '목표·자기평가 진행 현황 확인', '평가 결과와 피드백 체계화'].map((t) => (
+                <li key={t} className="tw-flex tw-items-start tw-gap-2 tw-text-slate-800">
+                  <CheckCircleOutlined className="tw-mt-0.5 tw-text-[#2563EB]" />
+                  <span>{t}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="tw-relative tw-h-full tw-min-h-[220px] tw-w-full tw-min-w-0 tw-self-stretch tw-overflow-hidden tw-rounded-2xl tw-shadow-xl tw-shadow-slate-900/10 tw-ring-1 tw-ring-slate-200/80">
+            <img
+              src="https://images.unsplash.com/photo-1556761175-b413da4baf72?q=80&w=2074&auto=format&fit=crop"
+              alt=""
+              className="tw-absolute tw-inset-0 tw-h-full tw-w-full tw-object-cover"
+            />
+          </div>
+        </ScrollReveal>
       </main>
 
       <section id="faq" className="tw-bg-slate-50 tw-py-16 md:tw-py-24">

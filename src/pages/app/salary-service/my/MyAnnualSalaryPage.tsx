@@ -541,15 +541,18 @@ function SalaryHistoryTab() {
   // (0원 연도가 사이에 끼어 비교가 깨지지 않도록 chartRows 안에서 i-1 비교)
   const chartRows = useMemo(() => {
     const list = years
-      .map((y, i) => ({
-        year: y,
-        totalPayment: queries[i].data?.totalPayment ?? 0,
-        netPay: queries[i].data?.netPay ?? 0,
-        payrollCount: queries[i].data?.payrollCount ?? 0,
-      }))
+      .map((y, i) => {
+        const query = queries[i];
+        return {
+          year: y,
+          totalPayment: query?.data?.totalPayment ?? 0,
+          netPay: query?.data?.netPay ?? 0,
+          payrollCount: query?.data?.payrollCount ?? 0,
+        };
+      })
       .filter((r) => r.netPay > 0);
     return list.map((r, i) => {
-      const prev = i > 0 ? list[i - 1].netPay : 0;
+      const prev = i > 0 ? (list[i - 1]?.netPay ?? 0) : 0;
       const growthRate = prev > 0 ? Math.round(((r.netPay - prev) / prev) * 1000) / 10 : null;
       const growthAmount = i > 0 ? r.netPay - prev : null;
       return { ...r, growthRate, growthAmount };
