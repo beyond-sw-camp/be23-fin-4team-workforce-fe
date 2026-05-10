@@ -11,6 +11,7 @@ import { decodeJwtPayload, getTenantHeadersFromJwtPayload } from '@/shared/auth/
 import { setAuthRefreshInFlight } from '@/shared/stores/authRefreshInFlightStore';
 import { clearRefreshIdentity, setRefreshIdentity } from '@/shared/stores/authRefreshIdentityStore';
 import { clearAccessToken, getAccessToken, setAccessToken } from '@/shared/stores/authTokenStore';
+import { setAuthSessionMirrorUser } from '@/shared/stores/authSessionMirrorStore';
 
 type LoginResponse = {
   accessToken?: string;
@@ -61,6 +62,11 @@ type LoginResponse = {
 };
 
 let currentSession: AuthSession | null = null;
+
+function commitSession(next: AuthSession | null) {
+  currentSession = next;
+  setAuthSessionMirrorUser(next?.user ?? null);
+}
 
 /** 백엔드 `Y`/`N` 또는 `YES`/`NO` */
 function isYnYes(value?: string) {
@@ -503,8 +509,8 @@ export const authClient: AuthClient = {
       };
     }
 
-    currentSession = { user: me };
-    return currentSession;
+    commitSession({ user: me });
+    return { user: me };
   },
   async logout() {
     try {
@@ -513,7 +519,7 @@ export const authClient: AuthClient = {
       clearAccessToken();
       clearRefreshIdentity();
       /** 세션의 user·permissions 제거 — UI는 AuthProvider `logout()`에서 `user` null 로 초기화 */
-      currentSession = null;
+      commitSession(null);
     }
   },
   async getSession() {
@@ -537,16 +543,17 @@ export const authClient: AuthClient = {
         permissions: [],
         flags: { mustChangePassword: false, onboardingRequired: false, emailVerificationRequired: false },
       } as unknown as Me;
-      currentSession = { user: operatorMe };
+      commitSession({ user: operatorMe });
       return currentSession;
     }
 
     try {
       const me = await getMeOrThrow();
-      currentSession = { user: me };
+      commitSession({ user: me });
       return currentSession;
     } catch {
       clearAccessToken();
+      commitSession(null);
       return null;
     }
   },
@@ -576,10 +583,10 @@ export const authClient: AuthClient = {
           permissions: mergePermissionStrings(me.permissions, fromRefresh),
         };
       }
-      currentSession = { user: me };
+      commitSession({ user: me });
       return currentSession;
     } catch {
-      currentSession = null;
+      commitSession(null);
       return null;
     } finally {
       setAuthRefreshInFlight(false);
