@@ -386,12 +386,14 @@ export function AbsenceProxyPage() {
     }
     const range = pickerRange;
     if (!range?.[0] || !range[1]) {
-      message.warning('위임 시작·종료 일시를 선택해 주세요.');
+      message.warning('위임 시작·종료일을 선택해 주세요.');
       return;
     }
-    const [start, end] = range;
+    const [rawStart, rawEnd] = range;
+    const start = rawStart.startOf('day');
+    const end = rawEnd.endOf('day');
     if (!end.isAfter(start)) {
-      message.warning('종료 일시는 시작 이후여야 합니다.');
+      message.warning('종료일은 시작일 이후여야 합니다.');
       return;
     }
     createMut.mutate({
@@ -595,12 +597,12 @@ export function AbsenceProxyPage() {
           <div>
             <Typography.Text className="tw-mb-1 tw-block tw-text-sm tw-font-medium">위임 기간</Typography.Text>
             <DatePicker.RangePicker
-              showTime={{ format: 'HH:mm' }}
-              format="YYYY-MM-DD HH:mm"
+              format="YYYY-MM-DD"
               className="tw-w-full"
               value={pickerRange}
               onChange={(v) => setPickerRange(v as [Dayjs | null, Dayjs | null] | null)}
               disabledDate={(current) => Boolean(current && current.isBefore(dayjs(), 'day'))}
+              popupStyle={{ zIndex: 3150 }}
             />
             <Typography.Paragraph type="secondary" className="!tw-mt-1 !tw-mb-0 !tw-text-xs">
               오늘 포함 이후 날짜만 선택할 수 있습니다(과거 일자는 불가). 종료는 시작보다 뒤여야 합니다. 기존 위임과 기간이 겹치면 등록할 수 없습니다.
