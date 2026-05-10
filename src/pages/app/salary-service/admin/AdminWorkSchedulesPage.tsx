@@ -555,11 +555,21 @@ function ScheduleForm({ form, editing, onSubmit, onGoToFlexibleSlots }: Schedule
         label="스케줄 운영 기간 (종료일 미입력 시 계속 적용)"
         name="effectiveRange"
         rules={[{ required: true }]}
+        extra="종료일은 미래 월말만 선택 가능"
       >
         <DatePicker.RangePicker
           format="YYYY-MM-DD"
           allowEmpty={[false, true]}
           style={{ width: '100%' }}
+          disabledDate={(d, info) => {
+            if (info?.from && info?.range === 'end') {
+              if (!d) return false;
+              const today = dayjs().startOf('day');
+              if (d.isBefore(today)) return true;
+              if (d.date() !== d.endOf('month').date()) return true;
+            }
+            return false;
+          }}
         />
       </Form.Item>
 

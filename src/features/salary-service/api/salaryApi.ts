@@ -680,8 +680,11 @@ export const salaryApi = {
     async updateApprovalLink(memberAllowanceId: string, approvalRequestId: string): Promise<void> {
       await httpClient.patch(
         `${BASE}/salary/me/allowances/${encodeURIComponent(memberAllowanceId)}/approval-link`,
-        null,
-        { params: { approvalRequestId } },
+        {},
+        {
+          params: { approvalRequestId },
+          headers: { 'Content-Type': 'application/json' },
+        },
       );
     },
 

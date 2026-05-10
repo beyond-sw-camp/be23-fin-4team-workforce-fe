@@ -20,6 +20,7 @@ import {
   DatePicker,
   Empty,
   Input,
+  InputNumber,
   Form,
   Select,
   Tag,
@@ -37,19 +38,26 @@ import {
 import { organizationApi } from '@/features/organization/api/organizationApi';
 import type { OrgChartOrgNode, OrgChartMember } from '@/features/organization/api/organizationApi';
 import { approvalApi } from '@/features/approvals/api/approvalApi';
+import { salaryApi } from '@/features/salary-service/api/salaryApi';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
+import { useAuth } from '@/features/auth/useAuth';
+import { usePermissions } from '@/features/permissions/usePermissionsHook';
+import { PERM } from '@/features/permissions/backend-permissions';
 
 type SimMember = {
   memberId: string;
   name: string;
   jobGradeName: string;
   jobTitleName: string;
+  /** 호봉(호봉제 회사만 의미) */
+  step?: number | null;
   /** 시뮬 트리 상에서 현재 속한 조직 */
   currentOrgId: string;
   /** 원본 조직 (변경 비교용) */
   originalOrgId: string;
   originalJobGradeName: string;
   originalJobTitleName: string;
+  originalStep?: number | null;
 };
 
 type Change = {
@@ -64,6 +72,9 @@ type Change = {
   /** 직책 변경 */
   fromJobTitle?: string;
   toJobTitle?: string;
+  /** 호봉 변경(호봉제 회사만) */
+  fromStep?: number | null;
+  toStep?: number | null;
 };
 
 function flattenOrg(
@@ -84,15 +95,19 @@ function flattenMembers(nodes: OrgChartOrgNode[]): SimMember[] {
     for (const n of ns) {
       for (const m of n.members ?? []) {
         const titleName = m.jobTitleName ?? '';
+        // OrgChartMember 에 step 이 있으면 사용, 없으면 null (호봉제 미사용 회사)
+        const stepFromOrg = (m as { step?: number | null }).step ?? null;
         result.push({
           memberId: m.memberId,
           name: m.name,
           jobGradeName: m.jobGradeName ?? '',
           jobTitleName: titleName,
+          step: stepFromOrg,
           currentOrgId: n.organizationId,
           originalOrgId: n.organizationId,
           originalJobGradeName: m.jobGradeName ?? '',
           originalJobTitleName: titleName,
+          originalStep: stepFromOrg,
         });
       }
       if (n.children?.length) walk(n.children);
@@ -165,8 +180,23 @@ const PERSONNEL_ORDER_PREFILL_STORAGE_KEY = 'wf-approval-prefill-personnel-order
 export function AdminOrgRestructurePage() {
   const { message } = App.useApp();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [submitOpen, setSubmitOpen] = useState(false);
   const [submitForm] = Form.useForm<{ effectiveDate: Dayjs; reason?: string }>();
+
+  // 조직 개편은 인사 관리자 / 시스템 관리자만 가능 (Role 기반)
+  const { hasPermission } = usePermissions();
+  const allowed = user?.isSystemAdmin === true || hasPermission(PERM.ROLE_UPDATE);
+  if (!allowed) {
+    return (
+      <Alert
+        type="warning"
+        showIcon
+        message="조직 개편 권한이 없습니다"
+        description="이 기능은 인사 관리자 또는 시스템 관리자만 사용할 수 있습니다."
+      />
+    );
+  }
 
   const orgChartQ = useQuery({
     queryKey: ['organization', 'org-chart'],
@@ -186,11 +216,30 @@ export function AdminOrgRestructurePage() {
     staleTime: 60_000,
   });
 
+  // 호봉제 회사 여부 - 활성 SalaryPolicy.usePayGradeYn === 'Y' 일 때만 호봉 입력 노출
+  const salaryPolicyQ = useQuery({
+    queryKey: ['salary', 'salary-policy', 'list-for-orgrestructure'],
+    queryFn: () => salaryApi.salaryPolicy.list(),
+    staleTime: 60_000,
+  });
+  const usePayGrade = useMemo(() => {
+    const today = dayjs().format('YYYY-MM-DD');
+    const active = (salaryPolicyQ.data ?? []).find((p) => {
+      const f = (p as { effectiveFrom?: string | null }).effectiveFrom;
+      const t = (p as { effectiveTo?: string | null }).effectiveTo;
+      return (!f || f <= today) && (!t || t >= today);
+    });
+    const yn = (active as { usePayGradeYn?: string } | undefined)?.usePayGradeYn;
+    return yn === 'Y';
+  }, [salaryPolicyQ.data]);
+
   // 인사발령품의서 양식 documentId 조회 (결재 작성 자동 진입에 사용)
+  // staleTime 0 - 시드 재실행/회사 전환 후에도 항상 최신 docId 사용
   const personnelDocQ = useQuery({
     queryKey: ['approval', 'documents', 'active', 'personnel-order'],
     queryFn: () => approvalApi.listActiveDocuments(),
-    staleTime: 60_000,
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
   const personnelOrderDocId = useMemo(() => {
     return (personnelDocQ.data ?? []).find((d) => d.documentName === '인사발령품의서')?.documentId;
@@ -208,7 +257,11 @@ export function AdminOrgRestructurePage() {
   const [simMembers, setSimMembers] = useState<SimMember[]>([]);
   // 직원 정보 모달
   const [editTarget, setEditTarget] = useState<SimMember | null>(null);
-  const [editForm] = Form.useForm<{ jobGradeName: string; jobTitleName?: string | null }>();
+  const [editForm] = Form.useForm<{
+    jobGradeName: string;
+    jobTitleName?: string | null;
+    step?: number | null;
+  }>();
 
   // org-chart 처음 로드 시 simMembers 초기화
   const initSim = () => {
@@ -230,7 +283,8 @@ export function AdminOrgRestructurePage() {
       const movedOrg = m.currentOrgId !== m.originalOrgId;
       const changedGrade = m.jobGradeName !== m.originalJobGradeName;
       const changedTitle = (m.jobTitleName ?? '') !== (m.originalJobTitleName ?? '');
-      if (movedOrg || changedGrade || changedTitle) {
+      const changedStep = (m.step ?? null) !== (m.originalStep ?? null);
+      if (movedOrg || changedGrade || changedTitle || changedStep) {
         list.push({
           memberId: m.memberId,
           name: m.name,
@@ -240,6 +294,8 @@ export function AdminOrgRestructurePage() {
           toJobGrade: changedGrade ? m.jobGradeName : undefined,
           fromJobTitle: changedTitle ? m.originalJobTitleName : undefined,
           toJobTitle: changedTitle ? m.jobTitleName : undefined,
+          fromStep: changedStep ? (m.originalStep ?? null) : undefined,
+          toStep: changedStep ? (m.step ?? null) : undefined,
         });
       }
     }
@@ -289,7 +345,7 @@ export function AdminOrgRestructurePage() {
     }
   };
 
-  // 트리 노드 클릭 - 직원이면 직급 변경 모달
+  // 트리 노드 클릭 - 직원이면 직급/호봉 변경 모달
   const onSelect: TreeProps['onSelect'] = (keys) => {
     const k = keys[0];
     if (typeof k !== 'string' || !k.startsWith('member:')) return;
@@ -300,7 +356,31 @@ export function AdminOrgRestructurePage() {
     editForm.setFieldsValue({
       jobGradeName: target.jobGradeName,
       jobTitleName: target.jobTitleName || null,
+      step: target.step ?? null,
     });
+    // 호봉제 회사면 활성 Salary 조회 -> step prefill (조직도 응답엔 step 없음)
+    if (usePayGrade) {
+      void salaryApi.salary.getByMemberId(memberId).then((salaries) => {
+        const today = dayjs().format('YYYY-MM-DD');
+        const active = salaries.find((s) => {
+          const f = (s as { effectiveFrom?: string | null }).effectiveFrom;
+          const t = (s as { effectiveTo?: string | null }).effectiveTo;
+          return (!f || f <= today) && (!t || t >= today);
+        });
+        const step = (active as { step?: number | null } | undefined)?.step ?? null;
+        if (step != null) {
+          editForm.setFieldsValue({ step });
+          // simMembers 의 step / originalStep 도 함께 동기화 (변경 비교 정확도)
+          setSimMembers((prev) =>
+            prev.map((m) =>
+              m.memberId === memberId
+                ? { ...m, step, originalStep: m.originalStep ?? step }
+                : m,
+            ),
+          );
+        }
+      }).catch(() => { /* prefill 실패는 silent */ });
+    }
   };
 
   const jobGradeOptions = useMemo(() => {
@@ -489,6 +569,12 @@ export function AdminOrgRestructurePage() {
                     <Tag color="purple">{c.toJobTitle || '-'}</Tag>
                   </span>
                 )}
+                {c.fromStep != null && c.toStep != null && c.fromStep !== c.toStep && (
+                  <span>
+                    호봉 <Tag>{c.fromStep}</Tag> →{' '}
+                    <Tag color="cyan">{c.toStep}</Tag>
+                  </span>
+                )}
               </li>
             ))}
           </ul>
@@ -544,14 +630,17 @@ export function AdminOrgRestructurePage() {
             });
             const orderCategory = resolveOrderCategory();
             // 사용자 노출용 한글 요약 (UUID 등 ID 제외, 부서명/이름/직급만)
-            const summaryLines = changes.map((c) => {
-              const parts: string[] = [`${c.name}`];
-              if (c.fromOrgName && c.toOrgName) parts.push(`부서: ${c.fromOrgName} -> ${c.toOrgName}`);
-              if (c.fromJobGrade && c.toJobGrade) parts.push(`직급: ${c.fromJobGrade || '-'} -> ${c.toJobGrade || '-'}`);
+            const summaryLines = changes.flatMap((c) => {
+              const lines: string[] = [`- ${c.name}`];
+              if (c.fromOrgName && c.toOrgName) lines.push(`  부서: ${c.fromOrgName} -> ${c.toOrgName}`);
+              if (c.fromJobGrade && c.toJobGrade) lines.push(`  직급: ${c.fromJobGrade || '-'} -> ${c.toJobGrade || '-'}`);
               if (c.fromJobTitle !== undefined && c.toJobTitle !== undefined) {
-                parts.push(`직책: ${c.fromJobTitle || '-'} -> ${c.toJobTitle || '-'}`);
+                lines.push(`  직책: ${c.fromJobTitle || '-'} -> ${c.toJobTitle || '-'}`);
               }
-              return `- ${parts.join(' / ')}`;
+              if (c.fromStep != null && c.toStep != null && c.fromStep !== c.toStep) {
+                lines.push(`  호봉: ${c.fromStep} -> ${c.toStep}`);
+              }
+              return lines;
             });
             const summaryText = [
               `발령 종류: ${orderCategoryLabel[orderCategory]}`,
@@ -650,14 +739,16 @@ export function AdminOrgRestructurePage() {
             initialValues={{
               jobGradeName: editTarget.jobGradeName,
               jobTitleName: editTarget.jobTitleName || null,
+              step: editTarget.step ?? null,
             }}
             className="tw-px-5 tw-py-5"
             onFinish={(v) => {
               const newTitle = (v.jobTitleName ?? '').trim();
+              const newStep = v.step ?? null;
               setSimMembers((prev) =>
                 prev.map((m) =>
                   m.memberId === editTarget.memberId
-                    ? { ...m, jobGradeName: v.jobGradeName, jobTitleName: newTitle }
+                    ? { ...m, jobGradeName: v.jobGradeName, jobTitleName: newTitle, step: newStep }
                     : m,
                 ),
               );
@@ -665,7 +756,10 @@ export function AdminOrgRestructurePage() {
               const titleNote = newTitle !== editTarget.jobTitleName
                 ? ` / 직책 → ${newTitle || '—'}`
                 : '';
-              message.success(`${editTarget.name} 직급 → ${v.jobGradeName}${titleNote}`);
+              const stepNote = newStep !== editTarget.step
+                ? ` / 호봉 → ${newStep ?? '-'}`
+                : '';
+              message.success(`${editTarget.name} 직급 → ${v.jobGradeName}${titleNote}${stepNote}`);
             }}
           >
             <div className="tw-mb-4 tw-rounded-xl tw-border tw-border-slate-200 tw-bg-slate-50/70 tw-p-4">
@@ -683,7 +777,6 @@ export function AdminOrgRestructurePage() {
               label="직급"
               name="jobGradeName"
               rules={[{ required: true, message: '직급을 선택하세요.' }]}
-              className="!tw-mb-0"
             >
               <Select options={jobGradeOptions} placeholder="직급 선택" allowClear />
             </Form.Item>
@@ -698,6 +791,16 @@ export function AdminOrgRestructurePage() {
                 allowClear
               />
             </Form.Item>
+            {usePayGrade ? (
+              <Form.Item
+                label="호봉"
+                name="step"
+                extra="호봉 변경 시 호봉표 lookup 으로 기본급 자동 재산정됩니다."
+                className="!tw-mb-0"
+              >
+                <InputNumber min={1} max={20} placeholder="예: 5" style={{ width: 200 }} />
+              </Form.Item>
+            ) : null}
           </Form>
         )}
       </AppDoubleActionModal>

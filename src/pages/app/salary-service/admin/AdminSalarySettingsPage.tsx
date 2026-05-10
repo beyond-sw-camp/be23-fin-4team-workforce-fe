@@ -926,11 +926,22 @@ export function SalaryTab({
                   label="적용 기간"
                   name="effectiveRange"
                   rules={[{ required: true, message: '적용 시작일을 선택하세요.' }]}
+                  extra="종료일은 미래 월말만 선택 가능 (미입력 = 계속 적용)"
                 >
                   <DatePicker.RangePicker
                     allowEmpty={[false, true]}
                     format="YYYY-MM-DD"
                     style={{ width: '100%' }}
+                    disabledDate={(d, info) => {
+                      // 종료일(인덱스 1) 만 - 오늘 이전 + 월말 아닌 날짜 차단. 시작일은 그대로 둠.
+                      if (info?.from && info?.range === 'end') {
+                        if (!d) return false;
+                        const today = dayjs().startOf('day');
+                        if (d.isBefore(today)) return true;
+                        if (d.date() !== d.endOf('month').date()) return true;
+                      }
+                      return false;
+                    }}
                   />
                 </Form.Item>
               </Col>
@@ -1834,8 +1845,8 @@ function SalaryItemTemplateTab() {
         ),
       },
       {
-        // 카테고리 기준 월 비과세 한도 한도 없음 또는 미지정 dash
-        title: '기본 비과세 금액',
+        // 월 비과세 한도. 0 또는 null 이면 "없음" 표시 (한도 자체가 없는 항목)
+        title: '월 비과세 한도',
         dataIndex: 'monthlyNonTaxableLimit',
         key: 'monthlyNonTaxableLimit',
         width: 160,
@@ -1844,14 +1855,10 @@ function SalaryItemTemplateTab() {
           if (typeof v === 'number' && v > 0) {
             return <span>{v.toLocaleString('ko-KR')} 원 / 월</span>;
           }
-          if (typeof v === 'number' && v === 0) {
-            return <Typography.Text type="secondary">한도 없음</Typography.Text>;
-          }
-          // null 인 경우 한도 미정 카테고리 학자금 기타 비과세
           if (r.taxCategory === 'TUITION' || r.taxCategory === 'ETC_NON_TAXABLE') {
             return <Typography.Text type="secondary">실비 / 별도</Typography.Text>;
           }
-          return <Typography.Text type="secondary">—</Typography.Text>;
+          return <Typography.Text type="secondary">없음</Typography.Text>;
         },
       },
       {
@@ -1889,8 +1896,18 @@ function SalaryItemTemplateTab() {
         title: '과세',
         dataIndex: 'isTaxableYn',
         key: 'isTaxableYn',
-        width: 100,
-        render: (v) => (v === 'Y' ? <Tag color="blue">과세</Tag> : <Tag>비과세</Tag>),
+        width: 160,
+        render: (v, r) => {
+          // 한도 있는 비과세 항목은 "한도 내 비과세 + 초과분 과세" 라는 점을 명확히
+          if (v !== 'Y' && typeof r.monthlyNonTaxableLimit === 'number' && r.monthlyNonTaxableLimit > 0) {
+            return (
+              <Tooltip title={`월 ${r.monthlyNonTaxableLimit.toLocaleString('ko-KR')}원까지 비과세, 초과분은 과세 처리됩니다`}>
+                <Tag color="gold">한도 내 비과세</Tag>
+              </Tooltip>
+            );
+          }
+          return v === 'Y' ? <Tag color="blue">과세</Tag> : <Tag>비과세</Tag>;
+        },
       },
       {
         title: '통상임금',

@@ -96,13 +96,27 @@ function genRowKey(): string {
   return `r-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 }
 
+const PERSONNEL_ORDER_PREFILL_STORAGE_KEY = 'wf-approval-prefill-personnel-order';
+
 export function PersonnelOrderItemsField() {
   const form = Form.useFormInstance();
-  // 외부에서 prefill 된 items 동기화용
-  const initialFromForm = (form.getFieldValue(['content', 'items']) ?? []) as Partial<ItemRow>[];
+  // 외부에서 prefill 된 items 동기화용 - form 인스턴스 mismatch 회피로 localStorage 도 직접 fallback
+  const initialRows = (() => {
+    const fromForm = (form.getFieldValue(['content', 'items']) ?? []) as Partial<ItemRow>[];
+    if (fromForm.length > 0) return fromForm;
+    try {
+      const raw = localStorage.getItem(PERSONNEL_ORDER_PREFILL_STORAGE_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw) as { contentJson?: { items?: Partial<ItemRow>[] } };
+      const items = parsed.contentJson?.items;
+      return Array.isArray(items) ? items : [];
+    } catch {
+      return [];
+    }
+  })();
   const [rows, setRows] = useState<ItemRow[]>(() =>
-    initialFromForm.length > 0
-      ? initialFromForm.map((r) => ({
+    initialRows.length > 0
+      ? initialRows.map((r) => ({
           rowKey: genRowKey(),
           memberId: r.memberId,
           memberName: r.memberName,

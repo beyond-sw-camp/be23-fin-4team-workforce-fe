@@ -376,13 +376,15 @@ export function MyAttendancePage() {
       }
       if (r.firstClockIn || r.lastClockOut) {
         workDays += 1;
+        // HH:mm:ss vs HH:mm 길이 차로 인한 잘못된 비교 방지 - HH:mm 으로 통일
+        const norm = (t: string) => t.length >= 5 ? t.slice(0, 5) : t;
         if (startTime && r.firstClockIn) {
-          const inHm = dayjs(r.firstClockIn).format('HH:mm:ss');
-          if (inHm > startTime) tardy += 1;
+          const inHm = dayjs(r.firstClockIn).format('HH:mm');
+          if (inHm > norm(startTime)) tardy += 1;
         }
         if (endTime && r.lastClockOut) {
-          const outHm = dayjs(r.lastClockOut).format('HH:mm:ss');
-          if (outHm < endTime) earlyLeave += 1;
+          const outHm = dayjs(r.lastClockOut).format('HH:mm');
+          if (outHm < norm(endTime)) earlyLeave += 1;
         }
       }
     }
@@ -775,6 +777,25 @@ export function MyAttendancePage() {
                         percent={summary.overtimeUsagePercent}
                         severity={otSev}
                       />
+                      {/* 이번 달 근무시간 누적 - monthlyNormalized 데이터 합산 (한국 1주 52h × 월 4.345주 ≈ 226h 한도) */}
+                      {(() => {
+                        const monthlyWorkedMinutes = (monthlyNormalized.content ?? [])
+                          .reduce((acc, r) => acc + Number(r.workedMinutes ?? 0), 0);
+                        const monthlyLimitMinutes = 52 * 60 * 4; // 월 약 208h 가이드 (52h × 4주)
+                        const monthlyPercent = monthlyLimitMinutes > 0
+                          ? Math.round((monthlyWorkedMinutes / monthlyLimitMinutes) * 1000) / 10
+                          : 0;
+                        return (
+                          <CompactLimitRow
+                            label="이번 달 근무시간 누적"
+                            limitLabel="208h"
+                            value={monthlyWorkedMinutes}
+                            limit={monthlyLimitMinutes}
+                            percent={monthlyPercent}
+                            severity={severityOf(monthlyPercent)}
+                          />
+                        );
+                      })()}
                       {summary.monthlyOvertimeLimitMinutes != null &&
                         summary.monthlyOvertimeLimitMinutes > 0 && (
                           <CompactLimitRow

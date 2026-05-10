@@ -558,12 +558,22 @@ export function AdminBonusPolicyPage({ embedded = false }: { embedded?: boolean 
                 name="effectiveRange"
                 rules={[{ required: true, message: '적용 시작일은 필수입니다.' }]}
                 className="!tw-mb-0"
+                extra="종료일은 미래 월말만 선택 가능 (미입력 = 계속 적용)"
               >
                 <DatePicker.RangePicker
                   allowEmpty={[false, true]}
                   format="YYYY-MM-DD"
                   className="tw-w-full"
                   disabled={editing ? [true, false] : false}
+                  disabledDate={(d, info) => {
+                    if (info?.from && info?.range === 'end') {
+                      if (!d) return false;
+                      const today = dayjs().startOf('day');
+                      if (d.isBefore(today)) return true;
+                      if (d.date() !== d.endOf('month').date()) return true;
+                    }
+                    return false;
+                  }}
                 />
               </Form.Item>
               <Form.Item
