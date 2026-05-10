@@ -933,8 +933,8 @@ export function SalaryTab({
                     format="YYYY-MM-DD"
                     style={{ width: '100%' }}
                     disabledDate={(d, info) => {
-                      // 종료일(인덱스 1) 만 - 오늘 이전 + 월말 아닌 날짜 차단. 시작일은 그대로 둠.
-                      if (info?.from && info?.range === 'end') {
+                      // 종료일 선택 단계에서만 오늘 이전 + 월말 아닌 날짜 차단. 시작일은 그대로 둠.
+                      if (info?.from) {
                         if (!d) return false;
                         const today = dayjs().startOf('day');
                         if (d.isBefore(today)) return true;

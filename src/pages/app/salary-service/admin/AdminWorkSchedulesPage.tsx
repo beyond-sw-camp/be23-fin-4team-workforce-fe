@@ -562,7 +562,7 @@ function ScheduleForm({ form, editing, onSubmit, onGoToFlexibleSlots }: Schedule
           allowEmpty={[false, true]}
           style={{ width: '100%' }}
           disabledDate={(d, info) => {
-            if (info?.from && info?.range === 'end') {
+            if (info?.from) {
               if (!d) return false;
               const today = dayjs().startOf('day');
               if (d.isBefore(today)) return true;

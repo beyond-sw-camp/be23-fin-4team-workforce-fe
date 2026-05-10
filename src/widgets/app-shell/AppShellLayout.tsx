@@ -553,7 +553,7 @@ function buildAppShellMenuItems(
   return items;
 }
 
-function useAppShellSiderMenuItems(currentPathname: string): {
+function useAppShellSiderMenuItems(): {
   items: NonNullable<MenuProps['items']>;
   showSalaryNegotiationSubmenu: boolean;
 } {
@@ -563,7 +563,8 @@ function useAppShellSiderMenuItems(currentPathname: string): {
   /** 결재 양식 설정 메뉴: 시스템 관리자 + 문서함 + 결재 관리 권한 */
   const showApprovalFormSettings =
     isAdmin || hasPermission(PERM.APPROVAL_AD_READ) || canAccessMemberDirectory(hasPermission);
-  const shouldQueryEsgConfig = status === 'authenticated' && currentPathname.startsWith('/app/esg');
+  const shouldQueryEsgConfig = status === 'authenticated';
+  const currentPathname = useRouterState({ select: (state) => state.location.pathname });
 
   const { data: esgConfig } = useQuery({
     queryKey: ['esg', 'config'],
@@ -798,7 +799,6 @@ function useAppShellSiderMenuItems(currentPathname: string): {
     esgConfig,
     isAdmin,
     approvalOrgChart,
-    status,
     user?.permissions,
     myDashboardProfile?.organizationName,
     user?.departmentName,
@@ -1777,8 +1777,7 @@ function AppShellLayout() {
     () => menuSelectedKeyFromPath(pathname, search),
     [pathname, search],
   );
-  const { items: appShellMenuItems, showSalaryNegotiationSubmenu } =
-    useAppShellSiderMenuItems(pathname);
+  const { items: appShellMenuItems, showSalaryNegotiationSubmenu } = useAppShellSiderMenuItems();
   const [orgChartModalOpen, setOrgChartModalOpen] = useState(false);
 
   const [siderCollapsed, setSiderCollapsed] = useState(() => {
