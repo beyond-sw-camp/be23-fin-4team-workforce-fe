@@ -18,6 +18,7 @@ import {
   Row,
   Select,
   Space,
+  Tag,
   Tooltip,
   Typography,
 } from 'antd';
@@ -26,6 +27,7 @@ import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { attendanceApi } from '@/features/salary-service/api/attendanceApi';
 import { AppButton } from '@/shared/ui/AppButton';
+import { disabledPolicyEffectiveTo } from '@/shared/lib/policyDateHelpers';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import type { OvertimePolicy } from '@/features/salary-service/types';
@@ -249,7 +251,7 @@ export function AdminOvertimePoliciesPage({ embedded = false }: { embedded?: boo
                       overtimeFloorMinutes: r.overtimeFloorMinutes ?? 15,
                       postApprovalDeadlineHours: r.postApprovalDeadlineHours ?? undefined,
                       weeklyOvertimeLimitMinutes: r.weeklyOvertimeLimitMinutes ?? undefined,
-                      weeklyTotalLimitMinutes: r.weeklyTotalLimitMinutes ?? undefined,
+                      weeklyTotalLimitMinutes: 3120, // 근로기준법 52시간 고정
                       dailyOvertimeLimitMinutes: r.dailyOvertimeLimitMinutes ?? undefined,
                       monthlyOvertimeLimitMinutes: r.monthlyOvertimeLimitMinutes ?? undefined,
                       effectiveFrom: r.effectiveFrom ? dayjs(r.effectiveFrom) : dayjs(),
@@ -362,16 +364,17 @@ export function AdminOvertimePoliciesPage({ embedded = false }: { embedded?: boo
             layout="vertical"
             className="[&_.ant-form-item]:!tw-mb-3"
             onFinish={(v) => {
-              // cross-field 논리 검증 - 단일 필드 rule 로 잡기 어려운 상호 관계 검증
-              const err = validateOvertimePolicyValues(v);
+              // 주 최대 총 근무시간은 근로기준법 52시간(3120분) 고정 - 사용자 입력 불가
+              const payload = { ...v, weeklyTotalLimitMinutes: 3120 };
+              const err = validateOvertimePolicyValues(payload);
               if (err) {
                 void message.error(err);
                 return;
               }
               if (editing?.overtimePolicyId) {
-                updateM.mutate({ id: editing.overtimePolicyId, v });
+                updateM.mutate({ id: editing.overtimePolicyId, v: payload });
               } else {
-                createM.mutate(v);
+                createM.mutate(payload);
               }
             }}
           >
@@ -444,10 +447,18 @@ export function AdminOvertimePoliciesPage({ embedded = false }: { embedded?: boo
               <Col span={8}>
                 <Form.Item
                   name="weeklyTotalLimitMinutes"
-                  label="주 최대 총 근무시간(분)"
-                  extra="예: 3120 (52시간)"
+                  label="주 최대 총 근무시간"
+                  initialValue={3120}
                 >
-                  <InputNumber min={0} placeholder="예: 3120" style={{ width: 170 }} />
+                  {/* 근로기준법 제53조 - 주 52시간 고정. 사용자 입력 받지 않음 */}
+                  <div className="tw-flex tw-h-8 tw-items-center tw-gap-2">
+                    <Tag color="blue" className="!tw-px-3 !tw-py-1 !tw-text-sm">
+                      52시간 (3,120분)
+                    </Tag>
+                    <Typography.Text type="secondary" className="!tw-text-xs">
+                      근로기준법 제53조 고정
+                    </Typography.Text>
+                  </div>
                 </Form.Item>
               </Col>
             </Row>
@@ -468,11 +479,16 @@ export function AdminOvertimePoliciesPage({ embedded = false }: { embedded?: boo
                 </Form.Item>
               </Col>
               <Col span={8}>
-                <Form.Item name="effectiveTo" label="적용 종료일" extra="미입력 시 계속 적용">
+                <Form.Item
+                  name="effectiveTo"
+                  label="적용 종료일"
+                  extra="미입력 시 계속 적용. 미래 월말만 선택 가능"
+                >
                   <DatePicker
                     format="YYYY-MM-DD"
-                    placeholder="종료일 선택 (선택)"
+                    placeholder="미래 월말 선택"
                     style={{ width: 170 }}
+                    disabledDate={disabledPolicyEffectiveTo}
                   />
                 </Form.Item>
               </Col>

@@ -85,10 +85,10 @@ function addDays(value: Date, days: number): Date {
 }
 
 function getWeekRange(date?: string) {
+  // 일요일 시작 (캘린더 / BE LaborLawValidator 와 통일)
   const base = parseDateOnly(date);
-  const day = base.getDay();
-  const mondayOffset = day === 0 ? -6 : 1 - day;
-  const weekStart = addDays(base, mondayOffset);
+  const day = base.getDay(); // 일요일=0
+  const weekStart = addDays(base, -day);
   const weekEnd = addDays(weekStart, 6);
   return {
     weekStart: formatDateOnly(weekStart),

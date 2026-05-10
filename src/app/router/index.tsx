@@ -904,7 +904,7 @@ const adminSalarySettingsRoute = createRoute({
   },
 });
 
-// 회사 관리자용 자동 작업 관리 페이지
+// 회사 관리자용 자동 작업 관리 페이지 - 시스템 관리자 전용
 const AdminBatchSchedulePageLazy = lazy(() => import('@/pages/app/salary-service/admin/AdminBatchSchedulePage'));
 const adminBatchScheduleRoute = createRoute({
   getParentRoute: () => appBaseRoute,
@@ -912,7 +912,7 @@ const adminBatchScheduleRoute = createRoute({
   component: withSuspense(AdminBatchSchedulePageLazy),
   beforeLoad: ({ context }) => {
     if (!context.auth.user?.isSystemAdmin) {
-      throw redirect({ to: '/app/payroll' });
+      throw redirect({ to: '/403' });
     }
   },
 });

@@ -1056,7 +1056,9 @@ export function ApprovalRequestReadOnlyModal({
                           <ApprovalFormPaperFieldRow key={field.name} label={field.label} required>
                             <Typography.Text
                               className={
-                                field.type === 'textarea' ? 'tw-whitespace-pre-wrap tw-break-words' : undefined
+                                field.type === 'textarea' || field.type === 'personnel_order_items'
+                                  ? 'tw-whitespace-pre-wrap tw-break-words'
+                                  : undefined
                               }
                             >
                               {text}

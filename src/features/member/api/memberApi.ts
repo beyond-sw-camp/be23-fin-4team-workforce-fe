@@ -205,6 +205,8 @@ export type CreateMemberPayload = {
   personalEmail: string;
   joinDate: string;
   employmentType: EmploymentType;
+  /** 계약직 전용 - YYYY-MM-DD. 다른 고용 형태는 null/생략 */
+  contractEndDate?: string | null;
   organizationId: string;
   jobGradeId: string;
   jobTitleId: string;

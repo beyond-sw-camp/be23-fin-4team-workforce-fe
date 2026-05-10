@@ -47,6 +47,8 @@ type FormValues = {
   /** timeRange + breakRange 기준 자동 계산. FLEXIBLE 이면 undefined → null 전송. */
   workMinutes?: number;
   effectiveRange: [dayjs.Dayjs, dayjs.Dayjs | null];
+  /** FLEXIBLE 전용 - 매월 다음 달 슬롯 신청 마감일 (1~28일). 미입력 시 25일 default */
+  selectionDeadlineDay?: number;
 };
 
 const QK = ['salary', 'work-schedules'] as const;
@@ -143,6 +145,8 @@ export function AdminWorkSchedulesPage({ embedded = false }: { embedded?: boolea
         ...buildTimePayload(v),
         effectiveFrom: v.effectiveRange[0].format('YYYY-MM-DD'),
         effectiveTo: v.effectiveRange[1] ? v.effectiveRange[1].format('YYYY-MM-DD') : null,
+        // FLEXIBLE 전용 마감일. FIXED 거나 미입력 시 null
+        selectionDeadlineDay: v.workType === 'FLEXIBLE' ? (v.selectionDeadlineDay ?? null) : null,
       }),
     onSuccess: () => {
       message.success('스케줄이 등록되었습니다.');
@@ -163,6 +167,8 @@ export function AdminWorkSchedulesPage({ embedded = false }: { embedded?: boolea
         effectiveTo: input.v.effectiveRange[1]
           ? input.v.effectiveRange[1].format('YYYY-MM-DD')
           : null,
+        selectionDeadlineDay:
+          input.v.workType === 'FLEXIBLE' ? (input.v.selectionDeadlineDay ?? null) : null,
       }),
     onSuccess: () => {
       message.success('수정되었습니다.');
@@ -333,6 +339,8 @@ export function AdminWorkSchedulesPage({ embedded = false }: { embedded?: boolea
                       r.effectiveFrom ? dayjs(r.effectiveFrom) : dayjs(),
                       r.effectiveTo ? dayjs(r.effectiveTo) : null,
                     ],
+                    selectionDeadlineDay:
+                      (r as WorkSchedule & { selectionDeadlineDay?: number }).selectionDeadlineDay ?? undefined,
                   });
                 }}
               />
@@ -547,13 +555,37 @@ function ScheduleForm({ form, editing, onSubmit, onGoToFlexibleSlots }: Schedule
         label="스케줄 운영 기간 (종료일 미입력 시 계속 적용)"
         name="effectiveRange"
         rules={[{ required: true }]}
+        extra="종료일은 미래 월말만 선택 가능"
       >
         <DatePicker.RangePicker
           format="YYYY-MM-DD"
           allowEmpty={[false, true]}
           style={{ width: '100%' }}
+          disabledDate={(d, info) => {
+            if (info?.from && info?.range === 'end') {
+              if (!d) return false;
+              const today = dayjs().startOf('day');
+              if (d.isBefore(today)) return true;
+              if (d.date() !== d.endOf('month').date()) return true;
+            }
+            return false;
+          }}
         />
       </Form.Item>
+
+      {/* FLEXIBLE 전용 - 매월 다음 달 슬롯 신청 마감일 */}
+      {isFlexible ? (
+        <Form.Item
+          label="슬롯 선택 마감일 (매월 N일)"
+          name="selectionDeadlineDay"
+          extra="직원이 매월 이 날짜까지 다음 달 시간대를 선택. 미선택 시 다음날 새벽 배치가 기본 슬롯 자동 배정. (default 25일)"
+          rules={[
+            { type: 'number', min: 1, max: 28, message: '1 ~ 28 사이로 입력해 주세요.' },
+          ]}
+        >
+          <InputNumber min={1} max={28} step={1} style={{ width: '100%' }} placeholder="25" />
+        </Form.Item>
+      ) : null}
 
       {/* 수정 모드에서 기존 스케줄 안내 */}
       {editing && isFlexible ? (

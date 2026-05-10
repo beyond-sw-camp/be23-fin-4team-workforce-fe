@@ -44,6 +44,7 @@ import {
   parseContractFormSchema,
 } from '@/features/contracts/lib/parseContractFormSchema';
 import { uploadSignaturePngForContract } from '@/features/contracts/lib/uploadSignaturePng';
+import { isContractMoneyLikeNumberField } from '@/features/contracts/lib/contractMoneyLikeField';
 import { ApprovalFormPaperFieldRow, ApprovalFormPaperLayout } from '@/features/approvals/ui/ApprovalFormPaperLayout';
 import { ContractAdminFormFieldInput } from '@/features/contracts/ui/ContractAdminFormFieldInput';
 import { CONTRACT_HUB_CARD_CLASS } from '@/features/contracts/ui/contractHubStyles';
@@ -102,10 +103,30 @@ function pickAdminFromContractContent(contract: ContractRecord, adminFieldNames:
   return out;
 }
 
-function formatValue(value: unknown): string {
+function formatValue(value: unknown, field?: ContractSchemaField): string {
   if (value == null) return '—';
-  if (typeof value === 'string') return value.trim() || '—';
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  // 금액 라벨/이름 휴리스틱과 동일한 기준으로 천원 콤마 + ' 원' 처리
+  const moneyLike =
+    field?.type === 'number' &&
+    isContractMoneyLikeNumberField({
+      type: 'number',
+      name: field.key,
+      label: field.label,
+    } as Parameters<typeof isContractMoneyLikeNumberField>[0]);
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return '—';
+    if (moneyLike) {
+      const n = Number(trimmed.replace(/,/g, ''));
+      if (!Number.isNaN(n)) return `${n.toLocaleString('ko-KR')} 원`;
+    }
+    return trimmed;
+  }
+  if (typeof value === 'number') {
+    if (moneyLike) return `${value.toLocaleString('ko-KR')} 원`;
+    return value.toLocaleString('ko-KR');
+  }
+  if (typeof value === 'boolean') return value ? '예' : '아니오';
   try {
     return JSON.stringify(value);
   } catch {
@@ -952,7 +973,7 @@ export function ContractAdminStatusPanel({ hubLayout = false }: { hubLayout?: bo
                   detailFields.map((field) => (
                     <ApprovalFormPaperFieldRow key={field.key} label={field.label}>
                       <Typography.Text className={field.type === 'textarea' ? 'tw-whitespace-pre-wrap tw-break-words' : undefined}>
-                        {formatValue(detailContent[field.key] ?? (field.sourceField ? detailContent[field.sourceField] : undefined))}
+                        {formatValue(detailContent[field.key] ?? (field.sourceField ? detailContent[field.sourceField] : undefined), field)}
                       </Typography.Text>
                     </ApprovalFormPaperFieldRow>
                   ))

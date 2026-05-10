@@ -643,6 +643,8 @@ export type WorkSchedule = {
   breakMinutes?: number | null;
   effectiveFrom?: string;
   effectiveTo?: string | null;
+  /** FLEXIBLE 전용 - 매월 다음 달 슬롯 신청 마감일 (1~28). default 25 */
+  selectionDeadlineDay?: number | null;
 };
 
 /** WorkSchedule 생성/수정 페이로드.
@@ -661,6 +663,8 @@ export type WorkScheduleCreatePayload = {
   breakEnd?: string | null;
   effectiveFrom: string;
   effectiveTo?: string | null;
+  /** FLEXIBLE 전용 - 매월 다음 달 슬롯 신청 마감일 (1~28). null/생략 시 default 25 */
+  selectionDeadlineDay?: number | null;
 };
 
 export type WorkScheduleUpdatePayload = Partial<Omit<WorkScheduleCreatePayload, 'memberId'>>;

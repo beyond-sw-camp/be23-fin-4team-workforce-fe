@@ -610,14 +610,15 @@ export function MyScheduleSelectionsPage() {
       if (!nextSel) {
         return {
           type: 'warning' as const,
-          message: `${nextMonthLabel} 근무 시간대 선택 마감 D-${dDay} (${thisMonthDeadline.format('M월 D일')}까지)`,
+          message: `${nextMonthLabel} 근무 시간대 미신청 - ${thisMonthDeadline.format('M월 D일')} 마감 (D-${dDay})`,
           description: '마감일까지 신청하지 않으면 기본 근무 시간대가 자동 적용됩니다.',
         };
       }
+      // 이미 신청 완료 - D-N 카운트다운은 노이즈라 description 생략, "변경 가능" 만 짧게
       return {
         type: 'success' as const,
         message: `${nextMonthLabel} 근무 시간대 — ${formatSlotInfo(nextSel)} 신청 완료`,
-        description: `마감일까지 변경 가능합니다 (D-${dDay}, ${thisMonthDeadline.format('M월 D일')})`,
+        description: `${thisMonthDeadline.format('M월 D일')}까지 [스케줄 변경 신청] 으로 변경할 수 있습니다.`,
       };
     }
 
@@ -722,24 +723,77 @@ export function MyScheduleSelectionsPage() {
 
   const columns = useMemo<ColumnsType<MemberScheduleSelection>>(
     () => [
-      { title: '대상월', dataIndex: 'targetYearMonth', key: 'targetYearMonth', width: 110 },
       {
-        title: '신청 스케줄',
-        key: 'slot',
-        render: (_, r) => slotMap.get(r.slotId ?? '') ?? r.slotId ?? '-',
+        title: '대상월',
+        dataIndex: 'targetYearMonth',
+        key: 'targetYearMonth',
+        width: 100,
+        sorter: (a, b) => (a.targetYearMonth ?? '').localeCompare(b.targetYearMonth ?? ''),
+        defaultSortOrder: 'descend' as const,
       },
-      { title: '사유', dataIndex: 'requestReason', key: 'requestReason', ellipsis: true },
+      {
+        title: '신청 시간대',
+        key: 'slot',
+        width: 180,
+        render: (_, r) => {
+          const label = slotMap.get(r.slotId ?? '') ?? r.slotId ?? '-';
+          return <Typography.Text strong>{label}</Typography.Text>;
+        },
+      },
+      {
+        title: '점심시간',
+        key: 'break',
+        width: 130,
+        render: (_, r) => {
+          if (!r.breakStart || !r.breakEnd) return <Typography.Text type="secondary">-</Typography.Text>;
+          return `${trimSeconds(r.breakStart)}~${trimSeconds(r.breakEnd)}`;
+        },
+      },
+      {
+        title: '신청일',
+        dataIndex: 'createdAt',
+        key: 'createdAt',
+        width: 130,
+        render: (v) => (v ? dayjs(v).format('YYYY-MM-DD') : '-'),
+        sorter: (a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? ''),
+      },
+      {
+        title: '사유',
+        dataIndex: 'requestReason',
+        key: 'requestReason',
+        ellipsis: true,
+        render: (v) => v || <Typography.Text type="secondary">-</Typography.Text>,
+      },
       {
         title: '상태',
         dataIndex: 'approvalStatus',
         key: 'approvalStatus',
-        width: 100,
-        render: (v) => <Tag>{STATUS_KO[v ?? ''] ?? v ?? '-'}</Tag>,
+        width: 110,
+        render: (v) => {
+          const label = STATUS_KO[v ?? ''] ?? v ?? '-';
+          // 상태별 색상: 승인=green, 자동=blue, 대기=orange, 반려=red, 취소=default
+          const color =
+            v === 'APPROVED' ? 'green'
+            : v === 'AUTO' ? 'blue'
+            : v === 'PENDING' ? 'orange'
+            : v === 'REJECTED' ? 'red'
+            : 'default';
+          return <Tag color={color}>{label}</Tag>;
+        },
+        filters: [
+          { text: '승인', value: 'APPROVED' },
+          { text: '자동 적용', value: 'AUTO' },
+          { text: '대기', value: 'PENDING' },
+          { text: '반려', value: 'REJECTED' },
+          { text: '취소', value: 'CANCELLED' },
+        ],
+        onFilter: (value, r) => r.approvalStatus === value,
       },
       {
         title: '액션',
         key: 'action',
         width: 90,
+        align: 'center' as const,
         render: (_, r) =>
           r.selectionId && r.approvalStatus === 'PENDING' ? (
             <Popconfirm title="신청을 철회할까요?" onConfirm={() => cancelM.mutate(r.selectionId!)}>
@@ -748,7 +802,7 @@ export function MyScheduleSelectionsPage() {
               </Button>
             </Popconfirm>
           ) : (
-            '-'
+            <Typography.Text type="secondary">-</Typography.Text>
           ),
       },
     ],
@@ -856,28 +910,34 @@ export function MyScheduleSelectionsPage() {
                 </>
               ),
             },
-            {
-              key: 'history',
-              label: '변경 신청 이력',
-              children: (
-                <>
-                  <div className="tw-mb-3 tw-flex tw-justify-end">
-                    <Button size="small" onClick={() => setScheduleTab('schedule')}>
-                      ‹ 근무 스케줄로 돌아가기
-                    </Button>
-                  </div>
-                  <AppDataTable<MemberScheduleSelection>
-                    rowKey={(r) => r.selectionId ?? `${r.targetYearMonth}-${r.createdAt}`}
-                    dataSource={historyQ.data ?? []}
-                    columns={columns}
-                    pagination={{ pageSize: 10 }}
-                    scroll={{ x: 860 }}
-                    locale={{ emptyText: '신청/이력 데이터가 없습니다.' }}
-                    loading={historyQ.isLoading}
-                  />
-                </>
-              ),
-            },
+            // 변경 신청 이력 탭은 시차출퇴근(FLEXIBLE) 정책이 활성일 때만 노출
+            // 고정근무(FIXED) 회사에는 슬롯 선택 자체가 없어서 이력 탭이 의미 없음
+            ...(activeFlexibleSchedule
+              ? [
+                  {
+                    key: 'history',
+                    label: '변경 신청 이력',
+                    children: (
+                      <>
+                        <div className="tw-mb-3 tw-flex tw-justify-end">
+                          <Button size="small" onClick={() => setScheduleTab('schedule')}>
+                            ‹ 근무 스케줄로 돌아가기
+                          </Button>
+                        </div>
+                        <AppDataTable<MemberScheduleSelection>
+                          rowKey={(r) => r.selectionId ?? `${r.targetYearMonth}-${r.createdAt}`}
+                          dataSource={historyQ.data ?? []}
+                          columns={columns}
+                          pagination={{ pageSize: 10 }}
+                          scroll={{ x: 860 }}
+                          locale={{ emptyText: '신청/이력 데이터가 없습니다.' }}
+                          loading={historyQ.isLoading}
+                        />
+                      </>
+                    ),
+                  },
+                ]
+              : []),
           ]}
         />
       </Card>

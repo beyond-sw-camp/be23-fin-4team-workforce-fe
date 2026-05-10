@@ -250,25 +250,6 @@ export function AdminPayrollPage() {
   }, [rows]);
 
   /* ── 이번 달 누락자 자동 검증 ──
-   * 회사 활성 직원 - 이번 달 REGULAR_MONTHLY Payroll 보유자 = 누락자
-   * 정산 처리 탭은 시간 무관(DRAFT/CONFIRMED) 데이터지만 누락 검증은 이번 달 기준 */
-  const missingMembers = useMemo(() => {
-    const allMembers = activeMembersQ.data ?? [];
-    const thisMonth = dayjs().format('YYYY-MM');
-    const regularRows = rows.filter(
-      (r) => r.payrollType === 'REGULAR_MONTHLY' && r.targetYearMonth === thisMonth,
-    );
-    const memberIdsWithPayroll = new Set(regularRows.map((r) => r.memberId));
-    return allMembers
-      .filter((m) => !memberIdsWithPayroll.has(m.memberId))
-      .map((m) => ({
-        memberId: m.memberId,
-        name: m.name,
-        sabun: (m as { sabun?: string | null }).sabun ?? null,
-        organizationName: m.organizationName ?? null,
-      }));
-  }, [activeMembersQ.data, rows]);
-
   /* ── 부서 옵션 (필터) ── */
   const departmentOptions = useMemo(() => {
     const set = new Set<string>();
@@ -432,38 +413,6 @@ export function AdminPayrollPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm] = Form.useForm<CreateForm>();
 
-  // 누락자 일괄 추가 모달 - 자동 검증 배너에서 진입
-  const [missingModalOpen, setMissingModalOpen] = useState(false);
-  const [missingSelected, setMissingSelected] = useState<string[]>([]);
-
-  // 일괄 추가 - 선택된 N명에 대해 단건 create 를 순차 실행 (멱등 - 이미 있는 건 BE 에서 스킵)
-  const bulkCreateMissingM = useMutation({
-    mutationFn: async (memberIds: string[]) => {
-      // SalaryPolicy.payDay 기준 그 정산월 + payDay 일자로 생성 - 없으면 오늘 일자
-      const day = activePayDay ?? dayjs().date();
-      const payDate = yearMonth.date(Math.min(day, yearMonth.daysInMonth())).format('YYYY-MM-DD');
-      let success = 0;
-      const failures: string[] = [];
-      for (const id of memberIds) {
-        try {
-          await salaryApi.payroll.create({ memberId: id, payrollYearMonthDay: payDate });
-          success++;
-        } catch (e) {
-          failures.push(`${id}: ${(e as Error).message}`);
-        }
-      }
-      return { success, failures };
-    },
-    onSuccess: (res) => {
-      message.success(
-        `누락자 ${res.success}명 추가 완료${res.failures.length > 0 ? ` (실패 ${res.failures.length}명)` : ''}`,
-      );
-      setMissingModalOpen(false);
-      setMissingSelected([]);
-      void qc.invalidateQueries({ queryKey: ['salary', 'payroll'] });
-    },
-    onError: (e: Error) => message.error(e.message || '누락자 추가 실패'),
-  });
   const createM = useMutation({
     mutationFn: (v: CreateForm) =>
       salaryApi.payroll.create({
@@ -695,41 +644,6 @@ export function AdminPayrollPage() {
                               : `이번 달(${thisMonth}) 정기급여 명세서가 아직 만들어지지 않았어요`
                           }
                           description="우측 상단 [명세서 생성] 버튼을 누르면 회사 정책 기준 정산일로 한꺼번에 만들어집니다."
-                        />
-                      );
-                    }
-                    // 배치 후 일부 누락
-                    if (missingMembers.length > 0) {
-                      return (
-                        <Alert
-                          type="warning"
-                          showIcon
-                          message={
-                            <span>
-                              <b>이번 달({thisMonth}) 정기급여 누락 {missingMembers.length}명</b> —{' '}
-                              {missingMembers
-                                .slice(0, 3)
-                                .map((m) => m.name)
-                                .join(', ')}
-                              {missingMembers.length > 3 ? ` 외 ${missingMembers.length - 3}명` : ''}
-                            </span>
-                          }
-                          action={
-                            <Space size="small">
-                              <Button size="small" type="primary" onClick={() => setMissingModalOpen(true)}>
-                                누락자 {missingMembers.length}명 일괄 추가
-                              </Button>
-                              <Button
-                                size="small"
-                                onClick={() => {
-                                  createForm.resetFields();
-                                  setCreateOpen(true);
-                                }}
-                              >
-                                개별 추가
-                              </Button>
-                            </Space>
-                          }
                         />
                       );
                     }
@@ -970,7 +884,7 @@ export function AdminPayrollPage() {
             },
             {
               key: 'bonus',
-              label: '상여·성과급 지급',
+              label: '상여금 지급',
               children: <AdminBonusBatchTab />,
             },
             {
@@ -1037,48 +951,6 @@ export function AdminPayrollPage() {
         </div>
       </AppDoubleActionModal>
 
-      {/* 월급 누락자 - 일괄 추가 모달 (배너 진입) */}
-      <AppDoubleActionModal
-        open={missingModalOpen}
-        onClose={() => {
-          setMissingModalOpen(false);
-          setMissingSelected([]);
-        }}
-        onConfirm={() => {
-          const ids = missingSelected.length > 0
-            ? missingSelected
-            : missingMembers.map((m) => m.memberId);
-          if (ids.length === 0) return;
-          bulkCreateMissingM.mutate(ids);
-        }}
-        confirmLoading={bulkCreateMissingM.isPending}
-        confirmText={`추가 ${missingSelected.length || missingMembers.length}명`}
-        cancelText="취소"
-        title="월급 누락자 일괄 추가"
-        destroyOnHidden
-        width={620}
-      >
-        <div className="tw-px-5 tw-py-4">
-          <Typography.Paragraph type="secondary" className="!tw-text-xs !tw-mb-2">
-            월급일 {activePayDay ?? '미설정'}일 자동 적용. 선택 없이 [추가] 누르면 전체({missingMembers.length}명)에 일괄 적용됩니다.
-          </Typography.Paragraph>
-          <Table
-            rowKey="memberId"
-            size="small"
-            dataSource={missingMembers}
-            pagination={{ pageSize: 10 }}
-            rowSelection={{
-              selectedRowKeys: missingSelected,
-              onChange: (keys) => setMissingSelected(keys as string[]),
-            }}
-            columns={[
-              { title: '사번', dataIndex: 'sabun', width: 100, render: (v) => v ?? '—' },
-              { title: '이름', dataIndex: 'name', width: 130 },
-              { title: '부서', dataIndex: 'organizationName', render: (v) => v ?? '—' },
-            ]}
-          />
-        </div>
-      </AppDoubleActionModal>
     </Space>
   );
 }

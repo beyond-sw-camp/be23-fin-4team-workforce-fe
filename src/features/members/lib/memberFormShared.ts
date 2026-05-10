@@ -96,7 +96,9 @@ export function pickRowName(row: Record<string, unknown>): string {
   return typeof row.name === 'string' ? row.name : '';
 }
 
-export const MEMBER_FORM_EMPLOYMENT_TYPES: EmploymentType[] = ['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERN'];
+// 신규 직원 생성 모달에 노출할 고용 형태 - 정규직/계약직만
+// (PART_TIME/INTERN 은 enum 자체는 유지, dropdown 선택지에서만 제외)
+export const MEMBER_FORM_EMPLOYMENT_TYPES: EmploymentType[] = ['FULL_TIME', 'CONTRACT'];
 
 export const MEMBER_FORM_EMPLOYMENT_OPTIONS = MEMBER_FORM_EMPLOYMENT_TYPES.map((v) => ({
   value: v,
