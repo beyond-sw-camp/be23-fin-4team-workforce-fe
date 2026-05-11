@@ -1472,7 +1472,7 @@ const MY_INBOX_FILTER_TABS: { key: 'ALL' | ApprovalRequestStatus; label: string 
 
 function formatDateTime(value?: string | null) {
   if (!value) return '—';
-  const d = dayjs(value);
+  const d = dayjs.utc(value).tz('Asia/Seoul');
   return d.isValid() ? d.format('YYYY-MM-DD HH:mm') : value;
 }
 
@@ -5841,7 +5841,7 @@ export function ApprovalsPage() {
         key: 'createdAt',
         width: 96,
         render: (_: unknown, row) => {
-          const compactDate = row.createdAt ? dayjs(row.createdAt).format('MM.DD HH:mm') : '—';
+          const compactDate = row.createdAt ? dayjs.utc(row.createdAt).tz('Asia/Seoul').format('MM.DD HH:mm') : '—';
           return (
             <Tooltip title={formatDateTime(row.createdAt)}>
               <span className="tw-block tw-whitespace-nowrap tw-text-xs tw-font-normal tw-leading-none tw-text-slate-500 [font-variant-numeric:tabular-nums]">
