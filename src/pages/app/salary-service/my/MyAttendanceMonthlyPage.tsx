@@ -98,8 +98,8 @@ export function MyAttendanceMonthlyPage() {
               type="link"
               onClick={() => {
                 const date = row.attendanceDate;
-                const clockIn = row.firstClockIn ? dayjs(row.firstClockIn).format('HH:mm') : '';
-                const clockOut = row.lastClockOut ? dayjs(row.lastClockOut).format('HH:mm') : '';
+                const clockIn = row.firstClockIn ? dayjs.utc(row.firstClockIn).tz('Asia/Seoul').format('HH:mm') : '';
+                const clockOut = row.lastClockOut ? dayjs.utc(row.lastClockOut).tz('Asia/Seoul').format('HH:mm') : '';
                 void navigate({
                   to: '/app/approvals/correction-request',
                   search: { date, clockIn, clockOut },
