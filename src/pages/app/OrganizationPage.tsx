@@ -541,6 +541,8 @@ export function OrganizationPage() {
   // (Role 기반 - ROLE:UPDATE 권한은 인사 관리자에게만 부여됨)
   const canRestructure =
     user?.isSystemAdmin === true || hasPermission(PERM.ROLE_UPDATE);
+  // 역할·권한 탭은 시스템 관리자만 노출 (인사 관리자는 ROLE 권한이 있어도 메뉴 숨김)
+  const canManageRoles = user?.isSystemAdmin === true;
   const qc = useQueryClient();
   const [selectedOrgKeys, setSelectedOrgKeys] = useState<Key[]>([]);
   const [isOrgEditing, setIsOrgEditing] = useState(false);
@@ -1664,11 +1666,13 @@ export function OrganizationPage() {
                 </div>
               ),
             },
-            {
-              key: 'roles',
-              label: '역할·권한',
-              children: <OrganizationRolesSection />,
-            },
+            ...(canManageRoles
+              ? [{
+                  key: 'roles',
+                  label: '역할·권한',
+                  children: <OrganizationRolesSection />,
+                }]
+              : []),
             ...(canRestructure
               ? [{
                   key: 'restructure',
