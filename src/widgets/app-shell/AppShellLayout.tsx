@@ -560,6 +560,10 @@ function useAppShellSiderMenuItems(): {
   const { status, user } = useAuth();
   const isAdmin = user?.isSystemAdmin === true;
   const { hasPermission } = usePermissions();
+  // 인사 팀장(또는 그 이상)도 시스템 관리자급 메뉴 노출
+  // - 자동 작업 관리만 isAdmin 전용 (아래 batchSchedule 분기에서 별도 처리)
+  // - 역할/권한 탭만 isAdmin 전용 (OrganizationPage 의 canManageRoles 에서 처리)
+  const isAdminOrHr = isAdmin || hasPermission(PERM.MEMBER_UPDATE);
   /** 결재 양식 설정 메뉴: 시스템 관리자 + 문서함 + 결재 관리 권한 */
   const showApprovalFormSettings =
     isAdmin || hasPermission(PERM.APPROVAL_AD_READ) || canAccessMemberDirectory(hasPermission);
@@ -715,7 +719,7 @@ function useAppShellSiderMenuItems(): {
           title: '결재 양식 설정',
         },
         ...(showMemberDirectoryMenu ? [contractSendMenuItem] : []),
-        ...(isAdmin
+        ...(isAdminOrHr
           ? [
               {
                 key: '/app/leave/absence',
@@ -741,7 +745,7 @@ function useAppShellSiderMenuItems(): {
     const leavePromotionEnabled = (leavePoliciesForMenu ?? []).some((p) => p.isPromotionYn === 'Y');
     const showSalaryNegotiationSubmenu = hasActiveNegotiationSalaryPolicy(salaryPoliciesForMenu);
     const items = buildAppShellMenuItems(
-      isAdmin,
+      isAdminOrHr,
       approvalMenuChildren,
       showMemberDirectoryMenu,
       hrGroupExtraChildren,
@@ -766,21 +770,21 @@ function useAppShellSiderMenuItems(): {
           }
         : null;
 
-    if (!isAdmin) {
+    if (!isAdminOrHr) {
       return {
         items: esgMenuItem ? [...items, esgMenuItem] : items,
         showSalaryNegotiationSubmenu: false,
       };
     }
 
-    /** 시스템 관리자: HR 정책 문서 항목을 메뉴 끝에 ESG 다음에 배치 */
+    /** 시스템 관리자 + 인사 팀장: HR 정책 문서 항목을 메뉴 끝에 ESG 다음에 배치 */
     const doc = {
       key: '/app/ai-documents',
       icon: <RobotOutlined className="tw-text-lg" />,
       label: 'HR 정책 문서',
       title: 'HR 정책 문서',
     };
-    // 자동 작업 관리 - 회사 관리자(시스템 관리자) 전용
+    // 자동 작업 관리 - 시스템 관리자 전용 (인사 팀장은 제외)
     const batchSchedule = isAdmin
       ? {
           key: '/app/admin/batch-schedule',
@@ -798,6 +802,7 @@ function useAppShellSiderMenuItems(): {
   }, [
     esgConfig,
     isAdmin,
+    isAdminOrHr,
     approvalOrgChart,
     user?.permissions,
     myDashboardProfile?.organizationName,
