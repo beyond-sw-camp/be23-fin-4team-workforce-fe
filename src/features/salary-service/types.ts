@@ -63,6 +63,8 @@ export type DailyAttendance = {
   overtimeMinutes?: number | null;
   /** 출장/외근 - WorkTripDetail.workTripType (BUSINESS_TRIP / OUTSIDE_WORK), 없으면 null */
   workTripType?: 'BUSINESS_TRIP' | 'OUTSIDE_WORK' | null;
+  /** 조퇴계 결재 승인 여부 - 'Y'면 상태/카운트에 '조퇴' 반영 */
+  earlyLeaveExcusedYn?: string | null;
 };
 
 /** 출퇴근 정정 신청 페이로드 */

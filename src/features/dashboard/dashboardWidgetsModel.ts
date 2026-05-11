@@ -48,20 +48,40 @@ export function orderedEnabledWidgets(enabled: ReadonlySet<DashboardWidgetId>): 
   return ALL_DASHBOARD_WIDGET_IDS.filter((id) => enabled.has(id));
 }
 
+// 시스템 관리자에게는 노출 안 할 위젯 (개인 근태/휴가)
+const SYSTEM_ADMIN_HIDDEN_WIDGETS: ReadonlySet<DashboardWidgetId> = new Set(['attendance', 'leave']);
+
+function isSystemAdminUser(): boolean {
+  try {
+    const token = localStorage.getItem('workforce.accessToken');
+    if (!token) return false;
+    const payload = JSON.parse(atob(token.split('.')[1])) as Record<string, unknown>;
+    return payload.isSystemAdmin === 'YES' || payload.isSystemAdmin === true;
+  } catch {
+    return false;
+  }
+}
+
+function applySystemAdminFilter(ids: DashboardWidgetId[]): DashboardWidgetId[] {
+  if (!isSystemAdminUser()) return ids;
+  return ids.filter((id) => !SYSTEM_ADMIN_HIDDEN_WIDGETS.has(id));
+}
+
 export function loadDashboardWidgets(): DashboardWidgetId[] {
   try {
     const raw = localStorage.getItem(DASHBOARD_WIDGET_STORAGE_KEY);
-    if (!raw) return [...ALL_DASHBOARD_WIDGET_IDS];
+    if (!raw) return applySystemAdminFilter([...ALL_DASHBOARD_WIDGET_IDS]);
     const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [...ALL_DASHBOARD_WIDGET_IDS];
+    if (!Array.isArray(parsed)) return applySystemAdminFilter([...ALL_DASHBOARD_WIDGET_IDS]);
     const filtered = parsed.filter(
       (x): x is DashboardWidgetId =>
         typeof x === 'string' && (ALL_DASHBOARD_WIDGET_IDS as readonly string[]).includes(x),
     );
     const dedup = orderedEnabledWidgets(new Set(filtered));
-    return dedup.length > 0 ? dedup : [...ALL_DASHBOARD_WIDGET_IDS];
+    const base = dedup.length > 0 ? dedup : [...ALL_DASHBOARD_WIDGET_IDS];
+    return applySystemAdminFilter(base);
   } catch {
-    return [...ALL_DASHBOARD_WIDGET_IDS];
+    return applySystemAdminFilter([...ALL_DASHBOARD_WIDGET_IDS]);
   }
 }
 
@@ -94,7 +114,11 @@ function preferredColumnOf(widgetId: DashboardWidgetId): DashboardColumnKey {
 
 function withMissingDefaultWidgets(layout: DashboardLayout): DashboardLayout {
   const existing = new Set(layout.items.map((item) => item.id));
-  const missing = ALL_DASHBOARD_WIDGET_IDS.filter((id) => !existing.has(id));
+  let missing = ALL_DASHBOARD_WIDGET_IDS.filter((id) => !existing.has(id));
+  // 시스템 관리자에게는 숨김 위젯을 자동 추가하지 않음
+  if (isSystemAdminUser()) {
+    missing = missing.filter((id) => !SYSTEM_ADMIN_HIDDEN_WIDGETS.has(id));
+  }
   if (missing.length === 0) return layout;
   return {
     ...layout,
@@ -138,7 +162,15 @@ export function loadDashboardLayout(): DashboardLayout {
     const raw = localStorage.getItem(DASHBOARD_LAYOUT_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as DashboardLayout;
-      return withMissingDefaultWidgets(normalizeLayout(parsed));
+      const layout = withMissingDefaultWidgets(normalizeLayout(parsed));
+      // 시스템 관리자는 숨김 위젯 제거
+      if (isSystemAdminUser()) {
+        return {
+          ...layout,
+          items: layout.items.filter((item) => !SYSTEM_ADMIN_HIDDEN_WIDGETS.has(item.id)),
+        };
+      }
+      return layout;
     }
   } catch {
     // ignore and fallback

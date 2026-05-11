@@ -356,11 +356,10 @@ export function MyAttendancePage() {
   );
   // 조퇴계 행별 진입은 화면 단순성 위해 제외 (자주 발생하지 않음). 조퇴는 전자결재 메뉴에서 양식 직접 작성
 
-  // 이번 달 통계 - 근무일 / 지각 / 결근 / 조퇴
+  // 이번 달 통계 - 근무일 / 지각(자동 감지) / 결근 / 조퇴(조퇴계 결재 승인된 것만 카운트)
   const monthStats = useMemo(() => {
     const rows = monthlyNormalized.content;
     const startTime = effectiveSchedule?.startTime ?? null; // HH:mm:ss
-    const endTime = effectiveSchedule?.endTime ?? null;
     const todayStr = todayIso;
     let workDays = 0;
     let tardy = 0;
@@ -382,10 +381,8 @@ export function MyAttendancePage() {
           const inHm = dayjs.utc(r.firstClockIn).tz('Asia/Seoul').format('HH:mm');
           if (inHm > norm(startTime)) tardy += 1;
         }
-        if (endTime && r.lastClockOut) {
-          const outHm = dayjs.utc(r.lastClockOut).tz('Asia/Seoul').format('HH:mm');
-          if (outHm < norm(endTime)) earlyLeave += 1;
-        }
+        // 조퇴 - 조퇴계 결재 승인된 경우만 카운트 (단순 조기 퇴근은 카운트하지 않음)
+        if (r.earlyLeaveExcusedYn === 'Y') earlyLeave += 1;
       }
     }
     return { workDays, tardy, absent, earlyLeave };
@@ -467,9 +464,24 @@ export function MyAttendancePage() {
       {
         title: '상태',
         key: 'status',
-        render: (_, row) => (
-          <AttendanceStatusTag status={row.status} workTripType={row.workTripType ?? null} />
-        ),
+        render: (_, row) => {
+          // 자동 감지 지각 - 출근시각 > 정규 시작시각
+          const norm = (t: string) => (t.length >= 5 ? t.slice(0, 5) : t);
+          const startTime = effectiveSchedule?.startTime ?? null;
+          let isTardy = false;
+          if (startTime && row.firstClockIn) {
+            const inHm = dayjs.utc(row.firstClockIn).tz('Asia/Seoul').format('HH:mm');
+            if (inHm > norm(startTime)) isTardy = true;
+          }
+          return (
+            <AttendanceStatusTag
+              status={row.status}
+              workTripType={row.workTripType ?? null}
+              tardy={isTardy}
+              earlyLeave={row.earlyLeaveExcusedYn === 'Y'}
+            />
+          );
+        },
       },
       {
         title: '출근',
