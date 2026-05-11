@@ -18,7 +18,7 @@ import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 function formatDt(iso?: string | null) {
   if (!iso) return '—';
-  const d = dayjs(iso);
+  const d = dayjs.utc(iso).tz('Asia/Seoul');
   return d.isValid() ? d.format('MM-DD HH:mm') : String(iso);
 }
 

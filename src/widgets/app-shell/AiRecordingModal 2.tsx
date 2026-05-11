@@ -37,6 +37,7 @@ import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppSearchBar } from '@/shared/ui';
 import { formatApprovalAttachmentBytes } from '@/features/approvals/api/approvalAttachmentsApi';
+import { toKstDateTime } from '@/lib/dayjsSetup';
 
 type AiRecordingModalProps = {
   open: boolean;
@@ -736,7 +737,7 @@ export function AiRecordingModal({
                   </Typography.Text>
                 </div>
                 <Typography.Text type="secondary" className="wf-ai-recording-meta">
-                  {dayjs(row.createdAt).format('YYYY-MM-DD HH:mm')} · {languageLabel(row.language)} ·{' '}
+                  {toKstDateTime(row.createdAt)} · {languageLabel(row.language)} ·{' '}
                   {formatApprovalAttachmentBytes(row.audioSize)}
                 </Typography.Text>
                 <Typography.Paragraph className="!tw-mb-0 tw-line-clamp-2 tw-text-sm tw-text-slate-600">
@@ -795,7 +796,7 @@ export function AiRecordingModal({
                 </Typography.Title>
               )}
               <Typography.Text type="secondary" className="wf-ai-recording-meta">
-                {dayjs(currentDetail.createdAt).format('YYYY-MM-DD HH:mm')} · {currentDetail.audioFileName} ·{' '}
+                {toKstDateTime(currentDetail.createdAt)} · {currentDetail.audioFileName} ·{' '}
                 {formatApprovalAttachmentBytes(currentDetail.audioSize)}
               </Typography.Text>
               <audio src={currentDetail.audioUrl} controls className="tw-w-full" />
