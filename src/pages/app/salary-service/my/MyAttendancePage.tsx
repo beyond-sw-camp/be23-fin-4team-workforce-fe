@@ -108,7 +108,7 @@ function estimateWorkedMinutes(
   breakMinutes: number,
 ): number {
   if (!firstClockIn || !lastClockOut) return 0;
-  const stay = dayjs(lastClockOut).diff(dayjs(firstClockIn), 'minute');
+  const stay = dayjs.utc(lastClockOut).tz('Asia/Seoul').diff(dayjs.utc(firstClockIn).tz('Asia/Seoul'), 'minute');
   return Math.max(0, stay - breakMinutes);
 }
 
@@ -475,13 +475,13 @@ export function MyAttendancePage() {
         title: '출근',
         dataIndex: 'firstClockIn',
         key: 'firstClockIn',
-        render: (v?: string | null) => (v ? dayjs(v).format('HH:mm') : '—'),
+        render: (v?: string | null) => (v ? dayjs.utc(v).tz('Asia/Seoul').format('HH:mm') : '—'),
       },
       {
         title: '퇴근',
         dataIndex: 'lastClockOut',
         key: 'lastClockOut',
-        render: (v?: string | null) => (v ? dayjs(v).format('HH:mm') : '—'),
+        render: (v?: string | null) => (v ? dayjs.utc(v).tz('Asia/Seoul').format('HH:mm') : '—'),
       },
       {
         title: '근무 시간',
@@ -625,8 +625,8 @@ export function MyAttendancePage() {
       effectiveSchedule?.breakMinutes ?? 0,
     );
   const latestClockLabel = (() => {
-    if (daily?.lastClockOut) return `퇴근 ${dayjs(daily.lastClockOut).format('HH:mm')}`;
-    if (daily?.firstClockIn) return `출근 ${dayjs(daily.firstClockIn).format('HH:mm')}`;
+    if (daily?.lastClockOut) return `퇴근 ${dayjs.utc(daily.lastClockOut).tz('Asia/Seoul').format('HH:mm')}`;
+    if (daily?.firstClockIn) return `출근 ${dayjs.utc(daily.firstClockIn).tz('Asia/Seoul').format('HH:mm')}`;
     return '최근 기록 없음';
   })();
 
@@ -1168,9 +1168,9 @@ function DailyScheduleDonut({
   const elapsedMinutes = (() => {
     if (workedMinutes != null && workedMinutes > 0) return workedMinutes;
     if (!firstClockIn) return 0;
-    const start = dayjs(firstClockIn);
+    const start = dayjs.utc(firstClockIn).tz('Asia/Seoul');
     if (!start.isValid()) return 0;
-    const end = lastClockOut ? dayjs(lastClockOut) : dayjs();
+    const end = lastClockOut ? dayjs.utc(lastClockOut).tz('Asia/Seoul') : dayjs();
     const stay = end.diff(start, 'minute');
     return Math.max(0, stay - (breakMinutes ?? 0));
   })();
@@ -1198,8 +1198,8 @@ function DailyScheduleDonut({
       <div>
         진행: {Math.floor(elapsedMinutes / 60)}시간 {elapsedMinutes % 60}분 ({percent}%)
       </div>
-      {firstClockIn && <div>출근: {dayjs(firstClockIn).format('HH:mm')}</div>}
-      {lastClockOut && <div>퇴근: {dayjs(lastClockOut).format('HH:mm')}</div>}
+      {firstClockIn && <div>출근: {dayjs.utc(firstClockIn).tz('Asia/Seoul').format('HH:mm')}</div>}
+      {lastClockOut && <div>퇴근: {dayjs.utc(lastClockOut).tz('Asia/Seoul').format('HH:mm')}</div>}
     </div>
   );
 
