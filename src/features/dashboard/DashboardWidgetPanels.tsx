@@ -835,7 +835,7 @@ export function DashboardAttendanceBlock() {
     },
   });
 
-  const fmtTime = (iso?: string | null) => (iso ? dayjs(iso).format('HH:mm') : '--:--');
+  const fmtTime = (iso?: string | null) => (iso ? dayjs.utc(iso).tz('Asia/Seoul').format('HH:mm') : '--:--');
   const fmtMinutes = (m?: number | null) => {
     const safe = Math.max(0, Math.floor(m ?? 0));
     const h = Math.floor(safe / 60);
