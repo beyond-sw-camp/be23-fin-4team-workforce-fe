@@ -379,11 +379,11 @@ export function MyAttendancePage() {
         // HH:mm:ss vs HH:mm 길이 차로 인한 잘못된 비교 방지 - HH:mm 으로 통일
         const norm = (t: string) => t.length >= 5 ? t.slice(0, 5) : t;
         if (startTime && r.firstClockIn) {
-          const inHm = dayjs(r.firstClockIn).format('HH:mm');
+          const inHm = dayjs.utc(r.firstClockIn).tz('Asia/Seoul').format('HH:mm');
           if (inHm > norm(startTime)) tardy += 1;
         }
         if (endTime && r.lastClockOut) {
-          const outHm = dayjs(r.lastClockOut).format('HH:mm');
+          const outHm = dayjs.utc(r.lastClockOut).tz('Asia/Seoul').format('HH:mm');
           if (outHm < norm(endTime)) earlyLeave += 1;
         }
       }

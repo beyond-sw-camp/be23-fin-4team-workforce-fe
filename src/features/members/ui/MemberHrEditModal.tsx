@@ -93,7 +93,7 @@ export function MemberHrEditModal({ memberId, open, onClose }: MemberHrEditModal
     onError: (e: Error) => message.error(e.message || '수정에 실패했습니다.'),
   });
 
-  const orgOptions = useMemo(() => buildOrgOptions(orgList), [orgList]);
+  const orgOptions = useMemo(() => buildOrgOptions(orgList, { excludeRoot: true }), [orgList]);
 
   const gradeOptions = useMemo(
     () =>
@@ -103,7 +103,8 @@ export function MemberHrEditModal({ memberId, open, onClose }: MemberHrEditModal
           const id = pickRowId(r);
           return id ? { value: id, label: pickRowName(r) || id } : null;
         })
-        .filter((x): x is { value: string; label: string } => x !== null),
+        .filter((x): x is { value: string; label: string } => x !== null)
+        .filter((opt) => opt.label !== '관리자'),
     [grades],
   );
 
@@ -115,7 +116,8 @@ export function MemberHrEditModal({ memberId, open, onClose }: MemberHrEditModal
           const id = pickRowId(r);
           return id ? { value: id, label: pickRowName(r) || id } : null;
         })
-        .filter((x): x is { value: string; label: string } => x !== null),
+        .filter((x): x is { value: string; label: string } => x !== null)
+        .filter((opt) => opt.label !== '관리자'),
     [titles],
   );
 

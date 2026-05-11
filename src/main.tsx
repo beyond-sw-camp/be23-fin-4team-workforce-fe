@@ -1,4 +1,5 @@
-﻿import React from 'react';
+﻿import './lib/dayjsSetup';
+import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { AppProviders } from '@/app/providers/AppProviders';
 import '@/app/styles/index.css';

@@ -37,8 +37,12 @@ export function pickOrgChildren(node: OrganizationTreeNode): OrganizationTreeNod
   return Array.isArray(raw) ? (raw as OrganizationTreeNode[]) : [];
 }
 
-export function buildOrgOptions(nodes: OrganizationTreeNode[]): Array<{ value: string; label: string }> {
+export function buildOrgOptions(
+  nodes: OrganizationTreeNode[],
+  options: { excludeRoot?: boolean } = {},
+): Array<{ value: string; label: string }> {
   if (!nodes.length) return [];
+  const { excludeRoot = false } = options;
   const out: Array<{ value: string; label: string }> = [];
   const seen = new Set<string>();
   const hasNested = nodes.some((n) => pickOrgChildren(n).length > 0);
@@ -47,8 +51,10 @@ export function buildOrgOptions(nodes: OrganizationTreeNode[]): Array<{ value: s
     const walk = (node: OrganizationTreeNode, depth: number) => {
       const id = pickOrgId(node);
       const name = pickOrgName(node) || '(이름 없음)';
-      if (id && !seen.has(id)) {
-        out.push({ value: id, label: `${'  '.repeat(depth)}${name}` });
+      const skip = excludeRoot && depth === 0;
+      if (id && !seen.has(id) && !skip) {
+        const indentDepth = excludeRoot ? Math.max(0, depth - 1) : depth;
+        out.push({ value: id, label: `${'  '.repeat(indentDepth)}${name}` });
         seen.add(id);
       }
       pickOrgChildren(node).forEach((child) => walk(child, depth + 1));
