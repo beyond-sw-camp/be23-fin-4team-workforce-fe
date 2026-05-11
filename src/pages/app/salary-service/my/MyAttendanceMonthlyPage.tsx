@@ -25,6 +25,7 @@ import type {
 import { AttendanceStatusTag } from '@/features/salary-service/ui/AttendanceStatusTag';
 
 import { AppDataTable } from '@/shared/ui/AppDataTable';
+import { toKstTime } from '@/lib/dayjsSetup';
 
 export function MyAttendanceMonthlyPage() {
   const [month, setMonth] = useState<Dayjs>(() => dayjs().startOf('month'));
@@ -98,8 +99,8 @@ export function MyAttendanceMonthlyPage() {
               type="link"
               onClick={() => {
                 const date = row.attendanceDate;
-                const clockIn = row.firstClockIn ? dayjs.utc(row.firstClockIn).tz('Asia/Seoul').format('HH:mm') : '';
-                const clockOut = row.lastClockOut ? dayjs.utc(row.lastClockOut).tz('Asia/Seoul').format('HH:mm') : '';
+                const clockIn = row.firstClockIn ? toKstTime(row.firstClockIn) : '';
+                const clockOut = row.lastClockOut ? toKstTime(row.lastClockOut) : '';
                 void navigate({
                   to: '/app/approvals/correction-request',
                   search: { date, clockIn, clockOut },
