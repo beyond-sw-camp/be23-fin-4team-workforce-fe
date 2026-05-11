@@ -31,13 +31,13 @@ const { RangePicker } = DatePicker;
 
 function formatDt(iso?: string | null) {
   if (!iso) return '—';
-  const d = dayjs(iso);
+  const d = dayjs.utc(iso).tz('Asia/Seoul');
   return d.isValid() ? d.format('MM-DD HH:mm') : String(iso);
 }
 
 function formatTime(iso?: string | null) {
   if (!iso) return '—';
-  const d = dayjs(iso);
+  const d = dayjs.utc(iso).tz('Asia/Seoul');
   return d.isValid() ? d.format('HH:mm:ss') : String(iso);
 }
 

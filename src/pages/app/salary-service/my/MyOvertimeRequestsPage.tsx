@@ -47,6 +47,7 @@ import type {
 import { approvalRequestApi } from '@/features/approvals/api/approvalRequestApi';
 
 import { AppDataTable } from '@/shared/ui/AppDataTable';
+import { toKstDateTime } from '@/lib/dayjsSetup';
 
 type FormValues = {
   targetDate: dayjs.Dayjs;
@@ -645,7 +646,7 @@ export function MyOvertimeRequestsPage() {
                               {role && <div>{role}</div>}
                               <div>
                                 {stepLabel}
-                                {ln.actedAt && ` · ${dayjs(ln.actedAt).format('YYYY-MM-DD HH:mm')}`}
+                                {ln.actedAt && ` · ${toKstDateTime(ln.actedAt)}`}
                               </div>
                               {ln.comment && (
                                 <div className="tw-mt-1 tw-text-slate-700">

@@ -872,11 +872,11 @@ export function DashboardAttendanceBlock() {
     const daily = dailyQ.data;
     if (!daily) return 0;
     if (daily.firstClockIn && !daily.lastClockOut) {
-      return Math.max(0, now.diff(dayjs(daily.firstClockIn), 'minute'));
+      return Math.max(0, now.diff(dayjs.utc(daily.firstClockIn).tz('Asia/Seoul'), 'minute'));
     }
     if (daily.workedMinutes != null) return daily.workedMinutes;
     if (daily.firstClockIn && daily.lastClockOut) {
-      return Math.max(0, dayjs(daily.lastClockOut).diff(dayjs(daily.firstClockIn), 'minute'));
+      return Math.max(0, dayjs.utc(daily.lastClockOut).tz('Asia/Seoul').diff(dayjs.utc(daily.firstClockIn).tz('Asia/Seoul'), 'minute'));
     }
     return 0;
   })();
