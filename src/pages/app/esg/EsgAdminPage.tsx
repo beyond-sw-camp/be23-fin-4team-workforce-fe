@@ -25,6 +25,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from '@tanstack/react-router';
 import type { ApiError } from '@/shared/api/types';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
 import { AppSingleActionModal } from '@/shared/ui/AppSingleActionModal';
@@ -772,7 +773,19 @@ export function EsgAdminPage() {
                           <span className="tw-block tw-truncate tw-text-sm tw-font-bold tw-text-slate-900">{item.title}</span>
                           <span className="tw-mt-1 tw-block tw-text-xs tw-text-slate-500">재고 {item.stock ?? 0}개</span>
                         </span>
-                        <span className="tw-shrink-0 tw-text-sm tw-font-bold tw-text-[#1e3a5f]">{item.requiredPoints}P</span>
+                        <span className="tw-flex tw-shrink-0 tw-items-center tw-gap-2">
+                          <span className="tw-text-sm tw-font-bold tw-text-[#1e3a5f]">{item.requiredPoints}P</span>
+                          {item.itemId ? (
+                            <Link
+                              to="/app/esg/admin/shop/items/$itemId"
+                              params={{ itemId: item.itemId }}
+                              className="tw-text-xs tw-font-semibold tw-text-blue-600 hover:tw-text-blue-800"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              수정
+                            </Link>
+                          ) : null}
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -1208,7 +1221,7 @@ export function EsgAdminPage() {
       >
         <div className={esgModalContentClass}>
         <Typography.Paragraph type="secondary" className="!tw-mb-3 !tw-text-xs">
-          등록된 포인트샵 물품 목록입니다. 새 물품은 샵 물품 카드의「등록」에서 추가하세요.
+          등록된 포인트샵 물품 목록입니다. 행의「수정」에서 내용을 변경할 수 있고, 새 물품은「등록」에서 추가하세요.
         </Typography.Paragraph>
         <Card className={modalPanelCardClass} size="small" title="등록 물품" styles={modalPanelCardStyles}>
           <AppDataTable<EsgShopItem>
@@ -1217,7 +1230,7 @@ export function EsgAdminPage() {
             dataSource={shopItems}
             pagination={{ pageSize: 8, showSizeChanger: false }}
             size="small"
-            scroll={{ x: 560 }}
+            scroll={{ x: 640 }}
             columns={[
               { title: '제목', dataIndex: 'title', ellipsis: true },
               {
@@ -1227,6 +1240,24 @@ export function EsgAdminPage() {
                 render: (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? `${v}P` : '—'),
               },
               { title: '재고', dataIndex: 'stock', width: 72 },
+              {
+                title: '',
+                key: 'edit',
+                width: 72,
+                fixed: 'right' as const,
+                render: (_, row) =>
+                  row.itemId ? (
+                    <Link
+                      to="/app/esg/admin/shop/items/$itemId"
+                      params={{ itemId: row.itemId }}
+                      className="tw-text-xs tw-font-semibold tw-text-blue-600 hover:tw-text-blue-800"
+                    >
+                      수정
+                    </Link>
+                  ) : (
+                    '—'
+                  ),
+              },
             ]}
           />
         </Card>

@@ -32,6 +32,7 @@ import { DashboardPage } from '@/pages/app/DashboardPage';
 import { HrInsightsPage } from '@/pages/app/HrInsightsPage';
 import { EsgAdminPage } from '@/pages/app/esg/EsgAdminPage';
 import { EsgHomePage } from '@/pages/app/esg/EsgHomePage';
+import { EsgShopItemEditPage } from '@/pages/app/esg/EsgShopItemEditPage';
 import { EsgShopPage } from '@/pages/app/esg/EsgShopPage';
 import { MembersPage } from '@/pages/app/MembersPage';
 import { MemberDetailPage } from '@/pages/app/MemberDetailPage';
@@ -256,6 +257,17 @@ const esgAdminRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/esg/admin',
   component: EsgAdminPage,
+  beforeLoad: ({ context }) => {
+    if (!context.auth.user?.isSystemAdmin) {
+      throw redirect({ to: '/app/esg' });
+    }
+  },
+});
+
+const esgShopItemEditRoute = createRoute({
+  getParentRoute: () => appBaseRoute,
+  path: '/esg/admin/shop/items/$itemId',
+  component: EsgShopItemEditPage,
   beforeLoad: ({ context }) => {
     if (!context.auth.user?.isSystemAdmin) {
       throw redirect({ to: '/app/esg' });
@@ -1058,6 +1070,7 @@ const routeTree = rootRoute.addChildren([
       esgHomeRoute,
       esgShopRoute,
       esgAdminRoute,
+      esgShopItemEditRoute,
       myProfileRoute,
       membersRoute,
       memberDetailRoute,
