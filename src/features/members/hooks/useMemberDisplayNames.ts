@@ -12,13 +12,17 @@ function labelFromMember(m: Member): string {
   return m.name?.trim() || m.email?.trim() || '—';
 }
 
+function normalizeMemberId(id: string | null | undefined): string {
+  return String(id ?? '').trim().toLowerCase();
+}
+
 /**
  * 목표/승인/활동 등에 노출되는 member UUID → 사원 표시명 매핑.
- * 더미 데이터에 남아 있는 과거 UUID가 있을 수 있으므로 상세 API를 반복 호출하지 않고 목록 기반으로만 표시합니다.
+ * 목록 기반으로 먼저 매핑하고, 목록에서 빠진 UUID만 상세 API로 보강합니다.
  */
 export function useMemberDisplayNames(memberIds: readonly string[]) {
   const sortedUnique = useMemo(
-    () => [...new Set(memberIds.map((x) => String(x).trim()).filter(Boolean))].sort(),
+    () => [...new Set(memberIds.map(normalizeMemberId).filter(Boolean))].sort(),
     [memberIds],
   );
 
@@ -30,7 +34,20 @@ export function useMemberDisplayNames(memberIds: readonly string[]) {
       const map = new Map<string, string>();
       const listRes = await membersApi.list({ page: 1, pageSize: 2000 });
       for (const m of listRes.items) {
-        map.set(m.id, labelFromMember(m));
+        map.set(normalizeMemberId(m.id), labelFromMember(m));
+      }
+      const missingIds = sortedUnique.filter((id) => !map.has(id));
+      const details = await Promise.all(
+        missingIds.map(async (id) => {
+          try {
+            return await membersApi.detail(id);
+          } catch {
+            return null;
+          }
+        }),
+      );
+      for (const m of details) {
+        if (m?.id) map.set(normalizeMemberId(m.id), labelFromMember(m));
       }
       return map;
     },
@@ -38,7 +55,7 @@ export function useMemberDisplayNames(memberIds: readonly string[]) {
 
   const labelFor = useCallback(
     (id: string | null | undefined) => {
-      const t = id?.trim();
+      const t = normalizeMemberId(id);
       if (!t) return '—';
       const hit = query.data?.get(t);
       if (hit) return hit;

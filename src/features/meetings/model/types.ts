@@ -9,7 +9,9 @@ export type MeetingRecord = {
   meetingRecordId: string;
   parentRecordId?: string;
   memberId: string;
+  memberName?: string;
   managerId: string;
+  managerName?: string;
   repeatCycle: RepeatCycle;
   scheduledAt: string;
   completedAt?: string;
@@ -57,6 +59,7 @@ export type MeetingAction = {
   content: string;
   description?: string;
   assigneeId: string;
+  assigneeName?: string;
   dueDate?: string;
   status: ActionStatus;
   completedAt?: string;

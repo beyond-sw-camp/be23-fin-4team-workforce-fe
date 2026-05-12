@@ -112,7 +112,7 @@ export default function MeetingsPage() {
         <Space>
           <UserOutlined />
           <Typography.Text className="tw-font-medium">
-            {labelFor(partnerIdOf(record))}
+            {partnerNameOf(record, labelFor)}
           </Typography.Text>
           {record.relatedSeasonId && (
             <Tag color="blue" className="!tw-rounded-full">
@@ -298,6 +298,12 @@ function partnerIdOf(record: MeetingListItem) {
   if (record.myRole === 'manager') return record.memberId;
   if (record.myRole === 'member') return record.managerId;
   return record.memberId;
+}
+
+function partnerNameOf(record: MeetingListItem, labelFor: (memberId: string) => string) {
+  if (record.myRole === 'manager') return record.memberName || labelFor(record.memberId);
+  if (record.myRole === 'member') return record.managerName || labelFor(record.managerId);
+  return record.memberName || labelFor(record.memberId);
 }
 
 function statusTag(record: MeetingRecord) {
