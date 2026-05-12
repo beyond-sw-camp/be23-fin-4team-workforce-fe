@@ -1,18 +1,17 @@
 <div align="center">
-<img width="845" alt="WORKFORCE" src="https://github.com/user-attachments/assets/a8d3b7b8-4880-491f-9073-0dad92340ea5" />
-
-**효율적인 인사 온보딩을 위한 중소기업 맞춤형 AI 기반 HR 관리 시스템**
-  
+<img width="1920" height="800" alt="WORKFORCE hero" src="./docs/asset/profile/workforce-hero.gif" />
 </div>
 
-<hr>
+> **WORKFORCE**는 회사마다 다른 인사 정책과 낮은 디지털 성숙도로 인해 발생하는 업무 공백을 줄이기 위한 AI 기반 HRMS입니다.  
+> 결재, 근태, 급여, 목표/평가, ESG, 전자계약, 채팅을 하나의 흐름으로 연결하고, 회사별 정책을 AI 챗봇과 자동화 모듈에 동기화하여 누구나 쉽게 사용할 수 있는 인사 운영 환경을 제공합니다.
 
+---
 
 ## 팀원 소개
 
 <div align="center">
 
-| ![김정훈](url1) | ![박세민](url2) | ![이다은](url3) | ![이지연](url4) |
+| <img src="./docs/asset/profile/kjh-profile.png" width="120" alt="김정훈 프로필" /> | <img src="./docs/asset/profile/psm-profile.png" width="120" alt="박세민 프로필" /> | <img src="./docs/asset/profile/lde-profile.png" width="120" alt="이다은 프로필" /> | <img src="./docs/asset/profile/ljy-profile.png" width="120" alt="이지연 프로필" /> |
 |----------------|-----------------|-----------------|-----------------|
 | [김정훈](https://github.com/jeonghuny) | [박세민](https://github.com/semin980520) | [이다은](https://github.com/leeda973) | [이지연](https://github.com/jiyean99) |
 
@@ -22,39 +21,46 @@
 
 ## 목차
 
-1. [프로젝트 배경 & 기획 의도](#프로젝트-배경--기획-의도)
+1. [서비스 개요](#서비스-개요)
 2. [주요 기능](#주요-기능)
-3. [시스템 아키텍처](#시스템-아키텍처)
-4. [기술 스택](#기술-스택)
-5. [화면 설계 & 주요 화면](#화면-설계--주요-화면)
-6. [AI 기능](#ai-기능)
-7. [트러블슈팅](#트러블슈팅)
+3. [기술 스택](#기술-스택)
+4. [시스템 아키텍처 & n8n AI Agent 오케스트레이션](#시스템-아키텍처--n8n-ai-agent-오케스트레이션)
+5. [기술 문서](#기술-문서)
+6. [시연 영상](#시연-영상)
+7. [부록](#부록)
 
 ---
 
+## 서비스 개요
 
-## 프로젝트 배경 & 기획 의도
+> **회사별 HR 정책을 AI와 자동화 흐름에 동기화하여, 인사 담당자의 반복 업무와 직원의 시스템 적응 시간을 줄이는 맞춤형 HR 관리 서비스**
 
-자체 인사관리 시스템을 구축하기 어려운 중소·중견기업은 시중 프로그램을 도입하더라도 우리 회사 정책과 맞지 않거나, 기능이 복잡해 제대로 활용하지 못하는 문제가 있습니다.
+WORKFORCE는 단순히 인사 기능을 모아둔 HRMS가 아닙니다.  
+회사마다 다른 정책을 시스템 설정으로 흡수하고, 그 설정이 **결재 양식 · 근태/급여 자동화 · AI 챗봇 답변**까지 이어지도록 설계한 인사 운영 플랫폼입니다.
 
-**WORKFORCE**는 회사별 정책에 맞게 설정하여 사용할 수 있고, 사용 중 어려운 부분은 AI 챗봇에게 물어보며 쉽게 해결할 수 있는 인사관리 플랫폼입니다.
+| 문제 정의 | 해결 방향 | 핵심 기능 |
+|-----------|-----------|-----------|
+| 시스템 사용법과 정책 인수인계가 사람에게 의존함 | AI 챗봇이 사용법, 정책, 실시간 데이터를 대화형으로 안내 | AI 챗봇, HR 정책 문서, 실시간 조회 |
+| 회사별 휴가, 급여, 결재, 조직 정책이 표준 기능과 맞지 않음 | 조직/권한/정책/결재 양식을 회사별로 커스터마이징 | 동적 결재 양식, 회사별 정책 설정 |
+| 연차 촉진, 근태 마감, 급여 산정 등 반복 업무가 누락되기 쉬움 | 배치와 이벤트 기반으로 정기 업무를 자동 처리 | Quartz, Spring Batch, 자동 작업 관리 |
+| 결재 승인 후 다른 시스템에 다시 반영해야 함 | 승인 이벤트로 근태, 급여, 캘린더, 알림을 자동 연결 | Kafka 이벤트, 후속 처리 자동화 |
+| ESG 활동이 별도 관리되어 참여 데이터가 흩어짐 | HR 데이터와 연결해 활동, 포인트, 캠페인을 통합 관리 | ESG 활동 관리, ESG 샵 |
+
+### 핵심 메시지
+
+- **누구나 바로 쓰는 HRMS**: 메뉴얼과 담당자 설명에 의존하지 않고 AI 챗봇으로 시스템 적응을 돕습니다.
+- **회사 정책에 맞춰지는 HRMS**: 고정된 기능에 회사를 맞추는 대신, 회사별 정책을 설정하고 자동화/챗봇에 동기화합니다.
+- **승인 이후까지 이어지는 HRMS**: 결재 승인으로 끝나지 않고 근태, 급여, 캘린더, 알림까지 후속 처리가 연결됩니다.
 
 <details>
-<summary><strong>기존 인사관리 프로그램의 문제점</strong></summary>
+<summary><strong>시장 분석 근거</strong></summary>
 
-| 문제 | 해결 |
-|------|------|
-| 실정에 맞는 정책 설정이 어렵다 | **회사 맞춤형 설정** — JSON 동적 폼 스키마로 결재 양식 자유 구성, 회사별 휴가 종류·공휴일·조직 구조 독립 관리 |
-| 급여 항목이 복잡하고 수기 검증에 한계가 있다 | **급여·근태 자동화** — 급여 계산·상여금·퇴직금·세금·소급 정산 자동 처리, 연차 촉진 알림·52시간 초과근로 위반 감지 |
-| IT 담당 인력이 부족하고 겸직 부담이 크다 | **AI 챗봇** — 사용법과 회사 정책을 자연어로 질문하면 우리 회사 상황에 맞는 답변 제공, 특정 담당자에게 질문이 몰리는 문제 해소 |
-| 성과 관리가 체계적이지 않다 | **성과관리 풀사이클** — 목표 설정 → 활동 기록 → 평가 → 피드백 → 보정(Calibration)까지 하나의 흐름으로 관리 |
-| 평균 5개의 개별 솔루션을 파편화된 상태로 운영한다 | **통합 플랫폼** — 결재, 계약, 근태, 급여, 목표/평가, ESG, 캘린더, 채팅까지 하나의 플랫폼에서 운영. 통합 검색(Elasticsearch)으로 흩어진 데이터를 한 번에 조회 |
+HR SaaS와 AI 기반 업무 자동화 수요는 증가하고 있지만, HR 운영 현장에서는 디지털 성숙도 격차, 담당자 겸직, 정책 커스터마이징 어려움이 함께 나타납니다.  
+WORKFORCE는 이 지점을 **가이드 없이도 쉽게 접근하고, 회사 정책에 맞게 자동으로 움직이는 HRMS**라는 방향으로 풀었습니다.
+
+[MTN HR 시장 기사](https://news.mtn.co.kr/news-detail/2023022310563781713) · [KDI 디지털 성숙도 조사](https://eiec.kdi.re.kr/policy/domesticView.do?ac=0000156198) · [다우오피스HR 인사담당자 현황](https://hr.daouoffice.com/blog/sme-hr-manager-recruitment-burnout) · [디지털데일리 HR테크 기사](https://www.ddaily.co.kr/page/view/2024050511345817576)
 
 </details>
-
-또한 ESG 경영의 중요성이 높아지는 흐름에 맞춰, 인사관리 플랫폼 안에서 ESG 활동 신청/승인, 포인트 적립, 캠페인 관리, 포인트 교환까지 통합하여 별도 시스템 없이 직원 참여를 유도할 수 있도록 구성했습니다.
-
-> 📎 [Figma 기획서 보기](https://www.figma.com/proto/6suak3PIQpHGzS3UBatOF1/%ED%95%9C%ED%99%94-BEYOND-SW-CAMP-23%EA%B8%B0?node-id=618-102&viewport=696%2C533%2C0.2&t=o5woH0kckAYE5DgS-1&scaling=min-zoom&content-scaling=fixed&starting-point-node-id=618%3A102&page-id=612%3A67) · [기획서 PDF 다운로드](docs/WORKFORCE_프로젝트_기획서.pdf)
 
 <br>
 <div align="right"><a href="#목차">맨 위로</a></div>
@@ -63,167 +69,413 @@
 
 ## 주요 기능
 
-<details>
-<summary><strong>조직 · 인사</strong></summary>
+### 1. AI 챗봇 기반 온보딩
 
-| 기능 | 설명 |
+- 신입사원과 일반 사용자가 인사 시스템 사용법을 자연어로 질문할 수 있습니다.
+- 회사 정책, 결재 양식, 휴가/급여/근태 규정을 RAG 기반으로 조회합니다.
+- “내 잔여 연차 얼마야?”처럼 실시간 데이터가 필요한 질문은 백엔드 API를 호출해 답변합니다.
+- “내일 연차 신청해줘”, “금요일 2시에 회의 일정 잡아줘”처럼 대화에서 필요한 값을 추출해 결재 작성 화면 prefill 또는 캘린더 일정 등록까지 연결합니다.
+- 전자결재 양식 등록/수정 시 벡터 DB가 갱신되어 챗봇이 최신 양식을 안내할 수 있습니다.
+
+### 2. 회사별 정책 커스터마이징
+
+- 조직, 직급, 직책, 역할/권한, 휴가 종류, 공휴일, 근무 정책, 급여 정책을 회사 단위로 관리합니다.
+- JSON 기반 동적 결재 양식으로 회사가 직접 양식을 구성할 수 있습니다.
+- 정책 변경 이벤트를 Kafka로 발행해 AI 검색 인덱스와 후속 업무에 반영합니다.
+
+### 3. 반복 인사 업무 자동화
+
+- 연차 부여, 연차 사용 촉진 1차/2차 알림, 월 근태 마감, 급여 명세서 발급, 상여 발행, 퇴직금 정산을 자동화합니다.
+- Quartz와 Spring Batch 기반으로 회사별 스케줄을 관리합니다.
+- 주 52시간, 일일/월간 근무 한도, 잔여 연차 등 법령·정책 기준을 자동 검증합니다.
+
+### 4. 전자결재와 후속 처리 자동화
+
+- 휴가, 외근, 출장, 출퇴근 정정, 인사 발령, 계약 등 업무를 결재 흐름으로 처리합니다.
+- 승인 완료 시 Kafka 이벤트를 통해 근태 차감, 캘린더 등록, 급여 반영, 인사 이력 생성이 자동 수행됩니다.
+- 부재 위임 기반 대리결재, 참조, 공람, 임시저장, 회수, 공문 발송/수신, 결재 PDF 다운로드 등 실무 결재 흐름을 지원합니다.
+- 전자계약은 템플릿 기반 개별/일괄 발송, 서명, 거절, 회수, 재발송, 이력 조회, 리마인드, PDF 다운로드까지 처리합니다.
+
+### 5. 목표·평가 파이프라인
+
+- 목표 설정, 활동 기록, 평가 설계, 다면 평가, 부서 간 보정, 결과 발행을 하나의 흐름으로 관리합니다.
+- 평가 결과는 성과급 발행의 기준 데이터로 연결될 수 있습니다.
+- AI 회의록에서 도출된 액션 아이템을 목표 시스템과 연결하는 확장 흐름을 고려했습니다.
+
+### 6. ESG 활동 관리
+
+- ESG 활동 신청, 승인, 포인트 적립, 캠페인 운영, 포인트 교환을 HRMS 안에서 처리합니다.
+- 인사 데이터와 연결해 부서별/직급별 참여 현황을 분석할 수 있습니다.
+- ESG 경영을 별도 부가 기능이 아니라 조직 참여 데이터로 관리할 수 있도록 설계했습니다.
+
+### 7. 협업과 운영 편의 기능
+
+- 실시간 채팅, 알림, 캘린더, 통합 검색을 제공합니다.
+- Kafka, Redis Pub/Sub, SSE 기반 알림으로 결재·급여·근태 이벤트를 즉시 전달합니다.
+- Elasticsearch 기반 통합 검색으로 흩어진 인사 데이터를 빠르게 조회합니다.
+
+<br>
+<div align="right"><a href="#목차">맨 위로</a></div>
+
+---
+
+## 기술 스택
+
+<table>
+  <tr>
+    <td width="160"><b>Backend · Spring</b></td>
+    <td>
+      <img src="https://img.shields.io/badge/Java-007396?style=flat-square&logo=openjdk&logoColor=white"/>
+      <img src="https://img.shields.io/badge/Spring_Boot-6DB33F?style=flat-square&logo=springboot&logoColor=white"/>
+      <img src="https://img.shields.io/badge/Spring_Security-6DB33F?style=flat-square&logo=springsecurity&logoColor=white"/>
+      <img src="https://img.shields.io/badge/Spring_Data_JPA-6DB33F?style=flat-square&logo=spring&logoColor=white"/>
+      <img src="https://img.shields.io/badge/Spring_Batch-6DB33F?style=flat-square&logo=spring&logoColor=white"/>
+      <img src="https://img.shields.io/badge/Apache_Kafka-231F20?style=flat-square&logo=apachekafka&logoColor=white"/>
+      <img src="https://img.shields.io/badge/Quartz-CC0000?style=flat-square"/>
+      <img src="https://img.shields.io/badge/QueryDSL-4479A1?style=flat-square"/>
+    </td>
+  </tr>
+  <tr>
+    <td><b>Backend · AI</b></td>
+    <td>
+      <img src="https://img.shields.io/badge/Python-3776AB?style=flat-square&logo=python&logoColor=white"/>
+      <img src="https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white"/>
+      <img src="https://img.shields.io/badge/OpenAI-412991?style=flat-square&logo=openai&logoColor=white"/>
+      <img src="https://img.shields.io/badge/Pinecone-000000?style=flat-square"/>
+      <img src="https://img.shields.io/badge/n8n-EA4B71?style=flat-square&logo=n8n&logoColor=white"/>
+    </td>
+  </tr>
+  <tr>
+    <td><b>Frontend</b></td>
+    <td>
+      <img src="https://img.shields.io/badge/Vue.js-4FC08D?style=flat-square&logo=vue.js&logoColor=white"/>
+      <img src="https://img.shields.io/badge/React-20232A?style=flat-square&logo=react&logoColor=61DAFB"/>
+      <img src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white"/>
+      <img src="https://img.shields.io/badge/Vite-646CFF?style=flat-square&logo=vite&logoColor=white"/>
+      <img src="https://img.shields.io/badge/Ant_Design-0170FE?style=flat-square&logo=antdesign&logoColor=white"/>
+      <img src="https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white"/>
+      <img src="https://img.shields.io/badge/TanStack_Query-FF4154?style=flat-square&logo=reactquery&logoColor=white"/>
+      <img src="https://img.shields.io/badge/Zustand-443E38?style=flat-square"/>
+    </td>
+  </tr>
+  <tr>
+    <td><b>Database</b></td>
+    <td>
+      <img src="https://img.shields.io/badge/MariaDB-003545?style=flat-square&logo=mariadb&logoColor=white"/>
+      <img src="https://img.shields.io/badge/Redis-FF4438?style=flat-square&logo=redis&logoColor=white"/>
+      <img src="https://img.shields.io/badge/Elasticsearch-005571?style=flat-square&logo=elasticsearch&logoColor=white"/>
+    </td>
+  </tr>
+  <tr>
+    <td><b>Cloud / Infra</b></td>
+    <td>
+      <img src="https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white"/>
+      <img src="https://img.shields.io/badge/Kubernetes-326CE5?style=flat-square&logo=kubernetes&logoColor=white"/>
+      <img src="https://img.shields.io/badge/AWS_EKS-FF9900?style=flat-square&logo=amazoneks&logoColor=white"/>
+      <img src="https://img.shields.io/badge/AWS_ECR-FF9900?style=flat-square&logo=amazonaws&logoColor=white"/>
+      <img src="https://img.shields.io/badge/Amazon_RDS-527FFF?style=flat-square&logo=amazonrds&logoColor=white"/>
+      <img src="https://img.shields.io/badge/Amazon_S3-569A31?style=flat-square&logo=amazons3&logoColor=white"/>
+      <img src="https://img.shields.io/badge/CloudFront-FF9900?style=flat-square&logo=amazonaws&logoColor=white"/>
+      <img src="https://img.shields.io/badge/GitHub_Actions-2088FF?style=flat-square&logo=githubactions&logoColor=white"/>
+      <img src="https://img.shields.io/badge/ingress--nginx-009639?style=flat-square&logo=nginx&logoColor=white"/>
+      <img src="https://img.shields.io/badge/cert--manager-326CE5?style=flat-square"/>
+    </td>
+  </tr>
+</table>
+
+<br>
+<div align="right"><a href="#목차">맨 위로</a></div>
+
+---
+
+## 시스템 아키텍처 & n8n AI Agent 오케스트레이션
+
+WORKFORCE는 AWS EKS 기반 MSA 구조로 배포되며, Gateway를 단일 API 진입점으로 두고 각 도메인 서비스와 AI 서비스를 Kubernetes Service DNS로 연결합니다.  
+운영 환경에서는 HPA, PDB, RollingUpdate, readiness/liveness probe를 조합해 확장성과 배포 안정성을 확보하고, AI 서비스는 Kafka RAG 동기화와 내부 API 호출을 통해 정책·결재 양식·캘린더 액션을 연결합니다.
+
+![WORKFORCE 시스템 아키텍처](docs/asset/workforce-architecture.png)
+
+WORKFORCE의 챗봇 요청은 `member-service`에서 n8n webhook으로 전달되고, n8n은 사용자 질문을 정규화한 뒤 LLM 기반 의도 분류와 Switch 라우팅을 수행합니다.  
+정책/RAG 답변, 실시간 HR 데이터 조회, 결재 양식 작성 액션, 캘린더 일정 등록 액션을 분기하여 각 서비스 API 또는 `ai-service` 액션 API로 연결합니다.
+
+![n8n AI Agent 오케스트레이션 Overview](docs/asset/n8n-workflow-overview.png)
+
+<br>
+<div align="right"><a href="#목차">맨 위로</a></div>
+
+---
+
+## 기술 문서
+
+백엔드와 DevOps 기준으로 사용한 기술과 설계 포인트를 전수형 문서로 분리했습니다.  
+인증/권한처럼 모든 API의 기반이 되는 기술부터 배포, 확장, 운영 의존성까지 확인할 수 있습니다.
+
+전체 기술 문서는 [기술 문서 인덱스](docs/technical/README.md)에서도 폴더별로 확인할 수 있습니다.
+
+<details>
+<summary><strong>플랫폼 기반 · 공통 인프라</strong></summary>
+
+| 문서 | 내용 |
 |------|------|
-| 조직 관리 | 회사별 조직 구조, 직급(Job Grade), 직책(Job Title) 관리 |
-| 역할·권한 | 13개 리소스 × 4개 액션 × 4단계 범위(본인/팀/부서/전사). 기본 역할 4개 자동 생성 + 커스텀 역할 추가 |
-| 회사별 설정 | 공휴일, 휴가 종류, 근무 정책 등 회사별 독립 관리 |
+| [시스템 아키텍처](docs/technical/platform/system-architecture.md) | MSA 구성, 서비스 역할, 데이터 흐름, 운영 인프라 |
+| [인증·인가·멀티테넌시](docs/technical/platform/auth-authorization-multitenancy.md) | JWT, Gateway 인증 필터, Refresh Token, SaaS 운영자/멤버 분리, `X-User-*` 헤더 전파 |
+| [공통 라이브러리와 표준 API 처리](docs/technical/platform/common-library-api-standard.md) | `workforce-common`, 공통 응답, 예외 처리, BaseTimeEntity, QueryDSL, S3, Redis 설정 |
+| [권한 모델과 역할 설계](docs/technical/platform/permission-role-model.md) | 역할/권한 데이터 모델, Redis 권한 캐시, `@CheckPermission` AOP, 권한 범위 |
+| [서비스 디스커버리와 Gateway 라우팅](docs/technical/platform/gateway-eureka-routing.md) | 로컬 Eureka, 운영 K8S Service DNS, Spring Cloud Gateway, 공개 경로, CORS |
+| [서비스 간 통신과 Feign Client](docs/technical/platform/inter-service-communication.md) | OpenFeign, 내부 조회 API, 헤더 전파, 장애 격리 포인트 |
 
 </details>
 
 <details>
-<summary><strong>근태 · 급여</strong></summary>
+<summary><strong>DevOps · 배포/운영 인프라</strong></summary>
 
-| 기능 | 설명 |
+| 문서 | 내용 |
 |------|------|
-| 근태 관리 | 출퇴근 기록, 연장·야간·휴일근무 신청, 출퇴근 정정, 조기퇴근, 외근/출장 관리 |
-| 휴가 관리 | 회사별 휴가 종류 설정, 연차 잔고 자동 차감(Pessimistic Locking), 연차 사용 촉진 자동 알림 |
-| 급여 자동 연산 | 급여 계산, 상여금, 퇴직금, 세금, 소급 정산까지 자동 처리. 근태/급여/상여 배치 모듈로 대량 데이터 처리 |
-| 노동법 준수 | 근기법 제61조 연차 촉진 1차/2차 자동 알림, 주 52시간 초과근로 위반 감지, 근태 이상 실시간 감지 |
+| [Kubernetes와 AWS 운영 인프라](docs/technical/devops/devops-kubernetes-aws.md) | EKS, ECR, RDS, S3, CloudFront, Ingress, cert-manager, K8S Service DNS |
+| [CI/CD와 컨테이너 배포](docs/technical/devops/devops-cicd-container.md) | GitHub Actions, Docker 멀티스테이지 빌드, ECR Push, kubectl apply/rollout restart |
+| [확장성과 무중단 배포 전략](docs/technical/devops/devops-scaling-zero-downtime.md) | HPA, PDB, RollingUpdate, readiness/liveness probe, 실제 매니페스트 기준 운영값 |
+| [운영 의존성과 런타임 설정](docs/technical/devops/devops-runtime-dependencies.md) | Kafka KRaft, Redis/Redis Stack, Elasticsearch Nori, n8n, Secret, prod profile |
 
 </details>
 
 <details>
-<summary><strong>결재 · 계약</strong></summary>
+<summary><strong>이벤트 · 배치 · 실시간 처리</strong></summary>
 
-| 기능 | 설명 |
+| 문서 | 내용 |
 |------|------|
-| 전자결재 | 결재 요청(상신) → 단계별 승인/반려 → 후속 처리 자동화. 임시저장, 결재 회수, 대리결재, 참조/공람 지원 |
-| 동적 결재 양식 | JSON 기반 formSchema로 회사가 직접 결재 양식을 만들고 필드를 자유롭게 구성. text, date, select, textarea 등 다양한 필드 타입 지원 |
-| 결재 후속 처리 | 승인 완료 시 요청 타입별 자동 처리 — 휴가 잔고 차감, 근태 정산 반영, 인사 발령 이력 생성, 캘린더 연동 등 |
-| 전자계약 | 계약서 생성 → 발송 → 서명 → PDF 저장. 일괄 발송, 법인인감 자동 서명, 계약 재발행 이력 관리 |
+| [이벤트 기반 시스템 연동](docs/technical/event-runtime/event-driven-flow.md) | Kafka, 도메인 이벤트, 검색/AI/후속 처리 연동 |
+| [알림·SSE·Redis Pub/Sub](docs/technical/event-runtime/notification-realtime-pipeline.md) | Kafka 알림 발행, Redis 브로드캐스트, SSE 연결, 알림 저장 |
+| [업무 자동화와 배치 처리](docs/technical/event-runtime/hr-automation-batch.md) | Quartz, Spring Batch, 회사별 Job, 연차/근태/급여/상여/퇴직금 자동화 |
+| [스케줄러와 운영자 콘솔](docs/technical/event-runtime/scheduler-saas-operations.md) | SaaS 운영자 스케줄 조회/수정, Quartz 트리거, 세율/요율 운영 |
+| [실시간 채팅과 파일 처리](docs/technical/event-runtime/member-chat-websocket.md) | WebSocket/STOMP, STOMP JWT 검증, Redis fan-out, 채팅방 권한, S3 파일 |
 
 </details>
 
 <details>
-<summary><strong>목표 · 평가</strong></summary>
+<summary><strong>도메인 기술</strong></summary>
 
-| 기능 | 설명 |
+| 문서 | 내용 |
 |------|------|
-| 목표 관리 | 목표 설정 → 활동 기록 → 진척률 관리 |
-| 평가 관리 | 평가 시즌 관리, 평가 설계(Design), 다면 피드백, 부서 간 보정(Calibration) |
-| 리포트 | 평가 결과 리포트 자동 생성 |
+| [회원·회사·조직 온보딩](docs/technical/domain/member-company-organization.md) | 회사 가입, 기본 조직/직급/직책/역할 시드, 구성원 관리, 인사 발령 |
+| [정책 커스터마이징과 동적 결재 양식](docs/technical/domain/policy-customization.md) | 회사별 정책 관리, JSON 동적 폼, 결재 후속 처리, 역할/권한 설계 |
+| [전자결재와 전자계약](docs/technical/domain/approval-contract.md) | 결재 요청 상태, 결재선, 문서함, 공문, 계약 생성/서명/PDF |
+| [근태·휴가 도메인](docs/technical/domain/attendance-leave-domain.md) | 출퇴근, 일/월 근태, 휴가 잔고, 연차 촉진, 외근/출장, 법령 검증 |
+| [급여·상여·퇴직금 도메인](docs/technical/domain/payroll-salary-domain.md) | 급여 정책, 명세서, 수당, 세금/4대보험, 상여, 퇴직금, 연차수당 |
+| [목표·평가·면담 도메인](docs/technical/domain/goal-evaluation-meeting.md) | 목표, 활동, 평가 시즌/설계/다면평가/보정, 면담 기록 |
+| [ESG 활동 관리](docs/technical/domain/esg-management.md) | ESG 활동, 포인트, 캠페인, 상품 교환, 참여 현황 |
+
+</details>
+
+<details>
+<summary><strong>AI · 검색 · 문서</strong></summary>
+
+| 문서 | 내용 |
+|------|------|
+| [AI 챗봇 및 RAG 아키텍처](docs/technical/ai-search-docs/ai-rag-chatbot.md) | 3-Layer RAG, 회사별 벡터 격리, 의도 분류, n8n 오케스트레이션, 정책 자동 동기화 |
+| [AI 액션 오케스트레이션](docs/technical/ai-search-docs/ai-action-orchestration.md) | 대화 기반 결재 양식 prefill, 캘린더 일정 생성, 슬롯 추출, 세션 상태 검증 |
+| [AI 회의록과 음성 처리](docs/technical/ai-search-docs/ai-recording-transcribe.md) | 녹음 업로드, FastAPI STT 연동, 회의록 생성, S3 저장 |
+| [통합 검색과 인덱싱](docs/technical/ai-search-docs/search-indexing.md) | Elasticsearch, 멤버/조직/결재 인덱스, Kafka 기반 색인 동기화 |
+| [문서·파일·PDF 처리](docs/technical/ai-search-docs/document-file-pdf.md) | S3 업로드, presigned URL, 결재/계약/PDF, 급여명세서/평가 리포트 |
+
+</details>
+
+<details>
+<summary><strong>운영 · 품질</strong></summary>
+
+| 문서 | 내용 |
+|------|------|
+| [데이터 모델과 ERD](docs/technical/ops-quality/data-model-erd.md) | 주요 도메인 엔티티, 회사 단위 데이터 격리, ERD 링크 |
+| [트러블슈팅](docs/technical/ops-quality/troubleshooting.md) | 핵심 기능 구현 중 발생한 문제와 해결 과정 정리 |
+
+</details>
+
+<br>
+<div align="right"><a href="#목차">맨 위로</a></div>
+
+---
+
+## 시연 영상
+
+화면 기준으로 가능한 모든 시나리오의 증적물을 아래 구조에 맞춰 정리하였습니다.
+
+<details>
+<summary><strong>Public · 인증/회사 가입</strong></summary>
+
+| 화면 | 경로 | 증적 시나리오 | 증적 |
+|------|------|---------------|------|
+| 랜딩 | `/` | 서비스 진입, 로그인/회사 온보딩 이동 | 준비 중 |
+| 로그인 | `/login` | 일반 사용자 로그인, SaaS 운영자 로그인 분기 | 준비 중 |
+| 비밀번호 찾기 | `/find-password` | 이메일 입력 후 재설정 요청 | 준비 중 |
+| 비밀번호 재설정 | `/reset-password` | 재설정 토큰 기반 새 비밀번호 등록 | 준비 중 |
+| 비밀번호 변경 | `/change-password` | 최초 로그인/강제 변경 플로우 | 준비 중 |
+| 이메일 인증 | `/verify-email` | 이메일 인증 완료/실패 화면 | 준비 중 |
+| 회사 온보딩 | `/company/onboarding` | 회사 생성, 기본 정보 입력, 초기 가입 완료 | 준비 중 |
+| 접근 금지 | `/403` | 권한 없는 사용자 접근 차단 | 준비 중 |
+| Not Found | `/404` | 존재하지 않는 URL 진입 | 준비 중 |
+
+</details>
+
+<details>
+<summary><strong>공통 앱 셸 · 대시보드/검색/알림/AI</strong></summary>
+
+| 화면/기능 | 경로 | 증적 시나리오 | 증적 |
+|-----------|------|---------------|------|
+| 대시보드 | `/app/dashboard` | 로그인 후 메인 위젯, 요약 지표 확인 | 준비 중 |
+| HR 인사이트 | `/app/insights` | 인사 지표/분석 화면 조회 | 준비 중 |
+| 캘린더 | `/app/calendar` | 회사 일정, 개인 일정, 결재 승인 일정 확인 | 준비 중 |
+| 알림 목록 | `/app/notifications` | 알림 목록 조회, 읽음 처리, 관련 화면 이동 | 준비 중 |
+| 헤더 알림 팝오버 | 공통 헤더 | 실시간 알림 수신, 알림 클릭 라우팅 | 준비 중 |
+| 통합 검색 | 공통 헤더 | 메뉴/구성원/문서 검색 후 상세 이동 | 준비 중 |
+| 조직도 모달 | 공통 앱 셸 | 조직 트리 조회, 구성원 상세 패널 확인 | 준비 중 |
+| 멤버 채팅 | 공통 헤더/모달 | 1:1/그룹 채팅, 파일/이미지 메시지, 읽음 처리 | 준비 중 |
+| AI 챗봇 | 우측 하단 FAB | 정책 질문, 실시간 조회 질문, 답변 출처 확인 | 준비 중 |
+| AI 회의록 | 공통 헤더 모달 | 녹음 파일 업로드, 회의록 생성, 결과 확인 | 준비 중 |
+| 마이페이지 | `/app/me` | 내 정보 조회 | 준비 중 |
+
+</details>
+
+<details>
+<summary><strong>SaaS 운영자 콘솔</strong></summary>
+
+| 화면 | 경로 | 증적 시나리오 | 증적 |
+|------|------|---------------|------|
+| 운영자 대시보드 | `/saas/dashboard` | SaaS 운영자 로그인 후 콘솔 진입 | 준비 중 |
+| 자동 작업 스케줄 | `/saas/schedules` | 테넌트/작업별 스케줄 조회 및 관리 | 준비 중 |
+| 세율표 관리 | `/saas/tax-table` | 기준연도별 세율표 조회/관리 | 준비 중 |
+| 4대보험 요율 관리 | `/saas/tax-rate` | 보험 요율 조회/관리 | 준비 중 |
+
+</details>
+
+<details>
+<summary><strong>초기 설정 · 조직/구성원/권한</strong></summary>
+
+| 화면 | 경로 | 증적 시나리오 | 증적 |
+|------|------|---------------|------|
+| 관리자 온보딩 | `/app/onboarding` | 회사 초기 조직/정책/결재 기본 설정 | 준비 중 |
+| 구성원 목록 | `/app/members` | 구성원 검색, 필터, 직원 등록 | 준비 중 |
+| 구성원 상세 | `/app/members/$memberId` | 인사 정보, 소속, 이력 상세 확인 | 준비 중 |
+| 조직 구조 | `/app/organization?tab=structure` | 조직 트리 생성/수정/이동 | 준비 중 |
+| 직급 관리 | `/app/organization?tab=grades` | 직급 등록/수정/삭제 | 준비 중 |
+| 직책 관리 | `/app/organization?tab=titles` | 직책 등록/수정/삭제 | 준비 중 |
+| 역할·권한 | `/app/organization?tab=roles` | 기본 역할, 커스텀 권한 설정 | 준비 중 |
+| 조직 개편 | `/app/organization?tab=restructure` | 조직 개편 시뮬레이션/적용 | 준비 중 |
+| HR 정책 문서 | `/app/ai-documents` | 정책 문서 업로드, 목록 조회, 삭제, 챗봇 연동 증적 | 준비 중 |
+| 자동 작업 관리 | `/app/admin/batch-schedule` | 배치 스케줄 조회/수정 | 준비 중 |
+
+</details>
+
+<details>
+<summary><strong>전자결재 · 문서함/양식/계약</strong></summary>
+
+| 화면 | 경로 | 증적 시나리오 | 증적 |
+|------|------|---------------|------|
+| 결재 작성 허브 | `/app/approvals?tab=compose` | 결재 양식 선택, 문서 작성, 임시저장, 상신 | 준비 중 |
+| 결재 양식 설정 | `/app/approvals?tab=admin` | JSON 동적 양식 생성/수정, 필드 구성 | 준비 중 |
+| 결재 대기함 | `/app/approvals?box=do-pending` | 결재 대기 문서 승인/반려 | 준비 중 |
+| 결재 처리함 | `/app/approvals?box=do-acted` | 내가 처리한 문서 조회 | 준비 중 |
+| 결재 예정함 | `/app/approvals?box=do-upcoming` | 다음 결재 예정 문서 확인 | 준비 중 |
+| 내 기안 전체 | `/app/approvals?box=per-all` | 내가 올린 문서 상태별 조회 | 준비 중 |
+| 임시저장함 | `/app/approvals?box=per-draft` | 임시저장 문서 이어쓰기/삭제 | 준비 중 |
+| 참조/공람함 | `/app/approvals?box=per-viewers` | 참조/공람 문서 확인 | 준비 중 |
+| 부재 위임 | `/app/approvals/absence-proxy` | 결재 위임 등록/해제 | 준비 중 |
+| 공문 문서함 | `/app/approvals?box=per-official` | 공문 작성/발송/조회 | 준비 중 |
+| 부서 문서함 | `/app/approvals/department` | 부서 기안/발송/수신 문서 조회 | 준비 중 |
+| 부서 문서 고급검색 | `/app/approvals/department-search` | 조직/상태/유형별 검색 | 준비 중 |
+| 내 기안 검색 | `/app/approvals/my-requests` | 내 기안 문서 목록, 상세 검색 | 준비 중 |
+| 출퇴근 정정 신청 | `/app/approvals/correction-request` | 근태 화면에서 정정 결재 prefill 이동 | 준비 중 |
+| 전자계약 발송 | `/app/contracts/send` | 계약 템플릿 선택, 대상자 선택, 일괄 발송 | 준비 중 |
+| 계약 상세 딥링크 | `/app/approvals?tab=compose` | 계약 알림 클릭 후 상세/서명 흐름 확인 | 준비 중 |
+
+</details>
+
+<details>
+<summary><strong>근태 · 휴가 · 출장</strong></summary>
+
+| 화면 | 경로 | 증적 시나리오 | 증적 |
+|------|------|---------------|------|
+| 내 근태 | `/app/attendance` | 출근/퇴근, 일간/주간 근태 현황, 정정 신청 진입 | 준비 중 |
+| 내 월근태 | `/app/attendance/monthly` | 월별 근태 내역 조회 | 준비 중 |
+| 개인 근무 스케줄 | `/app/attendance/schedules/my` | 시차출퇴근 스케줄 선택/변경 신청 | 준비 중 |
+| 초과근무 신청/조회 | `/app/attendance/overtime` | 연장근무 신청, 신청 이력 조회 | 준비 중 |
+| 내 주간 근무시간 | `/app/attendance/work-time` | 주간 누적 근무시간, 52시간 관련 상태 확인 | 준비 중 |
+| 휴가 계획 관리 | `/app/leave` | 잔여 연차 조회, 휴가 신청, 연차 촉진 회신 | 준비 중 |
+| 출장 신청/이력 | `/app/work-trips` | 출장/외근 신청, 이력 조회 | 준비 중 |
+| 전사 근태 현황 | `/app/attendance/company` | 일근태/월근태 현황, 이상 근태 확인 | 준비 중 |
+| 근무스케줄 관리 | `/app/attendance/schedules` | 회사 근무 스케줄 정책 관리 | 준비 중 |
+| 연장근로 정책 | `/app/attendance/overtime-policies` | 초과근무 정책 등록/수정 | 준비 중 |
+| 시차 출퇴근 시간대 | `/app/attendance/flexible-slots` | 출근 슬롯 등록/수정 | 준비 중 |
+| 연장근로 현황 | `/app/attendance/overtime-status` | 연장근로 사용 현황 집계 | 준비 중 |
+| 휴무일/공휴일 관리 | `/app/attendance/holidays` | 공휴일 등록, 일괄 반영 | 준비 중 |
+| 휴가 유형 관리 | `/app/leave/types` | 회사별 휴가 유형 등록/수정 | 준비 중 |
+| 연차 정책 관리 | `/app/leave/policies` | 연차 부여/이월/촉진 정책 설정 | 준비 중 |
+| 휴직 관리 | `/app/leave/absence` | 휴직 등록/승인 반영 내역 확인 | 준비 중 |
+| 연차 통보 미응답자 관리 | `/app/leave/promotion-no-response` | 1차/2차 미응답 대상자 필터링 및 조치 | 준비 중 |
+
+</details>
+
+<details>
+<summary><strong>급여 · 상여 · 퇴직금</strong></summary>
+
+| 화면 | 경로 | 증적 시나리오 | 증적 |
+|------|------|---------------|------|
+| 급여 조회 | `/app/payroll` | 내 급여 명세 목록 조회 | 준비 중 |
+| 급여 명세 상세 | `/app/payroll/$payrollId` | 지급/공제/세금 상세 확인 | 준비 중 |
+| 수당 변경 신청 | `/app/payroll/allowances` | 개인 수당 변경 신청/이력 조회 | 준비 중 |
+| 연봉 조회 | `/app/payroll/annual` | 내 연봉 정보 조회 | 준비 중 |
+| 퇴직금 조회 | `/app/payroll/retirement` | 예상 퇴직금 시뮬레이션 | 준비 중 |
+| 연봉 협상 이력 | `/app/payroll/negotiations` | 개인 연봉 협상 이력 조회 | 준비 중 |
+| 급여 정산 관리 | `/app/payroll/admin` | 월별 정산, 직원별 명세 생성/확정/지급 | 준비 중 |
+| 급여대장 상세 편집 | `/app/payroll/admin/$payrollId` | 명세 라인 수정, 확정/지급 처리 | 준비 중 |
+| 세금·4대보험 집계 | `/app/payroll/tax-summary` | 월별 보험/원천세 집계 조회 | 준비 중 |
+| 급여 정책 | `/app/salary/settings` | 지급/공제 항목, 급여 정책 설정 | 준비 중 |
+| 호봉표 관리 | `/app/salary/pay-grade-table` | 호봉 테이블 등록/수정 | 준비 중 |
+| 연차수당 정산 | `/app/salary/unused-leave` | 미사용 연차수당 대상 조회/정산 | 준비 중 |
+| 퇴직급여 정책 | `/app/salary/retirement-policy` | 법정/DB/DC 퇴직급여 정책 설정 | 준비 중 |
+| 연봉 협상 관리 | `/app/salary/negotiations` | 협상 대상자, 요청/승인 흐름 관리 | 준비 중 |
+| 상여 정책 | `/app/salary/bonus-policy` | 정기상여/성과급/명절상여 정책 설정 | 준비 중 |
+
+</details>
+
+<details>
+<summary><strong>목표 · 평가 · 면담</strong></summary>
+
+| 화면 | 경로 | 증적 시나리오 | 증적 |
+|------|------|---------------|------|
+| 내 목표 | `/app/performance?view=my` | 개인 목표 생성, 활동 기록, 진척률 확인 | 준비 중 |
+| 조직 목표 관리 | `/app/performance?view=org` | 팀/조직 목표 관리, 구성원 목표 확인 | 준비 중 |
+| 전사 목표 현황 | `/app/performance?view=company` | 전사 목표 현황 조회 | 준비 중 |
+| 평가 허브 | `/app/evaluations` | 내 평가, 평가 작성 진입, 결과 확인 | 준비 중 |
+| 평가 운영 관리 | `/app/evaluations?view=overview` | 시즌/설계/운영 탭 확인 | 준비 중 |
+| 평가 시즌 상세 | `/app/evaluations/seasons/$seasonId` | 그룹 편성, 평가자 배정, 보정, 결과 발행 | 준비 중 |
+| 내 평가 결과 | `/app/evaluations` | 평가 결과 카드/목록 확인 | 준비 중 |
+| 면담 목록 | `/app/meetings` | 면담 일정/기록 목록 조회, 생성 | 준비 중 |
+| 면담 상세 | `/app/meetings/$meetingId` | 면담 내용 작성/수정, 액션 아이템 확인 | 준비 중 |
 
 </details>
 
 <details>
 <summary><strong>ESG</strong></summary>
 
-| 기능 | 설명 |
-|------|------|
-| ESG 활동 | 활동 신청/승인, 포인트 적립, 캠페인 관리 |
-| 포인트 교환 | 적립 포인트로 물품 교환 쇼핑 |
-| 참여 현황 | 인사 데이터 연동으로 부서별/직급별 ESG 참여 현황 분석 |
+| 화면 | 경로 | 증적 시나리오 | 증적 |
+|------|------|---------------|------|
+| My ESG | `/app/esg` | ESG 활동 신청, 포인트 현황, 참여 현황 확인 | 준비 중 |
+| ESG 샵 | `/app/esg/shop` | 포인트 상품 조회, 교환 신청 | 준비 중 |
+| ESG 설정 | `/app/esg/admin` | ESG 활동 승인/반려, 캠페인/상품 관리 | 준비 중 |
 
 </details>
 
 <details>
-<summary><strong>협업 · 공통</strong></summary>
+<summary><strong>준비 중/레거시/리다이렉트 확인</strong></summary>
 
-| 기능 | 설명 |
-|------|------|
-| 실시간 채팅 | WebSocket(STOMP) 기반 사내 메신저, 파일 공유 |
-| 통합 검색 | Elasticsearch 기반으로 결재, 인사, 조직 등 흩어진 데이터를 한 번에 검색 |
-| 알림 | Kafka → Redis Pub/Sub → SSE 파이프라인으로 결재·근태·계약 등 실시간 알림 |
-| 캘린더 | 결재 승인 건 캘린더 자동 연동, 회사 공휴일 관리 |
+| 화면 | 경로 | 증적 시나리오 | 증적 |
+|------|------|---------------|------|
+| 메일 | `/app/mail` | 준비 중 화면 확인 | 준비 중 |
+| AI 비서 페이지 | `/app/ai-assistant` | 준비 중 화면 확인, FAB 챗봇과 구분 | 준비 중 |
+| 역할·권한 레거시 | `/app/roles` | `/app/organization?tab=roles` 리다이렉트 확인 | 준비 중 |
+| 월근태 레거시 | `/app/attendance/company/monthly` | `/app/attendance/company` 리다이렉트 확인 | 준비 중 |
+| 포괄임금 OT 레거시 | `/app/attendance/comprehensive-ot` | `/app/attendance/overtime-status` 리다이렉트 확인 | 준비 중 |
 
 </details>
-
-<br>
-<div align="right"><a href="#목차">맨 위로</a></div>
-
----
-
-## 시스템 아키텍처
-
-<!-- TODO: 아키텍처 다이어그램 이미지 -->
-
-<br>
-<div align="right"><a href="#목차">맨 위로</a></div>
-
----
-
-
-## 기술 스택
-
-### Backend - Spring
-![Java](https://img.shields.io/badge/java-007396?style=for-the-badge&logo=java&logoColor=white)
-![Spring Boot](https://img.shields.io/badge/spring%20boot-6DB33F?style=for-the-badge&logo=springboot&logoColor=white)
-![Spring Security](https://img.shields.io/badge/spring%20security-6DB33F?style=for-the-badge&logo=springsecurity&logoColor=white)
-![Spring Data JPA](https://img.shields.io/badge/spring%20data%20jpa-6DB33F?style=for-the-badge)
-![JWT](https://img.shields.io/badge/jwt-000000?style=for-the-badge)
-![Lombok](https://img.shields.io/badge/lombok-BC4521?style=for-the-badge)
-![Gradle](https://img.shields.io/badge/gradle-02303A?style=for-the-badge&logo=gradle&logoColor=white)
-![Swagger](https://img.shields.io/badge/swagger-85EA2D?style=for-the-badge&logo=swagger&logoColor=white)
-![WebSocket](https://img.shields.io/badge/websocket-000000?style=for-the-badge&logo=socketdotio&logoColor=white)
-
-### Backend - Python
-![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
-![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)
-![ChatGPT](https://img.shields.io/badge/chatGPT-74aa9c?style=for-the-badge&logo=openai&logoColor=white)
-![LangChain](https://img.shields.io/badge/langchain-%231C3C3C.svg?style=for-the-badge&logo=langchain&logoColor=white)
-
-### Frontend
-![Vue.js](https://img.shields.io/badge/vue.js-4FC08D?style=for-the-badge&logo=vuedotjs&logoColor=white)
-![Pinia](https://img.shields.io/badge/pinia-FFD859?style=for-the-badge)
-![Vue Router](https://img.shields.io/badge/vue%20router-4FC08D?style=for-the-badge)
-![Vite](https://img.shields.io/badge/vite-646CFF?style=for-the-badge&logo=vite&logoColor=white)
-![Axios](https://img.shields.io/badge/axios-5A29E4?style=for-the-badge)
-![TypeScript](https://img.shields.io/badge/typescript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
-![Chart.js](https://img.shields.io/badge/chart.js-FF6384?style=for-the-badge&logo=chartdotjs&logoColor=white)
-![HTML5](https://img.shields.io/badge/html5-E34F26?style=for-the-badge&logo=html5&logoColor=white)
-![CSS3](https://img.shields.io/badge/css3-1572B6?style=for-the-badge&logo=css3&logoColor=white)
-
-### Database
-![MariaDB](https://img.shields.io/badge/mariadb-003545?style=for-the-badge&logo=mariadb&logoColor=white)
-![Amazon RDS](https://img.shields.io/badge/amazon%20rds-527FFF?style=for-the-badge&logo=amazonrds&logoColor=white)
-
-### Cloud / Infrastructure
-![AWS](https://img.shields.io/badge/aws-232F3E?style=for-the-badge&logo=amazonaws&logoColor=white)
-![AWS IAM](https://img.shields.io/badge/aws%20iam-FF9900?style=for-the-badge)
-![Amazon S3](https://img.shields.io/badge/amazon%20s3-569A31?style=for-the-badge&logo=amazons3&logoColor=white)
-
-### CI / CD
-![GitHub Actions](https://img.shields.io/badge/github%20actions-2088FF?style=for-the-badge&logo=githubactions&logoColor=white)
-
-### Tools
-![Git](https://img.shields.io/badge/git-F05032?style=for-the-badge&logo=git&logoColor=white)
-![GitHub](https://img.shields.io/badge/github-181717?style=for-the-badge&logo=github)
-![Notion](https://img.shields.io/badge/notion-000000?style=for-the-badge&logo=notion)
-![Discord](https://img.shields.io/badge/discord-5865F2?style=for-the-badge&logo=discord&logoColor=white)
-![Figma](https://img.shields.io/badge/figma-F24E1E?style=for-the-badge&logo=figma&logoColor=white)
-
-<br>
-<div align="right"><a href="#목차">맨 위로</a></div>
-
----
-
-## 화면 설계 & 주요 화면
-
-- [Figma 전체 보기](https://www.figma.com/design/FftNc7FU8cuQZS2VnKm3NR/be23-fin-team4-workforce?node-id=0-1&t=AZ9PaJjekutgn9fR-1)
-
-<!-- TODO: 주요 화면 스크린샷/GIF 추가 -->
-
-<br>
-<div align="right"><a href="#목차">맨 위로</a></div>
-
----
-
-## AI 기능
-
-<!-- TODO: RAG 챗봇, 결재 초안 자동 생성 등 AI 기능 소개 -->
-
-<br>
-<div align="right"><a href="#목차">맨 위로</a></div>
-
----
-
-## 트러블슈팅
-
-<!-- TODO: 주요 기술적 문제 → 원인 → 해결 사례 3개 정도 -->
 
 <br>
 <div align="right"><a href="#목차">맨 위로</a></div>
@@ -233,8 +485,12 @@
 ## 부록
 
 - [ERD 전체 보기](https://www.erdcloud.com/d/Er4amBY2KpweBcKTk)
+- [ERD 이미지](docs/asset/WORKFORCE_ERD.png)
 - [프로그램 사양서 및 단위테스트결과서](https://documenter.getpostman.com/view/51059789/2sBXqDrNZT)
 - [요구사항 명세서](https://docs.google.com/spreadsheets/d/107CuIWefCSjBbwO0mnKdQJzK5WCFDKYtw5Rs18liJw8/edit?gid=63147339#gid=63147339)
 - [WBS](https://docs.google.com/spreadsheets/d/107CuIWefCSjBbwO0mnKdQJzK5WCFDKYtw5Rs18liJw8/edit?gid=395838842#gid=395838842)
 - [Figma 기획서](https://www.figma.com/proto/6suak3PIQpHGzS3UBatOF1/%ED%95%9C%ED%99%94-BEYOND-SW-CAMP-23%EA%B8%B0?node-id=618-102&viewport=696%2C533%2C0.2&t=o5woH0kckAYE5DgS-1&scaling=min-zoom&content-scaling=fixed&starting-point-node-id=618%3A102&page-id=612%3A67)
-- [기획서 PDF](docs/WORKFORCE_프로젝트_기획서.pdf)
+- [기획서 PDF](WORKFORCE_프로젝트_기획서.pdf)
+
+<br>
+<div align="right"><a href="#목차">맨 위로</a></div>
