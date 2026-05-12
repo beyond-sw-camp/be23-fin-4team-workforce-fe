@@ -151,7 +151,7 @@ function employeePartySigned(contract: ContractRecord): boolean {
 }
 
 function formatDateTime(value: string): string {
-  const d = dayjs(value);
+  const d = dayjs.utc(value).tz('Asia/Seoul');
   return d.isValid() ? d.format('YYYY-MM-DD HH:mm') : value;
 }
 
