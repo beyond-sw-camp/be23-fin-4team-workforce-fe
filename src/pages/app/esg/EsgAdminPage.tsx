@@ -277,7 +277,6 @@ export function EsgAdminPage() {
   const openShopItemEdit = (item: EsgShopItem) => {
     const id = item.itemId?.trim();
     if (!id) return;
-    setDashboardModal(null);
     setEditingShopItem(item);
   };
 
@@ -811,16 +810,7 @@ export function EsgAdminPage() {
                     {previewShopItems.slice(0, 3).map((item) => (
                       <div
                         key={item.itemId || JSON.stringify(item)}
-                        role={item.itemId ? 'button' : undefined}
-                        tabIndex={item.itemId ? 0 : undefined}
                         onClick={() => item.itemId && openShopItemEdit(item)}
-                        onKeyDown={(e) => {
-                          if (!item.itemId) return;
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            openShopItemEdit(item);
-                          }
-                        }}
                         className={`${esgSoftRowButtonClass}${
                           item.itemId ? ' tw-cursor-pointer hover:tw-bg-slate-100/80' : ''
                         }`}
@@ -832,7 +822,16 @@ export function EsgAdminPage() {
                         <span className="tw-flex tw-shrink-0 tw-items-center tw-gap-2">
                           <span className="tw-text-sm tw-font-bold tw-text-[#1e3a5f]">{item.requiredPoints}P</span>
                           {item.itemId ? (
-                            <span className="tw-text-xs tw-font-semibold tw-text-blue-600">수정</span>
+                            <button
+                              type="button"
+                              className="tw-cursor-pointer tw-border-0 tw-bg-transparent tw-p-0 tw-text-xs tw-font-semibold tw-text-blue-600 hover:tw-text-blue-800 hover:tw-underline"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openShopItemEdit(item);
+                              }}
+                            >
+                              수정
+                            </button>
                           ) : null}
                         </span>
                       </div>
@@ -1295,9 +1294,13 @@ export function EsgAdminPage() {
                 width: 88,
                 render: (_, row) =>
                   row.itemId ? (
-                    <Button type="link" size="small" className="!tw-p-0 tw-text-xs tw-font-semibold" onClick={() => openShopItemEdit(row)}>
+                    <button
+                      type="button"
+                      className="tw-cursor-pointer tw-border-0 tw-bg-transparent tw-p-0 tw-text-left tw-text-xs tw-font-semibold tw-text-blue-600 hover:tw-text-blue-800 hover:tw-underline"
+                      onClick={() => openShopItemEdit(row)}
+                    >
                       수정
-                    </Button>
+                    </button>
                   ) : (
                     '—'
                   ),
@@ -1360,6 +1363,7 @@ export function EsgAdminPage() {
         submitLoading={updateShop.isPending}
         submitButtonClassName={esgPrimaryButtonClass}
         width={560}
+        zIndex={1100}
         destroyOnHidden
         styles={{ body: modalScrollableBody }}
       >
