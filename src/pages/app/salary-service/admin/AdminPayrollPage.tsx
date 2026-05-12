@@ -623,30 +623,13 @@ export function AdminPayrollPage() {
               label: '정산 처리',
               children: (
                 <Space direction="vertical" className="tw-w-full" size={14}>
-                  {/* 이번 달 정기급여 누락자 검증 - 시간 무관 데이터 + 이번 달 기준 별도 검증 */}
+                  {/* 이번 달 정기급여 누락자 검증 - 0건일 땐 안내 숨김, 누락 없음일 때만 success 표기 */}
                   {(() => {
                     const thisMonth = dayjs().format('YYYY-MM');
                     const thisMonthRegularRows = rows.filter(
                       (r) => r.payrollType === 'REGULAR_MONTHLY' && r.targetYearMonth === thisMonth,
                     );
-                    // 이번 달 정기급여 명세서가 한 건도 없음 - 자동 배치 전 또는 미생성 상태
-                    if (thisMonthRegularRows.length === 0) {
-                      const payDateStr = activePayDay
-                        ? `${thisMonth}-${String(activePayDay).padStart(2, '0')}`
-                        : null;
-                      return (
-                        <Alert
-                          type="info"
-                          showIcon
-                          message={
-                            payDateStr
-                              ? `이번 달 정기급여 명세서가 아직 만들어지지 않았어요 (정산일 ${payDateStr})`
-                              : `이번 달(${thisMonth}) 정기급여 명세서가 아직 만들어지지 않았어요`
-                          }
-                          description="우측 상단 [명세서 생성] 버튼을 누르면 회사 정책 기준 정산일로 한꺼번에 만들어집니다."
-                        />
-                      );
-                    }
+                    if (thisMonthRegularRows.length === 0) return null;
                     return (
                       <Alert
                         type="success"
