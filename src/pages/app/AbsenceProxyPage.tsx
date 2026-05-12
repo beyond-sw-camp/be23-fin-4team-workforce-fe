@@ -602,6 +602,7 @@ export function AbsenceProxyPage() {
               value={pickerRange}
               onChange={(v) => setPickerRange(v as [Dayjs | null, Dayjs | null] | null)}
               disabledDate={(current) => Boolean(current && current.isBefore(dayjs(), 'day'))}
+              getPopupContainer={() => document.body}
               popupStyle={{ zIndex: 3150 }}
             />
             <Typography.Paragraph type="secondary" className="!tw-mt-1 !tw-mb-0 !tw-text-xs">
@@ -614,7 +615,7 @@ export function AbsenceProxyPage() {
               결재 작성 화면과 같이 조직도에서 멤버를 드래그해 오른쪽 칸에 놓거나, 멤버 노드를 클릭해 선택하세요. 조직 단위는
               지정할 수 없습니다.
             </Typography.Paragraph>
-            <div className="tw-grid tw-grid-cols-1 tw-gap-4 lg:tw-grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <div className="tw-grid tw-grid-cols-2 tw-gap-4">
               <Card size="small" title="조직도" variant="borderless" className="tw-shadow-none tw-bg-transparent">
                 <AppSearchBar
                   value={substitutePickerKeyword}
