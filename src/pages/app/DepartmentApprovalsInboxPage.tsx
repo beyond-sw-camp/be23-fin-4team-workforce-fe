@@ -28,7 +28,7 @@ import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 function formatDateTime(value?: string | null) {
   if (!value) return '—';
-  const d = dayjs(value);
+  const d = dayjs.utc(value).tz('Asia/Seoul');
   return d.isValid() ? d.format('YYYY-MM-DD HH:mm') : value;
 }
 

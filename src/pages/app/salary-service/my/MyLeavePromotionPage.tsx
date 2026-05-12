@@ -44,7 +44,7 @@ function formatDate(iso?: string | null) {
 
 function formatDateTime(iso?: string | null) {
   if (!iso) return '—';
-  const d = dayjs(iso);
+  const d = dayjs.utc(iso).tz('Asia/Seoul');
   return d.isValid() ? d.format('YYYY-MM-DD HH:mm') : iso;
 }
 

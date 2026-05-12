@@ -31,7 +31,7 @@ type PendingApprovalStatusFilter = 'pending' | 'waiting' | 'approved' | 'rejecte
 
 function formatDateTime(value?: string | null) {
   if (!value?.trim()) return '—';
-  const d = dayjs(value);
+  const d = dayjs.utc(value).tz('Asia/Seoul');
   return d.isValid() ? d.format('YYYY-MM-DD HH:mm') : '—';
 }
 
