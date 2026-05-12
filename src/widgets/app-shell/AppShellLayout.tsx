@@ -199,7 +199,7 @@ const TALENT_HUB_PATHS = ['/app/performance', '/app/evaluations', '/app/meetings
 const TALENT_HUB_PATH_SET = new Set<string>(TALENT_HUB_PATHS);
 
 const ORG_HR_GROUP_KEY = 'group-org-hr';
-/** 인사 관리 서브메뉴 — 구성원·조직도 접근과 동일하게 `canAccessMemberDirectory` 로 노출 */
+/** 인사 관리 서브메뉴 — 시스템 관리자 또는 인사(MEMBER:CREATE·UPDATE)만 노출 */
 const ORG_HR_PATHS = ['/app/members', '/app/organization'] as const;
 /** 계약 발송 라우트는 HR 그룹에만 속하며, 메뉴 순서는 `hrGroupExtraChildren`에서 결재 양식 다음에 둠 */
 const ORG_HR_PATH_SET = new Set<string>([...ORG_HR_PATHS, '/app/contracts/send']);
@@ -256,7 +256,7 @@ function approvalLeafIcon(box: string) {
 function buildAppShellMenuItems(
   isAdmin: boolean,
   approvalMenuChildren: NonNullable<MenuProps['items']> | undefined,
-  canAccessMemberDirectory: boolean,
+  showMemberDirectoryMenu: boolean,
   hrGroupExtraChildren?: NonNullable<MenuProps['items']>,
   leavePromotionEnabled = false,
   showSalaryNegotiationSubmenu = false,
@@ -293,7 +293,7 @@ function buildAppShellMenuItems(
     }
     if (ORG_HR_PATH_SET.has(path)) {
       if (!orgInserted) {
-        const baseChildren: NonNullable<MenuProps['items']> = canAccessMemberDirectory
+        const baseChildren: NonNullable<MenuProps['items']> = showMemberDirectoryMenu
           ? ORG_HR_PATHS.map((p) => ({
               key: p,
               icon: APP_MENU_ICONS[p],
@@ -727,7 +727,6 @@ function useAppShellSiderMenuItems(): {
                 label: APP_MENU_LABEL['/app/leave/absence'],
                 title: APP_MENU_LABEL['/app/leave/absence'],
               },
-              // 연차 촉진 알림 현황 - 운영 모니터링 메뉴 (인사 관리 그룹)
               {
                 key: '/app/leave/promotion-no-response',
                 icon: <BellOutlined className="tw-text-lg" />,
@@ -803,11 +802,11 @@ function useAppShellSiderMenuItems(): {
     esgConfig,
     isAdmin,
     isAdminOrHr,
+    showApprovalFormSettings,
     approvalOrgChart,
     user?.permissions,
     myDashboardProfile?.organizationName,
     user?.departmentName,
-    showApprovalFormSettings,
     leavePoliciesForMenu,
     salaryPoliciesForMenu,
     hasPermission,

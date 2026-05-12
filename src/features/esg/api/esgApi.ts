@@ -414,6 +414,32 @@ export const esgApi = {
     await httpClient.post('/esg/shop/items', fd);
   },
 
+  /** PUT /esg/shop/items/{itemId} — multipart, ESG UPDATE 권한. `X-User-UUID`는 httpClient 인터셉터에서 설정 */
+  async updateShopItem(
+    itemId: string,
+    params: {
+      title: string;
+      description?: string;
+      requiredPoints: number;
+      stock: number;
+      image?: File | null;
+    },
+  ) {
+    const id = typeof itemId === 'string' ? itemId.trim() : String(itemId ?? '').trim();
+    if (!id) {
+      throw new Error('물품 ID를 찾을 수 없습니다.');
+    }
+    const fd = new FormData();
+    fd.append('title', params.title.trim());
+    fd.append('description', (params.description ?? '').trim());
+    fd.append('requiredPoints', String(params.requiredPoints));
+    fd.append('stock', String(params.stock));
+    if (params.image) {
+      fd.append('image', params.image);
+    }
+    await httpClient.put(`/esg/shop/items/${encodeURIComponent(id)}`, fd);
+  },
+
   async listShopItems(): Promise<EsgShopItem[]> {
     const response = await httpClient.get('/esg/shop/items');
     const unwrapped = unwrapApiResponse<unknown>(response.data);
