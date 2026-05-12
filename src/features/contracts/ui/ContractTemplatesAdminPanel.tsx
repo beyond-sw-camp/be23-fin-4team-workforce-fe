@@ -88,7 +88,8 @@ type SingleSendForm = {
 type BatchSendForm = {
   templateId: string;
   batchName: string;
-  items: Array<{ employeeMemberId: string; adminInput?: Record<string, unknown> }>;
+  items: Array<{ employeeMemberId: string }>;
+  commonAdminInput?: Record<string, unknown>;
 };
 function buildContractSchemaJson(
   fields: FormFieldSchema[],
@@ -289,7 +290,7 @@ export function ContractTemplatesAdminPanel({
       message.success(
         `일괄 발송 완료: ${res.totalCount}건 (배치: ${res.batchName || res.batchId})`,
       );
-      batchSendForm.setFieldsValue({ items: [{ employeeMemberId: '', adminInput: {} }] });
+      batchSendForm.setFieldsValue({ items: [{ employeeMemberId: '' }], commonAdminInput: undefined });
       queueMicrotask(() => {
         window.location.reload();
       });
@@ -588,6 +589,11 @@ export function ContractTemplatesAdminPanel({
       const rowCount =
         (batchSendForm.getFieldValue('items') as BatchSendForm['items'] | undefined)?.length ?? 0;
       const adminKeys = batchAdminInputFields.map((f) => f.name);
+      const commonAdminObj = collectContractAdminInputFromForm(
+        (path) => batchSendForm.getFieldValue(path),
+        adminKeys,
+        ['commonAdminInput'],
+      );
       const items: Array<{ employeeMemberId: string; adminInputJson: Record<string, unknown> }> =
         [];
       for (let i = 0; i < rowCount; i += 1) {
@@ -595,12 +601,7 @@ export function ContractTemplatesAdminPanel({
           batchSendForm.getFieldValue(['items', i, 'employeeMemberId']) ?? '',
         ).trim();
         if (!employeeMemberId) continue;
-        const adminObj = collectContractAdminInputFromForm(
-          (path) => batchSendForm.getFieldValue(path),
-          adminKeys,
-          ['items', i],
-        );
-        items.push({ employeeMemberId, adminInputJson: adminObj });
+        items.push({ employeeMemberId, adminInputJson: commonAdminObj });
       }
       if (items.length === 0) {
         message.warning('일괄 발송 대상 직원을 1명 이상 선택해 주세요.');
@@ -640,7 +641,7 @@ export function ContractTemplatesAdminPanel({
         existingIds.add(id);
         return true;
       })
-      .map((id) => ({ employeeMemberId: id, adminInput: {} as Record<string, unknown> }));
+      .map((id) => ({ employeeMemberId: id }));
     if (appended.length === 0) {
       message.info('이미 추가된 직원입니다.');
       setBatchRecipientPickerOpen(false);
@@ -966,7 +967,7 @@ export function ContractTemplatesAdminPanel({
                   form={batchSendForm}
                   layout="vertical"
                   className="tw-pt-2"
-                  initialValues={{ items: [{ employeeMemberId: '', adminInput: {} }] }}
+                  initialValues={{ items: [{ employeeMemberId: '' }] }}
                 >
                   <Form.Item
                     name="templateId"
@@ -1029,79 +1030,31 @@ export function ContractTemplatesAdminPanel({
                                 options={memberOptions}
                               />
                             </Form.Item>
-                            {batchAdminInputFields.map((adminField) => (
-                              <Form.Item
-                                key={`${field.key}-${adminField.name}`}
-                                name={[field.name, 'adminInput', adminField.name]}
-                                label={adminField.label}
-                              >
-                                <ContractAdminFormFieldInput field={adminField} textAreaRows={2} />
-                              </Form.Item>
-                            ))}
                           </Card>
                         ))}
-                        <Button onClick={() => add({ employeeMemberId: '', adminInput: {} })}>
+                        <Button onClick={() => add({ employeeMemberId: '' })}>
                           대상 직원 추가
                         </Button>
                       </Space>
                     )}
                   </Form.List>
-                </Form>
-              <Form<BatchSendForm>
-                form={batchSendForm}
-                layout="vertical"
-                className="tw-pt-2"
-                initialValues={{ items: [{ employeeMemberId: '', adminInput: {} }] }}
-              >
-                <Form.Item name="templateId" label="템플릿" rules={[{ required: true, message: '템플릿을 선택해 주세요.' }]}>
-                  <Select
-                    showSearch
-                    optionFilterProp="label"
-                    loading={templateSelectLoading}
-                    placeholder="활성 템플릿 선택"
-                    options={activeTemplates.map((t) => ({
-                      value: t.templateId,
-                      label: `${t.templateName} (${CONTRACT_TYPE_LABEL[t.contractType as ContractType] ?? t.contractType})`,
-                    }))}
-                  />
-                </Form.Item>
-                <Form.Item name="batchName" label="발송 제목" rules={[{ required: true, message: '발송 제목을 입력해 주세요.' }]}>
-                  <Input placeholder="예: 2026년 연봉계약" maxLength={120} />
-                </Form.Item>
-                <Form.List name="items">
-                  {(fields, { add, remove }) => (
-                    <Space direction="vertical" className="tw-w-full" size={12}>
-                      <div className="tw-flex tw-items-center tw-justify-end">
-                        <Button onClick={() => setBatchRecipientPickerOpen(true)}>조직도에서 다중 추가</Button>
-                      </div>
-                      {fields.map((field, index) => (
-                        <Card
-                          key={field.key}
-                          size="small"
-                          title={`대상 ${index + 1}`}
-                          extra={
-                            fields.length > 1 ? (
-                              <Button type="link" danger size="small" onClick={() => remove(field.name)}>
-                                삭제
-                              </Button>
-                            ) : null
-                          }
+                  {batchAdminInputFields.length > 0 ? (
+                    <div className="tw-mt-4 tw-rounded-xl tw-border tw-border-blue-100 tw-bg-blue-50/50 tw-p-4">
+                      <Typography.Text strong className="tw-mb-3 tw-block tw-text-sm tw-text-blue-800">
+                        공통 입력값 (선택된 모든 대상자에게 동일하게 적용)
+                      </Typography.Text>
+                      {batchAdminInputFields.map((adminField) => (
+                        <Form.Item
+                          key={adminField.name}
+                          name={['commonAdminInput', 'adminInput', adminField.name]}
+                          label={adminField.label}
                         >
-                          <Form.Item name={[field.name, 'employeeMemberId']} label="직원" rules={[{ required: true, message: '직원을 선택해 주세요.' }]}>
-                            <Select showSearch optionFilterProp="label" placeholder="직원 선택" options={memberOptions} />
-                          </Form.Item>
-                          {batchAdminInputFields.map((adminField) => (
-                            <Form.Item key={`${field.key}-${adminField.name}`} name={[field.name, 'adminInput', adminField.name]} label={adminField.label}>
-                              <ContractAdminFormFieldInput field={adminField} textAreaRows={2} />
-                            </Form.Item>
-                          ))}
-                        </Card>
+                          <ContractAdminFormFieldInput field={adminField} textAreaRows={2} />
+                        </Form.Item>
                       ))}
-                      <Button onClick={() => add({ employeeMemberId: '', adminInput: {} })}>대상 직원 추가</Button>
-                    </Space>
-                  )}
-                </Form.List>
-              </Form>
+                    </div>
+                  ) : null}
+                </Form>
               </div>
             </AppDoubleActionModal>
           </>
@@ -1210,7 +1163,7 @@ export function ContractTemplatesAdminPanel({
                   form={batchSendForm}
                   layout="vertical"
                   className="tw-pt-1"
-                  initialValues={{ items: [{ employeeMemberId: '', adminInput: {} }] }}
+                  initialValues={{ items: [{ employeeMemberId: '' }] }}
                 >
                   <Form.Item
                     name="templateId"
@@ -1271,23 +1224,30 @@ export function ContractTemplatesAdminPanel({
                                 options={memberOptions}
                               />
                             </Form.Item>
-                            {batchAdminInputFields.map((adminField) => (
-                              <Form.Item
-                                key={`${field.key}-${adminField.name}`}
-                                name={[field.name, 'adminInput', adminField.name]}
-                                label={adminField.label}
-                              >
-                                <ContractAdminFormFieldInput field={adminField} textAreaRows={2} />
-                              </Form.Item>
-                            ))}
                           </div>
                         ))}
-                        <Button onClick={() => add({ employeeMemberId: '', adminInput: {} })}>
+                        <Button onClick={() => add({ employeeMemberId: '' })}>
                           대상 직원 추가
                         </Button>
                       </Space>
                     )}
                   </Form.List>
+                  {batchAdminInputFields.length > 0 ? (
+                    <div className="tw-mt-4 tw-rounded-xl tw-border tw-border-blue-100 tw-bg-blue-50/50 tw-p-4">
+                      <Typography.Text strong className="tw-mb-3 tw-block tw-text-sm tw-text-blue-800">
+                        공통 입력값 (선택된 모든 대상자에게 동일하게 적용)
+                      </Typography.Text>
+                      {batchAdminInputFields.map((adminField) => (
+                        <Form.Item
+                          key={adminField.name}
+                          name={['commonAdminInput', 'adminInput', adminField.name]}
+                          label={adminField.label}
+                        >
+                          <ContractAdminFormFieldInput field={adminField} textAreaRows={2} />
+                        </Form.Item>
+                      ))}
+                    </div>
+                  ) : null}
                   <div className="tw-mt-3 tw-flex tw-justify-end">
                     <Button
                       type="primary"

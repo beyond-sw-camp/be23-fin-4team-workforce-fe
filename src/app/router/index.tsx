@@ -27,6 +27,7 @@ import { VerifyEmailPage } from '@/pages/public/VerifyEmailPage';
 import { CompanyOnboardingPage } from '@/pages/public/CompanyOnboardingPage';
 import { lazy, Suspense, type ComponentType } from 'react';
 import { Spin } from 'antd';
+import { AppErrorBoundary } from '@/shared/ui/AppErrorBoundary';
 import { CalendarPage } from '@/pages/app/CalendarPage';
 import { DashboardPage } from '@/pages/app/DashboardPage';
 import { HrInsightsPage } from '@/pages/app/HrInsightsPage';
@@ -83,17 +84,19 @@ import { AdminSalarySettingsPage } from '@/pages/app/salary-service/admin/AdminS
 function withSuspense(Comp: ComponentType) {
   return function SuspenseBoundary() {
     return (
-      <Suspense
-        fallback={
-          <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
-            <Spin size="large">
-              <span className="tw-sr-only">페이지 로딩 중...</span>
-            </Spin>
-          </div>
-        }
-      >
-        <Comp />
-      </Suspense>
+      <AppErrorBoundary>
+        <Suspense
+          fallback={
+            <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
+              <Spin size="large">
+                <span className="tw-sr-only">페이지 로딩 중...</span>
+              </Spin>
+            </div>
+          }
+        >
+          <Comp />
+        </Suspense>
+      </AppErrorBoundary>
     );
   };
 }
