@@ -576,9 +576,9 @@ function ScheduleForm({ form, editing, onSubmit, onGoToFlexibleSlots }: Schedule
       {/* FLEXIBLE 전용 - 매월 다음 달 슬롯 신청 마감일 */}
       {isFlexible ? (
         <Form.Item
-          label="슬롯 선택 마감일 (매월 N일)"
+          label="스케줄 변경 신청 마감일 (매월 N일)"
           name="selectionDeadlineDay"
-          extra="직원이 매월 이 날짜까지 다음 달 시간대를 선택. 미선택 시 다음날 새벽 배치가 기본 슬롯 자동 배정. (default 25일)"
+          extra="직원이 매월 이 날짜까지 다음 달 시간대를 선택"
           rules={[
             { type: 'number', min: 1, max: 28, message: '1 ~ 28 사이로 입력해 주세요.' },
           ]}

@@ -117,8 +117,8 @@ const JOB_LABELS: Record<string, { name: string; description: string }> = {
     description: '제출 후 72시간 경과한 사후 신청 자동 만료',
   },
   slotDeadlineAutoAssignJob_Detail: {
-    name: '시차출퇴근 슬롯 자동 배정',
-    description: '마감일 경과한 시차 슬롯 자동 할당',
+    name: '시차출퇴근 스케줄 자동 배정',
+    description: '마감일 경과한 시차 스케줄 자동 할당',
   },
   // salary-service - 연차
   leaveGrantJob_Detail: {
