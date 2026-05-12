@@ -397,6 +397,11 @@ const approvalsAdminRoute = createRoute({
   path: '/approvals',
   validateSearch: approvalsSearchSchema,
   component: withSuspense(ApprovalsPageLazy),
+  beforeLoad: ({ context, search }) => {
+    if (String(search.tab ?? '') === 'admin') {
+      requireMemberDirectoryAccess(context);
+    }
+  },
 });
 
 const myApprovalRequestsRoute = createRoute({
@@ -545,9 +550,7 @@ const organizationRoute = createRoute({
   validateSearch: organizationSearchSchema,
   component: OrganizationPage,
   beforeLoad: ({ context }) => {
-    if (!context.auth.user?.isSystemAdmin) {
-      throw redirect({ to: '/403' });
-    }
+    requireMemberDirectoryAccess(context);
   },
 });
 
@@ -769,9 +772,7 @@ const adminLeavePromotionNoResponseRoute = createRoute({
   path: '/leave/promotion-no-response',
   component: AdminLeavePromotionNoResponsePage,
   beforeLoad: ({ context }) => {
-    if (!context.auth.user?.isSystemAdmin) {
-      throw redirect({ to: '/app/leave' });
-    }
+    requireMemberDirectoryAccess(context);
   },
 });
 
@@ -780,9 +781,7 @@ const adminLeaveOfAbsenceRoute = createRoute({
   path: '/leave/absence',
   component: AdminLeaveOfAbsencePage,
   beforeLoad: ({ context }) => {
-    if (!context.auth.user?.isSystemAdmin) {
-      throw redirect({ to: '/app/leave' });
-    }
+    requireMemberDirectoryAccess(context);
   },
 });
 
