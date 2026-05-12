@@ -42,7 +42,9 @@ import EvaluationSeasonDetailPage from '@/pages/app/evaluations/EvaluationSeason
 import PerformancePage from '@/pages/app/PerformancePage';
 // 큰 페이지(6000줄+) - 코드 스플릿으로 초기 번들에서 분리
 const ApprovalsPageLazy = lazy(() =>
-  import('@/pages/app/ApprovalsPage').then((m) => ({ default: m.ApprovalsPage })),
+  import('@/pages/app/ApprovalsPage')
+    .then((m) => ({ default: m.ApprovalsPage }))
+    .catch(() => { window.location.reload(); return new Promise(() => {}); }),
 );
 import { ContractSendPage } from '@/pages/app/ContractSendPage';
 import { ContractsPage } from '@/pages/app/ContractsPage';
@@ -65,14 +67,14 @@ import { AdminLeavePoliciesPage } from '@/pages/app/salary-service/admin/AdminLe
 import { AdminOvertimePoliciesPage } from '@/pages/app/salary-service/admin/AdminOvertimePoliciesPage';
 // 큰 관리자 급여 페이지 - 코드 스플릿
 const AdminPayrollManagePageLazy = lazy(() =>
-  import('@/pages/app/salary-service/admin/AdminPayrollManagePage').then((m) => ({
-    default: m.AdminPayrollManagePage,
-  })),
+  import('@/pages/app/salary-service/admin/AdminPayrollManagePage')
+    .then((m) => ({ default: m.AdminPayrollManagePage }))
+    .catch(() => { window.location.reload(); return new Promise(() => {}); }),
 );
 const AdminPayrollPageLazy = lazy(() =>
-  import('@/pages/app/salary-service/admin/AdminPayrollPage').then((m) => ({
-    default: m.AdminPayrollPage,
-  })),
+  import('@/pages/app/salary-service/admin/AdminPayrollPage')
+    .then((m) => ({ default: m.AdminPayrollPage }))
+    .catch(() => { window.location.reload(); return new Promise(() => {}); }),
 );
 import { AdminPayrollTaxSummaryPage } from '@/pages/app/salary-service/admin/AdminPayrollTaxSummaryPage';
 import { AdminRetirementPolicyPage } from '@/pages/app/salary-service/admin/AdminRetirementPolicyPage';
@@ -907,7 +909,10 @@ const adminSalarySettingsRoute = createRoute({
 });
 
 // 회사 관리자용 자동 작업 관리 페이지 - 시스템 관리자 전용
-const AdminBatchSchedulePageLazy = lazy(() => import('@/pages/app/salary-service/admin/AdminBatchSchedulePage'));
+const AdminBatchSchedulePageLazy = lazy(() =>
+  import('@/pages/app/salary-service/admin/AdminBatchSchedulePage')
+    .catch(() => { window.location.reload(); return new Promise(() => {}); }),
+);
 const adminBatchScheduleRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/admin/batch-schedule',
