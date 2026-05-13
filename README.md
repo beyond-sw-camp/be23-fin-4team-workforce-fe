@@ -2,8 +2,8 @@
 <img width="1920" height="800" alt="WORKFORCE hero" src="./docs/asset/profile/workforce-hero.gif" />
 </div>
 
-> **WORKFORCE**는 회사마다 다른 인사 정책과 낮은 디지털 성숙도로 인해 발생하는 업무 공백을 줄이기 위한 AI 기반 HRMS입니다.  
-> 결재, 근태, 급여, 목표/평가, ESG, 전자계약, 채팅을 하나의 흐름으로 연결하고, 회사별 정책을 AI 챗봇과 자동화 모듈에 동기화하여 누구나 쉽게 사용할 수 있는 인사 운영 환경을 제공합니다.
+> **WORKFORCE**는 파편화된 HR 시스템과 반복 수작업으로 인한 인사 운영의 비효율을 해소하는 AI 기반 통합 HRMS입니다.
+근태·급여·결재·평가·ESG·전자계약을 하나의 데이터 흐름으로 연결하고, 회사별 인사 정책을 AI 챗봇과 자동화 모듈에 실시간 반영하여 — 인사팀의 수작업 없이도 누구나 정확한 정보를 즉시 얻을 수 있는 환경을 만듭니다.
 
 ---
 
@@ -26,9 +26,9 @@
 3. [기술 스택](#기술-스택)
 4. [시스템 아키텍처 & n8n AI Agent 오케스트레이션](#시스템-아키텍처--n8n-ai-agent-오케스트레이션)
 5. [기술 문서](#기술-문서)
-6. [시연 영상](#시연-영상)
-7. [부록](#부록)
-
+6. [트러블슈팅](#트러블슈팅)
+7. [시연 영상](#시연-영상)
+8. [부록](#부록)
 ---
 
 ## 서비스 개요
@@ -75,12 +75,12 @@ WORKFORCE는 이 지점을 **가이드 없이도 쉽게 접근하고, 회사 정
 - 회사 정책, 결재 양식, 휴가/급여/근태 규정을 RAG 기반으로 조회합니다.
 - “내 잔여 연차 얼마야?”처럼 실시간 데이터가 필요한 질문은 백엔드 API를 호출해 답변합니다.
 - “내일 연차 신청해줘”, “금요일 2시에 회의 일정 잡아줘”처럼 대화에서 필요한 값을 추출해 결재 작성 화면 prefill 또는 캘린더 일정 등록까지 연결합니다.
-- 전자결재 양식 등록/수정 시 벡터 DB가 갱신되어 챗봇이 최신 양식을 안내할 수 있습니다.
+- 전자결재 양식 등록/수정 시 Kafka를 통한 실시간 이벤트 스트리밍으로 벡터 DB가 갱신되어 챗봇이 최신 양식을 안내할 수 있습니다.
 
 ### 2. 회사별 정책 커스터마이징
 
 - 조직, 직급, 직책, 역할/권한, 휴가 종류, 공휴일, 근무 정책, 급여 정책을 회사 단위로 관리합니다.
-- JSON 기반 동적 결재 양식으로 회사가 직접 양식을 구성할 수 있습니다.
+- 회사별 업무 환경에 맞춰 전자결재 양식을 직접 구성할 수 있습니다.
 - 정책 변경 이벤트를 Kafka로 발행해 AI 검색 인덱스와 후속 업무에 반영합니다.
 
 ### 3. 반복 인사 업무 자동화
@@ -104,15 +104,15 @@ WORKFORCE는 이 지점을 **가이드 없이도 쉽게 접근하고, 회사 정
 
 ### 6. ESG 활동 관리
 
-- ESG 활동 신청, 승인, 포인트 적립, 캠페인 운영, 포인트 교환을 HRMS 안에서 처리합니다.
-- 인사 데이터와 연결해 부서별/직급별 참여 현황을 분석할 수 있습니다.
+- 각 회사에서 ESG 설정 활성화 시, ESG 활동 신청, 승인, 포인트 적립 및 ESG 샵 물품 구매를 HRMS 안에서 운영할 수 있습니다.
+- 월별 ESG 점수를 집계하여 ESG 참여 현황을 집계하고 추이를 분석할 수 있습니다.
 - ESG 경영을 별도 부가 기능이 아니라 조직 참여 데이터로 관리할 수 있도록 설계했습니다.
 
 ### 7. 협업과 운영 편의 기능
 
 - 실시간 채팅, 알림, 캘린더, 통합 검색을 제공합니다.
 - Kafka, Redis Pub/Sub, SSE 기반 알림으로 결재·급여·근태 이벤트를 즉시 전달합니다.
-- Elasticsearch 기반 통합 검색으로 흩어진 인사 데이터를 빠르게 조회합니다.
+- Elasticsearch 기반 통합 검색으로 검색 응답 성능을 개선했습니다.
 
 <br>
 <div align="right"><a href="#목차">맨 위로</a></div>
@@ -293,6 +293,125 @@ WORKFORCE의 챗봇 요청은 `member-service`에서 n8n webhook으로 전달되
 <div align="right"><a href="#목차">맨 위로</a></div>
 
 ---
+## 트러블슈팅
+
+<details>
+  <summary><strong>트러블슈팅</strong></summary>
+
+
+## 1. 회사별 정책을 AI 답변에 최신 상태로 반영하는 문제
+
+### 문제
+
+AI 챗봇이 회사 정책 문서를 기반으로 답변하려면, HR 담당자가 휴가/근태/급여/결재 정책을 수정했을 때 벡터 DB도 함께 갱신되어야 합니다.  
+수동 업로드 방식만 사용하면 실제 정책과 AI 답변이 어긋날 수 있습니다.
+
+### 해결
+
+- 정책 변경 시 도메인 서비스가 Kafka 이벤트를 발행합니다.
+- AI 서비스가 이벤트를 구독해 정책 문서를 재구성하고 벡터 DB를 갱신합니다.
+- 회사 ID 기준으로 데이터 범위를 분리해 다른 회사 정책이 섞이지 않도록 합니다.
+
+### 결과
+
+정책 변경 이후에도 사용자는 챗봇에서 최신 회사 기준의 답변을 받을 수 있습니다.
+
+---
+
+## 2. 결재 승인 후 여러 도메인에 반영해야 하는 문제
+
+### 문제
+
+휴가 승인 하나에도 연차 잔고, 근태, 캘린더, 알림이 함께 변경되어야 합니다.  
+이를 동기 호출로 묶으면 서비스 간 결합도가 높아지고 일부 서비스 장애가 전체 결재 흐름에 영향을 줄 수 있습니다.
+
+### 해결
+
+- 결재 승인 완료 후 Kafka 이벤트를 발행합니다.
+- 근태, 캘린더, 알림 등 각 서비스가 필요한 이벤트만 구독해 후속 처리를 수행합니다.
+- 결재 트랜잭션과 후속 처리를 분리해 장애 영향을 줄입니다.
+
+### 결과
+
+결재를 중심으로 한 HR 업무 흐름이 자동으로 이어지고, 도메인별 책임도 분리됩니다.
+
+---
+
+## 3. 정기 인사 업무 누락 문제
+
+### 문제
+
+연차 부여, 연차 촉진, 월 근태 마감, 급여 명세서 생성은 정기적으로 수행되어야 하지만 사람이 직접 처리하면 누락 가능성이 있습니다.
+
+### 해결
+
+- Quartz로 회사별/업무별 실행 시점을 관리합니다.
+- Spring Batch와 도메인 Worker를 통해 대량 데이터를 안정적으로 처리합니다.
+- 실행 결과를 기록하고 알림 이벤트를 발행합니다.
+
+### 결과
+
+담당자의 반복 업무를 줄이고, 법령 및 회사 정책 준수에 필요한 작업을 정해진 시점에 자동 수행할 수 있습니다.
+
+---
+
+## 4. 실시간 알림의 다중 서버 전달 문제
+
+### 문제
+
+운영 환경에서는 여러 서버 인스턴스가 떠 있기 때문에, 알림을 발행한 서버와 사용자가 연결된 서버가 다를 수 있습니다.
+
+### 해결
+
+- 도메인 이벤트는 Kafka로 발행합니다.
+- 알림 서비스가 Redis Pub/Sub으로 모든 서버 인스턴스에 브로드캐스트합니다.
+- 각 서버의 SSE 연결을 통해 해당 사용자에게 알림을 전달합니다.
+
+### 결과
+
+다중 서버 환경에서도 결재, 급여, 근태 이벤트 알림을 실시간으로 전달할 수 있습니다.
+
+---
+
+## 5. 로컬 Eureka 구조와 운영 Kubernetes 구조가 달라지는 문제
+
+### 문제
+
+로컬 개발 환경은 Eureka 기반으로 서비스 디스커버리를 수행하지만, 운영 EKS 환경에서는 Pod가 Kubernetes Service 뒤에 배치됩니다.  
+로컬 설정을 그대로 운영에 가져가면 Gateway가 `lb://service-name`을 찾으려 하거나 AI/n8n 연동 URL이 localhost를 바라보는 문제가 생길 수 있습니다.
+
+### 해결
+
+- 운영 `prod` profile에서는 Eureka Client를 비활성화했습니다.
+- Gateway route를 Kubernetes Service DNS 기준으로 분리했습니다.
+- AI 서비스의 `GATEWAY_URL`, Kafka, Redis, DB 연결 정보는 Kubernetes Secret과 환경변수로 주입했습니다.
+- n8n webhook URL도 `n8n-service:5678` 기준으로 운영 환경을 분리했습니다.
+
+### 결과
+
+운영 Pod가 재생성되어 IP가 바뀌어도 Service DNS를 통해 안정적으로 내부 통신할 수 있습니다.
+
+---
+
+## 6. 배포 중 가용성과 실제 매니페스트 기준값 불일치 문제
+
+### 문제
+
+운영 문서와 실제 Kubernetes 매니페스트가 함께 발전하면서 HPA, RollingUpdate 값이 서로 다르게 적힌 부분이 생겼습니다.  
+예를 들어 실제 `k8s/hpa.yml`은 CPU 80%, `minReplicas: 1`, `maxReplicas: 2`이며, 서비스별 Deployment는 기본 replica 2개와 readiness/liveness probe를 사용합니다.
+
+### 해결
+
+- README 기술 문서는 실제 `be-devops` 매니페스트 기준으로 다시 정리했습니다.
+- HPA, PDB, RollingUpdate, probe 설정을 별도 DevOps 문서로 분리했습니다.
+- 무중단 배포 설명은 이상적인 목표값이 아니라 현재 적용된 값과 운영상 주의점 중심으로 정리했습니다.
+
+### 결과
+
+발표나 질의응답에서 운영 구성을 설명할 때 실제 배포 파일과 충돌하지 않는 기준 문서를 사용할 수 있습니다.
+
+</details>
+
 
 ## 시연 영상
 
@@ -369,12 +488,12 @@ WORKFORCE의 챗봇 요청은 `member-service`에서 n8n webhook으로 전달되
 
 | 화면 | 경로 | 증적 시나리오 | 증적 |
 |------|------|---------------|------|
-| 결재 작성 허브 | `/app/approvals?tab=compose` | 결재 양식 선택, 문서 작성, 임시저장, 상신 | 준비 중 |
-| 결재 양식 설정 | `/app/approvals?tab=admin` | JSON 동적 양식 생성/수정, 필드 구성 | 준비 중 |
-| 결재 대기함 | `/app/approvals?box=do-pending` | 결재 대기 문서 승인/반려 | 준비 중 |
+| 결재 작성 허브 | `/app/approvals?tab=compose` | 결재 양식 선택, 문서 작성, 임시저장, 상신 | <video src="https://github.com/user-attachments/assets/e14c097f-a4d4-4dd8-962f-d6166ea1cb2c"></video> |
+| 결재 양식 설정 | `/app/approvals?tab=admin` | 회사별 맞춤 양식 생성/수정, 필드 구성 | <video src="https://github.com/user-attachments/assets/77431889-ade1-4578-90c0-0b5954a5f6e4"></video> <video src="https://github.com/user-attachments/assets/13f39d96-734e-484a-8589-379af8f45523"></video> |
+| 결재 대기함 | `/app/approvals?box=do-pending` | 결재 대기 문서 승인/반려 | <video src="https://github.com/user-attachments/assets/4d1e3472-ea33-4074-8cb2-9c10909ae598"></video> <video src="https://github.com/user-attachments/assets/5a61f2cd-b5d2-4405-83a4-924804666071"></video> |
 | 결재 처리함 | `/app/approvals?box=do-acted` | 내가 처리한 문서 조회 | 준비 중 |
 | 결재 예정함 | `/app/approvals?box=do-upcoming` | 다음 결재 예정 문서 확인 | 준비 중 |
-| 내 기안 전체 | `/app/approvals?box=per-all` | 내가 올린 문서 상태별 조회 | 준비 중 |
+| 내 기안 전체 | `/app/approvals?box=per-all` | 내가 올린 문서 상태별 조회 | <video src="https://github.com/user-attachments/assets/28a6cccf-7685-4bb3-9779-f63b16964857"></video> |
 | 임시저장함 | `/app/approvals?box=per-draft` | 임시저장 문서 이어쓰기/삭제 | 준비 중 |
 | 참조/공람함 | `/app/approvals?box=per-viewers` | 참조/공람 문서 확인 | 준비 중 |
 | 부재 위임 | `/app/approvals/absence-proxy` | 결재 위임 등록/해제 | 준비 중 |
@@ -383,8 +502,8 @@ WORKFORCE의 챗봇 요청은 `member-service`에서 n8n webhook으로 전달되
 | 부서 문서 고급검색 | `/app/approvals/department-search` | 조직/상태/유형별 검색 | 준비 중 |
 | 내 기안 검색 | `/app/approvals/my-requests` | 내 기안 문서 목록, 상세 검색 | 준비 중 |
 | 출퇴근 정정 신청 | `/app/approvals/correction-request` | 근태 화면에서 정정 결재 prefill 이동 | 준비 중 |
-| 전자계약 발송 | `/app/contracts/send` | 계약 템플릿 선택, 대상자 선택, 일괄 발송 | 준비 중 |
-| 계약 상세 딥링크 | `/app/approvals?tab=compose` | 계약 알림 클릭 후 상세/서명 흐름 확인 | 준비 중 |
+| 전자계약 발송 | `/app/contracts/send` | 계약 템플릿 선택, 대상자 선택, 일괄 발송 | <video src="https://github.com/user-attachments/assets/6d136d61-0b5b-4149-8383-87713809588b"></video> |
+| 계약 상세 딥링크 | `/app/approvals?tab=compose` | 계약 알림 클릭 후 상세/서명 흐름 확인 | <video src="https://github.com/user-attachments/assets/7a06fe5c-80a0-4445-a15b-56b793aac0d9"></video> |
 
 </details>
 
@@ -458,9 +577,9 @@ WORKFORCE의 챗봇 요청은 `member-service`에서 n8n webhook으로 전달되
 
 | 화면 | 경로 | 증적 시나리오 | 증적 |
 |------|------|---------------|------|
-| My ESG | `/app/esg` | ESG 활동 신청, 포인트 현황, 참여 현황 확인 | 준비 중 |
-| ESG 샵 | `/app/esg/shop` | 포인트 상품 조회, 교환 신청 | 준비 중 |
-| ESG 설정 | `/app/esg/admin` | ESG 활동 승인/반려, 캠페인/상품 관리 | 준비 중 |
+| My ESG | `/app/esg` | ESG 활동 신청, 포인트 현황, 참여 현황 확인 | <video src="https://github.com/user-attachments/assets/e7c7a705-995d-4abd-91e1-7bf07afe707e"></video> |
+| ESG 샵 | `/app/esg/shop` | 포인트 상품 조회, 교환 신청 | <video src="https://github.com/user-attachments/assets/c3f5ff67-ffb8-4364-8111-b9ff64e90e7e"></video> |
+| ESG 설정 | `/app/esg/admin` | ESG 활동 승인/반려, 캠페인/상품 관리 | <video src="https://github.com/user-attachments/assets/7d3e196c-81a9-442f-bb3c-5bd40f0f5539"></video> <video src="https://github.com/user-attachments/assets/ba4cb137-14a1-4a36-9fe9-b86cde0ab01a"></video> |
 
 </details>
 
@@ -491,6 +610,7 @@ WORKFORCE의 챗봇 요청은 `member-service`에서 n8n webhook으로 전달되
 - [WBS](https://docs.google.com/spreadsheets/d/107CuIWefCSjBbwO0mnKdQJzK5WCFDKYtw5Rs18liJw8/edit?gid=395838842#gid=395838842)
 - [Figma 기획서](https://www.figma.com/proto/6suak3PIQpHGzS3UBatOF1/%ED%95%9C%ED%99%94-BEYOND-SW-CAMP-23%EA%B8%B0?node-id=618-102&viewport=696%2C533%2C0.2&t=o5woH0kckAYE5DgS-1&scaling=min-zoom&content-scaling=fixed&starting-point-node-id=618%3A102&page-id=612%3A67)
 - [기획서 PDF](WORKFORCE_프로젝트_기획서.pdf)
+
 
 <br>
 <div align="right"><a href="#목차">맨 위로</a></div>
