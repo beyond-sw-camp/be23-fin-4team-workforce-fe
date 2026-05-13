@@ -30,7 +30,6 @@ import { Spin } from 'antd';
 import { AppErrorBoundary } from '@/shared/ui/AppErrorBoundary';
 import { CalendarPage } from '@/pages/app/CalendarPage';
 import { DashboardPage } from '@/pages/app/DashboardPage';
-import { HrInsightsPage } from '@/pages/app/HrInsightsPage';
 import { EsgAdminPage } from '@/pages/app/esg/EsgAdminPage';
 import { EsgHomePage } from '@/pages/app/esg/EsgHomePage';
 import { EsgShopPage } from '@/pages/app/esg/EsgShopPage';
@@ -233,12 +232,6 @@ const onboardingStepperRoute = createRoute({
       throw redirect({ to: '/403' });
     }
   },
-});
-
-const hrInsightsRoute = createRoute({
-  getParentRoute: () => appBaseRoute,
-  path: '/insights',
-  component: HrInsightsPage,
 });
 
 const calendarRoute = createRoute({
@@ -1060,7 +1053,6 @@ const routeTree = rootRoute.addChildren([
     appBaseRoute.addChildren([
       dashboardRoute,
       onboardingStepperRoute,
-      hrInsightsRoute,
       calendarRoute,
       esgHomeRoute,
       esgShopRoute,

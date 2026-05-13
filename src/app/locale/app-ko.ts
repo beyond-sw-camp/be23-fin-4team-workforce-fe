@@ -4,7 +4,6 @@ export const APP_BRAND_NAME = '워크포스';
 
 export const APP_MENU_LABEL: Record<string, string> = {
   '/app/dashboard': '대시보드',
-  '/app/insights': '인사이트',
   '/app/calendar': '일정',
   '/app/members': '구성원',
   '/app/organization': '조직 관리',
@@ -57,7 +56,6 @@ export const APP_MENU_LABEL: Record<string, string> = {
 /** 사이드 메뉴 표시 순서 */
 export const APP_MENU_PATH_ORDER = [
   '/app/dashboard',
-  '/app/insights',
   '/app/calendar',
   '/app/members',
   '/app/organization',

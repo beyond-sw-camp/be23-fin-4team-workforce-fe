@@ -20,7 +20,6 @@
   GiftOutlined,
   GlobalOutlined,
   LineChartOutlined,
-  PieChartOutlined,
   MoreOutlined,
   MessageOutlined,
   PartitionOutlined,
@@ -147,7 +146,6 @@ function SiderPanelToggleIcon({ className }: { className?: string }) {
 
 const APP_MENU_ICONS: Record<string, ReactNode> = {
   '/app/dashboard': <DashboardOutlined className="tw-text-lg" />,
-  '/app/insights': <PieChartOutlined className="tw-text-lg" />,
   '/app/calendar': <CalendarOutlined className="tw-text-lg" />,
   '/app/members': <TeamOutlined className="tw-text-lg" />,
   '/app/organization': <ApartmentOutlined className="tw-text-lg" />,
