@@ -2,8 +2,8 @@
 <img width="1920" height="800" alt="WORKFORCE hero" src="./docs/asset/profile/workforce-hero.gif" />
 </div>
 
-> **WORKFORCE**는 파편화된 HR 시스템과 반복 수작업으로 인한 인사 운영의 비효율을 해소하는 AI 기반 통합 HRMS입니다.
-근태·급여·결재·평가·ESG·전자계약을 하나의 데이터 흐름으로 연결하고, 회사별 인사 정책을 AI 챗봇과 자동화 모듈에 실시간 반영하여 — 인사팀의 수작업 없이도 누구나 정확한 정보를 즉시 얻을 수 있는 환경을 만듭니다.
+> **WORKFORCE**는 파편화된 HR 시스템과 반복 수작업으로 인한 인사 운영의 비효율을 해소하는 AI 기반 통합 HRMS입니다.<br/>
+> 근태·급여·결재·평가·ESG·전자계약을 하나의 데이터 흐름으로 연결하고, 회사별 인사 정책을 AI 챗봇과 자동화 모듈에 실시간 반영하여 인사팀의 수작업 없이도 누구나 정확한 정보를 즉시 얻을 수 있는 환경을 만듭니다.
 
 ---
 
@@ -33,30 +33,49 @@
 
 ## 서비스 개요
 
-> **회사별 HR 정책을 AI와 자동화 흐름에 동기화하여, 인사 담당자의 반복 업무와 직원의 시스템 적응 시간을 줄이는 맞춤형 HR 관리 서비스**
+> **반복 수작업, 단순 문의, 파편화된 HR 시스템을 AI와 이벤트 기반 자동화로 연결하는 Zero-Manual HRMS**
 
-WORKFORCE는 단순히 인사 기능을 모아둔 HRMS가 아닙니다.  
-회사마다 다른 정책을 시스템 설정으로 흡수하고, 그 설정이 **결재 양식 · 근태/급여 자동화 · AI 챗봇 답변**까지 이어지도록 설계한 인사 운영 플랫폼입니다.
+WORKFORCE는 기존 HR 시스템이 현장의 업무 흐름을 충분히 따라가지 못한다는 문제의식에서 출발했습니다.  
+아래 세 장의 흐름처럼, **HR 솔루션의 필요성 → 기존 시스템의 한계 → WORKFORCE의 해결 방향** 순서로 문제와 솔루션을 정의했습니다.
+
+<div align="center">
+  <img width="900" alt="HR 솔루션의 중요성" src="./docs/asset/service-overview-01-hr-importance.png" />
+</div>
+
+> HR 솔루션은 더 이상 선택적인 관리 도구가 아니라, 인사 운영의 속도와 정확도를 결정하는 핵심 전략입니다.  
+> 복잡해지는 규정과 빠르게 바뀌는 업무 환경 속에서, HR 시스템은 단순 기록을 넘어 **사람의 시간을 가장 가치 있는 업무에 쓰게 만드는 기반**이 되어야 합니다.
+
+<div align="center">
+  <img width="900" alt="기존 HR 시스템의 한계와 문제점" src="./docs/asset/service-overview-02-hr-limitations.png" />
+</div>
+
+> 하지만 현장의 HR 담당자는 여전히 수작업, 반복 문의, 분리된 시스템 사이에서 시간을 잃고 있습니다.  
+> 급여 규정은 계속 바뀌는데 검증은 엑셀에 의존하고, 연차나 증명서 같은 단순 문의는 인사팀으로 몰리며, 결재·계약·평가·면담 기록은 각기 다른 도구에 흩어져 있습니다.
+
+<div align="center">
+  <img width="900" alt="새로운 HR 솔루션의 지향점" src="./docs/asset/service-overview-03-direction.png" />
+</div>
+
+> WORKFORCE는 이 문제를 기능 추가가 아니라 **운영 흐름의 연결**로 해결합니다.  
+> 반복 업무는 자동화하고, 직원 문의는 AI가 즉시 응답하며, 흩어진 HR 데이터는 하나의 플랫폼에서 이어지도록 설계했습니다.
+
+### WORKFORCE가 해결하는 방식
 
 | 문제 정의 | 해결 방향 | 핵심 기능 |
 |-----------|-----------|-----------|
-| 시스템 사용법과 정책 인수인계가 사람에게 의존함 | AI 챗봇이 사용법, 정책, 실시간 데이터를 대화형으로 안내 | AI 챗봇, HR 정책 문서, 실시간 조회 |
-| 회사별 휴가, 급여, 결재, 조직 정책이 표준 기능과 맞지 않음 | 조직/권한/정책/결재 양식을 회사별로 커스터마이징 | 동적 결재 양식, 회사별 정책 설정 |
-| 연차 촉진, 근태 마감, 급여 산정 등 반복 업무가 누락되기 쉬움 | 배치와 이벤트 기반으로 정기 업무를 자동 처리 | Quartz, Spring Batch, 자동 작업 관리 |
-| 결재 승인 후 다른 시스템에 다시 반영해야 함 | 승인 이벤트로 근태, 급여, 캘린더, 알림을 자동 연결 | Kafka 이벤트, 후속 처리 자동화 |
-| ESG 활동이 별도 관리되어 참여 데이터가 흩어짐 | HR 데이터와 연결해 활동, 포인트, 캠페인을 통합 관리 | ESG 활동 관리, ESG 샵 |
-
-### 핵심 메시지
-
-- **누구나 바로 쓰는 HRMS**: 메뉴얼과 담당자 설명에 의존하지 않고 AI 챗봇으로 시스템 적응을 돕습니다.
-- **회사 정책에 맞춰지는 HRMS**: 고정된 기능에 회사를 맞추는 대신, 회사별 정책을 설정하고 자동화/챗봇에 동기화합니다.
-- **승인 이후까지 이어지는 HRMS**: 결재 승인으로 끝나지 않고 근태, 급여, 캘린더, 알림까지 후속 처리가 연결됩니다.
+| 인사업무 수작업의 고통 | 급여/근태/휴가 규정을 회사 정책으로 관리하고 정기 작업을 자동 실행 | 회사별 정책 설정, Quartz, Spring Batch |
+| 단순 문의에 묶이는 인사팀 | 사용법, 정책, 실시간 HR 데이터를 AI 챗봇이 대화형으로 안내 | AI 챗봇, RAG, 실시간 API 조회 |
+| 파편화된 업무 시스템 | 결재 승인 이후 근태, 급여, 캘린더, 알림까지 이벤트로 연결 | Kafka 이벤트, Redis Pub/Sub, SSE |
+| 정책 변경의 분산 반영 | 정책과 결재 양식 변경을 AI 검색 인덱스와 후속 업무에 동기화 | HR 정책 문서, 동적 결재 양식, 벡터 DB 갱신 |
+| 조직 참여 데이터의 분리 | ESG 활동과 포인트, 캠페인을 HR 데이터 흐름 안에서 관리 | ESG 활동 관리, ESG 샵 |
 
 <details>
 <summary><strong>시장 분석 근거</strong></summary>
 
-HR SaaS와 AI 기반 업무 자동화 수요는 증가하고 있지만, HR 운영 현장에서는 디지털 성숙도 격차, 담당자 겸직, 정책 커스터마이징 어려움이 함께 나타납니다.  
-WORKFORCE는 이 지점을 **가이드 없이도 쉽게 접근하고, 회사 정책에 맞게 자동으로 움직이는 HRMS**라는 방향으로 풀었습니다.
+HR SaaS와 AI 기반 업무 자동화 수요는 증가하고 있지만, HR 운영 현장에서는 기존 기술 스택이 현재와 미래의 업무 요구를 충분히 충족하지 못한다는 문제가 남아 있습니다.  
+특히 인사 담당자는 복잡한 급여 규정 미지원, 수동 데이터 대조, 휴먼 에러 리스크, 반복 문의, 정책 변경의 분산 반영, 알림 채널 파편화로 인한 누락과 지연을 동시에 겪습니다.
+
+WORKFORCE는 이 지점을 **수작업을 줄이는 자동화, 문의를 흡수하는 AI, 흩어진 업무를 잇는 이벤트 기반 HRMS**라는 방향으로 풀었습니다.
 
 [MTN HR 시장 기사](https://news.mtn.co.kr/news-detail/2023022310563781713) · [KDI 디지털 성숙도 조사](https://eiec.kdi.re.kr/policy/domesticView.do?ac=0000156198) · [다우오피스HR 인사담당자 현황](https://hr.daouoffice.com/blog/sme-hr-manager-recruitment-burnout) · [디지털데일리 HR테크 기사](https://www.ddaily.co.kr/page/view/2024050511345817576)
 
@@ -296,10 +315,7 @@ WORKFORCE의 챗봇 요청은 `member-service`에서 n8n webhook으로 전달되
 ## 트러블슈팅
 
 <details>
-  <summary><strong>트러블슈팅</strong></summary>
-
-
-## 1. 회사별 정책을 AI 답변에 최신 상태로 반영하는 문제
+  <summary><strong>1. 회사별 정책을 AI 답변에 최신 상태로 반영하는 문제</strong></summary>
 
 ### 문제
 
@@ -316,9 +332,10 @@ AI 챗봇이 회사 정책 문서를 기반으로 답변하려면, HR 담당자�
 
 정책 변경 이후에도 사용자는 챗봇에서 최신 회사 기준의 답변을 받을 수 있습니다.
 
----
+</details>
 
-## 2. 결재 승인 후 여러 도메인에 반영해야 하는 문제
+<details>
+  <summary><strong>2. 결재 승인 후 여러 도메인에 반영해야 하는 문제</strong></summary>
 
 ### 문제
 
@@ -335,9 +352,10 @@ AI 챗봇이 회사 정책 문서를 기반으로 답변하려면, HR 담당자�
 
 결재를 중심으로 한 HR 업무 흐름이 자동으로 이어지고, 도메인별 책임도 분리됩니다.
 
----
+</details>
 
-## 3. 정기 인사 업무 누락 문제
+<details>
+  <summary><strong>3. 정기 인사 업무 누락 문제</strong></summary>
 
 ### 문제
 
@@ -353,9 +371,10 @@ AI 챗봇이 회사 정책 문서를 기반으로 답변하려면, HR 담당자�
 
 담당자의 반복 업무를 줄이고, 법령 및 회사 정책 준수에 필요한 작업을 정해진 시점에 자동 수행할 수 있습니다.
 
----
+</details>
 
-## 4. 실시간 알림의 다중 서버 전달 문제
+<details>
+  <summary><strong>4. 실시간 알림의 다중 서버 전달 문제</strong></summary>
 
 ### 문제
 
@@ -371,9 +390,10 @@ AI 챗봇이 회사 정책 문서를 기반으로 답변하려면, HR 담당자�
 
 다중 서버 환경에서도 결재, 급여, 근태 이벤트 알림을 실시간으로 전달할 수 있습니다.
 
----
+</details>
 
-## 5. 로컬 Eureka 구조와 운영 Kubernetes 구조가 달라지는 문제
+<details>
+  <summary><strong>5. 로컬 Eureka 구조와 운영 Kubernetes 구조가 달라지는 문제</strong></summary>
 
 ### 문제
 
@@ -391,9 +411,10 @@ AI 챗봇이 회사 정책 문서를 기반으로 답변하려면, HR 담당자�
 
 운영 Pod가 재생성되어 IP가 바뀌어도 Service DNS를 통해 안정적으로 내부 통신할 수 있습니다.
 
----
+</details>
 
-## 6. 배포 중 가용성과 실제 매니페스트 기준값 불일치 문제
+<details>
+  <summary><strong>6. 배포 중 가용성과 실제 매니페스트 기준값 불일치 문제</strong></summary>
 
 ### 문제
 
@@ -412,6 +433,10 @@ AI 챗봇이 회사 정책 문서를 기반으로 답변하려면, HR 담당자�
 
 </details>
 
+<br>
+<div align="right"><a href="#목차">맨 위로</a></div>
+
+---
 
 ## 시연 영상
 
@@ -609,7 +634,8 @@ AI 챗봇이 회사 정책 문서를 기반으로 답변하려면, HR 담당자�
 - [요구사항 명세서](https://docs.google.com/spreadsheets/d/107CuIWefCSjBbwO0mnKdQJzK5WCFDKYtw5Rs18liJw8/edit?gid=63147339#gid=63147339)
 - [WBS](https://docs.google.com/spreadsheets/d/107CuIWefCSjBbwO0mnKdQJzK5WCFDKYtw5Rs18liJw8/edit?gid=395838842#gid=395838842)
 - [Figma 기획서](https://www.figma.com/proto/6suak3PIQpHGzS3UBatOF1/%ED%95%9C%ED%99%94-BEYOND-SW-CAMP-23%EA%B8%B0?node-id=618-102&viewport=696%2C533%2C0.2&t=o5woH0kckAYE5DgS-1&scaling=min-zoom&content-scaling=fixed&starting-point-node-id=618%3A102&page-id=612%3A67)
-- [기획서 PDF](WORKFORCE_프로젝트_기획서.pdf)
+- [기획서 PDF](docs/WORKFORCE_프로젝트_기획서.pdf)
+- [발표 자료 PDF](docs/WORKFORCE_발표자료.pdf)
 
 
 <br>
