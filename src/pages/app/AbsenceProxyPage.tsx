@@ -10,8 +10,8 @@ import {
   App,
   Button,
   Card,
-  DatePicker,
   Divider,
+  Input,
   Space,
   Tabs,
   Tag,
@@ -21,7 +21,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import type { DataNode } from 'antd/es/tree';
 import clsx from 'clsx';
-import dayjs, { type Dayjs } from 'dayjs';
+import dayjs from 'dayjs';
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
 import { absenceProxyApi, type AbsenceProxyRecord } from '@/features/approvals/api/absenceProxyApi';
@@ -40,8 +40,9 @@ import { AppSearchBar } from '@/shared/ui';
 import { AppDataTable } from '@/shared/ui/AppDataTable';
 
 /** `toISOString()`은 UTC로 바뀌어 한국 등 로컬 '오늘'이 전날로 밀릴 수 있음 — LocalDateTime용 로컬 벽시각 */
-function toLocalDateTimePayload(d: Dayjs): string {
-  return d.format('YYYY-MM-DDTHH:mm:ss');
+function toLocalDateTimePayloadFromYmd(ymd: string, endOfDay: boolean): string {
+  const d = dayjs(ymd.trim());
+  return (endOfDay ? d.endOf('day') : d.startOf('day')).format('YYYY-MM-DDTHH:mm:ss');
 }
 
 function formatRange(start: string, end: string) {
@@ -96,7 +97,11 @@ export function AbsenceProxyPage() {
   const myMemberId = user?.id?.trim();
   const qc = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
-  const [pickerRange, setPickerRange] = useState<[Dayjs | null, Dayjs | null] | null>(null);
+  const [startDateYmd, setStartDateYmd] = useState('');
+  const [endDateYmd, setEndDateYmd] = useState('');
+  const todayYmd = dayjs().format('YYYY-MM-DD');
+  const endDateMinYmd =
+    startDateYmd && startDateYmd >= todayYmd ? startDateYmd : todayYmd;
   const [substitutePickerKeyword, setSubstitutePickerKeyword] = useState('');
   const [orgTreeSelectedKey, setOrgTreeSelectedKey] = useState<string>();
   const [selectedSubstitute, setSelectedSubstitute] = useState<MemberListItemForApproval | null>(null);
@@ -243,7 +248,8 @@ export function AbsenceProxyPage() {
       message.success('부재 위임을 등록했습니다.');
       setCreateOpen(false);
       setSelectedSubstitute(null);
-      setPickerRange(null);
+      setStartDateYmd('');
+      setEndDateYmd('');
       setSubstitutePickerKeyword('');
       setOrgTreeSelectedKey(undefined);
       await qc.refetchQueries({ queryKey: ['approval', 'absence-proxy', 'my'] });
@@ -384,22 +390,28 @@ export function AbsenceProxyPage() {
       message.warning('대결자를 선택해 주세요.');
       return;
     }
-    const range = pickerRange;
-    if (!range?.[0] || !range[1]) {
+    if (!startDateYmd.trim() || !endDateYmd.trim()) {
       message.warning('위임 시작·종료일을 선택해 주세요.');
       return;
     }
-    const [rawStart, rawEnd] = range;
-    const start = rawStart.startOf('day');
-    const end = rawEnd.endOf('day');
+    const start = dayjs(startDateYmd.trim()).startOf('day');
+    const end = dayjs(endDateYmd.trim()).endOf('day');
+    if (!start.isValid() || !end.isValid()) {
+      message.warning('날짜 형식을 확인해 주세요.');
+      return;
+    }
+    if (start.isBefore(dayjs(), 'day')) {
+      message.warning('오늘 포함 이후 날짜만 선택할 수 있습니다.');
+      return;
+    }
     if (!end.isAfter(start)) {
       message.warning('종료일은 시작일 이후여야 합니다.');
       return;
     }
     createMut.mutate({
       substituteId: selectedSubstitute.memberId,
-      startDate: toLocalDateTimePayload(start),
-      endDate: toLocalDateTimePayload(end),
+      startDate: toLocalDateTimePayloadFromYmd(startDateYmd, false),
+      endDate: toLocalDateTimePayloadFromYmd(endDateYmd, true),
     });
   };
 
@@ -580,7 +592,8 @@ export function AbsenceProxyPage() {
         onClose={() => {
           setCreateOpen(false);
           setSelectedSubstitute(null);
-          setPickerRange(null);
+          setStartDateYmd('');
+      setEndDateYmd('');
           setSubstitutePickerKeyword('');
           setOrgTreeSelectedKey(undefined);
         }}
@@ -596,15 +609,38 @@ export function AbsenceProxyPage() {
         <Space direction="vertical" size="middle" className="tw-w-full">
           <div>
             <Typography.Text className="tw-mb-1 tw-block tw-text-sm tw-font-medium">위임 기간</Typography.Text>
-            <DatePicker.RangePicker
-              format="YYYY-MM-DD"
-              className="tw-w-full"
-              value={pickerRange}
-              onChange={(v) => setPickerRange(v as [Dayjs | null, Dayjs | null] | null)}
-              disabledDate={(current) => Boolean(current && current.isBefore(dayjs(), 'day'))}
-              getPopupContainer={() => document.body}
-              popupStyle={{ zIndex: 3150 }}
-            />
+            <div className="tw-grid tw-grid-cols-1 tw-gap-3 sm:tw-grid-cols-2">
+              <div>
+                <Typography.Text type="secondary" className="!tw-mb-1 !tw-block !tw-text-xs">
+                  시작일
+                </Typography.Text>
+                <Input
+                  type="date"
+                  className="tw-w-full"
+                  value={startDateYmd}
+                  min={todayYmd}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setStartDateYmd(next);
+                    if (endDateYmd && next && endDateYmd < next) {
+                      setEndDateYmd('');
+                    }
+                  }}
+                />
+              </div>
+              <div>
+                <Typography.Text type="secondary" className="!tw-mb-1 !tw-block !tw-text-xs">
+                  종료일
+                </Typography.Text>
+                <Input
+                  type="date"
+                  className="tw-w-full"
+                  value={endDateYmd}
+                  min={endDateMinYmd}
+                  onChange={(e) => setEndDateYmd(e.target.value)}
+                />
+              </div>
+            </div>
             <Typography.Paragraph type="secondary" className="!tw-mt-1 !tw-mb-0 !tw-text-xs">
               오늘 포함 이후 날짜만 선택할 수 있습니다(과거 일자는 불가). 종료는 시작보다 뒤여야 합니다. 기존 위임과 기간이 겹치면 등록할 수 없습니다.
             </Typography.Paragraph>
@@ -615,7 +651,7 @@ export function AbsenceProxyPage() {
               결재 작성 화면과 같이 조직도에서 멤버를 드래그해 오른쪽 칸에 놓거나, 멤버 노드를 클릭해 선택하세요. 조직 단위는
               지정할 수 없습니다.
             </Typography.Paragraph>
-            <div className="tw-grid tw-grid-cols-2 tw-gap-4">
+            <div className="tw-grid tw-grid-cols-1 tw-gap-4 lg:tw-grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
               <Card size="small" title="조직도" variant="borderless" className="tw-shadow-none tw-bg-transparent">
                 <AppSearchBar
                   value={substitutePickerKeyword}
