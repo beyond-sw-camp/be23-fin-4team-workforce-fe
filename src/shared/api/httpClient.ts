@@ -2,9 +2,11 @@ import axios from 'axios';
 import type { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { env } from '@/app/config/env';
 import { parseApiError } from '@/shared/api/error-parser';
+import { hasHrPermissionFromAuth } from '@/shared/auth/hrAdminFromToken';
 import { decodeJwtPayload, getTenantHeadersFromToken, isSystemAdminFromJwtPayload } from '@/shared/auth/jwtTenantClaims';
 import { isAuthRefreshInFlight } from '@/shared/stores/authRefreshInFlightStore';
 import { clearRefreshIdentity, getRefreshIdentityHeaders } from '@/shared/stores/authRefreshIdentityStore';
+import { setAuthSessionMirrorUser } from '@/shared/stores/authSessionMirrorStore';
 import { clearAccessToken, getAccessToken } from '@/shared/stores/authTokenStore';
 
 export const httpClient = axios.create({
@@ -59,6 +61,7 @@ httpClient.interceptors.request.use((config) => {
     /** member-service `PermissionAspect`: YES면 Redis 권한 없이 통과, NO면 Redis ESG:READ 등 필요 */
     config.headers['X-User-IsSystemAdmin'] =
       payload && isSystemAdminFromJwtPayload(payload) ? 'YES' : 'NO';
+    config.headers['X-User-IsHrAdmin'] = hasHrPermissionFromAuth(trimmedToken) ? 'YES' : 'NO';
   }
   return config;
 });
@@ -91,6 +94,7 @@ httpClient.interceptors.response.use(
     ) {
       clearAccessToken();
       clearRefreshIdentity();
+      setAuthSessionMirrorUser(null);
       try {
         window.localStorage.clear();
       } catch {

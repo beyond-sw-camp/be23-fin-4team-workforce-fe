@@ -46,7 +46,6 @@ import {
   ApprovalFormStampColumn,
 } from '@/features/approvals/ui/ApprovalFormPaperLayout';
 import { ApprovalAiTranscribeField } from '@/features/approvals/ui/ApprovalAiTranscribeField';
-import { PersonnelOrderItemsField } from '@/features/approvals/ui/PersonnelOrderItemsField';
 import { useAuth } from '@/features/auth/useAuth';
 import clsx from 'clsx';
 import {
@@ -371,16 +370,30 @@ const PRE_ACTION_CONFIGS: PreActionConfig[] = [
     cancelEntity: (id) => attendanceApi.overtimeRequest.cancelMy(id),
     linkApproval: (id, aid) => attendanceApi.overtimeRequest.updateApprovalLink(id, aid),
   },
+  // 수당 변경 신청 - 적용 시작일은 자동 (BE 가 승인 시점 회사 payDay 기준 재산정)
+  // - 승인일 < payDay -> 당월 payDay 부터
+  // - 승인일 >= payDay -> 다음달 payDay 부터
   {
     documentName: '수당 변경 신청',
     entityIdField: 'memberAllowanceId',
     submitEntity: async (content) => {
       const salaryItemTemplateId = readStr(content, 'salaryItemTemplateId');
-      const amount = readNum(content, 'amount');
-      const effectiveFrom = readStr(content, 'effectiveFrom');
-      if (!salaryItemTemplateId || amount == null || !effectiveFrom) {
-        throw new Error('수당 항목·금액·적용 시작일은 필수입니다.');
+      if (!salaryItemTemplateId) {
+        throw new Error('수당 항목을 선택해 주세요.');
       }
+      // 적용 중인 항목이면 amount 입력 input 이 숨겨지므로 자동 0 (해제 모드)
+      // 미적용이면 사용자가 입력한 금액
+      const rawAmount = readNum(content, 'amount');
+      const amount = rawAmount == null ? 0 : rawAmount;
+      // 결재 제목에 신청 유형 자동 prefix - 결재 상세에서 추가/해제 구분
+      const isCancel = amount === 0;
+      const originalTitle = readStr(content, 'title') || '수당 변경 신청';
+      if (!originalTitle.startsWith('[해제]') && !originalTitle.startsWith('[신규]')) {
+        const prefix = isCancel ? '[해제] ' : '[신규] ';
+        content.title = prefix + originalTitle;
+      }
+      // 임시 effectiveFrom = today (BE applyApproval 에서 승인 시점 payDay 기준으로 재산정)
+      const effectiveFrom = dayjs().format('YYYY-MM-DD');
       const r = await salaryApi.memberAllowance.createMy({
         salaryItemTemplateId,
         amount,
@@ -391,9 +404,9 @@ const PRE_ACTION_CONFIGS: PreActionConfig[] = [
       return r.memberAllowanceId;
     },
     cancelEntity: (id) => salaryApi.memberAllowance.cancelMy(id),
-    linkApproval: (id, aid) => salaryApi.memberAllowance.updateApprovalLink(id, aid),
+    // linkApproval 호출 시 BE 가 400 반환하는 케이스 대비 - null 처리하면 consumer 가 entityId 로 직접 매칭
+    linkApproval: null,
   },
-
   {
     documentName: '출퇴근시간 변경 신청서',
     entityIdField: 'selectionId',
@@ -1459,7 +1472,7 @@ const MY_INBOX_FILTER_TABS: { key: 'ALL' | ApprovalRequestStatus; label: string 
 
 function formatDateTime(value?: string | null) {
   if (!value) return '—';
-  const d = dayjs(value);
+  const d = dayjs.utc(value).tz('Asia/Seoul');
   return d.isValid() ? d.format('YYYY-MM-DD HH:mm') : value;
 }
 
@@ -1959,12 +1972,17 @@ export function ApprovalsPage() {
     user?.departmentName?.trim() ||
     '';
   const isHrTeamMember = myOrgName === '인사팀';
+  void isHrTeamMember;
+  // 인사발령 관련 양식 모두 숨김 - 조직 개편 시뮬에서만 진입
+  // (인사발령품의서: 단일 진입점 / 인사발령(개별): 폐기됨, 기존 시드된 row 도 노출 X)
+  // 출퇴근시간 변경 신청서 FLEXIBLE 회사 가드는 workSchedules 가 정의된 후 별도로 적용 (아래)
   const pickerDocuments = useMemo(
-    () =>
-      isHrTeamMember
-        ? activeDocuments
-        : activeDocuments.filter((d) => d.documentName !== '인사발령품의서'),
-    [activeDocuments, isHrTeamMember],
+    () => activeDocuments.filter((d) => {
+      const name = d.documentName ?? '';
+      if (name === '인사발령품의서' || name === '인사발령(개별)') return false;
+      return true;
+    }),
+    [activeDocuments],
   );
 
   // 연차신청서 vacationType 필드의 동적 옵션, source="companyLeaveType"
@@ -2054,15 +2072,43 @@ export function ApprovalsPage() {
           if (!id) return false;
           const normalizedName = String(t.itemName ?? '').replace(/\s+/g, '');
           if (normalizedName === '기본급') return false;
-          if (activeAllowanceTemplateIds.has(id)) return false;
+          // 적용 중인 항목도 노출 - 선택 시 해제 흐름으로 자동 분기
           return true;
         })
         .slice()
         .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
-        .map((t) => ({ value: t.salaryItemTemplateId ?? '', label: t.itemName ?? '—' }))
+        .map((t) => {
+          const id = t.salaryItemTemplateId ?? '';
+          const isActive = activeAllowanceTemplateIds.has(id);
+          const label = isActive
+            ? `${t.itemName ?? '—'} (현재 적용 중 → 선택 시 해제)`
+            : `${t.itemName ?? '—'} (미적용 → 선택 시 신규 등록)`;
+          return { value: id, label };
+        })
         .filter((o) => o.value),
     [activeAllowanceTemplateIds, salaryItemTemplates],
   );
+
+  // 수당 변경 신청 - 선택한 templateId 의 활성 적용 정보 (없으면 null)
+  const allowanceActiveByTemplate = useMemo(() => {
+    const today = dayjs().format('YYYY-MM-DD');
+    const map = new Map<string, { amount: number; effectiveFrom: string | null }>();
+    for (const row of myAllowanceHistory) {
+      const templateId = row.salaryItemTemplateId ?? '';
+      if (!templateId) continue;
+      const status = String(row.approvalStatus ?? '').toUpperCase();
+      const approved = status === 'APPROVED' || status === 'AUTO';
+      const started = !row.effectiveFrom || row.effectiveFrom <= today;
+      const notEnded = !row.effectiveTo || row.effectiveTo >= today;
+      if (approved && started && notEnded) {
+        const amount = Number(row.amount ?? 0);
+        if (!map.has(templateId)) {
+          map.set(templateId, { amount, effectiveFrom: row.effectiveFrom ?? null });
+        }
+      }
+    }
+    return map;
+  }, [myAllowanceHistory]);
 
   // 출퇴근시간 변경 slotId 동적 옵션, source="flexibleTimeSlot"
   // 본인 적용 가능한 FLEXIBLE WorkSchedule 만 (본인 개인 스케줄 + 회사 기본)
@@ -2111,8 +2157,26 @@ export function ApprovalsPage() {
     return opts;
   }, [flexibleSlotQueries]);
 
+  // 출장복명서 양식 - 본인의 승인된 출장 신청 목록 동적 옵션 (source="myApprovedBusinessTrip")
+  // myRequestsAllForSummary 는 아래에서 정의됨 - 의존성으로 lazy 평가
+  // 함수형 useMemo 가 myRequestsAllForSummary 호이스팅되기 전에 실행되지 않도록 별도 정의
+  // (실제 평가는 select 렌더 시점이라 안전)
+
+  // 출퇴근시간 변경 신청서: FLEXIBLE 회사가 아니면 숨김 (workSchedules 정의 후에 적용)
+  const hasFlexibleSchedule = useMemo(
+    () => (workSchedules ?? []).some((s) => s.workType === 'FLEXIBLE'),
+    [workSchedules],
+  );
+  const visiblePickerDocuments = useMemo(
+    () => pickerDocuments.filter((d) => {
+      if (d.documentName === '출퇴근시간 변경 신청서' && !hasFlexibleSchedule) return false;
+      return true;
+    }),
+    [pickerDocuments, hasFlexibleSchedule],
+  );
+
   // 결재 홈 빠른 양식도 동일 필터 적용
-  const composeHubVisibleDocuments = pickerDocuments;
+  const composeHubVisibleDocuments = visiblePickerDocuments;
   const quickHomeFormOptions = useMemo(
     () =>
       composeHubVisibleDocuments.map((doc) => ({
@@ -2194,6 +2258,40 @@ export function ApprovalsPage() {
   useEffect(() => {
     composeMeetingAudioBlobRef.current = null;
   }, [selectedDocumentId]);
+
+  // 출장신청 양식 - 일비는 백엔드가 결재 승인 시 직급에서 자동 lookup (FE prefill 불필요, 양식에서도 제거)
+
+  // 수당 변경 신청 - salaryItemTemplateId 변경 시 currentStatusText / memberAllowanceId 자동 prefill
+  const watchedSalaryItemTemplateId =
+    selectedDocument?.documentName === '수당 변경 신청' && watchedContent
+      ? (watchedContent['salaryItemTemplateId'] as string | undefined)
+      : undefined;
+  useEffect(() => {
+    if (selectedDocument?.documentName !== '수당 변경 신청') return;
+    if (!watchedSalaryItemTemplateId) {
+      const current = (form.getFieldValue('content') ?? {}) as Record<string, unknown>;
+      if (current.currentStatusText || current.memberAllowanceId) {
+        form.setFieldsValue({
+          content: { ...current, currentStatusText: undefined, memberAllowanceId: undefined },
+        });
+      }
+      return;
+    }
+    const active = allowanceActiveByTemplate.get(watchedSalaryItemTemplateId);
+    const statusText = active
+      ? `현재 적용 중 (월 ${active.amount.toLocaleString('ko-KR')}원${active.effectiveFrom ? `, ${active.effectiveFrom}부터` : ''}) → 결재 승인 시 자동 해제됩니다.`
+      : '미적용 → 신청 금액 입력 후 결재 승인 시 자동 등록됩니다.';
+    const current = (form.getFieldValue('content') ?? {}) as Record<string, unknown>;
+    // memberAllowanceId 는 자동 분기 흐름에선 비워둬야 함 (백엔드가 templateId 로 활성행 lookup)
+    form.setFieldsValue({
+      content: {
+        ...current,
+        currentStatusText: statusText,
+        memberAllowanceId: undefined,
+      },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchedSalaryItemTemplateId, selectedDocument?.documentName]);
 
   const { data: orgChart } = useQuery({
     queryKey: ['organization', 'org-chart'],
@@ -2285,6 +2383,37 @@ export function ApprovalsPage() {
     queryFn: () => approvalRequestApi.listMyRequests(),
     staleTime: 60_000,
   });
+
+  // 출장복명서 - 본인의 승인된 출장 신청 select 옵션
+  const myApprovedBusinessTripOptions = useMemo(() => {
+    return myRequestsAllForSummary
+      .filter((r) => {
+        const docName = (r as { documentName?: string }).documentName ?? '';
+        const status = String((r as { requestStatus?: string }).requestStatus ?? '').toUpperCase();
+        const isTrip = docName.includes('출장신청') || docName.includes('출장 신청');
+        return isTrip && status === 'APPROVED';
+      })
+      .map((r) => {
+        let dest = '';
+        let start = '';
+        let end = '';
+        try {
+          const raw = (r as { contentJson?: string }).contentJson ?? '{}';
+          const c = JSON.parse(raw) as Record<string, unknown>;
+          dest = String(c.destination ?? '');
+          start = String(c.tripStartDate ?? '');
+          end = String(c.tripEndDate ?? '');
+        } catch {
+          /* ignore parse error */
+        }
+        const dates = [start, end].filter(Boolean).join(' ~ ');
+        const docName = (r as { documentName?: string }).documentName ?? '';
+        const requestId = String((r as { requestId?: string }).requestId ?? '');
+        const label = [docName, dates, dest].filter(Boolean).join(' · ');
+        return { value: requestId, label: label || requestId };
+      })
+      .filter((o) => o.value);
+  }, [myRequestsAllForSummary]);
 
   const { data: myDraftRequests = [], isFetching: myDraftsLoading } = useQuery({
     queryKey: ['approval-user', 'my-requests', 'DRAFT'],
@@ -2560,7 +2689,18 @@ export function ApprovalsPage() {
         closeEmbeddedApprovalModal();
         return;
       }
-      hardReloadToMyInbox();
+      // 페이지 이동 fallback - hardReloadToMyInbox 가 동작 안 하는 케이스 대비
+      try {
+        hardReloadToMyInbox();
+      } catch {
+        void navigate({ to: '/app/approvals', search: { tab: 'my', box: 'per-all' } });
+      }
+      // window.location.replace 가 React 사이클 안에서 즉시 반영 안 되는 케이스 - 100ms 후 navigate fallback
+      setTimeout(() => {
+        if (window.location.pathname === '/app/approvals' && !window.location.search.includes('tab=my')) {
+          void navigate({ to: '/app/approvals', search: { tab: 'my', box: 'per-all' } });
+        }
+      }, 200);
     },
     onError: (e: Error) => message.error(e.message || '결재 요청 처리에 실패했습니다.'),
   });
@@ -2620,7 +2760,18 @@ export function ApprovalsPage() {
         closeEmbeddedApprovalModal();
         return;
       }
-      hardReloadToMyInbox();
+      // 페이지 이동 fallback - hardReloadToMyInbox 가 동작 안 하는 케이스 대비
+      try {
+        hardReloadToMyInbox();
+      } catch {
+        void navigate({ to: '/app/approvals', search: { tab: 'my', box: 'per-all' } });
+      }
+      // window.location.replace 가 React 사이클 안에서 즉시 반영 안 되는 케이스 - 100ms 후 navigate fallback
+      setTimeout(() => {
+        if (window.location.pathname === '/app/approvals' && !window.location.search.includes('tab=my')) {
+          void navigate({ to: '/app/approvals', search: { tab: 'my', box: 'per-all' } });
+        }
+      }, 200);
     },
     onError: (e: Error) => message.error(e.message || '결재 요청 처리에 실패했습니다.'),
   });
@@ -3246,8 +3397,11 @@ export function ApprovalsPage() {
   // localStorage 사용 - iframe 모달도 부모와 동일 origin 으로 접근 가능 (sessionStorage는 분리됨)
   // iframe(embed) 안에서만 처리 - 부모쪽이 먼저 localStorage.removeItem 하면 iframe 이 prefill 못 채우는 문제 방지
   const personnelOrderPrefillAppliedRef = useRef(false);
+  // 인사발령 시뮬에서 받은 items / summary 를 submit 시점까지 보존 (form mismatch 우회)
+  const personnelOrderItemsCacheRef = useRef<unknown[]>([]);
+  const personnelOrderSummaryCacheRef = useRef<string>('');
   useEffect(() => {
-    if (!isEmbedComposeModal) return;
+    // embed/일반 페이지 양쪽 동작 - AdminOrgRestructurePage 가 같은 origin navigate 로 진입함
     if (tab !== 'compose' || composePhase !== 'fill') return;
     if (!selectedDocument || selectedDocument.documentName !== '인사발령품의서') {
       personnelOrderPrefillAppliedRef.current = false;
@@ -3255,7 +3409,10 @@ export function ApprovalsPage() {
     }
     if (personnelOrderPrefillAppliedRef.current) return;
     const raw = localStorage.getItem(PERSONNEL_ORDER_PREFILL_STORAGE_KEY);
-    if (!raw) return;
+    if (!raw) {
+      console.log('[PersonnelOrderPrefill] storage empty - 시뮬에서 진입한 것 아님');
+      return;
+    }
     try {
       const parsed = JSON.parse(raw) as {
         documentName?: string;
@@ -3263,9 +3420,15 @@ export function ApprovalsPage() {
         recipients?: { recipientOrganizationId: string; recipientOrganizationName: string }[];
       };
       const cj = parsed.contentJson ?? {};
+      // submit 시점까지 items / summary 보존 (form mismatch 우회용 ref)
+      if (Array.isArray(cj.items)) {
+        personnelOrderItemsCacheRef.current = cj.items;
+      }
       const current = (form.getFieldValue('content') ?? {}) as Record<string, unknown>;
-      // 사용자 노출 textarea 에는 한글 요약 (UUID 등 ID 제외)
       const summaryText = typeof cj.summaryText === 'string' ? cj.summaryText : '';
+      if (summaryText) {
+        personnelOrderSummaryCacheRef.current = summaryText;
+      }
       form.setFieldsValue({
         content: {
           ...current,
@@ -3273,8 +3436,11 @@ export function ApprovalsPage() {
           contentJsonText: summaryText,
         },
       });
-      // 인사발령품의서 = OFFICIAL 양식. recipients (수신 부서) 자동 설정
-      // 결재 승인 후 기안자가 [발송] 누르면 회사 모든 부서 부서문서함에 노출
+      // items 명시적 set - antd setFieldsValue 의 nested 객체 교체로 useWatch 가
+      // ['content', 'items'] path 변경 못 잡는 경우 보정
+      if (Array.isArray(cj.items)) {
+        form.setFieldValue(['content', 'items'], cj.items);
+      }
       if (Array.isArray(parsed.recipients) && parsed.recipients.length > 0) {
         setOfficialRecipients(
           parsed.recipients
@@ -3286,15 +3452,26 @@ export function ApprovalsPage() {
         );
       }
       personnelOrderPrefillAppliedRef.current = true;
+      // storage 비우지 않음 - submit 시점까지 보존되어 form mismatch 시 fallback 가능
+      // 다음 시뮬 진입 시 setItem 이 덮어씀 (selectedDocument 가 인사발령품의서 아닐 땐 prefill effect 가 동작 안 함)
+      console.log('[PersonnelOrderPrefill] applied items=', Array.isArray(cj.items) ? cj.items.length : 0);
       message.success(
         '조직 개편 시뮬 변경 사항을 결재 양식에 채웠습니다. 결재선만 지정해 신청하세요.',
       );
-    } catch {
-      // ignore bad payload
-    } finally {
-      localStorage.removeItem(PERSONNEL_ORDER_PREFILL_STORAGE_KEY);
+    } catch (e) {
+      console.error('[PersonnelOrderPrefill] failed', e);
     }
   }, [composePhase, form, isEmbedComposeModal, message, selectedDocument, tab]);
+
+  // 인사발령품의서 직접 docId 진입 안내 - prefill 데이터 없으면 안내만 표시
+  // (navigate 로 redirect 하면 모달 안에서 OrganizationPage 가 임베드되어 stack 되므로 메시지만)
+  useEffect(() => {
+    if (tab !== 'compose' || composePhase !== 'fill') return;
+    if (!selectedDocument || selectedDocument.documentName !== '인사발령품의서') return;
+    if (personnelOrderPrefillAppliedRef.current) return;
+    if (localStorage.getItem(PERSONNEL_ORDER_PREFILL_STORAGE_KEY)) return;
+    message.warning('인사발령품의서는 [조직 관리 > 조직 개편 시뮬레이션] 에서만 작성하세요. 빈 양식 그대로 신청하지 마세요.');
+  }, [tab, composePhase, selectedDocument, message]);
 
   // 휴가신청서 prefill - 휴가 계획 내역 [휴가 신청] 버튼에서 넘겨준 startDate/endDate/plannedDates 자동 채움
   // localStorage 사용 - iframe 모달도 부모와 동일 origin 으로 접근 가능 (sessionStorage는 분리됨)
@@ -3786,24 +3963,70 @@ export function ApprovalsPage() {
       }
 
       const contentForSubmit = { ...(values.content ?? {}) };
-      const isAllowanceChangeDocument = selectedDocument.documentName === '수당 변경 신청';
-      if (isAllowanceChangeDocument) {
-        const selectedTemplateId = readStr(contentForSubmit, 'salaryItemTemplateId');
-        if (status === 'WAIT' && !selectedTemplateId) {
-          message.warning('수당 항목을 선택해 주세요.');
-          return;
+
+      // 인사발령품의서 - 시뮬에서 넘어온 items / summary 를 contentJson 에 보존
+      // (form mismatch 로 form 에 안 들어간 케이스 대비, ref/storage 에서 직접 읽어 추가)
+      if (selectedDocument.documentName === '인사발령품의서') {
+        const cachedItems = personnelOrderItemsCacheRef.current;
+        const cachedSummary = personnelOrderSummaryCacheRef.current;
+        const storageRaw = localStorage.getItem(PERSONNEL_ORDER_PREFILL_STORAGE_KEY);
+        const formContent = (form.getFieldValue('content') ?? {}) as Record<string, unknown>;
+        console.log('[PersonnelOrderSubmit]',
+          'cachedItems=', cachedItems.length,
+          'cachedSummary=', cachedSummary?.length ?? 0,
+          'storageHas=', !!storageRaw,
+          'formContentJsonText=', String(formContent.contentJsonText ?? '').length,
+        );
+        if (cachedItems && cachedItems.length > 0) {
+          (contentForSubmit as Record<string, unknown>).items = cachedItems;
         }
-        if (selectedTemplateId) {
-          const fixedAmount = allowanceFixedAmountByTemplate.get(selectedTemplateId);
-          if (fixedAmount == null) {
-            message.warning(
-              '선택한 수당의 회사 고정 금액을 찾을 수 없습니다. 관리자에게 확인해 주세요.',
-            );
-            return;
+        // form 에 contentJsonText 가 있으면 우선 사용 (사용자가 textarea 에서 본 그대로)
+        const formText = String(formContent.contentJsonText ?? '').trim();
+        const finalSummary = formText || cachedSummary;
+        if (finalSummary) {
+          (contentForSubmit as Record<string, unknown>).contentJsonText = finalSummary;
+          (contentForSubmit as Record<string, unknown>).summaryText = finalSummary;
+        }
+        // ref 비어있으면 storage 직접 fallback
+        if ((!cachedItems || cachedItems.length === 0) || !cachedSummary) {
+          try {
+            const raw = localStorage.getItem(PERSONNEL_ORDER_PREFILL_STORAGE_KEY);
+            if (raw) {
+              const parsed = JSON.parse(raw) as {
+                contentJson?: { items?: unknown[]; summaryText?: string };
+              };
+              const items = parsed.contentJson?.items;
+              const sum = parsed.contentJson?.summaryText;
+              if ((!cachedItems || cachedItems.length === 0) && Array.isArray(items) && items.length > 0) {
+                (contentForSubmit as Record<string, unknown>).items = items;
+              }
+              if (!cachedSummary && typeof sum === 'string' && sum) {
+                (contentForSubmit as Record<string, unknown>).contentJsonText = sum;
+                (contentForSubmit as Record<string, unknown>).summaryText = sum;
+              }
+            }
+          } catch {
+            // ignore
           }
-          contentForSubmit.amount = fixedAmount;
         }
       }
+
+      // 휴가신청서 비연속 케이스 - plannedDates 만 채워졌으면 startDate/endDate 를 first/last 로 자동 도출
+      // (양식 schema 에 startDate/endDate 만 정의돼 있어 결재 상세에서 빈 칸으로 보이는 문제 fix)
+      if (selectedDocument.documentName === '휴가신청서') {
+        const rawPlanned = (contentForSubmit as Record<string, unknown>).plannedDates;
+        const planned = Array.isArray(rawPlanned)
+          ? (rawPlanned.filter((d) => typeof d === 'string' && d) as string[])
+          : null;
+        if (planned && planned.length > 0) {
+          const sorted = [...planned].sort();
+          const start = (contentForSubmit as Record<string, unknown>).startDate;
+          const end = (contentForSubmit as Record<string, unknown>).endDate;
+          if (!start) (contentForSubmit as Record<string, unknown>).startDate = sorted[0];
+          if (!end) (contentForSubmit as Record<string, unknown>).endDate = sorted[sorted.length - 1];
+        }
+      }
+
       if (vacationLeaveKindField && familyEventSubtypeField) {
         const kind = contentForSubmit[vacationLeaveKindField.name];
         if (kind !== APPROVAL_FAMILY_EVENT_LEAVE_KIND_OPTION) {
@@ -5618,7 +5841,7 @@ export function ApprovalsPage() {
         key: 'createdAt',
         width: 96,
         render: (_: unknown, row) => {
-          const compactDate = row.createdAt ? dayjs(row.createdAt).format('MM.DD HH:mm') : '—';
+          const compactDate = row.createdAt ? dayjs.utc(row.createdAt).tz('Asia/Seoul').format('MM.DD HH:mm') : '—';
           return (
             <Tooltip title={formatDateTime(row.createdAt)}>
               <span className="tw-block tw-whitespace-nowrap tw-text-xs tw-font-normal tw-leading-none tw-text-slate-500 [font-variant-numeric:tabular-nums]">
@@ -5972,7 +6195,7 @@ export function ApprovalsPage() {
             setComposeFormSelectModalOpen(false);
             setComposeFormSelectInitialId(undefined);
           }}
-          documents={pickerDocuments}
+          documents={visiblePickerDocuments}
           loading={docsLoading}
           initialDocumentId={composeFormSelectInitialId}
           onConfirm={handleApprovalFormSelectConfirm}
@@ -6316,7 +6539,7 @@ export function ApprovalsPage() {
               >
                 {composePhaseView === 'select' ? (
                   <DocumentFormPicker
-                    documents={pickerDocuments}
+                    documents={visiblePickerDocuments}
                     loading={docsLoading}
                     onAfterPick={(documentId, doc) => {
                       if (isComposeHubEntry) {
@@ -6506,8 +6729,15 @@ export function ApprovalsPage() {
                             .map((field) => {
                               const isAllowanceChangeDocument =
                                 selectedDocument.documentName === '수당 변경 신청';
-                              // 수당 변경 신청은 회사 고정 금액을 사용하므로 신청 금액 입력 UI는 숨긴다.
-                              if (isAllowanceChangeDocument && field.name === 'amount') return null;
+                              // 수당 변경 신청 - 적용 중인 항목은 해제 흐름이라 amount 입력 불필요 (숨김)
+                              if (
+                                isAllowanceChangeDocument &&
+                                field.name === 'amount' &&
+                                watchedSalaryItemTemplateId &&
+                                allowanceActiveByTemplate.has(watchedSalaryItemTemplateId)
+                              ) {
+                                return null;
+                              }
                               // hidden 필드는 제출 시 프론트가 auto-populate (예: leaveRequestId), UI 에 미표시
                               if (field.type === 'hidden') return null;
                               if (field.type === 'static_note') {
@@ -6571,14 +6801,25 @@ export function ApprovalsPage() {
                                 ? [{ required: true as const, message: `${field.label} 선택` }]
                                 : [];
                               if (field.type === 'personnel_order_items') {
-                                // 인사발령품의서 전용 - 직원/부서/직급/직책 선택 패널, contentJsonText 에는 사람 읽기용 요약만 들어감
+                                // C 옵션 - 시뮬 결과를 read-only textarea 로 표시 (편집 X)
+                                // contentJsonText 에 summary text 가 prefill 으로 들어옴
                                 return (
                                   <ApprovalFormPaperFieldRow
                                     key={field.name}
                                     label={field.label}
-                                    required={fieldLocked}
+                                    required={false}
                                   >
-                                    <PersonnelOrderItemsField />
+                                    <Form.Item
+                                      name={['content', field.name]}
+                                      noStyle
+                                    >
+                                      <Input.TextArea
+                                        rows={6}
+                                        readOnly
+                                        placeholder="조직 개편 시뮬레이션에서 입력한 발령 내역이 자동 반영됩니다."
+                                        style={{ background: '#fafafa', color: '#262626' }}
+                                      />
+                                    </Form.Item>
                                   </ApprovalFormPaperFieldRow>
                                 );
                               }
@@ -6717,7 +6958,9 @@ export function ApprovalsPage() {
                                       ? salaryItemTemplateOptions
                                       : field.source === 'flexibleTimeSlot'
                                         ? flexibleTimeSlotOptions
-                                        : null;
+                                        : field.source === 'myApprovedBusinessTrip'
+                                          ? myApprovedBusinessTripOptions
+                                          : null;
                                 const selectOptions = dynamicOptions
                                   ? dynamicOptions
                                   : (field.options ?? []).map((opt) => ({

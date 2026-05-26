@@ -27,9 +27,9 @@ import { VerifyEmailPage } from '@/pages/public/VerifyEmailPage';
 import { CompanyOnboardingPage } from '@/pages/public/CompanyOnboardingPage';
 import { lazy, Suspense, type ComponentType } from 'react';
 import { Spin } from 'antd';
+import { AppErrorBoundary } from '@/shared/ui/AppErrorBoundary';
 import { CalendarPage } from '@/pages/app/CalendarPage';
 import { DashboardPage } from '@/pages/app/DashboardPage';
-import { HrInsightsPage } from '@/pages/app/HrInsightsPage';
 import { EsgAdminPage } from '@/pages/app/esg/EsgAdminPage';
 import { EsgHomePage } from '@/pages/app/esg/EsgHomePage';
 import { EsgShopPage } from '@/pages/app/esg/EsgShopPage';
@@ -41,7 +41,9 @@ import EvaluationSeasonDetailPage from '@/pages/app/evaluations/EvaluationSeason
 import PerformancePage from '@/pages/app/PerformancePage';
 // 큰 페이지(6000줄+) - 코드 스플릿으로 초기 번들에서 분리
 const ApprovalsPageLazy = lazy(() =>
-  import('@/pages/app/ApprovalsPage').then((m) => ({ default: m.ApprovalsPage })),
+  import('@/pages/app/ApprovalsPage')
+    .then((m) => ({ default: m.ApprovalsPage }))
+    .catch(() => { window.location.reload(); return new Promise(() => {}); }),
 );
 import { ContractSendPage } from '@/pages/app/ContractSendPage';
 import { ContractsPage } from '@/pages/app/ContractsPage';
@@ -64,14 +66,14 @@ import { AdminLeavePoliciesPage } from '@/pages/app/salary-service/admin/AdminLe
 import { AdminOvertimePoliciesPage } from '@/pages/app/salary-service/admin/AdminOvertimePoliciesPage';
 // 큰 관리자 급여 페이지 - 코드 스플릿
 const AdminPayrollManagePageLazy = lazy(() =>
-  import('@/pages/app/salary-service/admin/AdminPayrollManagePage').then((m) => ({
-    default: m.AdminPayrollManagePage,
-  })),
+  import('@/pages/app/salary-service/admin/AdminPayrollManagePage')
+    .then((m) => ({ default: m.AdminPayrollManagePage }))
+    .catch(() => { window.location.reload(); return new Promise(() => {}); }),
 );
 const AdminPayrollPageLazy = lazy(() =>
-  import('@/pages/app/salary-service/admin/AdminPayrollPage').then((m) => ({
-    default: m.AdminPayrollPage,
-  })),
+  import('@/pages/app/salary-service/admin/AdminPayrollPage')
+    .then((m) => ({ default: m.AdminPayrollPage }))
+    .catch(() => { window.location.reload(); return new Promise(() => {}); }),
 );
 import { AdminPayrollTaxSummaryPage } from '@/pages/app/salary-service/admin/AdminPayrollTaxSummaryPage';
 import { AdminRetirementPolicyPage } from '@/pages/app/salary-service/admin/AdminRetirementPolicyPage';
@@ -83,17 +85,19 @@ import { AdminSalarySettingsPage } from '@/pages/app/salary-service/admin/AdminS
 function withSuspense(Comp: ComponentType) {
   return function SuspenseBoundary() {
     return (
-      <Suspense
-        fallback={
-          <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
-            <Spin size="large">
-              <span className="tw-sr-only">페이지 로딩 중...</span>
-            </Spin>
-          </div>
-        }
-      >
-        <Comp />
-      </Suspense>
+      <AppErrorBoundary>
+        <Suspense
+          fallback={
+            <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
+              <Spin size="large">
+                <span className="tw-sr-only">페이지 로딩 중...</span>
+              </Spin>
+            </div>
+          }
+        >
+          <Comp />
+        </Suspense>
+      </AppErrorBoundary>
     );
   };
 }
@@ -228,12 +232,6 @@ const onboardingStepperRoute = createRoute({
       throw redirect({ to: '/403' });
     }
   },
-});
-
-const hrInsightsRoute = createRoute({
-  getParentRoute: () => appBaseRoute,
-  path: '/insights',
-  component: HrInsightsPage,
 });
 
 const calendarRoute = createRoute({
@@ -397,6 +395,11 @@ const approvalsAdminRoute = createRoute({
   path: '/approvals',
   validateSearch: approvalsSearchSchema,
   component: withSuspense(ApprovalsPageLazy),
+  beforeLoad: ({ context, search }) => {
+    if (String(search.tab ?? '') === 'admin') {
+      requireMemberDirectoryAccess(context);
+    }
+  },
 });
 
 const myApprovalRequestsRoute = createRoute({
@@ -545,9 +548,7 @@ const organizationRoute = createRoute({
   validateSearch: organizationSearchSchema,
   component: OrganizationPage,
   beforeLoad: ({ context }) => {
-    if (!context.auth.user?.isSystemAdmin) {
-      throw redirect({ to: '/403' });
-    }
+    requireMemberDirectoryAccess(context);
   },
 });
 
@@ -769,9 +770,7 @@ const adminLeavePromotionNoResponseRoute = createRoute({
   path: '/leave/promotion-no-response',
   component: AdminLeavePromotionNoResponsePage,
   beforeLoad: ({ context }) => {
-    if (!context.auth.user?.isSystemAdmin) {
-      throw redirect({ to: '/app/leave' });
-    }
+    requireMemberDirectoryAccess(context);
   },
 });
 
@@ -780,9 +779,7 @@ const adminLeaveOfAbsenceRoute = createRoute({
   path: '/leave/absence',
   component: AdminLeaveOfAbsencePage,
   beforeLoad: ({ context }) => {
-    if (!context.auth.user?.isSystemAdmin) {
-      throw redirect({ to: '/app/leave' });
-    }
+    requireMemberDirectoryAccess(context);
   },
 });
 
@@ -904,15 +901,18 @@ const adminSalarySettingsRoute = createRoute({
   },
 });
 
-// 회사 관리자용 자동 작업 관리 페이지
-const AdminBatchSchedulePageLazy = lazy(() => import('@/pages/app/salary-service/admin/AdminBatchSchedulePage'));
+// 회사 관리자용 자동 작업 관리 페이지 - 시스템 관리자 전용
+const AdminBatchSchedulePageLazy = lazy(() =>
+  import('@/pages/app/salary-service/admin/AdminBatchSchedulePage')
+    .catch(() => { window.location.reload(); return new Promise(() => {}); }),
+);
 const adminBatchScheduleRoute = createRoute({
   getParentRoute: () => appBaseRoute,
   path: '/admin/batch-schedule',
   component: withSuspense(AdminBatchSchedulePageLazy),
   beforeLoad: ({ context }) => {
     if (!context.auth.user?.isSystemAdmin) {
-      throw redirect({ to: '/app/payroll' });
+      throw redirect({ to: '/403' });
     }
   },
 });
@@ -1053,7 +1053,6 @@ const routeTree = rootRoute.addChildren([
     appBaseRoute.addChildren([
       dashboardRoute,
       onboardingStepperRoute,
-      hrInsightsRoute,
       calendarRoute,
       esgHomeRoute,
       esgShopRoute,

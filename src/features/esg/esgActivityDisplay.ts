@@ -109,7 +109,7 @@ export function resolveEsgCategoryDisplay(row: Record<string, unknown>): string 
   return `${label} · ${d}`;
 }
 
-/** category + categoryDescription (백엔드 EsgActivityResDto) */
+/** category + categoryDescription (백엔드 EsgActivityResDto)  */
 export function resolveActivityCategoryDisplay(row: EsgActivity): string {
   return resolveEsgCategoryDisplay(row as Record<string, unknown>);
 }

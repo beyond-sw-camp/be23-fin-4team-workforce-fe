@@ -2,7 +2,6 @@ import {
   ArrowLeftOutlined,
   BankOutlined,
   EditOutlined,
-  ReloadOutlined,
   ScheduleOutlined } from '@ant-design/icons';
 import { useMutation,
   useQuery,
@@ -15,7 +14,6 @@ import { Alert,
   Input,
   Select,
   Space,
-  Switch,
   Tabs,
   Tag,
   Tooltip,
@@ -119,8 +117,8 @@ const JOB_LABELS: Record<string, { name: string; description: string }> = {
     description: '제출 후 72시간 경과한 사후 신청 자동 만료',
   },
   slotDeadlineAutoAssignJob_Detail: {
-    name: '시차출퇴근 슬롯 자동 배정',
-    description: '마감일 경과한 시차 슬롯 자동 할당',
+    name: '시차출퇴근 스케줄 자동 배정',
+    description: '마감일 경과한 시차 스케줄 자동 할당',
   },
   // salary-service - 연차
   leaveGrantJob_Detail: {
@@ -253,7 +251,6 @@ function SaasSchedulesPageInner() {
   });
   const allData = [...(memberQ.data ?? []), ...(salaryQ.data ?? [])];
   const isLoading = memberQ.isLoading || salaryQ.isLoading;
-  const isFetching = memberQ.isFetching || salaryQ.isFetching;
 
   // 글로벌 잡 (jobKey 에 __ 없음) vs 회사별 잡 (__{uuid} 포함) 분리
   const globalRows = allData.filter((it) => extractCompanyId(it.jobKey) == null);
@@ -321,18 +318,6 @@ function SaasSchedulesPageInner() {
     },
   });
 
-  const toggleM = useMutation({
-    mutationFn: (vars: { source: SaasSchedule['source']; jobKey: string; active: boolean }) =>
-      saasApi.schedule.setActive(vars.source, vars.jobKey, vars.active),
-    onSuccess: (_, vars) => {
-      message.success(vars.active ? '다시 활성화되었습니다.' : '일시 중지되었습니다.');
-      void qc.invalidateQueries({ queryKey: QK_MEMBER });
-      void qc.invalidateQueries({ queryKey: QK_SALARY });
-    },
-    onError: (e: unknown) => {
-      message.error((e as { message?: string })?.message ?? '상태 변경에 실패했습니다.');
-    },
-  });
 
   const openEdit = (row: SaasSchedule) => {
     setEditing(row);
@@ -348,16 +333,16 @@ function SaasSchedulesPageInner() {
   };
 
   const cols: ColumnsType<SaasSchedule> = [
+    // 활성 토글 컬럼 제거 - 토글 끄더라도 회사 화면(연차 사용 촉진 알림 등) UI 가 그에 맞춰 안 바뀜.
+    // 기능 연동 완료 전까지 토글 자체를 비노출.
     {
-      title: '활성',
-      key: 'active',
-      width: 80,
+      title: '상태',
+      key: 'state',
+      width: 90,
       render: (_, row) => (
-        <Switch
-          checked={!row.paused}
-          loading={toggleM.isPending && toggleM.variables?.jobKey === row.jobKey}
-          onChange={(checked) => toggleM.mutate({ source: row.source, jobKey: row.jobKey, active: checked })}
-        />
+        <Tag color={row.paused ? 'default' : 'green'}>
+          {row.paused ? '정지' : '실행 중'}
+        </Tag>
       ),
     },
     {
@@ -438,22 +423,12 @@ function SaasSchedulesPageInner() {
               자동 작업 관리
             </Typography.Title>
           </Space>
-          <Button
-            icon={<ReloadOutlined />}
-            onClick={() => {
-              void memberQ.refetch();
-              void salaryQ.refetch();
-            }}
-            loading={isFetching}
-          >
-            새로고침
-          </Button>
         </div>
 
         <Alert
           type="info"
           showIcon
-          message="활성 토글로 끄거나 켜고, 시간 변경으로 실행 주기를 바꿀 수 있어요."
+          message="시간 변경으로 자동 작업의 실행 주기를 조정할 수 있어요."
         />
 
         {memberQ.isError ? (

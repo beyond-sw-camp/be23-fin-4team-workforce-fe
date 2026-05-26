@@ -214,7 +214,8 @@ export function stripNonPersistedApprovalContentFields(
   fields: FormFieldSchema[],
 ): void {
   for (const f of fields) {
-    if (f.type === 'ai_transcribe' || f.type === 'static_note' || f.type === 'personnel_order_items') {
+    // personnel_order_items 는 textarea read-only 로 사용 중 - contentJsonText (summary) 보존 필요
+    if (f.type === 'ai_transcribe' || f.type === 'static_note') {
       delete content[f.name];
     }
   }

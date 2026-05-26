@@ -535,21 +535,32 @@ export function AdminCompanyLeaveTypesPage() {
         title: '이름',
         dataIndex: 'name',
         key: 'name',
-        render: (v: string, r) => (
-          <Space size={6}>
-            <button
-              type="button"
-              className="tw-appearance-none tw-border-0 tw-bg-transparent tw-p-0 tw-text-left tw-text-sm tw-font-semibold tw-text-slate-900 hover:tw-text-[#1e3a5f] focus-visible:tw-rounded focus-visible:tw-outline-none focus-visible:tw-ring-2 focus-visible:tw-ring-blue-400"
-              onClick={(event) => {
-                event.stopPropagation();
-                openEdit(r);
-              }}
-            >
-              {v ?? '—'}
-            </button>
-            {r.isSystemDefault ? <Tag color="blue">기본</Tag> : null}
-          </Space>
-        ),
+        render: (v: string, r) => {
+          // 연차/반차/월차 - 클릭 자체 비활성, 일반 텍스트로 표시
+          if (isLocked(r)) {
+            return (
+              <Space size={6}>
+                <span className="tw-text-sm tw-font-semibold tw-text-slate-900">{v ?? '—'}</span>
+                {r.isSystemDefault ? <Tag color="blue">기본</Tag> : null}
+              </Space>
+            );
+          }
+          return (
+            <Space size={6}>
+              <button
+                type="button"
+                className="tw-appearance-none tw-border-0 tw-bg-transparent tw-p-0 tw-text-left tw-text-sm tw-font-semibold tw-text-slate-900 hover:tw-text-[#1e3a5f] focus-visible:tw-rounded focus-visible:tw-outline-none focus-visible:tw-ring-2 focus-visible:tw-ring-blue-400"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  openEdit(r);
+                }}
+              >
+                {v ?? '—'}
+              </button>
+              {r.isSystemDefault ? <Tag color="blue">기본</Tag> : null}
+            </Space>
+          );
+        },
       },
       {
         title: '잔고 유형',
@@ -583,21 +594,24 @@ export function AdminCompanyLeaveTypesPage() {
         align: 'center',
         render: (_, record) => {
           const deletable = canDelete(record);
+          const locked = isLocked(record);
           if (!listEditing) {
             return (
               <Space size={4} onClick={(e) => e.stopPropagation()}>
-                <Tooltip title="수정">
-                  <Button
-                    type="text"
-                    size="small"
-                    icon={<EditOutlined />}
-                    className="!tw-inline-flex !tw-h-8 !tw-w-8 !tw-items-center !tw-justify-center !tw-rounded-lg !tw-text-slate-500 hover:!tw-bg-slate-100 hover:!tw-text-slate-800"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      openEdit(record);
-                    }}
-                  />
-                </Tooltip>
+                {locked ? null : (
+                  <Tooltip title="수정">
+                    <Button
+                      type="text"
+                      size="small"
+                      icon={<EditOutlined />}
+                      className="!tw-inline-flex !tw-h-8 !tw-w-8 !tw-items-center !tw-justify-center !tw-rounded-lg !tw-text-slate-500 hover:!tw-bg-slate-100 hover:!tw-text-slate-800"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openEdit(record);
+                      }}
+                    />
+                  </Tooltip>
+                )}
                 {deletable ? (
                   <Popconfirm
                     title="정말 삭제하시겠어요?"

@@ -20,7 +20,6 @@
   GiftOutlined,
   GlobalOutlined,
   LineChartOutlined,
-  PieChartOutlined,
   MoreOutlined,
   MessageOutlined,
   PartitionOutlined,
@@ -147,7 +146,6 @@ function SiderPanelToggleIcon({ className }: { className?: string }) {
 
 const APP_MENU_ICONS: Record<string, ReactNode> = {
   '/app/dashboard': <DashboardOutlined className="tw-text-lg" />,
-  '/app/insights': <PieChartOutlined className="tw-text-lg" />,
   '/app/calendar': <CalendarOutlined className="tw-text-lg" />,
   '/app/members': <TeamOutlined className="tw-text-lg" />,
   '/app/organization': <ApartmentOutlined className="tw-text-lg" />,
@@ -199,7 +197,7 @@ const TALENT_HUB_PATHS = ['/app/performance', '/app/evaluations', '/app/meetings
 const TALENT_HUB_PATH_SET = new Set<string>(TALENT_HUB_PATHS);
 
 const ORG_HR_GROUP_KEY = 'group-org-hr';
-/** 인사 관리 서브메뉴 — 구성원·조직도 접근과 동일하게 `canAccessMemberDirectory` 로 노출 */
+/** 인사 관리 서브메뉴 — 시스템 관리자 또는 인사(MEMBER:CREATE·UPDATE)만 노출 */
 const ORG_HR_PATHS = ['/app/members', '/app/organization'] as const;
 /** 계약 발송 라우트는 HR 그룹에만 속하며, 메뉴 순서는 `hrGroupExtraChildren`에서 결재 양식 다음에 둠 */
 const ORG_HR_PATH_SET = new Set<string>([...ORG_HR_PATHS, '/app/contracts/send']);
@@ -256,7 +254,7 @@ function approvalLeafIcon(box: string) {
 function buildAppShellMenuItems(
   isAdmin: boolean,
   approvalMenuChildren: NonNullable<MenuProps['items']> | undefined,
-  canAccessMemberDirectory: boolean,
+  showMemberDirectoryMenu: boolean,
   hrGroupExtraChildren?: NonNullable<MenuProps['items']>,
   leavePromotionEnabled = false,
   showSalaryNegotiationSubmenu = false,
@@ -293,7 +291,7 @@ function buildAppShellMenuItems(
     }
     if (ORG_HR_PATH_SET.has(path)) {
       if (!orgInserted) {
-        const baseChildren: NonNullable<MenuProps['items']> = canAccessMemberDirectory
+        const baseChildren: NonNullable<MenuProps['items']> = showMemberDirectoryMenu
           ? ORG_HR_PATHS.map((p) => ({
               key: p,
               icon: APP_MENU_ICONS[p],
@@ -553,17 +551,22 @@ function buildAppShellMenuItems(
   return items;
 }
 
-function useAppShellSiderMenuItems(currentPathname: string): {
+function useAppShellSiderMenuItems(): {
   items: NonNullable<MenuProps['items']>;
   showSalaryNegotiationSubmenu: boolean;
 } {
   const { status, user } = useAuth();
   const isAdmin = user?.isSystemAdmin === true;
   const { hasPermission } = usePermissions();
+  // 인사 팀장(또는 그 이상)도 시스템 관리자급 메뉴 노출
+  // - 자동 작업 관리만 isAdmin 전용 (아래 batchSchedule 분기에서 별도 처리)
+  // - 역할/권한 탭만 isAdmin 전용 (OrganizationPage 의 canManageRoles 에서 처리)
+  const isAdminOrHr = isAdmin || hasPermission(PERM.MEMBER_UPDATE);
   /** 결재 양식 설정 메뉴: 시스템 관리자 + 문서함 + 결재 관리 권한 */
   const showApprovalFormSettings =
     isAdmin || hasPermission(PERM.APPROVAL_AD_READ) || canAccessMemberDirectory(hasPermission);
-  const shouldQueryEsgConfig = status === 'authenticated' && currentPathname.startsWith('/app/esg');
+  const shouldQueryEsgConfig = status === 'authenticated';
+  const currentPathname = useRouterState({ select: (state) => state.location.pathname });
 
   const { data: esgConfig } = useQuery({
     queryKey: ['esg', 'config'],
@@ -714,7 +717,7 @@ function useAppShellSiderMenuItems(currentPathname: string): {
           title: '결재 양식 설정',
         },
         ...(showMemberDirectoryMenu ? [contractSendMenuItem] : []),
-        ...(isAdmin
+        ...(isAdminOrHr
           ? [
               {
                 key: '/app/leave/absence',
@@ -722,7 +725,6 @@ function useAppShellSiderMenuItems(currentPathname: string): {
                 label: APP_MENU_LABEL['/app/leave/absence'],
                 title: APP_MENU_LABEL['/app/leave/absence'],
               },
-              // 연차 촉진 알림 현황 - 운영 모니터링 메뉴 (인사 관리 그룹)
               {
                 key: '/app/leave/promotion-no-response',
                 icon: <BellOutlined className="tw-text-lg" />,
@@ -740,7 +742,7 @@ function useAppShellSiderMenuItems(currentPathname: string): {
     const leavePromotionEnabled = (leavePoliciesForMenu ?? []).some((p) => p.isPromotionYn === 'Y');
     const showSalaryNegotiationSubmenu = hasActiveNegotiationSalaryPolicy(salaryPoliciesForMenu);
     const items = buildAppShellMenuItems(
-      isAdmin,
+      isAdminOrHr,
       approvalMenuChildren,
       showMemberDirectoryMenu,
       hrGroupExtraChildren,
@@ -765,41 +767,44 @@ function useAppShellSiderMenuItems(currentPathname: string): {
           }
         : null;
 
-    if (!isAdmin) {
+    if (!isAdminOrHr) {
       return {
         items: esgMenuItem ? [...items, esgMenuItem] : items,
         showSalaryNegotiationSubmenu: false,
       };
     }
 
-    /** 시스템 관리자: HR 정책 문서 항목을 메뉴 끝에 ESG 다음에 배치 */
+    /** 시스템 관리자 + 인사 팀장: HR 정책 문서 항목을 메뉴 끝에 ESG 다음에 배치 */
     const doc = {
       key: '/app/ai-documents',
       icon: <RobotOutlined className="tw-text-lg" />,
       label: 'HR 정책 문서',
       title: 'HR 정책 문서',
     };
-    // 자동 작업 관리 - HR 정책 문서 다음 (시스템 설정 영역)
-    const batchSchedule = {
-      key: '/app/admin/batch-schedule',
-      icon: <ScheduleOutlined className="tw-text-lg" />,
-      label: APP_MENU_LABEL['/app/admin/batch-schedule'],
-      title: APP_MENU_LABEL['/app/admin/batch-schedule'],
-    };
+    // 자동 작업 관리 - 시스템 관리자 전용 (인사 팀장은 제외)
+    const batchSchedule = isAdmin
+      ? {
+          key: '/app/admin/batch-schedule',
+          icon: <ScheduleOutlined className="tw-text-lg" />,
+          label: APP_MENU_LABEL['/app/admin/batch-schedule'],
+          title: APP_MENU_LABEL['/app/admin/batch-schedule'],
+        }
+      : null;
 
+    const tail = batchSchedule ? [doc, batchSchedule] : [doc];
     if (esgMenuItem) {
-      return { items: [...items, esgMenuItem, doc, batchSchedule], showSalaryNegotiationSubmenu };
+      return { items: [...items, esgMenuItem, ...tail], showSalaryNegotiationSubmenu };
     }
-    return { items: [...items, doc, batchSchedule], showSalaryNegotiationSubmenu };
+    return { items: [...items, ...tail], showSalaryNegotiationSubmenu };
   }, [
     esgConfig,
     isAdmin,
+    isAdminOrHr,
+    showApprovalFormSettings,
     approvalOrgChart,
-    status,
     user?.permissions,
     myDashboardProfile?.organizationName,
     user?.departmentName,
-    showApprovalFormSettings,
     leavePoliciesForMenu,
     salaryPoliciesForMenu,
     hasPermission,
@@ -1774,8 +1779,7 @@ function AppShellLayout() {
     () => menuSelectedKeyFromPath(pathname, search),
     [pathname, search],
   );
-  const { items: appShellMenuItems, showSalaryNegotiationSubmenu } =
-    useAppShellSiderMenuItems(pathname);
+  const { items: appShellMenuItems, showSalaryNegotiationSubmenu } = useAppShellSiderMenuItems();
   const [orgChartModalOpen, setOrgChartModalOpen] = useState(false);
 
   const [siderCollapsed, setSiderCollapsed] = useState(() => {

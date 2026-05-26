@@ -835,7 +835,7 @@ export function DashboardAttendanceBlock() {
     },
   });
 
-  const fmtTime = (iso?: string | null) => (iso ? dayjs(iso).format('HH:mm') : '--:--');
+  const fmtTime = (iso?: string | null) => (iso ? dayjs.utc(iso).tz('Asia/Seoul').format('HH:mm') : '--:--');
   const fmtMinutes = (m?: number | null) => {
     const safe = Math.max(0, Math.floor(m ?? 0));
     const h = Math.floor(safe / 60);
@@ -872,11 +872,11 @@ export function DashboardAttendanceBlock() {
     const daily = dailyQ.data;
     if (!daily) return 0;
     if (daily.firstClockIn && !daily.lastClockOut) {
-      return Math.max(0, now.diff(dayjs(daily.firstClockIn), 'minute'));
+      return Math.max(0, now.diff(dayjs.utc(daily.firstClockIn).tz('Asia/Seoul'), 'minute'));
     }
     if (daily.workedMinutes != null) return daily.workedMinutes;
     if (daily.firstClockIn && daily.lastClockOut) {
-      return Math.max(0, dayjs(daily.lastClockOut).diff(dayjs(daily.firstClockIn), 'minute'));
+      return Math.max(0, dayjs.utc(daily.lastClockOut).tz('Asia/Seoul').diff(dayjs.utc(daily.firstClockIn).tz('Asia/Seoul'), 'minute'));
     }
     return 0;
   })();

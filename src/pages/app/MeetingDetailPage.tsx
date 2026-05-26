@@ -205,6 +205,8 @@ export default function MeetingDetailPage() {
   const currentUserId = user?.id ?? '';
   const isManager = meeting.managerId === currentUserId;
   const isMember = meeting.memberId === currentUserId;
+  const memberName = meeting.memberName || labelFor(meeting.memberId);
+  const managerName = meeting.managerName || labelFor(meeting.managerId);
 
   const openEdit = () => {
     editForm.setFieldsValue({
@@ -223,7 +225,7 @@ export default function MeetingDetailPage() {
         subtitle={
           <Space wrap size="small" className="tw-text-slate-600">
             <span>
-              {labelFor(meeting.memberId)} · {labelFor(meeting.managerId)}
+              {memberName} · {managerName}
             </span>
             <span className="tw-inline-flex tw-items-center tw-gap-1">
               <CalendarOutlined />
@@ -288,13 +290,13 @@ export default function MeetingDetailPage() {
           <Descriptions.Item label="구성원">
             <Space>
               <UserOutlined />
-              <Typography.Text>{labelFor(meeting.memberId)}</Typography.Text>
+              <Typography.Text>{memberName}</Typography.Text>
             </Space>
           </Descriptions.Item>
           <Descriptions.Item label="매니저">
             <Space>
               <UserOutlined />
-              <Typography.Text>{labelFor(meeting.managerId)}</Typography.Text>
+              <Typography.Text>{managerName}</Typography.Text>
             </Space>
           </Descriptions.Item>
           <Descriptions.Item label="일정">
@@ -490,7 +492,7 @@ export default function MeetingDetailPage() {
                   description={
                     <Space split={<Divider type="vertical" />} size={0}>
                       <Typography.Text type="secondary">
-                        담당: {labelFor(action.assigneeId)}
+                        담당: {action.assigneeName || labelFor(action.assigneeId)}
                       </Typography.Text>
                       {action.dueDate && (
                         <Typography.Text type="secondary">

@@ -249,12 +249,8 @@ export default function EvaluationSeasonDetailPage() {
                     type="info"
                     showIcon
                     className="!tw-rounded-xl"
-                    message={season.status === 'DRAFT' ? '평가 시작 시 대상자가 자동으로 로드됩니다.' : '평가 대상자와 상사평가자를 확인하세요.'}
-                    description={
-                      season.status === 'DRAFT'
-                        ? '목표 기간에 승인 완료된 개인 목표를 가진 구성원이 자동으로 평가 대상자가 됩니다.'
-                        : '대상자는 승인 완료 개인 목표 기준이며, 상사평가자는 직속 상사 기준으로 자동 지정됩니다.'
-                    }
+                    message="평가 대상자와 상사평가자를 확인하세요."
+                    description="대상자는 승인 완료 개인 목표 기준이며, 상사평가자는 직속 상사 기준으로 자동 지정됩니다."
                   />
                   <GroupsSection
                     groups={groups}
@@ -667,12 +663,12 @@ function SeasonMeetingsCard({
           {
             title: '구성원',
             dataIndex: 'memberId',
-            render: (memberId: string) => labelFor(memberId),
+            render: (memberId: string, meeting: MeetingRecord) => meeting.memberName || labelFor(memberId),
           },
           {
             title: '상사',
             dataIndex: 'managerId',
-            render: (managerId: string) => labelFor(managerId),
+            render: (managerId: string, meeting: MeetingRecord) => meeting.managerName || labelFor(managerId),
           },
           {
             title: '예정 일시',

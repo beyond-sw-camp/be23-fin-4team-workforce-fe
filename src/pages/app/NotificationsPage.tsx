@@ -20,6 +20,7 @@ import {
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppTabLabel } from '@/shared/ui/AppTabLabel';
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
+import { toKstTime } from '@/lib/dayjsSetup';
 
 type NotificationFilter = 'all' | 'unread' | 'read';
 
@@ -144,7 +145,7 @@ function NotificationRow({ item, onRoute, onDelete, deleting }: NotificationRowP
           {item.content || '알림 내용이 없습니다.'}
         </div>
         <div className="tw-mt-2 tw-text-xs tw-text-slate-400">
-          {item.createdAt ? dayjs(item.createdAt).format('HH:mm') : '-'}
+          {item.createdAt ? toKstTime(item.createdAt) : '-'}
         </div>
       </div>
       <Space className="tw-shrink-0" size={8}>

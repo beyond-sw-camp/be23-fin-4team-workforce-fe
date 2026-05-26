@@ -108,7 +108,7 @@ function estimateWorkedMinutes(
   breakMinutes: number,
 ): number {
   if (!firstClockIn || !lastClockOut) return 0;
-  const stay = dayjs(lastClockOut).diff(dayjs(firstClockIn), 'minute');
+  const stay = dayjs.utc(lastClockOut).tz('Asia/Seoul').diff(dayjs.utc(firstClockIn).tz('Asia/Seoul'), 'minute');
   return Math.max(0, stay - breakMinutes);
 }
 
@@ -356,11 +356,10 @@ export function MyAttendancePage() {
   );
   // 조퇴계 행별 진입은 화면 단순성 위해 제외 (자주 발생하지 않음). 조퇴는 전자결재 메뉴에서 양식 직접 작성
 
-  // 이번 달 통계 - 근무일 / 지각 / 결근 / 조퇴
+  // 이번 달 통계 - 근무일 / 지각(자동 감지) / 결근 / 조퇴(조퇴계 결재 승인된 것만 카운트)
   const monthStats = useMemo(() => {
     const rows = monthlyNormalized.content;
     const startTime = effectiveSchedule?.startTime ?? null; // HH:mm:ss
-    const endTime = effectiveSchedule?.endTime ?? null;
     const todayStr = todayIso;
     let workDays = 0;
     let tardy = 0;
@@ -376,14 +375,14 @@ export function MyAttendancePage() {
       }
       if (r.firstClockIn || r.lastClockOut) {
         workDays += 1;
+        // HH:mm:ss vs HH:mm 길이 차로 인한 잘못된 비교 방지 - HH:mm 으로 통일
+        const norm = (t: string) => t.length >= 5 ? t.slice(0, 5) : t;
         if (startTime && r.firstClockIn) {
-          const inHm = dayjs(r.firstClockIn).format('HH:mm:ss');
-          if (inHm > startTime) tardy += 1;
+          const inHm = dayjs.utc(r.firstClockIn).tz('Asia/Seoul').format('HH:mm');
+          if (inHm > norm(startTime)) tardy += 1;
         }
-        if (endTime && r.lastClockOut) {
-          const outHm = dayjs(r.lastClockOut).format('HH:mm:ss');
-          if (outHm < endTime) earlyLeave += 1;
-        }
+        // 조퇴 - 조퇴계 결재 승인된 경우만 카운트 (단순 조기 퇴근은 카운트하지 않음)
+        if (r.earlyLeaveExcusedYn === 'Y') earlyLeave += 1;
       }
     }
     return { workDays, tardy, absent, earlyLeave };
@@ -465,21 +464,36 @@ export function MyAttendancePage() {
       {
         title: '상태',
         key: 'status',
-        render: (_, row) => (
-          <AttendanceStatusTag status={row.status} workTripType={row.workTripType ?? null} />
-        ),
+        render: (_, row) => {
+          // 자동 감지 지각 - 출근시각 > 정규 시작시각
+          const norm = (t: string) => (t.length >= 5 ? t.slice(0, 5) : t);
+          const startTime = effectiveSchedule?.startTime ?? null;
+          let isTardy = false;
+          if (startTime && row.firstClockIn) {
+            const inHm = dayjs.utc(row.firstClockIn).tz('Asia/Seoul').format('HH:mm');
+            if (inHm > norm(startTime)) isTardy = true;
+          }
+          return (
+            <AttendanceStatusTag
+              status={row.status}
+              workTripType={row.workTripType ?? null}
+              tardy={isTardy}
+              earlyLeave={row.earlyLeaveExcusedYn === 'Y'}
+            />
+          );
+        },
       },
       {
         title: '출근',
         dataIndex: 'firstClockIn',
         key: 'firstClockIn',
-        render: (v?: string | null) => (v ? dayjs(v).format('HH:mm') : '—'),
+        render: (v?: string | null) => (v ? dayjs.utc(v).tz('Asia/Seoul').format('HH:mm') : '—'),
       },
       {
         title: '퇴근',
         dataIndex: 'lastClockOut',
         key: 'lastClockOut',
-        render: (v?: string | null) => (v ? dayjs(v).format('HH:mm') : '—'),
+        render: (v?: string | null) => (v ? dayjs.utc(v).tz('Asia/Seoul').format('HH:mm') : '—'),
       },
       {
         title: '근무 시간',
@@ -515,8 +529,8 @@ export function MyAttendancePage() {
           const goCompose = () => {
             if (!correctionDocId) return;
             const date = row.attendanceDate;
-            const clockIn = row.firstClockIn ? dayjs(row.firstClockIn).format('HH:mm') : '';
-            const clockOut = row.lastClockOut ? dayjs(row.lastClockOut).format('HH:mm') : '';
+            const clockIn = row.firstClockIn ? dayjs.utc(row.firstClockIn).tz('Asia/Seoul').format('HH:mm') : '';
+            const clockOut = row.lastClockOut ? dayjs.utc(row.lastClockOut).tz('Asia/Seoul').format('HH:mm') : '';
             void navigate({
               to: '/app/approvals',
               search: {
@@ -623,8 +637,8 @@ export function MyAttendancePage() {
       effectiveSchedule?.breakMinutes ?? 0,
     );
   const latestClockLabel = (() => {
-    if (daily?.lastClockOut) return `퇴근 ${dayjs(daily.lastClockOut).format('HH:mm')}`;
-    if (daily?.firstClockIn) return `출근 ${dayjs(daily.firstClockIn).format('HH:mm')}`;
+    if (daily?.lastClockOut) return `퇴근 ${dayjs.utc(daily.lastClockOut).tz('Asia/Seoul').format('HH:mm')}`;
+    if (daily?.firstClockIn) return `출근 ${dayjs.utc(daily.firstClockIn).tz('Asia/Seoul').format('HH:mm')}`;
     return '최근 기록 없음';
   })();
 
@@ -775,6 +789,25 @@ export function MyAttendancePage() {
                         percent={summary.overtimeUsagePercent}
                         severity={otSev}
                       />
+                      {/* 이번 달 근무시간 누적 - monthlyNormalized 데이터 합산 (한국 1주 52h × 월 4.345주 ≈ 226h 한도) */}
+                      {(() => {
+                        const monthlyWorkedMinutes = (monthlyNormalized.content ?? [])
+                          .reduce((acc, r) => acc + Number(r.workedMinutes ?? 0), 0);
+                        const monthlyLimitMinutes = 52 * 60 * 4; // 월 약 208h 가이드 (52h × 4주)
+                        const monthlyPercent = monthlyLimitMinutes > 0
+                          ? Math.round((monthlyWorkedMinutes / monthlyLimitMinutes) * 1000) / 10
+                          : 0;
+                        return (
+                          <CompactLimitRow
+                            label="이번 달 근무시간 누적"
+                            limitLabel="208h"
+                            value={monthlyWorkedMinutes}
+                            limit={monthlyLimitMinutes}
+                            percent={monthlyPercent}
+                            severity={severityOf(monthlyPercent)}
+                          />
+                        );
+                      })()}
                       {summary.monthlyOvertimeLimitMinutes != null &&
                         summary.monthlyOvertimeLimitMinutes > 0 && (
                           <CompactLimitRow
@@ -1147,9 +1180,9 @@ function DailyScheduleDonut({
   const elapsedMinutes = (() => {
     if (workedMinutes != null && workedMinutes > 0) return workedMinutes;
     if (!firstClockIn) return 0;
-    const start = dayjs(firstClockIn);
+    const start = dayjs.utc(firstClockIn).tz('Asia/Seoul');
     if (!start.isValid()) return 0;
-    const end = lastClockOut ? dayjs(lastClockOut) : dayjs();
+    const end = lastClockOut ? dayjs.utc(lastClockOut).tz('Asia/Seoul') : dayjs();
     const stay = end.diff(start, 'minute');
     return Math.max(0, stay - (breakMinutes ?? 0));
   })();
@@ -1177,8 +1210,8 @@ function DailyScheduleDonut({
       <div>
         진행: {Math.floor(elapsedMinutes / 60)}시간 {elapsedMinutes % 60}분 ({percent}%)
       </div>
-      {firstClockIn && <div>출근: {dayjs(firstClockIn).format('HH:mm')}</div>}
-      {lastClockOut && <div>퇴근: {dayjs(lastClockOut).format('HH:mm')}</div>}
+      {firstClockIn && <div>출근: {dayjs.utc(firstClockIn).tz('Asia/Seoul').format('HH:mm')}</div>}
+      {lastClockOut && <div>퇴근: {dayjs.utc(lastClockOut).tz('Asia/Seoul').format('HH:mm')}</div>}
     </div>
   );
 

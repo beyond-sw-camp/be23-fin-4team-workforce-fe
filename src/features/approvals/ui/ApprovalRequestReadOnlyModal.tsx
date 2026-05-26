@@ -79,7 +79,8 @@ const REQUEST_STATUS_LABEL: Record<ApprovalRequestStatus, string> = {
 
 function formatDateTime(value?: string | null) {
   if (!value) return '—';
-  const d = dayjs(value);
+  // 백엔드 UTC LocalDateTime -> KST 변환 후 표시 (JVM TZ=UTC 통일과 짝)
+  const d = dayjs.utc(value).tz('Asia/Seoul');
   return d.isValid() ? d.format('YYYY-MM-DD HH:mm') : value;
 }
 
@@ -1056,7 +1057,9 @@ export function ApprovalRequestReadOnlyModal({
                           <ApprovalFormPaperFieldRow key={field.name} label={field.label} required>
                             <Typography.Text
                               className={
-                                field.type === 'textarea' ? 'tw-whitespace-pre-wrap tw-break-words' : undefined
+                                field.type === 'textarea' || field.type === 'personnel_order_items'
+                                  ? 'tw-whitespace-pre-wrap tw-break-words'
+                                  : undefined
                               }
                             >
                               {text}

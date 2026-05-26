@@ -63,6 +63,8 @@ export type DailyAttendance = {
   overtimeMinutes?: number | null;
   /** 출장/외근 - WorkTripDetail.workTripType (BUSINESS_TRIP / OUTSIDE_WORK), 없으면 null */
   workTripType?: 'BUSINESS_TRIP' | 'OUTSIDE_WORK' | null;
+  /** 조퇴계 결재 승인 여부 - 'Y'면 상태/카운트에 '조퇴' 반영 */
+  earlyLeaveExcusedYn?: string | null;
 };
 
 /** 출퇴근 정정 신청 페이로드 */
@@ -643,6 +645,8 @@ export type WorkSchedule = {
   breakMinutes?: number | null;
   effectiveFrom?: string;
   effectiveTo?: string | null;
+  /** FLEXIBLE 전용 - 매월 다음 달 슬롯 신청 마감일 (1~28). default 25 */
+  selectionDeadlineDay?: number | null;
 };
 
 /** WorkSchedule 생성/수정 페이로드.
@@ -661,6 +665,8 @@ export type WorkScheduleCreatePayload = {
   breakEnd?: string | null;
   effectiveFrom: string;
   effectiveTo?: string | null;
+  /** FLEXIBLE 전용 - 매월 다음 달 슬롯 신청 마감일 (1~28). null/생략 시 default 25 */
+  selectionDeadlineDay?: number | null;
 };
 
 export type WorkScheduleUpdatePayload = Partial<Omit<WorkScheduleCreatePayload, 'memberId'>>;

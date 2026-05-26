@@ -115,6 +115,9 @@ export function EsgAdminPage() {
   const [rejectForm] = Form.useForm<{ reason: string }>();
   const [shopForm] = Form.useForm();
   const [shopFile, setShopFile] = useState<File | null>(null);
+  const [editingShopItem, setEditingShopItem] = useState<EsgShopItem | null>(null);
+  const [editShopForm] = Form.useForm();
+  const [editShopFile, setEditShopFile] = useState<File | null>(null);
   const [scoreMonth, setScoreMonth] = useState('');
   const [dashboardModal, setDashboardModal] = useState<DashboardModal>(null);
   const [esg403BannerDismissed, setEsg403BannerDismissed] = useState(() => {
@@ -269,6 +272,47 @@ export function EsgAdminPage() {
       void qc.invalidateQueries({ queryKey: ['esg', 'shop'] });
     },
     onError: (e: Error) => message.error(e.message || '등록에 실패했습니다.'),
+  });
+
+  const openShopItemEdit = (item: EsgShopItem) => {
+    const id = item.itemId?.trim();
+    if (!id) return;
+    setEditingShopItem(item);
+  };
+
+  useEffect(() => {
+    if (!editingShopItem) return;
+    editShopForm.setFieldsValue({
+      title: editingShopItem.title,
+      description: editingShopItem.description ?? '',
+      requiredPoints: editingShopItem.requiredPoints,
+      stock: editingShopItem.stock,
+    });
+    setEditShopFile(null);
+  }, [editingShopItem, editShopForm]);
+
+  const updateShop = useMutation({
+    mutationFn: async () => {
+      if (!editingShopItem?.itemId?.trim()) {
+        throw new Error('물품을 찾을 수 없습니다.');
+      }
+      const v = await editShopForm.validateFields();
+      await esgApi.updateShopItem(editingShopItem.itemId, {
+        title: String(v.title).trim(),
+        description: String(v.description ?? '').trim(),
+        requiredPoints: Number(v.requiredPoints),
+        stock: Number(v.stock),
+        image: editShopFile,
+      });
+    },
+    onSuccess: () => {
+      message.success('물품을 수정했습니다.');
+      setEditingShopItem(null);
+      editShopForm.resetFields();
+      setEditShopFile(null);
+      void qc.invalidateQueries({ queryKey: ['esg', 'shop'] });
+    },
+    onError: (e: Error) => message.error(e.message || '수정에 실패했습니다.'),
   });
 
   const allOrdersQuery = useQuery({
@@ -766,13 +810,30 @@ export function EsgAdminPage() {
                     {previewShopItems.slice(0, 3).map((item) => (
                       <div
                         key={item.itemId || JSON.stringify(item)}
-                        className={esgSoftRowButtonClass}
+                        onClick={() => item.itemId && openShopItemEdit(item)}
+                        className={`${esgSoftRowButtonClass}${
+                          item.itemId ? ' tw-cursor-pointer hover:tw-bg-slate-100/80' : ''
+                        }`}
                       >
                         <span className="tw-min-w-0">
                           <span className="tw-block tw-truncate tw-text-sm tw-font-bold tw-text-slate-900">{item.title}</span>
                           <span className="tw-mt-1 tw-block tw-text-xs tw-text-slate-500">재고 {item.stock ?? 0}개</span>
                         </span>
-                        <span className="tw-shrink-0 tw-text-sm tw-font-bold tw-text-[#1e3a5f]">{item.requiredPoints}P</span>
+                        <span className="tw-flex tw-shrink-0 tw-items-center tw-gap-2">
+                          <span className="tw-text-sm tw-font-bold tw-text-[#1e3a5f]">{item.requiredPoints}P</span>
+                          {item.itemId ? (
+                            <button
+                              type="button"
+                              className="tw-cursor-pointer tw-border-0 tw-bg-transparent tw-p-0 tw-text-xs tw-font-semibold tw-text-blue-600 hover:tw-text-blue-800 hover:tw-underline"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openShopItemEdit(item);
+                              }}
+                            >
+                              수정
+                            </button>
+                          ) : null}
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -1208,7 +1269,7 @@ export function EsgAdminPage() {
       >
         <div className={esgModalContentClass}>
         <Typography.Paragraph type="secondary" className="!tw-mb-3 !tw-text-xs">
-          등록된 포인트샵 물품 목록입니다. 새 물품은 샵 물품 카드의「등록」에서 추가하세요.
+          등록된 포인트샵 물품 목록입니다. 행의「수정」을 누르면 수정 모달이 열리고, 새 물품은「등록」에서 추가하세요.
         </Typography.Paragraph>
         <Card className={modalPanelCardClass} size="small" title="등록 물품" styles={modalPanelCardStyles}>
           <AppDataTable<EsgShopItem>
@@ -1217,7 +1278,7 @@ export function EsgAdminPage() {
             dataSource={shopItems}
             pagination={{ pageSize: 8, showSizeChanger: false }}
             size="small"
-            scroll={{ x: 560 }}
+            scroll={{ x: 640 }}
             columns={[
               { title: '제목', dataIndex: 'title', ellipsis: true },
               {
@@ -1227,6 +1288,23 @@ export function EsgAdminPage() {
                 render: (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? `${v}P` : '—'),
               },
               { title: '재고', dataIndex: 'stock', width: 72 },
+              {
+                title: '',
+                key: 'edit',
+                width: 88,
+                render: (_, row) =>
+                  row.itemId ? (
+                    <button
+                      type="button"
+                      className="tw-cursor-pointer tw-border-0 tw-bg-transparent tw-p-0 tw-text-left tw-text-xs tw-font-semibold tw-text-blue-600 hover:tw-text-blue-800 hover:tw-underline"
+                      onClick={() => openShopItemEdit(row)}
+                    >
+                      수정
+                    </button>
+                  ) : (
+                    '—'
+                  ),
+              },
             ]}
           />
         </Card>
@@ -1269,6 +1347,92 @@ export function EsgAdminPage() {
             </Form.Item>
           </Form>
         </Card>
+        </div>
+      </AppSingleActionModal>
+
+      <AppSingleActionModal
+        title={editingShopItem ? `물품 수정 — ${editingShopItem.title}` : '물품 수정'}
+        open={Boolean(editingShopItem)}
+        onClose={() => {
+          setEditingShopItem(null);
+          editShopForm.resetFields();
+          setEditShopFile(null);
+        }}
+        onSubmit={() => void updateShop.mutateAsync()}
+        submitText="저장"
+        submitLoading={updateShop.isPending}
+        submitButtonClassName={esgPrimaryButtonClass}
+        width={560}
+        zIndex={1100}
+        destroyOnHidden
+        styles={{ body: modalScrollableBody }}
+      >
+        <div className={esgModalContentClass}>
+          <Typography.Paragraph type="secondary" className="!tw-mb-3 !tw-text-xs">
+            물품명·설명·포인트·재고를 변경할 수 있습니다. 이미지는 새 파일을 선택할 때만 교체됩니다.
+          </Typography.Paragraph>
+          <Card className={modalPanelCardClass} size="small" styles={modalPanelCardStyles}>
+            <Form form={editShopForm} layout="vertical" className="tw-max-w-xl">
+              <Form.Item name="title" label="물품명" rules={[{ required: true, message: '물품명을 입력해 주세요.' }]}>
+                <Input />
+              </Form.Item>
+              <Form.Item name="description" label="설명">
+                <Input.TextArea rows={3} placeholder="선택 사항" />
+              </Form.Item>
+              <Form.Item
+                name="requiredPoints"
+                label="필요 포인트"
+                rules={[
+                  { required: true, message: '필요 포인트를 입력해 주세요.' },
+                  {
+                    validator: (_, v) => {
+                      const n = Number(v);
+                      if (!Number.isFinite(n) || n <= 0) {
+                        return Promise.reject(new Error('1 이상의 숫자를 입력해 주세요.'));
+                      }
+                      return Promise.resolve();
+                    },
+                  },
+                ]}
+              >
+                <InputNumber min={1} className="tw-w-full" />
+              </Form.Item>
+              <Form.Item
+                name="stock"
+                label="재고 수량"
+                rules={[
+                  { required: true, message: '재고를 입력해 주세요.' },
+                  {
+                    validator: (_, v) => {
+                      const n = Number(v);
+                      if (!Number.isFinite(n) || n <= 0) {
+                        return Promise.reject(new Error('1 이상의 숫자를 입력해 주세요.'));
+                      }
+                      return Promise.resolve();
+                    },
+                  },
+                ]}
+              >
+                <InputNumber min={1} className="tw-w-full" />
+              </Form.Item>
+              {editingShopItem?.imageUrl ? (
+                <div className="tw-mb-3">
+                  <Typography.Text className="tw-mb-1 tw-block tw-text-sm tw-font-medium">현재 이미지</Typography.Text>
+                  <img
+                    src={editingShopItem.imageUrl}
+                    alt=""
+                    className="tw-max-h-40 tw-max-w-full tw-rounded-lg tw-border tw-border-slate-200 tw-object-contain"
+                  />
+                </div>
+              ) : null}
+              <Form.Item label="이미지 교체">
+                <Typography.Paragraph type="secondary" className="!tw-mb-2 !tw-mt-0 !tw-text-xs">
+                  파일을 선택하면 서버에서 기존 이미지를 삭제한 뒤 새로 업로드합니다. 변경하지 않으려면 비워 두세요.
+                </Typography.Paragraph>
+                <input type="file" accept="image/*" onChange={(e) => setEditShopFile(e.target.files?.[0] ?? null)} />
+              </Form.Item>
+            </Form>
+          </Card>
         </div>
       </AppSingleActionModal>
 

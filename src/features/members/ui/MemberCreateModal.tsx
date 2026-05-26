@@ -23,6 +23,8 @@ type FormValues = {
   personalEmail: string;
   joinDate: Dayjs;
   employmentType: EmploymentType;
+  /** 계약직 전용 - 계약 만료일 */
+  contractEndDate?: Dayjs;
   organizationId: string;
   jobGradeId: string;
   jobTitleId: string;
@@ -88,6 +90,11 @@ export function MemberCreateModal({ open, onClose }: Props) {
         personalEmail: v.personalEmail.trim(),
         joinDate: v.joinDate.format('YYYY-MM-DD'),
         employmentType: v.employmentType,
+        // 계약직만 만료일 전송, 그 외는 null
+        contractEndDate:
+          v.employmentType === 'CONTRACT' && v.contractEndDate
+            ? v.contractEndDate.format('YYYY-MM-DD')
+            : null,
         organizationId: v.organizationId,
         jobGradeId: v.jobGradeId,
         jobTitleId: v.jobTitleId,
@@ -160,19 +167,21 @@ export function MemberCreateModal({ open, onClose }: Props) {
     }
   };
 
-  const orgOptions = useMemo(() => buildOrgOptions(orgList), [orgList]);
+  const orgOptions = useMemo(() => buildOrgOptions(orgList, { excludeRoot: true }), [orgList]);
 
   const gradeOptions = grades.map((row) => {
     const r = row as Record<string, unknown>;
     const id = pickRowId(r);
     return id ? { value: id, label: pickRowName(r) || id } : null;
-  }).filter((x): x is { value: string; label: string } => x !== null);
+  }).filter((x): x is { value: string; label: string } => x !== null)
+    .filter((opt) => opt.label !== '관리자');
 
   const titleOptions = titles.map((row) => {
     const r = row as Record<string, unknown>;
     const id = pickRowId(r);
     return id ? { value: id, label: pickRowName(r) || id } : null;
-  }).filter((x): x is { value: string; label: string } => x !== null);
+  }).filter((x): x is { value: string; label: string } => x !== null)
+    .filter((opt) => opt.label !== '관리자');
 
   const roleOptions = roles
     .filter((r) => r.id)
@@ -227,6 +236,26 @@ export function MemberCreateModal({ open, onClose }: Props) {
               <Select options={MEMBER_FORM_EMPLOYMENT_OPTIONS} placeholder="선택" />
             </Form.Item>
           </div>
+
+          {/* 3-1행: 계약 만료일 - 고용 형태가 CONTRACT 일 때만 노출 */}
+          <Form.Item
+            noStyle
+            shouldUpdate={(prev, cur) => prev?.employmentType !== cur?.employmentType}
+          >
+            {({ getFieldValue }) => {
+              const empType = getFieldValue('employmentType');
+              if (empType !== 'CONTRACT') return null;
+              return (
+                <Form.Item
+                  name="contractEndDate"
+                  label="계약 만료일"
+                  rules={[{ required: true, message: '계약직은 계약 만료일을 입력하세요.' }]}
+                >
+                  <DatePicker className="tw-w-full" format="YYYY-MM-DD" />
+                </Form.Item>
+              );
+            }}
+          </Form.Item>
 
           {/* 4행: 조직 + 직급 */}
           <div className="tw-grid tw-grid-cols-2 tw-gap-x-6 tw-gap-y-1">

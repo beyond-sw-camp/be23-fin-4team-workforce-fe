@@ -47,6 +47,9 @@ import { OrganizationRolesSection } from '@/features/organization/ui/Organizatio
 import { AppWorkspacePageTitle } from '@/shared/ui/AppWorkspacePageTitle';
 import { AdminOrgRestructurePage } from '@/pages/app/organization/AdminOrgRestructurePage';
 import { AppDoubleActionModal } from '@/shared/ui/AppDoubleActionModal';
+import { useAuth } from '@/features/auth/useAuth';
+import { usePermissions } from '@/features/permissions/usePermissionsHook';
+import { PERM } from '@/features/permissions/backend-permissions';
 
 type OrgSettingsTab = 'structure' | 'grades' | 'titles' | 'roles' | 'restructure';
 type OrgStructureLayoutDirection = 'horizontal' | 'vertical';
@@ -532,6 +535,14 @@ export function OrganizationPage() {
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as { tab?: string };
   const activeTab = parseOrgTab(search.tab);
+  const { user } = useAuth();
+  const { hasPermission } = usePermissions();
+  // 조직 개편 탭은 인사 관리자 / 시스템 관리자만 노출
+  // (Role 기반 - ROLE:UPDATE 권한은 인사 관리자에게만 부여됨)
+  const canRestructure =
+    user?.isSystemAdmin === true || hasPermission(PERM.ROLE_UPDATE);
+  // 역할·권한 탭은 시스템 관리자만 노출 (인사 관리자는 ROLE 권한이 있어도 메뉴 숨김)
+  const canManageRoles = user?.isSystemAdmin === true;
   const qc = useQueryClient();
   const [selectedOrgKeys, setSelectedOrgKeys] = useState<Key[]>([]);
   const [isOrgEditing, setIsOrgEditing] = useState(false);
@@ -1655,16 +1666,20 @@ export function OrganizationPage() {
                 </div>
               ),
             },
-            {
-              key: 'roles',
-              label: '역할·권한',
-              children: <OrganizationRolesSection />,
-            },
-            {
-              key: 'restructure',
-              label: '조직 개편',
-              children: <AdminOrgRestructurePage />,
-            },
+            ...(canManageRoles
+              ? [{
+                  key: 'roles',
+                  label: '역할·권한',
+                  children: <OrganizationRolesSection />,
+                }]
+              : []),
+            ...(canRestructure
+              ? [{
+                  key: 'restructure',
+                  label: '조직 개편(인사 발령)',
+                  children: <AdminOrgRestructurePage />,
+                }]
+              : []),
           ]}
         />
       </Card>

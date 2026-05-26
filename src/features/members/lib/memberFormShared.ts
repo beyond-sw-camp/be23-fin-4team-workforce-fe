@@ -37,8 +37,12 @@ export function pickOrgChildren(node: OrganizationTreeNode): OrganizationTreeNod
   return Array.isArray(raw) ? (raw as OrganizationTreeNode[]) : [];
 }
 
-export function buildOrgOptions(nodes: OrganizationTreeNode[]): Array<{ value: string; label: string }> {
+export function buildOrgOptions(
+  nodes: OrganizationTreeNode[],
+  options: { excludeRoot?: boolean } = {},
+): Array<{ value: string; label: string }> {
   if (!nodes.length) return [];
+  const { excludeRoot = false } = options;
   const out: Array<{ value: string; label: string }> = [];
   const seen = new Set<string>();
   const hasNested = nodes.some((n) => pickOrgChildren(n).length > 0);
@@ -47,8 +51,10 @@ export function buildOrgOptions(nodes: OrganizationTreeNode[]): Array<{ value: s
     const walk = (node: OrganizationTreeNode, depth: number) => {
       const id = pickOrgId(node);
       const name = pickOrgName(node) || '(이름 없음)';
-      if (id && !seen.has(id)) {
-        out.push({ value: id, label: `${'  '.repeat(depth)}${name}` });
+      const skip = excludeRoot && depth === 0;
+      if (id && !seen.has(id) && !skip) {
+        const indentDepth = excludeRoot ? Math.max(0, depth - 1) : depth;
+        out.push({ value: id, label: `${'  '.repeat(indentDepth)}${name}` });
         seen.add(id);
       }
       pickOrgChildren(node).forEach((child) => walk(child, depth + 1));
@@ -96,7 +102,9 @@ export function pickRowName(row: Record<string, unknown>): string {
   return typeof row.name === 'string' ? row.name : '';
 }
 
-export const MEMBER_FORM_EMPLOYMENT_TYPES: EmploymentType[] = ['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERN'];
+// 신규 직원 생성 모달에 노출할 고용 형태 - 정규직/계약직만
+// (PART_TIME/INTERN 은 enum 자체는 유지, dropdown 선택지에서만 제외)
+export const MEMBER_FORM_EMPLOYMENT_TYPES: EmploymentType[] = ['FULL_TIME', 'CONTRACT'];
 
 export const MEMBER_FORM_EMPLOYMENT_OPTIONS = MEMBER_FORM_EMPLOYMENT_TYPES.map((v) => ({
   value: v,
